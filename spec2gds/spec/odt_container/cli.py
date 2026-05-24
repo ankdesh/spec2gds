@@ -5,6 +5,7 @@ import sys
 import spec2gds.spec.odt_container.container as container
 import spec2gds.spec.odt_container.manager as manager
 import spec2gds.spec.odt_container.json_plugin as json_plugin
+import spec2gds.spec.odt_container.ipxact_plugin as ipxact_plugin
 import spec2gds.spec.odt_container.verifier as verifier
 
 def _build_default_manager() -> manager.PluginManager:
@@ -18,6 +19,10 @@ def _build_default_manager() -> manager.PluginManager:
     # Instantiate and register the test JSON plugin
     json_plug = json_plugin.SimpleJSONPlugin()
     pm.register_plugin(json_plug)
+    
+    # Instantiate and register the IPXACT plugin
+    ipxact_plug = ipxact_plugin.IPXACTPlugin()
+    pm.register_plugin(ipxact_plug)
     
     return pm
 
@@ -117,14 +122,17 @@ def main() -> None:
                 print(f"Error: Source file '{args.source}' does not exist.", file=sys.stderr)
                 sys.exit(1)
 
-            with open(args.source, "r", encoding="utf-8") as f:
-                raw_content = f.read()
-
-            try:
-                payload = json.loads(raw_content)
-            except Exception as e:
-                print(f"Error: Injected payload is not valid JSON: {e}", file=sys.stderr)
-                sys.exit(1)
+            if args.modality == "ipxact":
+                with open(args.source, "rb") as f:
+                    payload = f.read()
+            else:
+                with open(args.source, "r", encoding="utf-8") as f:
+                    raw_content = f.read()
+                try:
+                    payload = json.loads(raw_content)
+                except Exception as e:
+                    print(f"Error: Injected payload is not valid JSON: {e}", file=sys.stderr)
+                    sys.exit(1)
 
             # Open existing container or instantiate a fresh blank text container
             # Handles 0-size files correctly inside HybridODTContainer.__init__
@@ -148,7 +156,12 @@ def main() -> None:
             cont = container.HybridODTContainer(args.container)
             payload = pm.extract_payload(cont, args.modality, args.file)
 
-            output_str = json.dumps(payload, indent=2)
+            if args.modality == "ipxact":
+                import lxml.etree
+                output_str = lxml.etree.tostring(payload._xmlRoot, pretty_print=True).decode("utf-8")
+            else:
+                output_str = json.dumps(payload, indent=2)
+
             if args.output:
                 with open(args.output, "w", encoding="utf-8") as f:
                     f.write(output_str)

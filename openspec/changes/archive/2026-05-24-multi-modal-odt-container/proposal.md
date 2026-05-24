@@ -4,8 +4,8 @@ Standard hardware documentation often forces a compromise between human readabil
 ## What Changes
 - Introduce a new headless Python API and CLI tool within the `spec` submodule for extending ODT archives.
 - Implement an ODT container manager (`HybridODTContainer`) utilizing `odfdo` to register custom directories in `META-INF/manifest.xml`.
-- Implement a plugin architecture (`ModalityPlugin`) for handling different data schemas.
-- Introduce the first plugin: `IPXACTPlugin`, utilizing `pyEDAA.IPXACT` for strict validation and data extraction.
+- Introduce a plugin architecture (`ModalityPlugin`) for handling different data schemas, ensuring full compatibility with existing implementations like `JsonPlugin`.
+- Introduce a new plugin: `IPXACTPlugin`, utilizing `pyEDAA.IPXACT` for strict validation and data extraction.
 - Introduce a custom generic URI scheme (`spec://<modality>/<path>/<node>`) within ODT `<text:a>` tags to allow semantic cross-linking between narrative text and embedded data.
 
 ## Capabilities

@@ -1,60 +1,64 @@
-# Walkthrough: Hybrid ODT Container Implementation
+# Walkthrough: Hybrid ODT Container and Multi-Modal Specifications
 
-This document provides a comprehensive summary of the changes made, tests executed, and validation results for the `core-odt-container` change.
+This document provides a comprehensive summary of the architecture, implementations, test results, and validation reports for the entire ODT hybrid spec framework. This includes both the baseline container engine and the new `IPXACTPlugin` multi-modal specification extension.
 
 ---
 
 ## Accomplishments
 
-We have successfully built a fully functioning, extensible, and strictly typed hybrid OpenDocument Text (ODT) container engine in Python. Every module conforms strictly to the newly established project **Mojo-Readiness guidelines**:
-- **Type-Locked Properties**: Explicit variable types, complete parameter/return typing, and static field declarations.
-- **Value Semantics**: Decoupled deep copies returned from extraction and resolution boundaries to align with Mojo's default value semantics.
-- **Composition over Inheritance**: Modality plugins implemented strictly via `typing.Protocol` interfaces.
-- **Strict Imports**: Imported entire module namespaces only (`import os`, `import lxml.etree as etree`), avoiding individual member imports.
-- **Isolated Exception Control**: Separate, sequential `try-except` blocks for low-level ZIP and manifest operations.
-- **Mojo-Compliant Testing**: Module-scoped standalone test functions returning `None` and asserting by raising standard errors.
+We have built a headless Python API and CLI tool to package, validate, and query multi-modal hardware data directly inside standard ODT documents (preserving data integrity across LibreOffice editing cycles). 
+
+Every component strictly adheres to the **Mojo-Readiness guidelines**:
+- **Strict Type Annotations**: Fully typed signatures and variables.
+- **Value Semantics**: Explicit `copy.deepcopy()` cloning on all boundary traversals to enforce state isolation.
+- **Protocol-Driven Extensibility**: Modular plugin architecture using `typing.Protocol` interfaces.
+- **Namespace-Only Imports**: Direct namespace loading only (e.g., `import copy`, `import lxml.etree`).
+- **Sequential Error Flows**: Specific sequential try-except clauses avoiding multi-exception catch-alls.
+- **Independent Test Suites**: Zero-argument standalone test functions returning `None` and asserting via Python `assert` statements.
 
 ---
 
 ## Core Implementations
 
 ### 1. Hybrid ODT Container (`spec/odt_container/container.py`)
-- Bridges `odfdo.Document` and low-level `zipfile` processing.
-- Automatically caches and manages files in a dedicated `spec_data/` namespace.
-- Synchronously updates `META-INF/manifest.xml` utilizing the `odfdo.manifest.Manifest` API to register custom files with custom media-types.
-- **Byte Alignment Constraint**: Features a custom ZIP post-processing engine that ensures the `mimetype` file is written completely uncompressed and placed as the absolute first entry in the ZIP stream.
-- Gracefully handles empty and 0-byte containers during initialization.
+- Interfaces `odfdo.Document` and low-level `zipfile` packaging.
+- Isolates all custom hardware spec payloads within the namespaced `spec_data/` directory inside ODT.
+- Synchronously updates `META-INF/manifest.xml` to associate custom media-types (e.g., `application/xml+ipxact`, `application/x-spec-json`), preventing office suites from stripping embedded files.
+- **Mimetype Alignment**: Uses a custom ZIP layout post-processor to ensure `mimetype` is stored uncompressed and placed as the absolute first entry, keeping documents perfectly compliant with ISO/IEC 26300 standards.
 
-### 2. Plugin Architecture and Registry (`spec/odt_container/plugin.py`, `manager.py`)
-- Defines `ModalityPlugin` protocol to enforce loose coupling.
-- Implements `PluginManager` to manage registered modalities and delegate payload injections/extractions.
-- Resolves custom URIs conforming to `spec://<modality_id>/<file_path>/<node_path>`.
+### 2. Extensible Plugin Registry (`spec/odt_container/plugin.py`, `manager.py`)
+- Defines `ModalityPlugin` protocol to enable third-party schema formats.
+- Implements `PluginManager` to bootstrap modality handlers, delegate payloads, and parse custom links.
+- Resolves URIs conforming to `spec://<modality_id>/<file_path>/<node_path>`.
 
 ### 3. Simple JSON Modality (`spec/odt_container/json_plugin.py`)
-- Features a concrete `SimpleJSONPlugin` conforming to the `ModalityPlugin` interface.
-- Implements strict validation using Pydantic models (`SimpleJSONSpecSchema`).
-- Provides deep-copy extraction and path resolution (e.g. `spec://simple-json/dma.json/metadata/1/value`).
+- Implements `ModalityPlugin` for `simple-json` payloads.
+- Validates data against strict templates using Pydantic (`SimpleJSONSpecSchema`).
+- Resolves JSON pointer query paths (e.g. `/metadata/1/value`).
 
-### 4. Semantic Link Verification Engine (`spec/odt_container/verifier.py`)
-- Implements `ContainerVerifier` compiling a complete Pydantic-based `ContainerVerificationReport`.
-- Uses `lxml` and precise XPath namespace queries (`urn:oasis:names:tc:opendocument:xmlns:text:1.0`) to extract all ODT hyperlinks (`<text:a>`) featuring the `spec://` scheme.
-- Runs referential integrity checks checking both registered file presence and resolving link nodes.
+### 4. IP-XACT Modality (`spec/odt_container/ipxact_plugin.py`)
+- Implements `ModalityPlugin` for `ipxact` payloads.
+- **Namespace Dispatching**: Supports transparent validation of both IEEE 1685-2009 and 2014 documents by dynamically selecting the schema based on XML namespace attributes.
+- **Custom Deepcopy Subclass**: Extends the third-party `pyEDAA.IPXACT.Component.Component` class into a custom `HybridIPXACTComponent` subclass to support Python `copy.deepcopy()` operations by serializing state to XML via `lxml` and re-parsing. This completely bypasses pickling bugs present in the underlying third-party package.
+- **Hybrid Path Resolution**: Resolves queries by searching logical attributes (case-insensitively) first, falling back to standard `lxml` XPath queries (e.g., `//ipxact:description`) on mismatch.
 
-### 5. Headless Command-Line Interface (`spec/odt_container/cli.py`)
-- Implements a clean CLI using `argparse` exposing:
-  - `list-plugins`: lists active modalities.
-  - `inject`: loads source payloads, runs Pydantic validations, packages files, and updates ODT ZIPs.
-  - `extract`: queries payloads and writes/prints extracted dictionaries.
-  - `validate`: outputs a detailed validation JSON report.
+### 5. Semantic Link Verification Engine (`spec/odt_container/verifier.py`)
+- Scans `content.xml` via `lxml` to find all hyperlinks containing the `spec://` protocol.
+- Executes referential integrity validations to confirm that all targets resolve to actual values.
+- Compiles a complete `ContainerVerificationReport` returned as structured JSON.
+
+### 6. Command-Line Interface (`spec/odt_container/cli.py`)
+- Provides a clean CLI with subcommands: `list-plugins`, `inject`, `extract`, and `validate`.
+- Enhanced `inject` and `extract` commands to dynamically dispatch between JSON and raw XML payloads based on modality type.
 
 ---
 
 ## Test Engineering & Verification
 
-We established a comprehensive suite of 10 standalone unit/integration tests covering container integrity, Pydantic validations, path traversals, link validations, and CLI commands.
+We established a comprehensive suite of **13 standalone unit/integration tests** covering container integrity, Pydantic validations, path traversals, link validations, IP-XACT version dispatching, hybrid XPath resolutions, and CLI subcommands.
 
 ### Test Results
-Executing `PYTHONPATH=. uv run pytest` succeeds flawlessly with all 10 tests passing:
+Executing `PYTHONPATH=. .venv/bin/pytest tests/spec/odt_container/` succeeds flawlessly with all 13 tests passing:
 
 ```bash
 ============================= test session starts ==============================
@@ -62,23 +66,22 @@ platform linux -- Python 3.12.3, pytest-9.0.3, pluggy-1.6.0
 rootdir: /home/ankdesh/explore/spec2gds
 configfile: pyproject.toml
 collecting ...
-collected 10 items
+collected 13 items
 
-tests/spec/odt_container/test_cli.py ..                                  [ 20%]
-tests/spec/odt_container/test_container.py ....                          [ 60%]
+tests/spec/odt_container/test_cli.py ..                                  [ 15%]
+tests/spec/odt_container/test_container.py ....                          [ 46%]
+tests/spec/odt_container/test_ipxact.py ...                              [ 69%]
 tests/spec/odt_container/test_plugins.py ....                            [100%]
 
-============================== 10 passed in 0.20s ==============================
+============================== 13 passed in 0.32s ==============================
 ```
 
 ### Verification Scenarios Covered
-1. **Container Instantiation**: Verifies pristine state.
-2. **File Injection & Extraction**: Validates manifest synchronization and media-types.
-3. **File Deletion**: Validates deletion cascades through manifest.xml.
-4. **Mimetype ZIP Integrity**: Assures `mimetype` is stored uncompressed as the first ZIP entry.
-5. **Plugin Registration**: Validates correct Modality Plugin lookups.
-6. **JSON Pydantic Validation**: Assures invalid JSON schemas are caught and rejected.
-7. **JSON Injection & Traversal**: Validates deep copy value cloning and node resolution.
-8. **Verifier Link Resolution**: Confirms verifier flags dangling spec links in `content.xml`.
-9. **CLI list-plugins / inject / extract**: Confirms robust subcommand execution.
-10. **CLI validate**: Verifies reporting of consistent and inconsistent container packages.
+1. **Container Integrity & MIME Magic**: Verifies `mimetype` byte alignments.
+2. **File Injection & Deletion Cascades**: Confirms proper sync of `META-INF/manifest.xml`.
+3. **Pydantic Schema Validation**: Assures JSON spec validation rejects incorrect profiles.
+4. **Dynamic IP-XACT Validation**: Verifies that both 1685-2009 and 2014 documents are parsed and validated against their appropriate XSDs without manual intervention.
+5. **Hybrid Path Traversals**: Verifies logical queries (e.g., `VLNV/Name`) and XPath queries (e.g. `//ipxact:description`) against the IP-XACT database.
+6. **Custom Deepcopy Copy Semantics**: Confirms the `deepcopy` workaround isolates the object model from side-effect mutations.
+7. **Referential Integrity Audits**: Verifies the link resolver flags dangling spec references inside the ODT document narrative.
+8. **CLI subcommand routing**: Validates the end-to-end user pipeline.

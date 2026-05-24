@@ -234,6 +234,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyedaa-ipxact"
+version = "0.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "lxml" },
+    { name = "pytooling" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/3c/45/757a091b9f09599fd74b483ee1730bff5a0283e3feb8e391c99f2cdb7193/pyedaa_ipxact-0.6.5.tar.gz", hash = "sha256:8a085bb1dd4610031fe2d6bcfdd7292b622179ac374e0653031a0400f93407e9", size = 307632, upload-time = "2026-01-20T23:10:35.654Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6b/8d/9e7f9dc0ab1456264058d31af42c2cadaf8120934626fdcc235f2892efaa/pyedaa_ipxact-0.6.5-py3-none-any.whl", hash = "sha256:8741faf6471ec1e80d5d97360c66e0933b2f1e7e7315d66c185f3774b0b6cb0e", size = 536631, upload-time = "2026-01-20T23:10:33.529Z" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -259,6 +272,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pytooling"
+version = "8.14.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/03/12/938d8786836600b380438a30b55e8002b02c904d1281d5d5a437c8932bfc/pytooling-8.14.0.tar.gz", hash = "sha256:ac1b0bb9b920ae8f13382c4280c405a7a316a457fe2fb6591aa1c1c018054ba0", size = 162849, upload-time = "2026-03-21T23:41:51.16Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/53/9c/697d1a2ce0a63a7dea200e43bbff17c620dcb51035bf03cad5b890a4e328/pytooling-8.14.0-py3-none-any.whl", hash = "sha256:8a50a1b0415ba1e3d0ef33dde8221cd02126d36d8f00bb5f6be3128382f4d935", size = 208759, upload-time = "2026-03-21T23:41:49.001Z" },
+]
+
+[[package]]
 name = "spec2gds"
 version = "0.1.0"
 source = { virtual = "." }
@@ -266,6 +288,7 @@ dependencies = [
     { name = "lxml" },
     { name = "odfdo" },
     { name = "pydantic" },
+    { name = "pyedaa-ipxact" },
     { name = "pytest" },
 ]
 
@@ -274,6 +297,7 @@ requires-dist = [
     { name = "lxml", specifier = ">=6.1.1" },
     { name = "odfdo", specifier = ">=3.22.8" },
     { name = "pydantic", specifier = ">=2.13.4" },
+    { name = "pyedaa-ipxact", specifier = ">=0.6.5" },
     { name = "pytest", specifier = ">=9.0.3" },
 ]
 

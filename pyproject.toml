@@ -8,5 +8,6 @@ dependencies = [
     "lxml>=6.1.1",
     "odfdo>=3.22.8",
     "pydantic>=2.13.4",
+    "pyedaa-ipxact>=0.6.5",
     "pytest>=9.0.3",
 ]
