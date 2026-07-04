@@ -35,7 +35,15 @@ spec2gds/spec/odt_container/
   ipxact_plugin.py   IP-XACT XML plugin using pyEDAA.IPXACT.
   verifier.py        Embedded file and spec:// link consistency checker.
   cli.py             Headless command-line interface.
+  api/               Local FastAPI app factory for the planned editor.
+  editor_core/       Semantic ODT editor model and v1 save gate.
+  editor_web/        Minimal React/Vite frontend shell.
+  samples/           Rebuildable sample ODT and hybrid ODT test documents.
+  docs/              Package-level design notes and decision records.
 ```
+
+Future viewer/editor code for this ODT tool should also stay under this package
+so the top-level `spec2gds` project can grow other components independently.
 
 ## Current Modalities
 
@@ -107,6 +115,23 @@ UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" \
 .uv-bootstrap/bin/uv sync
 ```
 
+The planned web editor should keep Python environment management on `uv` and add
+only a minimal Node/Vite frontend workspace inside `spec2gds/spec/odt_container/`.
+
+Run the local editor API:
+
+```bash
+uv run python -m spec2gds.spec.odt_container.api
+```
+
+Run the frontend from another terminal after installing Node.js/npm:
+
+```bash
+cd spec2gds/spec/odt_container/editor_web
+npm install
+npm run dev
+```
+
 ## Run Tests
 
 Use the module form of pytest from the uv environment:
@@ -136,10 +161,10 @@ The current test suite covers:
 - CLI inject, extract, validate, and plugin listing flows.
 - Verifier detection of valid and dangling `spec://` links.
 
-At the time this README was added, the suite passed with:
+At the time the v1 editor core was added, the package suite passed with:
 
 ```text
-13 passed
+22 passed
 ```
 
 ## CLI Usage
@@ -193,6 +218,23 @@ The `validate` command emits a JSON report and exits with a non-zero status when
 embedded files are invalid, missing from the manifest, or when `spec://` links in
 `content.xml` cannot be resolved.
 
+## Sample Documents
+
+Sample ODT documents live under [`samples/`](samples/). Rebuild the raw/generated
+sample corpus and embed the sample IP-XACT component with:
+
+```bash
+UV_CACHE_DIR="$PWD/.uv-cache" \
+UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" \
+uv run python -m spec2gds.spec.odt_container.samples.build_sample_documents
+```
+
+Generated hybrid samples are written to:
+
+```text
+spec2gds/spec/odt_container/samples/generated/
+```
+
 ## Design Notes
 
 - All custom files must live under `spec_data/`.
@@ -204,6 +246,53 @@ embedded files are invalid, missing from the manifest, or when `spec://` links i
   documentation to point at exact structured spec values.
 - Extracted payloads are deep-copied at API boundaries to avoid accidental
   mutation of cached container state.
+
+## Planned Viewer/Editor Direction
+
+The next major capability is a local web-based light editor for extended ODT
+files. The current decision is documented in
+[`docs/editor_architecture.md`](docs/editor_architecture.md).
+
+Summary:
+
+- Use a local Python backend plus a React/TypeScript frontend.
+- Keep dependencies minimal and popular: FastAPI, Pydantic, React, Vite, pytest,
+  and later Playwright for browser flows.
+- Do not start with Electron, Tauri, or a heavy rich-text editor framework.
+- Build a small semantic block editor first for headings, paragraphs, lists,
+  section-version selection, links, and IP-XACT previews.
+- Keep all code for this tool inside `spec2gds/spec/odt_container/`.
+
+The first editor milestone should render ODT semantically, allow limited text
+editing, support heading-based section versions such as `Title//v1`, preview
+interface-focused IP-XACT tables, edit/import raw IP-XACT XML, and save only
+when diagnostics are clean.
+
+Implemented so far:
+
+- `editor_core` parses `content.xml` into headings, paragraphs, list items,
+  table placeholders, and links.
+- Adjacent headings with the same title and level, written as `Title//version`,
+  are grouped as section variants.
+- Active section choices are stored as manifested JSON under
+  `spec_data/odt-editor/`.
+- Embedded IP-XACT XML can be summarized into interface-focused table data.
+- The editor session blocks save while diagnostics remain.
+- A minimal FastAPI app exposes snapshot, text edit, and active section version
+  endpoints.
+- A minimal React/Vite shell can load a local ODT path through the API, edit
+  semantic text blocks, switch section versions, and display IP-XACT interface
+  summaries.
+- Raw IP-XACT XML can be previewed for diagnostics and imported only when the
+  preview is clean.
+- Synthetic tests cover semantic parsing, text edits, section version state,
+  IP-XACT interface extraction, IP-XACT XML import gating, save blocking, and
+  ODT save/reload.
+- API tests cover the local snapshot, text edit, active section version,
+  IP-XACT preview, and IP-XACT import route behavior over synthetic ODT files.
+- Frontend scaffold tests keep the package scripts, source files, API calls, and
+  minimal dependency policy visible to Python CI until Node/npm build checks are
+  available in the development environment.
 
 ## Known Scope
 

@@ -1,4 +1,5 @@
 import datetime
+import json
 import typing
 import pydantic
 import lxml.etree as etree
@@ -93,10 +94,19 @@ class ContainerVerifier:
                 modality_id: str = parts[1]
                 sub_file_path: str = "/".join(parts[2:])
                 try:
-                    # Resolve plugin, extract bytes, and run validation schema
-                    target_plugin = self._manager.get_plugin(modality_id)
-                    data: typing.Any = target_plugin.extract_data(self._container, sub_file_path)
-                    target_plugin.validate_data(data)
+                    if modality_id == "odt-editor":
+                        # Internal editor metadata is package state, not a user modality.
+                        file_bytes: bytes = self._container.extract_file(file_path)
+                        if sub_file_path.endswith(".json"):
+                            json.loads(file_bytes.decode("utf-8"))
+                    else:
+                        # Resolve plugin, extract bytes, and run validation schema
+                        target_plugin = self._manager.get_plugin(modality_id)
+                        if modality_id == "ipxact":
+                            data = self._container.extract_file(file_path)
+                        else:
+                            data = target_plugin.extract_data(self._container, sub_file_path)
+                        target_plugin.validate_data(data)
                 except Exception as e:
                     is_valid = False
                     error_msg = str(e)
