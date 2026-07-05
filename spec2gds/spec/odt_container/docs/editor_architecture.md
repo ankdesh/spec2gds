@@ -49,9 +49,10 @@ Lexical, ProseMirror, Slate, Electron, Tauri, or shadcn by default. Add one only
 when a concrete feature proves that the custom code is becoming harder to
 maintain than the dependency.
 
-The first editor should be a simple semantic block editor owned by this package.
-It should support headings, paragraphs, lists, section version selection, links,
-and IP-XACT previews before attempting broad word-processor behavior.
+The editor should remain a semantic document editor owned by this package. It
+should support headings, paragraphs, lists, section version selection, links,
+tables, images, and IP-XACT previews before attempting broad word-processor
+behavior.
 
 ## Package Boundary
 
@@ -74,17 +75,19 @@ spec2gds/spec/odt_container/
 The repository root can remain a high-level umbrella for future `spec2gds`
 components.
 
-## First Milestone
+## Current Milestone
 
 Build a light editor, not a full word processor.
 
 Implemented backend/core capabilities:
 
 - Parse ODT `content.xml` into a semantic document model.
-- Represent headings, paragraphs, list items, table placeholders, and links.
+- Represent headings, paragraphs, list items, read-only tables, read-only
+  images, and links.
 - Apply plain-text edits to headings, paragraphs, and list item paragraphs.
-- Detect adjacent heading variants named `Title//version`.
-- Persist active section choices in manifested editor metadata.
+- Detect adjacent legacy heading variants named `Title//version`.
+- Assign stable heading IDs and persist version/IP-XACT relations in
+  `spec_data/odt-editor/relations.json`.
 - Read embedded IP-XACT XML and render interface-focused summaries.
 - Emit blocking diagnostics for malformed content, unresolved `spec://` links,
   malformed IP-XACT XML, missing IP-XACT component VLNV fields, and missing
@@ -96,12 +99,15 @@ Implemented backend/core capabilities:
 Implemented browser UI shell capabilities:
 
 - Load an ODT snapshot by local path through the API.
-- Render a semantic document view instead of exact page layout.
+- Render a clean themed document view instead of exact page layout.
 - Show one selected section version at a time.
-- Provide controls for heading, paragraph, and list item text edits.
-- Provide controls for active section version choices.
-- Display interface-focused IP-XACT tables.
-- Preview and save raw IP-XACT XML through backend diagnostics.
+- Provide inline controls for simple heading, paragraph, and list item text
+  edits.
+- Provide heading-local controls for active section version choices.
+- Attach existing embedded IP-XACT files to headings and inspect them in a right
+  drawer.
+- Save document text, relation metadata, active versions, and optional raw
+  IP-XACT XML edits through one explicit endpoint.
 
 Remaining browser UI capabilities:
 
@@ -120,7 +126,7 @@ Out of scope for the first milestone:
 
 ## Section Versioning Rule
 
-Versioned sections are identified by headings with a suffix:
+Legacy versioned sections can be identified by headings with a suffix:
 
 ```text
 Section title//version
@@ -134,9 +140,9 @@ Cache behavior//v1
 Cache behavior//v2
 ```
 
-The UI should display the base title, `Cache behavior`, plus a version dropdown.
-The underlying ODT can keep the explicit suffixes so the format remains simple
-and inspectable.
+The UI displays the base title, `Cache behavior`, plus a heading-local version
+menu. New phase 2 state is stored in `relations.json`; the suffix form is a
+migration path for existing documents and samples.
 
 ## IP-XACT Scope
 

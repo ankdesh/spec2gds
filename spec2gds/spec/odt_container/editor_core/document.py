@@ -8,11 +8,15 @@ import pydantic
 ODF_NS: dict[str, str] = {
     "office": "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
     "text": "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+    "table": "urn:oasis:names:tc:opendocument:xmlns:table:1.0",
+    "draw": "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
     "xlink": "http://www.w3.org/1999/xlink",
+    "xml": "http://www.w3.org/XML/1998/namespace",
 }
 
 TEXT_NS: str = ODF_NS["text"]
 XLINK_NS: str = ODF_NS["xlink"]
+XML_NS: str = ODF_NS["xml"]
 
 
 class Diagnostic(pydantic.BaseModel):
@@ -36,15 +40,35 @@ class DocumentLink(pydantic.BaseModel):
     block_id: str
 
 
+class TableCell(pydantic.BaseModel):
+    text: str
+
+
+class TableRow(pydantic.BaseModel):
+    cells: list[TableCell] = pydantic.Field(default_factory=list)
+
+
+class ImageRef(pydantic.BaseModel):
+    asset_id: str
+    href: str
+    title: str = ""
+
+
 class SemanticBlock(pydantic.BaseModel):
     """A small editable/readable projection of an ODT content block."""
 
     block_id: str
     block_type: str
     text: str
+    display_text: str = ""
     level: typing.Optional[int] = None
+    heading_id: typing.Optional[str] = None
     editable: bool = False
+    editable_reason: str = ""
     links: list[DocumentLink] = pydantic.Field(default_factory=list)
+    table_rows: list[TableRow] = pydantic.Field(default_factory=list)
+    image: typing.Optional[ImageRef] = None
+    style_name: typing.Optional[str] = None
 
 
 class SectionVariant(pydantic.BaseModel):
@@ -93,6 +117,24 @@ def _element_text(element: etree._Element) -> str:
     return "".join(element.itertext()).strip()
 
 
+def _display_text(text_value: str) -> str:
+    parts = _heading_parts(text_value)
+    if parts is None:
+        return text_value
+    return parts[0]
+
+
+def _style_name(element: etree._Element) -> str | None:
+    return element.get(f"{{{TEXT_NS}}}style-name")
+
+
+def _has_complex_inline_markup(element: etree._Element) -> bool:
+    for child in element:
+        if isinstance(child.tag, str):
+            return True
+    return False
+
+
 def _element_links(element: etree._Element, block_id: str) -> list[DocumentLink]:
     links: list[DocumentLink] = []
     for link_element in element.xpath(".//text:a", namespaces=ODF_NS):
@@ -130,6 +172,68 @@ def _make_group_id(title: str, level: int, ordinal: int) -> str:
     return f"h{level}-{normalized}-{ordinal}"
 
 
+def _slug(value: str) -> str:
+    normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in value)
+    while "--" in normalized:
+        normalized = normalized.replace("--", "-")
+    normalized = normalized.strip("-")
+    return normalized or "heading"
+
+
+def _xml_id(element: etree._Element) -> str | None:
+    return element.get(f"{{{XML_NS}}}id")
+
+
+def _set_xml_id(element: etree._Element, value: str) -> None:
+    element.set(f"{{{XML_NS}}}id", value)
+
+
+def _make_unique_id(candidate: str, used: set[str]) -> str:
+    base = candidate
+    ordinal = 2
+    while candidate in used:
+        candidate = f"{base}-{ordinal}"
+        ordinal += 1
+    used.add(candidate)
+    return candidate
+
+
+def _heading_level(element: etree._Element) -> int:
+    level_attr = element.get(f"{{{TEXT_NS}}}outline-level")
+    if level_attr is None:
+        return 1
+    try:
+        return int(level_attr)
+    except ValueError:
+        return 1
+
+
+def ensure_heading_ids(content_xml: bytes) -> bytes:
+    """Assign stable xml:id values to headings that do not already have one."""
+    root = etree.fromstring(content_xml)
+    used: set[str] = set()
+    headings = root.xpath("//text:h", namespaces=ODF_NS)
+    for ordinal, heading in enumerate(headings):
+        existing = _xml_id(heading)
+        if existing:
+            used.add(existing)
+            continue
+        text_value = _display_text(_element_text(heading))
+        candidate = f"h{_heading_level(heading)}-{_slug(text_value)}-{ordinal}"
+        _set_xml_id(heading, _make_unique_id(candidate, used))
+    return etree.tostring(root, encoding="UTF-8", xml_declaration=True)
+
+
+def heading_ids(content_xml: bytes) -> list[str]:
+    root = etree.fromstring(content_xml)
+    values: list[str] = []
+    for heading in root.xpath("//text:h", namespaces=ODF_NS):
+        value = _xml_id(heading)
+        if value is not None:
+            values.append(value)
+    return values
+
+
 def _collect_blocks_from_element(
     element: etree._Element,
     blocks: list[SemanticBlock],
@@ -137,22 +241,23 @@ def _collect_blocks_from_element(
 ) -> None:
     local = _local_name(element)
     if _is_text_element(element, "h"):
-        block_id = f"block-{len(blocks)}"
-        level_attr = element.get(f"{{{TEXT_NS}}}outline-level")
-        level = 1
-        if level_attr is not None:
-            try:
-                level = int(level_attr)
-            except ValueError:
-                level = 1
+        heading_id = _xml_id(element) or f"block-{len(blocks)}"
+        block_id = heading_id
+        level = _heading_level(element)
         block_links = _element_links(element, block_id)
+        text_value = _element_text(element)
+        complex_inline = _has_complex_inline_markup(element)
         block = SemanticBlock(
             block_id=block_id,
             block_type="heading",
-            text=_element_text(element),
+            text=text_value,
+            display_text=_display_text(text_value),
             level=level,
-            editable=True,
+            heading_id=heading_id,
+            editable=not complex_inline,
+            editable_reason="contains inline markup" if complex_inline else "",
             links=block_links,
+            style_name=_style_name(element),
         )
         blocks.append(block)
         links.extend(block_links)
@@ -161,12 +266,17 @@ def _collect_blocks_from_element(
     if _is_text_element(element, "p"):
         block_id = f"block-{len(blocks)}"
         block_links = _element_links(element, block_id)
+        complex_inline = _has_complex_inline_markup(element)
+        text_value = _element_text(element)
         block = SemanticBlock(
             block_id=block_id,
             block_type="paragraph",
-            text=_element_text(element),
-            editable=True,
+            text=text_value,
+            display_text=text_value,
+            editable=not complex_inline,
+            editable_reason="contains inline markup" if complex_inline else "",
             links=block_links,
+            style_name=_style_name(element),
         )
         blocks.append(block)
         links.extend(block_links)
@@ -180,24 +290,55 @@ def _collect_blocks_from_element(
                 block_id=block_id,
                 block_type="list_item",
                 text=_element_text(paragraph),
-                editable=True,
+                display_text=_element_text(paragraph),
+                editable=not _has_complex_inline_markup(paragraph),
+                editable_reason="contains inline markup" if _has_complex_inline_markup(paragraph) else "",
                 links=block_links,
+                style_name=_style_name(paragraph),
             )
             blocks.append(block)
             links.extend(block_links)
         return
 
-    if _is_text_element(element, "table") or local == "table":
+    if local == "table":
         block_id = f"block-{len(blocks)}"
+        rows: list[TableRow] = []
+        for row in element.xpath(".//table:table-row", namespaces=ODF_NS):
+            cells: list[TableCell] = []
+            for cell in row.xpath("./table:table-cell", namespaces=ODF_NS):
+                cells.append(TableCell(text=_element_text(cell)))
+            if cells:
+                rows.append(TableRow(cells=cells))
         blocks.append(
             SemanticBlock(
                 block_id=block_id,
                 block_type="table",
                 text=_element_text(element),
+                display_text=_element_text(element),
                 editable=False,
+                editable_reason="tables are read-only in phase 2",
+                table_rows=rows,
             )
         )
         return
+
+    if local == "frame":
+        image_elements = element.xpath(".//draw:image", namespaces=ODF_NS)
+        if image_elements:
+            href = image_elements[0].get(f"{{{XLINK_NS}}}href") or ""
+            block_id = f"block-{len(blocks)}"
+            blocks.append(
+                SemanticBlock(
+                    block_id=block_id,
+                    block_type="image",
+                    text=href,
+                    display_text=href,
+                    editable=False,
+                    editable_reason="images are read-only in phase 2",
+                    image=ImageRef(asset_id=block_id, href=href, title=_element_text(element)),
+                )
+            )
+            return
 
     for child in element:
         if isinstance(child.tag, str):
@@ -357,17 +498,46 @@ def _set_element_plain_text(element: etree._Element, text_value: str) -> None:
     element.text = text_value
 
 
-def _editable_elements(root: etree._Element) -> list[etree._Element]:
-    elements: list[etree._Element] = []
+def _collect_editable_elements(
+    element: etree._Element,
+    elements: list[tuple[str, etree._Element]],
+    block_index: list[int],
+) -> None:
+    local = _local_name(element)
+    if _is_text_element(element, "h"):
+        elements.append((_xml_id(element) or f"block-{block_index[0]}", element))
+        block_index[0] += 1
+        return
+    if _is_text_element(element, "p"):
+        elements.append((f"block-{block_index[0]}", element))
+        block_index[0] += 1
+        return
+    if _is_text_element(element, "list"):
+        for paragraph in element.xpath(".//text:list-item/text:p", namespaces=ODF_NS):
+            elements.append((f"block-{block_index[0]}", paragraph))
+            block_index[0] += 1
+        return
+    if local == "table":
+        block_index[0] += 1
+        return
+    if local == "frame" and element.xpath(".//draw:image", namespaces=ODF_NS):
+        block_index[0] += 1
+        return
+    for child in element:
+        if isinstance(child.tag, str):
+            _collect_editable_elements(child, elements, block_index)
+
+
+def _editable_elements(root: etree._Element) -> list[tuple[str, etree._Element]]:
+    elements: list[tuple[str, etree._Element]] = []
     text_nodes = root.xpath("//office:text", namespaces=ODF_NS)
     if not text_nodes:
         return elements
     office_text = text_nodes[0]
-    for element in office_text.iter():
-        if not isinstance(element.tag, str):
-            continue
-        if _is_text_element(element, "h") or _is_text_element(element, "p"):
-            elements.append(element)
+    block_index = [0]
+    for child in office_text:
+        if isinstance(child.tag, str):
+            _collect_editable_elements(child, elements, block_index)
     return elements
 
 
@@ -387,9 +557,10 @@ def apply_text_edits_to_content_xml(
 
     root = etree.fromstring(content_xml)
     editable = _editable_elements(root)
-    for idx, element in enumerate(editable):
-        block_id = f"block-{idx}"
+    for block_id, element in editable:
         if block_id not in edits:
+            continue
+        if _has_complex_inline_markup(element):
             continue
         _set_element_plain_text(element, edits[block_id])
     return etree.tostring(root, encoding="UTF-8", xml_declaration=True)

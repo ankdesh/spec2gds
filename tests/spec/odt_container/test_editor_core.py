@@ -53,6 +53,54 @@ SYNTHETIC_LINK_CONTENT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+SYNTHETIC_IPXACT_LINK_CONTENT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  office:version="1.3">
+  <office:body>
+    <office:text>
+      <text:h text:outline-level="1">Overview</text:h>
+      <text:p>No attachment here.</text:p>
+      <text:h text:outline-level="2">IP-XACT reference</text:h>
+      <text:p><text:a xlink:type="simple" xlink:href="spec://ipxact/uart.xml/VLNV/Name">Linked IP name</text:a></text:p>
+    </office:text>
+  </office:body>
+</office:document-content>
+"""
+
+
+SYNTHETIC_RICH_CONTENT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  xmlns:draw="urn:oasis:names:tc:opendocument:xmlns:drawing:1.0"
+  xmlns:xlink="http://www.w3.org/1999/xlink"
+  office:version="1.3">
+  <office:body>
+    <office:text>
+      <text:h text:outline-level="1">Rich content</text:h>
+      <text:p>Plain paragraph.</text:p>
+      <text:p><text:a xlink:type="simple" xlink:href="https://example.com">Linked paragraph</text:a></text:p>
+      <table:table>
+        <table:table-row>
+          <table:table-cell><text:p>Name</text:p></table:table-cell>
+          <table:table-cell><text:p>Value</text:p></table:table-cell>
+        </table:table-row>
+        <table:table-row>
+          <table:table-cell><text:p>CTRL</text:p></table:table-cell>
+          <table:table-cell><text:p>0x00</text:p></table:table-cell>
+        </table:table-row>
+      </table:table>
+      <draw:frame><draw:image xlink:href="Pictures/sample.png"/></draw:frame>
+    </office:text>
+  </office:body>
+</office:document-content>
+"""
+
+
 SYNTHETIC_IPXACT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014">
   <ipxact:vendor>acme</ipxact:vendor>
@@ -118,6 +166,38 @@ def test_apply_text_edits_to_synthetic_content() -> None:
         raise AssertionError("List item edit was not applied.")
 
 
+def test_phase2_parser_assigns_heading_ids_and_renders_rich_blocks() -> None:
+    """Test phase 2 parser fields for stable headings, tables, images, and edit safety."""
+    content_with_ids = editor_document.ensure_heading_ids(SYNTHETIC_RICH_CONTENT_XML)
+    parsed = editor_document.parse_content_xml(content_with_ids)
+    blocks = parsed.blocks
+
+    heading = blocks[0]
+    if heading.heading_id is None or not heading.block_id.startswith("h1-rich-content"):
+        raise AssertionError(f"Expected stable heading id, got {heading}")
+    if not heading.editable:
+        raise AssertionError("Plain heading should be editable.")
+
+    plain = blocks[1]
+    linked = blocks[2]
+    if not plain.editable:
+        raise AssertionError("Plain paragraph should be editable.")
+    if linked.editable or linked.editable_reason != "contains inline markup":
+        raise AssertionError("Linked paragraph should be read-only to preserve inline markup.")
+
+    table = blocks[3]
+    if table.block_type != "table" or table.editable:
+        raise AssertionError(f"Expected read-only table block, got {table}")
+    if table.table_rows[1].cells[0].text != "CTRL":
+        raise AssertionError(f"Expected table cell extraction, got {table.table_rows}")
+
+    image = blocks[4]
+    if image.block_type != "image" or image.image is None:
+        raise AssertionError(f"Expected image block, got {image}")
+    if image.image.href != "Pictures/sample.png":
+        raise AssertionError(f"Unexpected image href: {image.image.href}")
+
+
 def test_ipxact_interface_summary_from_synthetic_xml() -> None:
     """Test interface-focused IP-XACT table extraction."""
     summary = ipxact_view.extract_ipxact_summary("spec_data/ipxact/uart.xml", SYNTHETIC_IPXACT_XML)
@@ -172,6 +252,83 @@ def test_editor_session_snapshot_persists_active_versions_and_saves() -> None:
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+def test_editor_session_migrates_legacy_versions_to_relations() -> None:
+    """Test legacy Title//version groups are projected into global relation metadata."""
+    cont = container.HybridODTContainer()
+    cont.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
+    session = editor_session.EditorSession(cont)
+
+    snapshot = session.snapshot()
+    if len(snapshot.relations.section_groups) != 1:
+        raise AssertionError(f"Expected migrated relation group, got {snapshot.relations}")
+    group = snapshot.relations.section_groups[0]
+    if group.title != "Bus behavior":
+        raise AssertionError(f"Unexpected migrated title: {group.title}")
+    if [variant.version for variant in group.variants] != ["v1", "v2"]:
+        raise AssertionError(f"Unexpected migrated versions: {group.variants}")
+    if not all(variant.heading_id.startswith("h2-bus-behavior") for variant in group.variants):
+        raise AssertionError(f"Expected stable heading ids, got {group.variants}")
+
+    session.persist_relations(snapshot.relations)
+    if "spec_data/odt-editor/relations.json" not in cont.custom_files:
+        raise AssertionError("Relations metadata was not persisted.")
+
+
+def test_editor_session_validates_multiple_ipxact_attachments() -> None:
+    """Test heading-level IP-XACT attachment relations and missing file diagnostics."""
+    cont = container.HybridODTContainer()
+    cont.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
+    cont.inject_file(
+        "spec_data/ipxact/uart.xml",
+        SYNTHETIC_IPXACT_XML,
+        "application/xml+ipxact",
+    )
+    session = editor_session.EditorSession(cont)
+    snapshot = session.snapshot()
+    heading_id = snapshot.document.blocks[0].heading_id
+    if heading_id is None:
+        raise AssertionError("Expected heading id.")
+
+    draft = snapshot.relations
+    draft.ipxact_attachments[heading_id] = [
+        {"file_path": "spec_data/ipxact/uart.xml"},
+        {"file_path": "missing.xml"},
+    ]
+    session.persist_relations(draft)
+    updated = session.snapshot()
+
+    if updated.relations.ipxact_attachments[heading_id][0].file_path != "spec_data/ipxact/uart.xml":
+        raise AssertionError("Existing attachment was not preserved.")
+    if not any("missing" in diagnostic.message for diagnostic in updated.diagnostics):
+        raise AssertionError(f"Expected missing attachment diagnostic, got {updated.diagnostics}")
+
+
+def test_editor_session_migrates_ipxact_links_to_nearest_heading() -> None:
+    """Test legacy spec://ipxact links become heading-specific attachments."""
+    cont = container.HybridODTContainer()
+    cont.document.set_part("content.xml", SYNTHETIC_IPXACT_LINK_CONTENT_XML)
+    cont.inject_file(
+        "spec_data/ipxact/uart.xml",
+        SYNTHETIC_IPXACT_XML,
+        "application/xml+ipxact",
+    )
+    session = editor_session.EditorSession(cont)
+    snapshot = session.snapshot()
+    headings = {
+        block.display_text: block.heading_id
+        for block in snapshot.document.blocks
+        if block.block_type == "heading"
+    }
+    overview_id = headings["Overview"]
+    ipxact_id = headings["IP-XACT reference"]
+
+    if overview_id in snapshot.relations.ipxact_attachments:
+        raise AssertionError("Overview heading should not receive IP-XACT attachments.")
+    attached = snapshot.relations.ipxact_attachments.get(ipxact_id or "", [])
+    if [item.file_path for item in attached] != ["spec_data/ipxact/uart.xml"]:
+        raise AssertionError(f"Expected heading-specific IP-XACT attachment, got {attached}")
 
 
 def test_editor_session_blocks_save_on_unresolved_spec_link() -> None:
@@ -280,10 +437,17 @@ def test_editor_web_scaffold_is_minimal_and_present() -> None:
     main_source = (web_root / "src/main.tsx").read_text(encoding="utf-8")
     expected_fragments = [
         "/documents/snapshot",
-        "/documents/text-edits",
-        "/documents/active-section-versions",
-        "/ipxact/preview",
-        "/documents/ipxact-xml",
+        "/documents/save",
+        "/documents/assets",
+        "/files",
+        "command-bar",
+        "file-sidebar",
+        "ipxact_attachments",
+        "attachedComponents",
+        "No IP-XACT attached to this heading.",
+        "closeFloatingMenus",
+        "pointerdown",
+        "contentEditable",
     ]
     for fragment in expected_fragments:
         if fragment not in main_source:
@@ -346,6 +510,25 @@ def test_editor_api_endpoints_with_synthetic_odt() -> None:
         )
         if len(ipxact_payload["ipxact_components"]) != 1:
             raise AssertionError("API did not persist imported IP-XACT XML.")
+
+        save_payload = endpoints[("POST", "/documents/save")](
+            temp_path,
+            api_app.EditorSaveRequest.model_validate(
+                {
+                    "text_edits": {"block-1": "Explicit save intro."},
+                    "relations": ipxact_payload["relations"],
+                    "ipxact_xml_edits": {},
+                }
+            ),
+        )
+        if save_payload["document"]["blocks"][1]["text"] != "Explicit save intro.":
+            raise AssertionError("Explicit save route did not apply text edits.")
+        if "spec_data/odt-editor/relations.json" not in container.HybridODTContainer(temp_path).custom_files:
+            raise AssertionError("Explicit save route did not persist relation metadata.")
+
+        file_payload = endpoints[("GET", "/files")](str(Path(temp_path).parent))
+        if not any(entry["name"] == Path(temp_path).name for entry in file_payload["entries"]):
+            raise AssertionError(f"File browser did not list the synthetic ODT: {file_payload}")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

@@ -259,30 +259,32 @@ Summary:
 - Keep dependencies minimal and popular: FastAPI, Pydantic, React, Vite, pytest,
   and later Playwright for browser flows.
 - Do not start with Electron, Tauri, or a heavy rich-text editor framework.
-- Build a small semantic block editor first for headings, paragraphs, lists,
-  section-version selection, links, and IP-XACT previews.
+- Build a semantic document editor for headings, paragraphs, lists, links,
+  read-only tables/images, section-version selection, and IP-XACT previews.
 - Keep all code for this tool inside `spec2gds/spec/odt_container/`.
 
-The first editor milestone should render ODT semantically, allow limited text
-editing, support heading-based section versions such as `Title//v1`, preview
-interface-focused IP-XACT tables, edit/import raw IP-XACT XML, and save only
-when diagnostics are clean.
+The current editor milestone renders ODT semantically, allows limited inline text
+editing, migrates heading-based section versions such as `Title//v1` into global
+metadata, attaches embedded IP-XACT files to headings, opens detailed IP-XACT
+tables in a right drawer, and saves only when diagnostics are clean.
 
 Implemented so far:
 
 - `editor_core` parses `content.xml` into headings, paragraphs, list items,
-  table placeholders, and links.
-- Adjacent headings with the same title and level, written as `Title//version`,
-  are grouped as section variants.
-- Active section choices are stored as manifested JSON under
-  `spec_data/odt-editor/`.
+  read-only tables, read-only images, and links.
+- Headings receive stable `xml:id` values for relation metadata.
+- Adjacent legacy headings with the same title and level, written as
+  `Title//version`, are migrated into section-variant relations.
+- Active section choices and heading-attached IP-XACT files are stored in
+  `spec_data/odt-editor/relations.json`.
 - Embedded IP-XACT XML can be summarized into interface-focused table data.
 - The editor session blocks save while diagnostics remain.
-- A minimal FastAPI app exposes snapshot, text edit, and active section version
-  endpoints.
-- A minimal React/Vite shell can load a local ODT path through the API, edit
-  semantic text blocks, switch section versions, and display IP-XACT interface
-  summaries.
+- A FastAPI app exposes snapshot, explicit save, asset, text edit, active
+  section version, and IP-XACT XML endpoints.
+- A React/Vite shell can load a local ODT path through the API, render a clean
+  document view, edit simple text blocks inline, switch heading-local versions,
+  attach existing embedded IP-XACT files, and inspect IP-XACT interfaces in a
+  right drawer.
 - Raw IP-XACT XML can be previewed for diagnostics and imported only when the
   preview is clean.
 - Synthetic tests cover semantic parsing, text edits, section version state,
@@ -293,6 +295,9 @@ Implemented so far:
 - Frontend scaffold tests keep the package scripts, source files, API calls, and
   minimal dependency policy visible to Python CI until Node/npm build checks are
   available in the development environment.
+
+Phase 2 behavior and metadata details are documented in
+[`docs/phase2_document_ui.md`](docs/phase2_document_ui.md).
 
 ## Known Scope
 

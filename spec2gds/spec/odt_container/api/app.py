@@ -1,14 +1,34 @@
+import pathlib
 import typing
 
 import pydantic
 
 import spec2gds.spec.odt_container.container as container_module
+import spec2gds.spec.odt_container.editor_core.relations as editor_relations
 import spec2gds.spec.odt_container.editor_core.session as editor_session
 
 
 class IpxactXmlRequest(pydantic.BaseModel):
     file_path: str
     xml_text: str
+
+
+class EditorSaveRequest(pydantic.BaseModel):
+    text_edits: dict[str, str] = pydantic.Field(default_factory=dict)
+    relations: editor_relations.EditorRelations | None = None
+    ipxact_xml_edits: dict[str, str] = pydantic.Field(default_factory=dict)
+
+
+class FileBrowserEntry(pydantic.BaseModel):
+    name: str
+    path: str
+    entry_type: str
+
+
+class FileBrowserResponse(pydantic.BaseModel):
+    directory: str
+    parent: str | None = None
+    entries: list[FileBrowserEntry]
 
 
 def create_app() -> typing.Any:
@@ -32,7 +52,9 @@ def create_app() -> typing.Any:
         fastapi.middleware.cors.CORSMiddleware,
         allow_origins=[
             "http://127.0.0.1:5173",
+            "http://127.0.0.1:5174",
             "http://localhost:5173",
+            "http://localhost:5174",
         ],
         allow_credentials=True,
         allow_methods=["*"],
@@ -83,5 +105,63 @@ def create_app() -> typing.Any:
         session.update_ipxact_xml(request.file_path, request.xml_text)
         session.save(path)
         return session.snapshot().model_dump()
+
+    @app.post("/documents/save")
+    def save_document(
+        path: str,
+        request: EditorSaveRequest,
+    ) -> dict[str, typing.Any]:
+        session = editor_session.EditorSession.from_path(path)
+        session.apply_editor_save(
+            text_edits=request.text_edits,
+            editor_relations=request.relations,
+            ipxact_xml_edits=request.ipxact_xml_edits,
+        )
+        session.save(path)
+        return session.snapshot().model_dump()
+
+    @app.get("/documents/assets/{asset_id}")
+    def document_asset(path: str, asset_id: str) -> typing.Any:
+        session = editor_session.EditorSession.from_path(path)
+        try:
+            data, media_type = session.asset_bytes(asset_id)
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        return fastapi.Response(content=data, media_type=media_type)
+
+    @app.get("/files")
+    def browse_files(directory: str = ".") -> dict[str, typing.Any]:
+        try:
+            current = pathlib.Path(directory).expanduser().resolve()
+            if not current.exists() or not current.is_dir():
+                raise ValueError(f"Not a directory: {directory}")
+            entries: list[FileBrowserEntry] = []
+            for child in sorted(current.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower())):
+                if child.name.startswith("."):
+                    continue
+                if child.is_dir():
+                    entries.append(
+                        FileBrowserEntry(
+                            name=child.name,
+                            path=str(child),
+                            entry_type="directory",
+                        )
+                    )
+                elif child.suffix.lower() == ".odt":
+                    entries.append(
+                        FileBrowserEntry(
+                            name=child.name,
+                            path=str(child),
+                            entry_type="file",
+                        )
+                    )
+            parent = str(current.parent) if current.parent != current else None
+            return FileBrowserResponse(
+                directory=str(current),
+                parent=parent,
+                entries=entries,
+            ).model_dump()
+        except Exception as exc:
+            raise fastapi.HTTPException(status_code=400, detail=str(exc)) from exc
 
     return app
