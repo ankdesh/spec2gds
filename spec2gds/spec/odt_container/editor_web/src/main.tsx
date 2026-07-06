@@ -107,8 +107,47 @@ type FileBrowserResponse = {
   entries: FileBrowserEntry[];
 };
 
+type AgentBlock = {
+  block_id: string;
+  title: string;
+  level: number;
+  tags: string[];
+};
+
+type AgentAction = {
+  action_id: string;
+  title: string;
+  summary: string;
+};
+
+type AgentArtifact = {
+  artifact_id: string;
+  artifact_kind: string;
+  media_type: string;
+  summary: string;
+  external_uri: string;
+  producer: string;
+  role: string;
+};
+
+type AgentAttachment = {
+  attachment_id: string;
+  block_id: string;
+  artifact_id: string;
+  role: string;
+  run_id: string;
+};
+
+type AgentDocumentState = {
+  document_id: string;
+  blocks: AgentBlock[];
+  artifact_refs: Record<string, AgentArtifact>;
+  attachments: Record<string, AgentAttachment[]>;
+};
+
 const apiBase = "http://127.0.0.1:8000";
 const initialBrowseDirectory = "spec2gds/spec/odt_container/samples/generated";
+const v1Tags = ["systemc-perf", "systemc-bitaccurate", "rtl", "ip", "interface", "configuration"];
 
 function headingForVariant(variant: SectionVariant): string {
   return variant.heading_id ?? variant.heading_block_id ?? "";
@@ -162,9 +201,15 @@ function App() {
   const [xmlEdits, setXmlEdits] = useState<Record<string, string>>({});
   const [openAttachHeading, setOpenAttachHeading] = useState<string | null>(null);
   const [openVersionGroup, setOpenVersionGroup] = useState<string | null>(null);
+  const [openTagHeading, setOpenTagHeading] = useState<string | null>(null);
+  const [openAgentArtifactHeading, setOpenAgentArtifactHeading] = useState<string | null>(null);
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
   const [xmlEditPath, setXmlEditPath] = useState<string | null>(null);
   const [status, setStatus] = useState("Choose an ODT file to load.");
+  const [agentBlocks, setAgentBlocks] = useState<Record<string, AgentBlock>>({});
+  const [agentActions, setAgentActions] = useState<Record<string, AgentAction[]>>({});
+  const [agentArtifacts, setAgentArtifacts] = useState<Record<string, AgentArtifact>>({});
+  const [agentAttachments, setAgentAttachments] = useState<Record<string, AgentAttachment[]>>({});
 
   const relations = relationsDraft ?? snapshot?.relations ?? null;
   const sectionGroups = relations?.section_groups ?? snapshot?.document.section_groups ?? [];
@@ -202,6 +247,8 @@ function App() {
       }
       setOpenAttachHeading(null);
       setOpenVersionGroup(null);
+      setOpenTagHeading(null);
+      setOpenAgentArtifactHeading(null);
     }
 
     document.addEventListener("pointerdown", closeFloatingMenus);
@@ -234,6 +281,7 @@ function App() {
     setXmlEdits({});
     setDrawerPath(null);
     setStatus("Document loaded.");
+    await openAgentSpec(nextPath);
   }
 
   async function loadSnapshot() {
@@ -298,6 +346,76 @@ function App() {
     });
   }
 
+  async function openAgentSpec(nextPath: string) {
+    const response = await fetch(`${apiBase}/agent-spec/documents/open`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: nextPath,
+        sidecar_root: `${nextPath}.agent-spec-sidecar`,
+        user_identity: "local"
+      })
+    });
+    if (!response.ok) {
+      setStatus(`Document loaded. Agent-spec open failed: ${response.status}`);
+      return;
+    }
+    const data = (await response.json()) as AgentDocumentState;
+    const nextBlocks = Object.fromEntries(data.blocks.map((block) => [block.block_id, block])) as Record<string, AgentBlock>;
+    setAgentBlocks(nextBlocks);
+    setAgentArtifacts(data.artifact_refs);
+    setAgentAttachments(data.attachments);
+    await refreshAgentActions(data.blocks);
+  }
+
+  async function refreshAgentActions(blocks: AgentBlock[]) {
+    const entries = await Promise.all(
+      blocks.map(async (block) => {
+        const response = await fetch(`${apiBase}/agent-spec/blocks/${encodeURIComponent(block.block_id)}/actions`);
+        if (!response.ok) {
+          return [block.block_id, []] as const;
+        }
+        const data = (await response.json()) as { actions: AgentAction[] };
+        return [block.block_id, data.actions] as const;
+      })
+    );
+    setAgentActions(Object.fromEntries(entries) as Record<string, AgentAction[]>);
+  }
+
+  async function updateAgentTags(blockId: string, tags: string[]) {
+    const response = await fetch(`${apiBase}/agent-spec/blocks/${encodeURIComponent(blockId)}/tags`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tags })
+    });
+    if (!response.ok) {
+      setStatus(`Tag update failed: ${response.status}`);
+      return;
+    }
+    const block = (await response.json()) as AgentBlock;
+    const nextBlocks = { ...agentBlocks, [block.block_id]: block };
+    setAgentBlocks(nextBlocks);
+    await refreshAgentActions(Object.values(nextBlocks));
+  }
+
+  async function runAgentAction(blockId: string, actionId: string) {
+    setStatus(`Running ${actionId}...`);
+    const response = await fetch(
+      `${apiBase}/agent-spec/blocks/${encodeURIComponent(blockId)}/actions/${encodeURIComponent(actionId)}/runs`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ parameters: { delay_seconds: 1 } })
+      }
+    );
+    if (!response.ok) {
+      setStatus(`Action failed: ${response.status}`);
+      return;
+    }
+    await openAgentSpec(path);
+    setStatus(`${actionId} completed and attached artifact metadata.`);
+  }
+
   function renderText(block: SemanticBlock) {
     const text = textEdits[block.block_id] ?? (block.display_text || block.text);
     if (!block.editable) {
@@ -327,6 +445,9 @@ function App() {
     const group = groupForHeading(block, sectionGroups);
     const headingId = block.heading_id ?? block.block_id;
     const attachments = relations?.ipxact_attachments[headingId] ?? [];
+    const agentBlock = agentBlocks[headingId];
+    const actions = agentActions[headingId] ?? [];
+    const agentBlockAttachments = agentAttachments[headingId] ?? [];
     const attachedComponents = attachments
       .map((attachment) => componentsByPath[attachment.file_path])
       .filter((component): component is IpxactSummary => component !== undefined);
@@ -353,6 +474,39 @@ function App() {
             <span aria-hidden="true">⧉</span>
             <span>{attachments.length}</span>
           </button>
+          {agentBlock && (
+            <button
+              className={agentBlock.tags.length > 0 ? "icon-button tag-button has-tags" : "icon-button tag-button"}
+              type="button"
+              title={`${agentBlock.tags.length} tag${agentBlock.tags.length === 1 ? "" : "s"}`}
+              onClick={() => setOpenTagHeading(openTagHeading === headingId ? null : headingId)}
+            >
+              #
+            </button>
+          )}
+          {agentBlockAttachments.length > 0 && (
+            <button
+              className="icon-button agent-artifact-button has-agent-artifacts"
+              type="button"
+              title={`${agentBlockAttachments.length} agent artifact${agentBlockAttachments.length === 1 ? "" : "s"}`}
+              onClick={() =>
+                setOpenAgentArtifactHeading(openAgentArtifactHeading === headingId ? null : headingId)
+              }
+            >
+              <span>{agentBlockAttachments.length}</span>
+            </button>
+          )}
+          {actions.map((action) => (
+            <button
+              key={action.action_id}
+              className="action-button"
+              type="button"
+              title={action.summary}
+              onClick={() => void runAgentAction(headingId, action.action_id)}
+            >
+              {action.title}
+            </button>
+          ))}
         </div>
         {group && openVersionGroup === group.group_id && (
           <div className="floating-menu version-menu">
@@ -391,6 +545,41 @@ function App() {
               <p className="empty-note">Some attached IP-XACT files are missing from the ODT package.</p>
             )}
             {attachedComponents.length === 0 && <p className="empty-note">No IP-XACT attached to this heading.</p>}
+          </div>
+        )}
+        {openTagHeading === headingId && agentBlock && (
+          <div className="floating-menu tag-menu">
+            <strong>Tags</strong>
+            {v1Tags.map((tag) => {
+              const checked = agentBlock.tags.includes(tag);
+              const nextTags = checked
+                ? agentBlock.tags.filter((candidate) => candidate !== tag)
+                : [...agentBlock.tags, tag];
+              return (
+                <button
+                  key={tag}
+                  className={checked ? "menu-item active" : "menu-item"}
+                  type="button"
+                  onClick={() => void updateAgentTags(headingId, nextTags)}
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {openAgentArtifactHeading === headingId && (
+          <div className="floating-menu agent-artifact-menu">
+            <strong>Agent artifacts</strong>
+            {agentBlockAttachments.map((attachment) => {
+              const artifact = agentArtifacts[attachment.artifact_id];
+              return (
+                <div key={attachment.attachment_id} className="attachment-row">
+                  <span>{artifact?.summary ?? attachment.artifact_id}</span>
+                  <small>{artifact?.producer ?? attachment.role}</small>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

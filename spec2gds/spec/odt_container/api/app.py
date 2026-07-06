@@ -6,6 +6,7 @@ import pydantic
 import spec2gds.spec.odt_container.container as container_module
 import spec2gds.spec.odt_container.editor_core.relations as editor_relations
 import spec2gds.spec.odt_container.editor_core.session as editor_session
+import spec2gds.agent_spec.api.app as agent_spec_api
 
 
 class IpxactXmlRequest(pydantic.BaseModel):
@@ -48,6 +49,7 @@ def create_app() -> typing.Any:
         ) from exc
 
     app = fastapi.FastAPI(title="spec2gds ODT Container Editor API")
+    app.mount("/agent-spec", agent_spec_api.create_app())
     app.add_middleware(
         fastapi.middleware.cors.CORSMiddleware,
         allow_origins=[
