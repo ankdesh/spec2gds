@@ -424,6 +424,7 @@ def test_editor_web_scaffold_is_minimal_and_present() -> None:
         raise AssertionError(f"Unexpected frontend runtime dependencies: {actual_dependencies}")
 
     allowed_dev_dependencies = {
+        "@playwright/test",
         "@types/react",
         "@types/react-dom",
         "@vitejs/plugin-react",
@@ -529,6 +530,18 @@ def test_editor_api_endpoints_with_synthetic_spec() -> None:
         file_payload = endpoints[("GET", "/files")](str(Path(temp_path).parent))
         if not any(entry["name"] == Path(temp_path).name for entry in file_payload["entries"]):
             raise AssertionError(f"File browser did not list the synthetic agent-spec: {file_payload}")
+
+        previous_cwd = Path.cwd()
+        os.chdir("spec2gds/agent_spec/document/editor_web")
+        try:
+            generated_payload = endpoints[("GET", "/files")](api_app.GENERATED_SAMPLES_ALIAS)
+        finally:
+            os.chdir(previous_cwd)
+        generated_files = {entry["name"] for entry in generated_payload["entries"]}
+        if "synthetic_basic_with_ipxact.spec" not in generated_files:
+            raise AssertionError(f"Generated samples were not listed from alias path: {generated_payload}")
+        if any(entry["name"].endswith(".agent-spec-sidecar") for entry in generated_payload["entries"]):
+            raise AssertionError(f"File browser should hide sidecar directories: {generated_payload}")
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)

@@ -11,8 +11,6 @@ import spec2gds.agent_spec.runs.runner as agent_runner
 
 
 class OpenDocumentRequest(pydantic.BaseModel):
-    """Request body for opening a local `.spec` document session."""
-
     path: str
     sidecar_root: str | None = None
     user_identity: str = "local"
@@ -20,14 +18,10 @@ class OpenDocumentRequest(pydantic.BaseModel):
 
 
 class TagUpdateRequest(pydantic.BaseModel):
-    """Request body for replacing one block's tags."""
-
     tags: list[str]
 
 
 class RunActionRequest(pydantic.BaseModel):
-    """Request body for triggering an action with optional parameters."""
-
     parameters: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
 
 

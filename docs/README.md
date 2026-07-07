@@ -20,4 +20,6 @@ individual coding sessions.
   plan, v1 decision ledger, and remaining design topics.
 - [Agent-Spec Refactor Goals](agent_spec_refactor_goals.md): hard-cutover plan
   to merge the old `spec` hierarchy into `agent-spec`, rename active files to
-  `.spec`, and remove ODT-centered names from code.
+  `.spec`, and remove agent-spec-centered names from code.
+- [Agent-Spec UI Testing](agent_spec_ui_testing.md): Playwright setup, commands,
+  and restricted-environment notes for the local editor.

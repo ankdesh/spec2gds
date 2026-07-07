@@ -13,7 +13,7 @@ import spec2gds.agent_spec.plugins.manager as manager
 
 
 ACTIVE_STATE_PATH: str = "spec_data/agent-spec-editor/active_section_versions.json"
-ACTIVE_STATE_MEDIA_TYPE: str = "application/vnd.spec2gds.agent-spec-editor-state+json"
+ACTIVE_STATE_MEDIA_TYPE: str = "application/vnd.spec2gds.spec-editor-state+json"
 
 
 class EditorSnapshot(pydantic.BaseModel):

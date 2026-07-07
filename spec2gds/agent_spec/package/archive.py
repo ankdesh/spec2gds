@@ -28,8 +28,6 @@ class AgentSpecArchive:
         self.custom_files = {}
         self.container_path = path
 
-        # Temp-file based tests often create a zero-byte placeholder first.
-        # Treat that as a request for a new archive rather than parsing it.
         if path is not None and os.path.exists(path) and os.path.getsize(path) > 0:
             try:
                 self.document = odfdo.Document(path)
@@ -41,8 +39,6 @@ class AgentSpecArchive:
             except Exception as exc:
                 raise IOError(f"Failed to parse custom parts from .spec document: {exc}") from exc
         else:
-            # Start from an office-text package while `.spec` remains compatible
-            # with mature document editors.
             self.document = odfdo.Document.new("text")
 
     def _load_custom_files(self) -> None:

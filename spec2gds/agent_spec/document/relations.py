@@ -5,7 +5,7 @@ import pydantic
 
 
 RELATIONS_PATH: str = "spec_data/agent-spec-editor/relations.json"
-RELATIONS_MEDIA_TYPE: str = "application/vnd.spec2gds.agent-spec-editor-relations+json"
+RELATIONS_MEDIA_TYPE: str = "application/vnd.spec2gds.spec-editor-relations+json"
 
 
 class HeadingIpxactAttachment(pydantic.BaseModel):

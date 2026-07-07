@@ -2,9 +2,8 @@
 
 ## Decision
 
-Build the extended agent-spec viewer/editor as a local web application contained
-inside `spec2gds.agent_spec.document`, backed by the `.spec` archive services in
-`spec2gds.agent_spec.package`.
+Build the extended agent-spec viewer/editor as a local web application contained inside
+the `spec2gds.spec.archive` package.
 
 The first implementation should use a small, popular stack:
 
@@ -60,7 +59,7 @@ behavior.
 All code for this tool should live below:
 
 ```text
-spec2gds/agent_spec/document/
+spec2gds/agent_spec/
 ```
 
 Recommended layout:
@@ -68,13 +67,13 @@ Recommended layout:
 ```text
 spec2gds/agent_spec/
   api/              FastAPI app, route handlers, API schemas.
-  document/         semantic model, section versions, serializers, web shell.
-  package/          .spec archive mechanics and validation.
-  plugins/          embedded payload handlers.
+  document/         agent-spec semantic model, section versions, serializers.
+  package/          .spec archive package mechanics.
   docs/             Package-level design notes.
 ```
 
-The old `spec2gds.spec` package is not an active compatibility path.
+The repository root can remain a high-level umbrella for future `spec2gds`
+components.
 
 ## Current Milestone
 

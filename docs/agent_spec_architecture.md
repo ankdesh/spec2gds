@@ -8,12 +8,12 @@ It is the versioned repository of human-readable specification content,
 deterministically defined artifacts, pipeline inputs, generated outputs,
 provenance, and reviewable writebacks.
 
-A normal hardware spec document may start as Word, PDF, Markdown, or another
-human-written format. The architecture assumes that document can be converted
-into an agent-spec `.spec` document with stable blocks, tags, artifact
-references, and links for agent/pipeline use.
+A normal hardware spec document may start as Word, PDF, Markdown, agent-spec, or
+another human-written format. The architecture assumes that document can be
+converted into an agent-spec document: an agent-spec-backed document with stable
+blocks, tags, artifact references, and links for agent/pipeline use.
 
-The `.spec` archive is the storage foundation:
+The existing agent-spec archive remains the storage foundation:
 
 - `content.xml` carries the editable human document: text, tables, figures, and
   headings.
@@ -74,8 +74,8 @@ flowchart LR
     Writeback["Writeback Service\nvalidate, apply, feedback"]
   end
 
-  subgraph Storage[".spec-backed storage"]
-    SpecPackage[".spec package"]
+  subgraph Storage["agent-spec-backed storage"]
+    agent-spec[".spec package"]
     Content["content.xml\ntext, tables, figures"]
     SpecData["spec_data/\nartifact references"]
   end
@@ -96,31 +96,35 @@ flowchart LR
   Runs --> Workers
   Workers --> Events
   Workers --> Writeback
-  Docs --> SpecPackage
+  Docs --> agent-spec
   Graph --> SpecData
   Writeback --> Docs
-  SpecPackage --> Content
-  SpecPackage --> SpecData
+  agent-spec --> Content
+  agent-spec --> SpecData
 ```
 
-## Python Package Boundaries
+## Recommended Python Package Boundaries
 
-The active implementation now lives under one `spec2gds.agent_spec` hierarchy:
+The existing `spec2gds.spec.agent_spec_package` package should remain the agent-spec archive
+engine. The new architecture should add an orchestration package above it:
 
 ```text
 spec2gds/
   agent_spec/
-    package/          .spec archive loading, saving, manifest, validation
-    document/         semantic content model, relations, local editor shell
-    plugins/          payload handlers such as JSON and IP-XACT
-    storage/          repository, graph persistence, artifact policies
+    api/              central FastAPI app and websocket/event routes
     actions/          action registry, plugin loading, built-in actions
-    runs/             run coordinator, snapshots, writebacks, audit events
-    api/              FastAPI routes for documents, actions, runs, UI support
-    samples/          .spec sample documents and builders
+    events/           event envelope, in-process bus, durable event log
+    graph/            block/version graph models and queries
+    runs/             run coordinator, leases, worker protocol
+    storage/          agent-spec-backed repository and artifact policies
+    writeback/        validation, auto-apply, feedback, and audit logic
+    workers/          local worker runtime and adapters
+  spec/
+    agent_spec_package/    existing agent-spec archive, plugins, editor core, web shell
 ```
 
-The older `spec2gds.spec` hierarchy is not an active compatibility path.
+The current editor API can either stay as an agent-spec-only development surface or be
+gradually folded under `agent_spec/api` once the action/event model exists.
 
 ## agent-spec Storage Model
 

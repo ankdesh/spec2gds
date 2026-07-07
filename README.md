@@ -7,10 +7,10 @@ experiments and tooling.
 
 ### Agent-Spec Architecture
 
-`agent-spec` is the central `.spec` document architecture for converted
-hardware specification documents, versioned sections/subsections, tags,
-configurable Python actions, downstream pipeline runs, artifact references, and
-reviewable writebacks.
+The intended architecture is for `agent-spec` to become the central,
+agent-spec-backed source of truth for converted hardware specification documents,
+versioned sections/subsections, tags, configurable Python actions, downstream
+pipeline runs, artifact references, and reviewable writebacks.
 
 The current plan is documented in:
 
@@ -26,10 +26,9 @@ The first backend implementation lives in:
 spec2gds/agent_spec/
 ```
 
-It provides the v1 Pydantic contracts, `.spec` metadata repository, Python
-module plus YAML action registry, run coordinator, writeback records, pseudo
-SystemC performance/bit-accurate actions, and the office-compatible `.spec`
-archive/editor layer.
+It provides the v1 Pydantic contracts, agent-spec-backed metadata repository, Python
+module plus YAML action registry, run coordinator, writeback records, and pseudo
+SystemC performance/bit-accurate actions.
 
 Run the local agent-spec API:
 
@@ -37,22 +36,20 @@ Run the local agent-spec API:
 uv run python -m spec2gds.agent_spec.api
 ```
 
-The active implementation is organized by responsibility:
+### Agent-Spec
+
+The current implemented component is the extended agent-spec archive tool in:
 
 ```text
 spec2gds/agent_spec/
-  package/    .spec archive loading, saving, and validation
-  document/   semantic document projection and local editor support
-  plugins/    payload handlers such as JSON and IP-XACT
-  storage/    graph, manifest, run, checkpoint, and artifact persistence
-  actions/    action registry and built-in action providers
-  runs/       run coordinator and writeback flow
-  api/        FastAPI surfaces
-  samples/    .spec sample documents and builders
 ```
 
-The `.spec` archive is currently office-compatible internally, but the public
-project extension and user-facing terminology are `.spec` and `agent-spec`.
+It provides a Python API and CLI for embedding structured hardware data inside
+agent-spec files, including custom `spec_data/` artifacts, `spec://` links, IP-XACT
+artifact support, and container validation.
+
+See the package docs in [`spec2gds/agent_spec/docs/`](spec2gds/agent_spec/docs/)
+for design notes and editor/API direction.
 
 ## Development
 
@@ -69,6 +66,15 @@ Run tests:
 
 ```bash
 uv run python -m pytest -q
+```
+
+Run the agent-spec editor Playwright smoke test:
+
+```bash
+cd spec2gds/agent_spec/document/editor_web
+npm install
+npx playwright install chromium
+npm run test:e2e
 ```
 
 For restricted environments, keep uv state local to the repository:

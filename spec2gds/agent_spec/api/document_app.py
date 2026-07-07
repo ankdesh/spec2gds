@@ -32,6 +32,42 @@ class FileBrowserResponse(pydantic.BaseModel):
     entries: list[FileBrowserEntry]
 
 
+GENERATED_SAMPLES_ALIAS = "agent-spec://samples/generated"
+
+
+def _repo_root() -> pathlib.Path:
+    """Return the repository root based on this module's package location."""
+    return pathlib.Path(__file__).resolve().parents[3]
+
+
+def _generated_samples_directory() -> pathlib.Path:
+    """Return the checked-in directory containing loadable sample .spec files."""
+    return _repo_root() / "spec2gds" / "agent_spec" / "samples" / "generated"
+
+
+def _resolve_browse_directory(directory: str) -> pathlib.Path:
+    """Resolve file browser paths without depending on the server cwd.
+
+    The frontend starts at a named generated-samples location so users always
+    see a loadable agent-spec document after opening the editor. Absolute paths
+    and legacy relative paths are still accepted for normal navigation and for
+    older frontend bundles.
+    """
+    if directory in {"", ".", "generated", "@generated", GENERATED_SAMPLES_ALIAS}:
+        return _generated_samples_directory().resolve()
+
+    requested = pathlib.Path(directory).expanduser()
+    candidates = [requested]
+    if not requested.is_absolute():
+        candidates.append(_repo_root() / requested)
+
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved.exists() and resolved.is_dir():
+            return resolved
+    raise ValueError(f"Not a directory: {directory}")
+
+
 def create_app() -> typing.Any:
     """
     Create the local FastAPI app for the v1 agent-spec editor.
@@ -132,14 +168,14 @@ def create_app() -> typing.Any:
         return fastapi.Response(content=data, media_type=media_type)
 
     @app.get("/files")
-    def browse_files(directory: str = ".") -> dict[str, typing.Any]:
+    def browse_files(directory: str = GENERATED_SAMPLES_ALIAS) -> dict[str, typing.Any]:
         try:
-            current = pathlib.Path(directory).expanduser().resolve()
-            if not current.exists() or not current.is_dir():
-                raise ValueError(f"Not a directory: {directory}")
+            current = _resolve_browse_directory(directory)
             entries: list[FileBrowserEntry] = []
             for child in sorted(current.iterdir(), key=lambda item: (not item.is_dir(), item.name.lower())):
                 if child.name.startswith("."):
+                    continue
+                if child.name.endswith(".agent-spec-sidecar"):
                     continue
                 if child.is_dir():
                     entries.append(

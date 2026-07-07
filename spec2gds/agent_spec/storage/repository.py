@@ -1,4 +1,4 @@
-"""Repository for graph, run, and artifact metadata inside `.spec` documents."""
+""".spec repository for agent-spec v1 metadata."""
 
 import datetime
 import hashlib
@@ -20,17 +20,14 @@ MEDIA_TYPE_JSON: str = "application/vnd.spec2gds.agent-spec+json"
 
 
 def utc_now() -> str:
-    """Return a stable UTC timestamp string for persisted metadata."""
     return datetime.datetime.now(datetime.UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def stable_hash(data: bytes) -> str:
-    """Return the normalized content hash used in graph and artifact records."""
     return f"sha256:{hashlib.sha256(data).hexdigest()}"
 
 
 def stable_id(prefix: str) -> str:
-    """Create a namespaced random identifier for persisted agent-spec records."""
     return f"{prefix}_{uuid.uuid4().hex}"
 
 
@@ -54,7 +51,7 @@ def _load_json_model(
 
 
 class AgentSpecRepository:
-    """Server-owned facade for one agent-spec document."""
+    """Server-owned facade for one agent-spec document document."""
 
     document_path: pathlib.Path
     sidecar_root: pathlib.Path
@@ -212,7 +209,6 @@ class AgentSpecRepository:
         return stable_hash(_json_bytes(data))
 
     def set_block_tags(self, block_id: str, tags: list[str]) -> None:
-        """Replace the tag set for one block after validating the v1 taxonomy."""
         self.project_graph()
         if block_id not in self.graph.blocks:
             raise KeyError(f"Unknown block: {block_id}")
@@ -225,7 +221,6 @@ class AgentSpecRepository:
         self.graph.blocks[block_id].tags = clean_tags
 
     def active_version(self, block_id: str) -> agent_models.BlockVersionRecord:
-        """Return a defensive copy of the currently active version for a block."""
         self.project_graph()
         if block_id not in self.graph.blocks:
             raise KeyError(f"Unknown block: {block_id}")
@@ -236,7 +231,6 @@ class AgentSpecRepository:
         raise KeyError(f"Active version missing for block {block_id}: {active_version_id}")
 
     def set_active_version(self, block_id: str, version_id: str) -> None:
-        """Point a block at an existing immutable version."""
         self.project_graph()
         if block_id not in self.graph.blocks:
             raise KeyError(f"Unknown block: {block_id}")
@@ -245,7 +239,6 @@ class AgentSpecRepository:
         self.graph.active_versions[block_id] = version_id
 
     def attachment_artifacts(self, block_id: str) -> list[agent_models.ArtifactRef]:
-        """Return artifact references currently attached to a block."""
         artifacts: list[agent_models.ArtifactRef] = []
         for attachment in self.graph.attachments.get(block_id, []):
             artifact = self.graph.artifact_refs.get(attachment.artifact_id)
@@ -259,7 +252,6 @@ class AgentSpecRepository:
         block_id: str,
         run_id: str,
     ) -> agent_models.AttachmentRecord:
-        """Attach a validated action artifact to an existing block."""
         if block_id not in self.graph.blocks:
             raise KeyError(f"Unknown block: {block_id}")
         self.graph.artifact_refs[artifact.artifact_id] = artifact.model_copy(deep=True)
@@ -279,7 +271,6 @@ class AgentSpecRepository:
         run_record: agent_models.RunRecord,
         events: list[agent_models.RunEvent],
     ) -> None:
-        """Persist one run record and its audit events into the `.spec` archive."""
         run_path = f"spec_data/agent-spec/runs/{run_record.run_id}/run.json"
         events_path = f"spec_data/agent-spec/runs/{run_record.run_id}/events.ndjson"
         event_lines = b"\n".join(_json_bytes(event).strip() for event in events)
@@ -287,19 +278,15 @@ class AgentSpecRepository:
         self._persist_bytes(events_path, event_lines + b"\n")
 
     def persist_snapshot(self, run_id: str, snapshot: agent_models.InputSnapshot) -> None:
-        """Persist the immutable action input snapshot for a run."""
         self._persist_model(f"spec_data/agent-spec/runs/{run_id}/input_snapshot.json", snapshot)
 
     def persist_writeback(self, writeback: agent_models.WritebackRecord) -> None:
-        """Persist the server-owned writeback decision for a run."""
         self._persist_model(f"spec_data/agent-spec/writebacks/{writeback.writeback_id}.json", writeback)
 
     def persist_checkpoint(self, checkpoint_id: str, data: dict[str, typing.Any]) -> None:
-        """Persist a compact checkpoint summary for downstream inspection."""
         self._persist_bytes(f"spec_data/agent-spec/checkpoints/{checkpoint_id}.json", _json_bytes(data))
 
     def save(self) -> None:
-        """Write manifest, graph, version, and artifact metadata back to disk."""
         current_file_hash = self._file_hash()
         if self.loaded_file_hash and current_file_hash and current_file_hash != self.loaded_file_hash:
             raise RuntimeError("Refusing to save because the agent-spec changed outside the server session.")

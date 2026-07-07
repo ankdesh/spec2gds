@@ -33,11 +33,9 @@ class ActionRegistry:
         self._actions = {}
 
     def register(self, spec: agent_models.ActionSpec, handler: ActionHandler) -> None:
-        """Register or replace an action handler by action ID."""
         self._actions[spec.action_id] = RegisteredAction(spec=spec, handler=handler)
 
     def get(self, action_id: str) -> RegisteredAction:
-        """Return an enabled registered action or raise for unknown/disabled IDs."""
         if action_id not in self._actions:
             raise KeyError(f"Unknown action: {action_id}")
         action = self._actions[action_id]
@@ -46,11 +44,9 @@ class ActionRegistry:
         return action
 
     def list_actions(self) -> list[agent_models.ActionSpec]:
-        """List enabled action specs as defensive copies for API/UI use."""
         return [action.spec.model_copy(deep=True) for action in self._actions.values() if action.spec.enabled]
 
     def actions_for_tags(self, tags: list[str]) -> list[agent_models.ActionSpec]:
-        """Find enabled actions whose required tags intersect the block tags."""
         tag_set = set(tags)
         matches: list[agent_models.ActionSpec] = []
         for action in self._actions.values():
@@ -61,14 +57,12 @@ class ActionRegistry:
         return matches
 
     def load_python_modules(self, module_names: list[str]) -> None:
-        """Import action provider modules and call their `register_actions` hook."""
         for module_name in module_names:
             module = importlib.import_module(module_name)
             register_actions = getattr(module, "register_actions")
             register_actions(self)
 
     def apply_config(self, config: dict[str, typing.Any]) -> None:
-        """Apply deployment config such as per-action enablement flags."""
         actions_config = config.get("actions", {})
         if not isinstance(actions_config, dict):
             return

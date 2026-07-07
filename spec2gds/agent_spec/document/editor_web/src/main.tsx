@@ -146,7 +146,7 @@ type AgentDocumentState = {
 };
 
 const apiBase = "http://127.0.0.1:8000";
-const initialBrowseDirectory = "spec2gds/agent_spec/samples/generated";
+const initialBrowseDirectory = "agent-spec://samples/generated";
 const v1Tags = ["systemc-perf", "systemc-bitaccurate", "rtl", "ip", "interface", "configuration"];
 
 function headingForVariant(variant: SectionVariant): string {

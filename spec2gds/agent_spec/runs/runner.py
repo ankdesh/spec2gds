@@ -24,7 +24,6 @@ class AgentSpecRunner:
         self.events = []
 
     def available_actions(self, block_id: str) -> list[agent_models.ActionSpec]:
-        """Return enabled action specs whose tag rules match the selected block."""
         self.repository.project_graph()
         block = self.repository.graph.blocks[block_id]
         return self.registry.actions_for_tags(block.tags)
@@ -35,7 +34,6 @@ class AgentSpecRunner:
         block_id: str,
         parameters: dict[str, typing.Any] | None = None,
     ) -> agent_models.RunRecord:
-        """Capture a snapshot, run an action handler, and persist writeback state."""
         if parameters is None:
             parameters = {}
         self.repository.project_graph()

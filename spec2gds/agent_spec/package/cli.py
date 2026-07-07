@@ -32,7 +32,7 @@ def main() -> None:
     Supports list-plugins, inject, extract, and validate command suites.
     """
     parser = argparse.ArgumentParser(
-        description="Agent-spec archive management tool for embedded structured hardware data."
+        description="Hybrid Agent-Spec Management Tool - Embeds structured hardware specs inside agent-spec."
     )
     # Target command routing
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -46,12 +46,12 @@ def main() -> None:
     # 2. inject command
     inject_parser = subparsers.add_parser(
         "inject",
-        help="Inject a custom modality payload into a .spec archive."
+        help="Inject custom modality data payload into agent-spec archive."
     )
     inject_parser.add_argument(
         "--container",
         required=True,
-        help="Path to target .spec file."
+        help="Path to target hybrid agent-spec file."
     )
     inject_parser.add_argument(
         "--modality",
@@ -72,12 +72,12 @@ def main() -> None:
     # 3. extract command
     extract_parser = subparsers.add_parser(
         "extract",
-        help="Extract a custom modality payload from a .spec archive."
+        help="Extract custom modality payload from agent-spec archive."
     )
     extract_parser.add_argument(
         "--container",
         required=True,
-        help="Path to target .spec file."
+        help="Path to target hybrid agent-spec file."
     )
     extract_parser.add_argument(
         "--modality",
@@ -97,12 +97,12 @@ def main() -> None:
     # 4. validate command
     validate_parser = subparsers.add_parser(
         "validate",
-        help="Run verification on all files and links inside a .spec archive."
+        help="Run verification on all files and links inside agent-spec archive."
     )
     validate_parser.add_argument(
         "--container",
         required=True,
-        help="Path to target .spec file."
+        help="Path to target hybrid agent-spec file."
     )
 
     args = parser.parse_args()
@@ -134,7 +134,7 @@ def main() -> None:
                     print(f"Error: Injected payload is not valid JSON: {e}", file=sys.stderr)
                     sys.exit(1)
 
-            # Open an existing archive or instantiate a fresh blank text archive.
+            # Open existing container or instantiate a fresh blank text container
             # Handles 0-size files correctly inside AgentSpecArchive.__init__
             cont = container.AgentSpecArchive(
                 args.container if os.path.exists(args.container) else None
@@ -143,12 +143,12 @@ def main() -> None:
             # Delegate injection (runs schema validations automatically)
             pm.inject_payload(cont, args.modality, args.file, payload)
             
-            # Preserve office-compatible mimetype alignment when saving.
+            # Enforce uncompressed mimetype alignments and save container ZIP
             cont.save(args.container)
             print(f"Successfully injected '{args.file}' into '{args.container}' under modality '{args.modality}'.")
 
         elif args.command == "extract":
-            # extract: load archive, extract targeted payload file, print/save
+            # extract: load hybrid agent-spec, extract targeted payload file, print/save
             if not os.path.exists(args.container):
                 print(f"Error: Container file '{args.container}' does not exist.", file=sys.stderr)
                 sys.exit(1)

@@ -49,6 +49,10 @@ def test_sample_documents_build_and_verify() -> None:
                 raise AssertionError(f"Expected APB port maps in {generated_path}: {interface.port_maps}")
 
         archive = container.AgentSpecArchive(str(generated_path))
+        if archive.document.get_part("content.xml") is None:
+            raise AssertionError(f"Generated sample has no document content: {generated_path}")
+        if generated_path.suffix != ".spec":
+            raise AssertionError(f"Generated sample should use .spec extension: {generated_path}")
         report = verifier.ContainerVerifier(archive, plugin_manager).verify_all()
         if not report.is_fully_consistent:
             raise AssertionError(f"Generated sample failed verification: {report}")
