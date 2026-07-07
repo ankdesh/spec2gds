@@ -7,10 +7,10 @@ experiments and tooling.
 
 ### Agent-Spec Architecture
 
-The intended architecture is for `agent-spec` to become the central,
-ODT-backed source of truth for converted hardware specification documents,
-versioned sections/subsections, tags, configurable Python actions, downstream
-pipeline runs, artifact references, and reviewable writebacks.
+`agent-spec` is the central `.spec` document architecture for converted
+hardware specification documents, versioned sections/subsections, tags,
+configurable Python actions, downstream pipeline runs, artifact references, and
+reviewable writebacks.
 
 The current plan is documented in:
 
@@ -26,9 +26,10 @@ The first backend implementation lives in:
 spec2gds/agent_spec/
 ```
 
-It provides the v1 Pydantic contracts, ODT-backed metadata repository, Python
-module plus YAML action registry, run coordinator, writeback records, and pseudo
-SystemC performance/bit-accurate actions.
+It provides the v1 Pydantic contracts, `.spec` metadata repository, Python
+module plus YAML action registry, run coordinator, writeback records, pseudo
+SystemC performance/bit-accurate actions, and the office-compatible `.spec`
+archive/editor layer.
 
 Run the local agent-spec API:
 
@@ -36,20 +37,22 @@ Run the local agent-spec API:
 uv run python -m spec2gds.agent_spec.api
 ```
 
-### ODT Container
-
-The current implemented component is the extended ODT container tool in:
+The active implementation is organized by responsibility:
 
 ```text
-spec2gds/spec/odt_container/
+spec2gds/agent_spec/
+  package/    .spec archive loading, saving, and validation
+  document/   semantic document projection and local editor support
+  plugins/    payload handlers such as JSON and IP-XACT
+  storage/    graph, manifest, run, checkpoint, and artifact persistence
+  actions/    action registry and built-in action providers
+  runs/       run coordinator and writeback flow
+  api/        FastAPI surfaces
+  samples/    .spec sample documents and builders
 ```
 
-It provides a Python API and CLI for embedding structured hardware data inside
-ODT files, including custom `spec_data/` artifacts, `spec://` links, IP-XACT
-artifact support, and container validation.
-
-See [`spec2gds/spec/odt_container/README.md`](spec2gds/spec/odt_container/README.md)
-for setup, tests, CLI usage, and the planned local web viewer/editor direction.
+The `.spec` archive is currently office-compatible internally, but the public
+project extension and user-facing terminology are `.spec` and `agent-spec`.
 
 ## Development
 

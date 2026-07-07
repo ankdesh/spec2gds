@@ -5,9 +5,9 @@ import tempfile
 import spec2gds.agent_spec.actions as agent_actions
 import spec2gds.agent_spec.api.app as agent_api_app
 import spec2gds.agent_spec.models as agent_models
-import spec2gds.agent_spec.repository as agent_repository
-import spec2gds.agent_spec.runner as agent_runner
-import spec2gds.spec.odt_container.container as odt_container
+import spec2gds.agent_spec.storage.repository as agent_repository
+import spec2gds.agent_spec.runs.runner as agent_runner
+import spec2gds.agent_spec.package.archive as archive
 
 
 SYNTHETIC_CONTENT_XML: bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
@@ -50,16 +50,16 @@ UPDATED_CONTENT_XML: bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-def _write_synthetic_odt(path: pathlib.Path) -> None:
-    container = odt_container.HybridODTContainer()
+def _write_synthetic_spec(path: pathlib.Path) -> None:
+    container = archive.AgentSpecArchive()
     container.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
     container.save(str(path))
 
 
 def _repository(tmpdir: pathlib.Path) -> agent_repository.AgentSpecRepository:
-    document_path = tmpdir / "agent_spec.odt"
+    document_path = tmpdir / "agent_spec.spec"
     sidecar_path = tmpdir / "sidecar"
-    _write_synthetic_odt(document_path)
+    _write_synthetic_spec(document_path)
     return agent_repository.AgentSpecRepository(
         str(document_path),
         sidecar_root=str(sidecar_path),
@@ -153,7 +153,7 @@ def test_pseudo_pipeline_auto_attaches_artifact_and_persists_metadata() -> None:
         if not artifact.external_uri.startswith("file://"):
             raise AssertionError(f"Expected sidecar file URI, got {artifact.external_uri}")
         if f"spec_data/agent-spec/artifacts/{artifact_id}.json" not in repo.container.custom_files:
-            raise AssertionError("Artifact metadata was not embedded in ODT.")
+            raise AssertionError("Artifact metadata was not embedded in agent-spec.")
 
         writeback_paths = [
             path
@@ -275,7 +275,7 @@ def test_server_owned_write_guard_rejects_out_of_band_file_change() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = pathlib.Path(tmp)
         repo = _repository(tmp_path)
-        document_path = tmp_path / "agent_spec.odt"
+        document_path = tmp_path / "agent_spec.spec"
         block = _block_by_title(repo, "Performance Model")
         repo.set_block_tags(block.block_id, ["systemc-perf"])
 
@@ -284,15 +284,15 @@ def test_server_owned_write_guard_rejects_out_of_band_file_change() -> None:
             repo.save()
         except RuntimeError:
             return
-        raise AssertionError("Expected server-owned write guard to reject external ODT mutation.")
+        raise AssertionError("Expected server-owned write guard to reject external agent-spec mutation.")
 
 
 def test_local_api_opens_document_discovers_action_and_runs_pseudo_pipeline() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = pathlib.Path(tmp)
-        document_path = tmp_path / "agent_spec.odt"
+        document_path = tmp_path / "agent_spec.spec"
         sidecar_path = tmp_path / "sidecar"
-        _write_synthetic_odt(document_path)
+        _write_synthetic_spec(document_path)
         app = agent_api_app.create_app()
         endpoint_by_name = {
             route.name: route.endpoint
@@ -332,7 +332,7 @@ def test_local_api_opens_document_discovers_action_and_runs_pseudo_pipeline() ->
         reloaded.project_graph()
         artifact_id = run_data["produced_artifact_ids"][0]
         if artifact_id not in reloaded.graph.artifact_refs:
-            raise AssertionError("API run did not persist artifact metadata into ODT.")
+            raise AssertionError("API run did not persist artifact metadata into agent-spec.")
 
         events_data = endpoint_by_name["events"]()
         event_types = [event["event_type"] for event in events_data["events"]]

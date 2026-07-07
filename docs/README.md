@@ -6,7 +6,7 @@ individual coding sessions.
 ## Agent-Spec Architecture
 
 - [Agent-Spec Architecture Plan](agent_spec_architecture.md): central server,
-  ODT-backed source of truth, event flow, versioning, UI responsibilities, and
+  .spec source of truth, event flow, versioning, UI responsibilities, and
   pipeline writeback model.
 - [Agent-Spec Vocabulary](agent_spec_vocabulary.md): shared concept glossary
   for hardware specs, agent-spec documents, blocks, tags, versions, actions,
@@ -18,3 +18,6 @@ individual coding sessions.
   schema outline, pseudo pipeline demo, sanity checks, and test plan.
 - [Roadmap and Design Decisions](agent_spec_roadmap_questions.md): staged build
   plan, v1 decision ledger, and remaining design topics.
+- [Agent-Spec Refactor Goals](agent_spec_refactor_goals.md): hard-cutover plan
+  to merge the old `spec` hierarchy into `agent-spec`, rename active files to
+  `.spec`, and remove ODT-centered names from code.

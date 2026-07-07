@@ -102,7 +102,7 @@ Pipeline actions must receive immutable snapshots, not mutable editor state.
 Rules:
 
 - `snapshot_id` is created at run submission time.
-- `source_document_hash` records the ODT state used for the snapshot.
+- `source_document_hash` records the agent-spec state used for the snapshot.
 - `selected_versions` must include exact version IDs.
 - Artifact references should be resolvable through the spec graph service.
 - The snapshot should be persisted or reproducible from run metadata.
@@ -147,7 +147,7 @@ All runtime events should share one envelope:
   "payload": {
     "artifact_id": "artifact_...",
     "external_uri": "artifact-store://run_.../model.cpp",
-    "odt_metadata_path": "spec_data/agent-spec/artifacts/artifact_....json"
+    "spec_metadata_path": "spec_data/agent-spec/artifacts/artifact_....json"
   }
 }
 ```
@@ -227,14 +227,14 @@ Artifacts should be addressable and hashable:
   "kind": "source",
   "format": "cpp",
   "external_uri": "artifact-store://run_.../model.cpp",
-  "odt_metadata_path": "spec_data/agent-spec/artifacts/artifact_model_cpp.json",
+  "spec_metadata_path": "spec_data/agent-spec/artifacts/artifact_model_cpp.json",
   "sha256": "...",
   "summary": "Generated SystemC model",
   "media_type": "text/x-c++src"
 }
 ```
 
-Large artifacts live externally. The ODT stores hashes, summaries, media types,
+Large artifacts live externally. The agent-spec stores hashes, summaries, media types,
 producer metadata, and stable retrieval metadata.
 
 ## Minimum Built-In Actions

@@ -37,7 +37,7 @@ class SourceTrace(pydantic.BaseModel):
 
 
 class ArtifactRef(pydantic.BaseModel):
-    """ODT-stored metadata for an externally stored or compact artifact."""
+    """Metadata for an externally stored or compact artifact."""
 
     artifact_id: str
     artifact_kind: str
@@ -85,7 +85,7 @@ class BlockRecord(pydantic.BaseModel):
 
 
 class SpecGraph(pydantic.BaseModel):
-    """The ODT-persisted graph of blocks, versions, tags, and artifacts."""
+    """Persisted graph of blocks, versions, tags, and artifacts."""
 
     version: int = 1
     blocks: dict[str, BlockRecord] = pydantic.Field(default_factory=dict)
@@ -212,4 +212,3 @@ class ActionResult(pydantic.BaseModel):
 
     artifacts: list[ArtifactRef] = pydantic.Field(default_factory=list)
     diagnostics: list[AgentSpecDiagnostic] = pydantic.Field(default_factory=list)
-

@@ -10,13 +10,13 @@
 - Design the external artifact storage mechanism.
 - Pick the first real pipeline target.
 
-### Phase 1: Core Models and ODT Persistence
+### Phase 1: Core Models and agent-spec Persistence
 
 - Add `spec2gds/agent_spec/` Pydantic models.
 - Persist `spec_data/agent-spec/manifest.json` and `graph.json`.
-- Map existing ODT headings and relation metadata into block IDs.
+- Map existing .spec headings and relation metadata into block IDs.
 - Add immutable block version records.
-- Add graph validation tests and ODT reload tests.
+- Add graph validation tests and .spec reload tests.
 
 ### Phase 2: Action Registry and Event Bus
 
@@ -39,7 +39,7 @@
 - Implement one real generator, preferably the shortest path that proves value.
 - Candidate options: SystemC stub generator, RTL stub generator, UVM register
   model stub generator, or synthesis wrapper around an existing RTL artifact.
-- Store generated artifact hashes, summaries, and references in ODT.
+- Store generated artifact hashes, summaries, and references in agent-spec.
 - Record tool versions, parameters, and source block versions.
 
 ### Phase 5: Hardening
@@ -57,21 +57,21 @@ These decisions are captured in more detail in
 
 | Area | V1 decision |
 | --- | --- |
-| Blocks | Every ODT heading/subheading creates a block, also called a section/subsection. |
+| Blocks | Every .spec heading/subheading creates a block, also called a section/subsection. |
 | Block versions | A version snapshots prose and linked artifacts together. |
 | Action inputs | An action captures the currently selected block version at trigger time. |
 | Generated output | Pipeline outputs are artifacts attached to existing blocks, not new sections or blocks. |
 | Tags | V1 tags are `systemc-perf`, `systemc-bitaccurate`, `rtl`, `ip`, `interface`, and `configuration`. |
-| Artifact storage | Large artifacts live externally; ODT stores hashes, summaries, and artifact references. |
-| Server writes | The server owns all ODT writes during a session. |
-| Sidecar | The server uses a sidecar working directory and checkpoints ODT-facing metadata back into ODT. |
+| Artifact storage | Large artifacts live externally; agent-spec stores hashes, summaries, and artifact references. |
+| Server writes | The server owns all .spec writes during a session. |
+| Sidecar | The server uses a sidecar working directory and checkpoints agent-spec-facing metadata back into agent-spec. |
 | First pipelines | V1 demo pipelines are pseudo SystemC performance and SystemC bit-accurate pipelines. |
 | Pipeline interface | Public pipeline interface is Python functions, even if internals use mixed tools. |
-| Remote workers | Remote workers receive input snapshots derived from ODT data only. |
+| Remote workers | Remote workers receive input snapshots derived from agent-spec data only. |
 | Run lifecycle | V1 requires `queued`, `running`, `completed`, and `failed`. |
 | Writeback | Valid artifact metadata auto-applies after sanity checks. Bad output becomes `needs_human_feedback`. |
 | Reruns | Reruns append new attachments with metadata. Existing attachments remain. |
-| Attachment ownership | The ODT server owns attachments after receiving valid data. |
+| Attachment ownership | The agent-spec server owns attachments after receiving valid data. |
 | Source content | Pipelines cannot directly update source block content. A future reviewed source-update artifact may handle that. |
 | Traceability | V1 requires source block version plus artifact/reference traceability. |
 | Action registration | Repo Python modules plus YAML config. |
@@ -89,7 +89,7 @@ These decisions are captured in more detail in
 
 ## Remaining Design Topics
 
-- Git diff friendliness for ODT internals.
+- Git diff friendliness for .spec internals.
 - Exact external artifact storage and retrieval mechanism.
 - Real SystemC performance and bit-accurate pipeline contracts.
 - Source-block update artifact review flow.

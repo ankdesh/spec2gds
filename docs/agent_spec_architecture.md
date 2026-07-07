@@ -8,24 +8,24 @@ It is the versioned repository of human-readable specification content,
 deterministically defined artifacts, pipeline inputs, generated outputs,
 provenance, and reviewable writebacks.
 
-A normal hardware spec document may start as Word, PDF, Markdown, ODT, or
-another human-written format. The architecture assumes that document can be
-converted into an agent-spec document: an ODT-backed document with stable
-blocks, tags, artifact references, and links for agent/pipeline use.
+A normal hardware spec document may start as Word, PDF, Markdown, or another
+human-written format. The architecture assumes that document can be converted
+into an agent-spec `.spec` document with stable blocks, tags, artifact
+references, and links for agent/pipeline use.
 
-The existing ODT container remains the storage foundation:
+The `.spec` archive is the storage foundation:
 
 - `content.xml` carries the editable human document: text, tables, figures, and
   headings.
 - `spec_data/` carries artifact references and agent-spec metadata that office
-  tools preserve inside the `.odt` package.
+  tools preserve inside the `.spec` package.
 - `spec://` links connect visible prose to exact structured nodes.
 - The current FastAPI plus React editor can become one client of the richer
   central server rather than the owner of pipeline logic.
 
 ## Architecture Goals
 
-- Keep the `.odt` file as the portable project artifact and authoritative
+- Keep the `.spec` file as the portable project artifact and authoritative
   interchange format.
 - Let downstream pipelines consume explicit versions of explicit spec blocks.
 - Let each pipeline run independently and asynchronously.
@@ -42,7 +42,7 @@ The existing ODT container remains the storage foundation:
 - Full multi-user collaborative editing.
 - Distributed build farm orchestration.
 - Exact LibreOffice rendering in the browser.
-- Replacing ODT with a database as the primary source of truth.
+- Replacing agent-spec with a database as the primary source of truth.
 - Running proprietary EDA tools directly from the browser.
 
 ## Core Vocabulary
@@ -50,7 +50,7 @@ The existing ODT container remains the storage foundation:
 The shared vocabulary is maintained in
 [`agent_spec_vocabulary.md`](agent_spec_vocabulary.md). Current key decisions:
 
-- Every ODT heading or subheading creates a versioned block.
+- Every agent-spec heading or subheading creates a versioned block.
 - A block can also be called a document section or subsection.
 - A block version includes both the human prose under that heading and linked
   artifacts.
@@ -66,7 +66,7 @@ flowchart LR
   API["Python Central Server\nFastAPI, WebSocket/SSE"]
 
   subgraph Core["agent-spec core services"]
-    Docs["Document Service\nODT load/save"]
+    Docs["Document Service\nagent-spec load/save"]
     Graph["Spec Graph Service\nblocks, versions, links"]
     Actions["Action Registry\nPython action specs"]
     Runs["Run Coordinator\njobs, leases, status"]
@@ -74,8 +74,8 @@ flowchart LR
     Writeback["Writeback Service\nvalidate, apply, feedback"]
   end
 
-  subgraph Storage["ODT-backed storage"]
-    ODT[".odt package"]
+  subgraph Storage[".spec-backed storage"]
+    SpecPackage[".spec package"]
     Content["content.xml\ntext, tables, figures"]
     SpecData["spec_data/\nartifact references"]
   end
@@ -96,39 +96,35 @@ flowchart LR
   Runs --> Workers
   Workers --> Events
   Workers --> Writeback
-  Docs --> ODT
+  Docs --> SpecPackage
   Graph --> SpecData
   Writeback --> Docs
-  ODT --> Content
-  ODT --> SpecData
+  SpecPackage --> Content
+  SpecPackage --> SpecData
 ```
 
-## Recommended Python Package Boundaries
+## Python Package Boundaries
 
-The existing `spec2gds.spec.odt_container` package should remain the ODT package
-engine. The new architecture should add an orchestration package above it:
+The active implementation now lives under one `spec2gds.agent_spec` hierarchy:
 
 ```text
 spec2gds/
   agent_spec/
-    api/              central FastAPI app and websocket/event routes
+    package/          .spec archive loading, saving, manifest, validation
+    document/         semantic content model, relations, local editor shell
+    plugins/          payload handlers such as JSON and IP-XACT
+    storage/          repository, graph persistence, artifact policies
     actions/          action registry, plugin loading, built-in actions
-    events/           event envelope, in-process bus, durable event log
-    graph/            block/version graph models and queries
-    runs/             run coordinator, leases, worker protocol
-    storage/          ODT-backed repository and artifact policies
-    writeback/        validation, auto-apply, feedback, and audit logic
-    workers/          local worker runtime and adapters
-  spec/
-    odt_container/    existing ODT container, plugins, editor core, web shell
+    runs/             run coordinator, snapshots, writebacks, audit events
+    api/              FastAPI routes for documents, actions, runs, UI support
+    samples/          .spec sample documents and builders
 ```
 
-The current editor API can either stay as an ODT-only development surface or be
-gradually folded under `agent_spec/api` once the action/event model exists.
+The older `spec2gds.spec` hierarchy is not an active compatibility path.
 
-## ODT Storage Model
+## agent-spec Storage Model
 
-The `.odt` remains the portable artifact. The server should project it into an
+The `.spec` remains the portable artifact. The server should project it into an
 in-memory spec graph while editing or running actions, then persist important
 state back into `spec_data/agent-spec/`.
 
@@ -158,7 +154,7 @@ Rules:
   external locations for artifacts.
 - `writebacks/` stores applied writeback records and `needs_human_feedback`
   records for malformed or ambiguous outputs.
-- Large artifacts live externally. The ODT stores hashes, summaries, and stable
+- Large artifacts live externally. The agent-spec stores hashes, summaries, and stable
   artifact references; the exact external mechanism will be designed later.
 
 ## Versioning Model
@@ -246,7 +242,7 @@ sequenceDiagram
   participant Registry as Action Registry
   participant Runs as Run Coordinator
   participant Worker
-  participant ODT as ODT Repository
+  participant agent-spec as agent-spec Repository
 
   UI->>API: GET /actions?context=block
   API->>Registry: actions_for_context(block, active_versions)
@@ -254,13 +250,13 @@ sequenceDiagram
   API-->>UI: render buttons/forms
   User->>UI: click "Generate SystemC"
   UI->>API: POST /actions/systemc.generate/runs
-  API->>ODT: create immutable input snapshot
+  API->>agent-spec: create immutable input snapshot
   API->>Runs: create run
   Runs-->>UI: event run.created
   Runs->>Worker: lease run
-  Worker->>ODT: read snapshot artifacts
+  Worker->>agent-spec: read snapshot artifacts
   Worker-->>UI: events run.started/run.log
-  Worker->>ODT: store artifacts + writeback record
+  Worker->>agent-spec: store artifacts + writeback record
   Worker-->>UI: event run.writeback.applied
 ```
 
@@ -271,14 +267,14 @@ sequenceDiagram
   participant Worker
   participant Writeback
   participant UI
-  participant ODT
+  participant agent-spec
   participant Events
 
   Worker->>Writeback: submit artifact metadata
-  Writeback->>ODT: validate and persist writeback record
+  Writeback->>agent-spec: validate and persist writeback record
   Writeback->>Events: publish run.writeback.applied
   Events-->>UI: artifact appears in document context
-  Writeback->>ODT: attach artifacts/links
+  Writeback->>agent-spec: attach artifacts/links
   Writeback->>Events: publish document.updated
 ```
 
@@ -290,7 +286,7 @@ malformed, ambiguous, or attempt source-block updates are recorded as
 
 | Service | Responsibility |
 | --- | --- |
-| Document Service | Load, save, validate, and checkpoint ODT documents using the existing container layer. |
+| Document Service | Load, save, validate, and checkpoint agent-spec documents using the existing container layer. |
 | Spec Graph Service | Resolve block IDs, tags, active versions, `spec://` links, artifact references, and dependency relationships. |
 | Action Registry | Load Python action definitions and expose UI-ready action metadata. |
 | Run Coordinator | Create runs, lock input snapshots, lease work to local or remote workers, and maintain run status. |
@@ -326,20 +322,20 @@ states.
 5. Add API endpoints for action discovery, run creation, run status, events, and
   auto-apply, feedback, and audit flows.
 6. Persist `spec_data/agent-spec/manifest.json`, `graph.json`, run records, and
-   writeback records inside sample ODT files.
+   writeback records inside sample agent-spec files.
 7. Update the React UI to fetch actions by context and render generic action
    buttons/forms.
 8. Add tests around action discovery, snapshot immutability, event ordering,
-   writeback persistence, and ODT reload.
+   writeback persistence, and agent-spec reload.
 
 ## Design Risks
 
-- ODT files are ZIP packages, so frequent append-only event persistence can be
+- agent-spec files are ZIP packages, so frequent append-only event persistence can be
   expensive. Keep live events in server memory and checkpoint durable summaries
-  into the ODT at run boundaries.
+  into the agent-spec at run boundaries.
 - Large artifacts need a stable external storage mechanism. Keep hashes and
-  summaries in ODT so the agent-spec document remains authoritative.
-- Concurrency is subtle. Start with a single-writer document lock per ODT file,
+  summaries in agent-spec so the agent-spec document remains authoritative.
+- Concurrency is subtle. Start with a single-writer document lock per agent-spec file,
   then add optimistic conflict checks based on read/write sets.
 - Action plugin freedom can become unsafe. Use typed schemas, explicit
   capabilities, timeouts, and visible provenance before running external tools.
