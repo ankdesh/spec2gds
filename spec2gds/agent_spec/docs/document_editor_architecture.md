@@ -1,160 +1,117 @@
-# agent-spec Viewer/Editor Architecture
+# Agent-Spec Document Editor Architecture
 
-## Decision
+This package-level note describes the current local document editor. The
+project-level architecture is in `docs/agent_spec_architecture.md`.
 
-Build the extended agent-spec viewer/editor as a local web application contained inside
-the `spec2gds.spec.archive` package.
+## Current Shape
 
-The first implementation should use a small, popular stack:
+The editor is a local web application:
 
-- Python backend: FastAPI with Pydantic models.
+- Backend: FastAPI with Pydantic request/response models.
 - Frontend: React, TypeScript, and Vite.
-- Styling: plain CSS first.
-- Browser tests: Playwright when UI flows become stable.
-- Python tests: pytest through the existing `uv` environment.
+- Styling: plain CSS.
+- Browser tests: Playwright smoke tests.
+- Python tests: pytest through the repository `uv` environment.
 
-Do not start with Electron. Keep the app easy to run and debug in a normal
-browser first. If desktop packaging becomes important later, wrap the already
-working web app instead of making packaging part of the first milestone.
-
-## Why Not Browser-Only First
-
-Browser-only TypeScript is attractive because it can become a static app and
-keeps all file handling local to the user. It is still a valid future direction
-for some parts of the viewer.
-
-For this project, the first implementation should prefer a Python backend plus
-a browser frontend because the problem is not only UI. The tool must parse,
-validate, preserve, and rewrite agent-spec archives with embedded structured hardware
-data. Keeping that document engine behind a typed local API gives us a clearer
-place for package integrity checks, IP-XACT validation, export flows, and later
-automation.
-
-This decision is based on the problem shape, not on the fact that Python code
-already exists.
-
-## Dependency Policy
-
-Keep package usage minimal and understandable.
-
-Use popular frameworks for infrastructure:
-
-- React for UI composition.
-- Vite for frontend dev/build.
-- FastAPI for local HTTP APIs.
-- Pydantic for request and response contracts.
-
-Avoid heavy editor frameworks in the first phase. Do not introduce Tiptap,
-Lexical, ProseMirror, Slate, Electron, Tauri, or shadcn by default. Add one only
-when a concrete feature proves that the custom code is becoming harder to
-maintain than the dependency.
-
-The editor should remain a semantic document editor owned by this package. It
-should support headings, paragraphs, lists, section version selection, links,
-tables, images, and IP-XACT previews before attempting broad word-processor
-behavior.
-
-## Package Boundary
-
-All code for this tool should live below:
+All active editor code lives under:
 
 ```text
 spec2gds/agent_spec/
+  api/document_app.py
+  document/
+  document/editor_web/
+  package/
+  plugins/
 ```
 
-Recommended layout:
+`document_app.py` also mounts the action/run API from `api/app.py` at
+`/agent-spec`.
 
-```text
-spec2gds/agent_spec/
-  api/              FastAPI app, route handlers, API schemas.
-  document/         agent-spec semantic model, section versions, serializers.
-  package/          .spec archive package mechanics.
-  docs/             Package-level design notes.
-```
+## Backend Responsibilities
 
-The repository root can remain a high-level umbrella for future `spec2gds`
-components.
-
-## Current Milestone
-
-Build a light editor, not a full word processor.
+`EditorSession` in `document/session.py` is the editor facade around
+`AgentSpecArchive`.
 
 Implemented backend/core capabilities:
 
-- Parse agent-spec `content.xml` into a semantic document model.
+- Load and save `.spec` packages while preserving `spec_data/` custom files.
+- Parse `content.xml` into a semantic document model.
 - Represent headings, paragraphs, list items, read-only tables, read-only
   images, and links.
-- Apply plain-text edits to headings, paragraphs, and list item paragraphs.
+- Assign stable heading `xml:id` values when missing.
+- Apply plain-text edits to simple headings, paragraphs, and list item
+  paragraphs.
 - Detect adjacent legacy heading variants named `Title//version`.
-- Assign stable heading IDs and persist version/IP-XACT relations in
+- Persist section-version and IP-XACT relation metadata in
   `spec_data/agent-spec-editor/relations.json`.
-- Read embedded IP-XACT XML and render interface-focused summaries.
-- Emit blocking diagnostics for malformed content, unresolved `spec://` links,
-  malformed IP-XACT XML, missing IP-XACT component VLNV fields, and missing
-  IP-XACT bus interfaces.
-- Block save when diagnostics remain.
-- Save an agent-spec while preserving custom files and manifest entries.
-- Expose a small FastAPI app factory for local API use.
+- Read embedded IP-XACT XML from `spec_data/ipxact/` and render
+  interface-focused summaries.
+- Report diagnostics for malformed content, unresolved `spec://` links,
+  malformed IP-XACT XML, missing component VLNV fields, missing bus interfaces,
+  and missing attachment files.
+- Block save when blocking diagnostics remain.
+- Expose local API endpoints for snapshots, saves, text edits, active section
+  choices, IP-XACT preview/editing, image assets, and file browsing.
 
-Implemented browser UI shell capabilities:
+## Frontend Responsibilities
 
-- Load an agent-spec snapshot by local path through the API.
-- Render a clean themed document view instead of exact page layout.
-- Show one selected section version at a time.
-- Provide inline controls for simple heading, paragraph, and list item text
-  edits.
-- Provide heading-local controls for active section version choices.
-- Attach existing embedded IP-XACT files to headings and inspect them in a right
-  drawer.
-- Save document text, relation metadata, active versions, and optional raw
-  IP-XACT XML edits through one explicit endpoint.
+The React editor currently:
 
-Remaining browser UI capabilities:
-
-- Add local file picker/open-save ergonomics.
-- Add browser-level build and interaction tests once Node/npm are available in
-  the development environment.
-
-Out of scope for the first milestone:
-
-- Exact LibreOffice rendering fidelity.
-- Full rich-text editing.
-- Advanced table editing.
-- In-browser-only operation.
-- Electron or Tauri packaging.
-- Multi-user collaboration.
+- Browses directories and opens checked-in/generated `.spec` documents.
+- Renders a clean document view rather than exact office page layout.
+- Shows one selected section version at a time.
+- Provides inline controls for simple text edits.
+- Provides heading-local controls for section version choices.
+- Attaches embedded IP-XACT files to headings.
+- Shows IP-XACT component identity, bus interfaces, mode, bus type, abstraction
+  type, port maps, diagnostics, and optional raw XML editing in a right drawer.
+- Saves text edits, relation metadata, active versions, and IP-XACT XML edits
+  through one explicit save flow.
+- Shows action controls backed by the mounted `/agent-spec` API.
 
 ## Section Versioning Rule
 
-Legacy versioned sections can be identified by headings with a suffix:
+Legacy versioned sections are identified by adjacent headings with this suffix:
 
 ```text
 Section title//version
 ```
 
 Only adjacent headings with the same base title and same heading level are one
-version group. For example, these are variants of the same section:
+version group. For example:
 
 ```text
 Cache behavior//v1
 Cache behavior//v2
 ```
 
-The UI displays the base title, `Cache behavior`, plus a heading-local version
-menu. New phase 2 state is stored in `relations.json`; the suffix form is a
-migration path for existing documents and samples.
+The UI displays the base title, `Cache behavior`, and stores the active version
+choice in relation metadata.
 
-## IP-XACT Scope
+## Editing Scope
 
-The first table renderer should focus on interfaces before registers:
+The editor is intentionally not a full word processor.
 
-- component identity and VLNV fields
-- bus interfaces
-- bus type references
-- abstraction type references
-- interface mode
-- port maps where present
+Supported editable blocks:
 
-Full IP-XACT schema validation should remain a backend responsibility. The UI
-should show diagnostics clearly and prevent saving when the current document has
-known unresolved warnings or errors.
+- simple headings
+- simple paragraphs
+- simple list item paragraphs
+
+Read-only in the current editor:
+
+- blocks with inline markup, including links or mixed spans
+- tables
+- images
+- broad rich-text formatting
+
+This avoids silently dropping office markup during simple text edits.
+
+## Out Of Scope Today
+
+- exact LibreOffice rendering fidelity
+- full rich-text editing
+- advanced table editing
+- in-browser-only operation
+- Electron or Tauri packaging
+- multi-user collaboration

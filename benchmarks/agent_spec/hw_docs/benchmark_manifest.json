@@ -1,0 +1,222 @@
+{
+  "cases": [
+    {
+      "attached_heading_id": "h2-features-0",
+      "case_id": "apb_gpio",
+      "component": {
+        "library": "ip-blocks",
+        "name": "APB_GPIO",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/apb_gpio.html",
+        "ipxact_xml": "converted/ipxact/apb_gpio.xml",
+        "odt": "converted/odt/apb_gpio.odt",
+        "pdf": "inputs/pdf/apb_gpio.pdf",
+        "spec": "generated/apb_gpio.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/apb_gpio.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/apb_gpio.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "26c2cb34e76b23c8be5cf7e9d40954023862f78c1de66d84bc7be6fc7eec4119",
+        "ipxact_xml": "77238161c2300bc6d4fa33e0a7d4678ab329c7721aa1590a0a54ba2c92e6ad87",
+        "odt": "75afdd400e78d0da4944dd6536f7dbd56459d09f2e012562d150b568ccebf64e",
+        "pdf": "bf8455453477b54cb016a699ac4d7fb5a57451830e877a8844c15590b1400c15",
+        "spec": "f13bc73418bd6319609ad27226bbb78d9e999e1dd45546e1f919ee5bcaf3f89c"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "APB GPIO"
+    },
+    {
+      "attached_heading_id": "h2-features-0",
+      "case_id": "apb_i2c_slave",
+      "component": {
+        "library": "ip-blocks",
+        "name": "APB_I2C_Slave",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/apb_i2c_slave.html",
+        "ipxact_xml": "converted/ipxact/apb_i2c_slave.xml",
+        "odt": "converted/odt/apb_i2c_slave.odt",
+        "pdf": "inputs/pdf/apb_i2c_slave.pdf",
+        "spec": "generated/apb_i2c_slave.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/apb_i2c_slave.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/apb_i2c_slave.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "eb23834323d39057e1344bc5cb45b1177fec5c7a7b137b3445880218ae96ed15",
+        "ipxact_xml": "bca1d961adff59b90092d6b0c884a0845b3002e3f367d5a621193fba0c49f7ff",
+        "odt": "a857b40323df3fbbeb15977c9c5fa302bfa54fa8625f1f0a4b277daa9392e872",
+        "pdf": "8fb2581ddfce5b6242b45aca7fcb70725e631b348e8d098cf0fae1bd8ecc075e",
+        "spec": "c4aaa52f97e962158c274ee0440e3123d7d785dba1b7873da321df6f881539a8"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "APB I2C Slave"
+    },
+    {
+      "attached_heading_id": "h2-features-0",
+      "case_id": "apb_timer",
+      "component": {
+        "library": "ip-blocks",
+        "name": "APB_Timer",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/apb_timer.html",
+        "ipxact_xml": "converted/ipxact/apb_timer.xml",
+        "odt": "converted/odt/apb_timer.odt",
+        "pdf": "inputs/pdf/apb_timer.pdf",
+        "spec": "generated/apb_timer.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/apb_timer.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/apb_timer.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "058bbb5747d0ece3f249e9221a2aedd3f451699b585111ebdb9d9b01ba3f4996",
+        "ipxact_xml": "f210b59c4c2d7b270cc9ae8850b8b7fb5b6a98efe5e3b98c75f0514204a6a0ed",
+        "odt": "eea4a820ef428a694f19cfedab3bfe1ea2dadc83d16744f0f7c40329149e59f4",
+        "pdf": "6ec85140be3a4beaff3b21224ff0fb6ecc3109dd933b8cd630ef9683e3a07b11",
+        "spec": "afa7df4b25dc2598dcdab4daccf2169a8b7dc6e9dc5f7e74d53fbfc0c1e84625"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "APB Timer"
+    },
+    {
+      "attached_heading_id": "h2-dedicated-csr-address-space-0",
+      "case_id": "cv_hpdcache_csrs",
+      "component": {
+        "library": "ip-blocks",
+        "name": "CV_HPDCACHE",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/cv_hpdcache_csrs.html",
+        "ipxact_xml": "converted/ipxact/cv_hpdcache.xml",
+        "odt": "converted/odt/cv_hpdcache_csrs.odt",
+        "pdf": "inputs/pdf/cv_hpdcache_csrs.pdf",
+        "spec": "generated/cv_hpdcache_csrs.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/cv_hpdcache.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/cv_hpdcache.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "ffe040274c0f135c64efa26fecddd3402eb564ca9d573d21429faabd40ea66a9",
+        "ipxact_xml": "f3cda022cd8e259323ac39e47cda8cf3c5ca8d208dbd3a84f448bb806b23de93",
+        "odt": "ba55701216d2470bb9463590cf6cc22bc40d8f4047a65f5df4d69de9b4a9c423",
+        "pdf": "280499b91c20092c32ffe84d41e46d9eb7ceb9083fcb19ee62a021e9c5e567ba",
+        "spec": "ab3b4cc67a77df2c40d75a3fbef163047bd265aba97d84af1b737c20429c7f88"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "CV HPDcache CSRs"
+    },
+    {
+      "attached_heading_id": "h2-synthesis-time-static-configuration-parameters-0",
+      "case_id": "cv_hpdcache_interface",
+      "component": {
+        "library": "ip-blocks",
+        "name": "CV_HPDCACHE",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/cv_hpdcache_interface.html",
+        "ipxact_xml": "converted/ipxact/cv_hpdcache.xml",
+        "odt": "converted/odt/cv_hpdcache_interface.odt",
+        "pdf": "inputs/pdf/cv_hpdcache_interface.pdf",
+        "spec": "generated/cv_hpdcache_interface.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/cv_hpdcache.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/cv_hpdcache.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "9a0c3870b90759d4114266c8dd8c337cfa77f087eb5c39dccea112da138da357",
+        "ipxact_xml": "f3cda022cd8e259323ac39e47cda8cf3c5ca8d208dbd3a84f448bb806b23de93",
+        "odt": "e52fffc6762963fe6f522ab5c9fa56d083d05c2657a4ee18182c9a6e18678485",
+        "pdf": "e17cc71eb080c05660c4b7ae7e24cf4a5a0dec6523b65afbe92612ceec16629c",
+        "spec": "3e792d121a2379a9fd406fb4ef2b07bc9a80ec42aeb8ac903b362d836831208f"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "CV HPDcache Interface"
+    },
+    {
+      "attached_heading_id": "h2-navigation-menu-0",
+      "case_id": "cvfpu_readme",
+      "component": {
+        "library": "ip-blocks",
+        "name": "CVFPU",
+        "vendor": "openhwgroup.org",
+        "version": "1.0"
+      },
+      "files": {
+        "html": "inputs/html/cvfpu_readme.html",
+        "ipxact_xml": "converted/ipxact/cvfpu.xml",
+        "odt": "converted/odt/cvfpu_readme.odt",
+        "pdf": "inputs/pdf/cvfpu_readme.pdf",
+        "spec": "generated/cvfpu_readme.spec"
+      },
+      "ipxact_container_path": "spec_data/ipxact/cvfpu.xml",
+      "semantic_diagnostics": [
+        {
+          "message": "No IP-XACT bus interfaces found.",
+          "severity": "warning",
+          "source": "spec_data/ipxact/cvfpu.xml"
+        }
+      ],
+      "semantic_interface_count": 0,
+      "sha256": {
+        "html": "dbe911b32a7a9e15a401bde40b45c8e2f7609a61c584ea81483eae789a41639e",
+        "ipxact_xml": "61fb6162ad06de953d987c15f51983529a964f7df6a6642d068402abaf5cb3d2",
+        "odt": "669003782359197aad6ef62fd2391e3fbaac0abbcde232ec4d1cc4108ac63693",
+        "pdf": "2a0759c10c9418255175bfb820eebd8f8adba866e0438336274f1f2c75e35903",
+        "spec": "95519e63b36502650b897c1bdc5eff69f3650e6f8e143ca91973f8795862e19a"
+      },
+      "strict_ipxact_schema_error": "IP-XACT XML validation failed: The input IP-XACT file is not valid according to XML schema http://www.accellera.org/XMLSchema/IPXACT/1685-2014.",
+      "strict_ipxact_schema_valid": false,
+      "title": "CVFPU README"
+    }
+  ],
+  "description": "Hardware-document benchmark with original PDF/HTML inputs, converted ODT/XML artifacts, and generated .spec packages.",
+  "version": 1
+}

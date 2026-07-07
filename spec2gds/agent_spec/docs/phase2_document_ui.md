@@ -1,8 +1,8 @@
-# Phase 2 Document UI
+# Document UI Notes
 
-Phase 2 turns the first semantic editor into a document-first web UI. The editor
-still runs as a local FastAPI backend with a React/Vite frontend, but custom
-agent-spec behavior now lives beside headings instead of in global side panels.
+The current editor is a document-first web UI. It runs as a local FastAPI
+backend with a React/Vite frontend, and custom agent-spec behavior lives beside
+headings instead of only in global side panels.
 
 ## Relation Metadata
 
@@ -20,9 +20,10 @@ The metadata contains:
 - `ipxact_attachments`: a map from heading ID to one or more embedded
   `spec_data/ipxact/*.xml` files.
 
-Legacy headings such as `Register behavior//v1` are still detected. On load,
-the backend projects them into relation metadata and gives each heading a stable
-`xml:id`; on explicit Save, the relation file is written into the agent-spec archive.
+Legacy headings such as `Register behavior//v1` are detected on load. The
+backend projects them into relation metadata and gives each heading a stable
+`xml:id`; on explicit Save, the relation file is written into the `.spec`
+archive.
 
 ## Rendering Behavior
 
@@ -52,6 +53,6 @@ The editor uses explicit Save. Text edits, active section choices, attachment
 changes, relation metadata, and raw IP-XACT XML replacements are sent together
 to `/documents/save`.
 
-The backend validates blocking diagnostics before writing the agent-spec. LibreOffice
-compatibility is preserved by keeping all version sections as normal agent-spec
-content; the custom editor decides which variant is visible.
+The backend validates blocking diagnostics before writing the `.spec` package.
+Office compatibility is preserved by keeping all version sections as normal
+document content; the custom editor decides which variant is visible.

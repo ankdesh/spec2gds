@@ -1,345 +1,271 @@
-# Agent-Spec Architecture Plan
+# Agent-Spec Architecture
 
 ## Purpose
 
-`agent-spec` should become the central source of truth for specification-driven
-hardware work. It is not only a document viewer and not only a code generator.
-It is the versioned repository of human-readable specification content,
-deterministically defined artifacts, pipeline inputs, generated outputs,
-provenance, and reviewable writebacks.
+This document describes the current `agent-spec` implementation in this
+repository. It is the place to understand the software components, the runtime
+flow, and where to read code for details.
 
-A normal hardware spec document may start as Word, PDF, Markdown, agent-spec, or
-another human-written format. The architecture assumes that document can be
-converted into an agent-spec document: an agent-spec-backed document with stable
-blocks, tags, artifact references, and links for agent/pipeline use.
+`agent-spec` currently provides a local, single-user workflow for `.spec`
+documents:
 
-The existing agent-spec archive remains the storage foundation:
+- `.spec` files keep the human-readable document body in office-compatible
+  `content.xml`.
+- Project metadata and structured hardware payloads live under `spec_data/`
+  inside the same package.
+- The local FastAPI backend projects document headings into blocks, records
+  block versions, stores action/run metadata, and preserves embedded artifacts.
+- The React/Vite editor consumes backend snapshots, edits supported document
+  blocks, previews IP-XACT attachments, and can trigger the current action API.
 
-- `content.xml` carries the editable human document: text, tables, figures, and
-  headings.
-- `spec_data/` carries artifact references and agent-spec metadata that office
-  tools preserve inside the `.spec` package.
-- `spec://` links connect visible prose to exact structured nodes.
-- The current FastAPI plus React editor can become one client of the richer
-  central server rather than the owner of pipeline logic.
+The repository is still an umbrella for specification-driven hardware design
+experiments. The architecture below reflects the code that exists today, not a
+future multi-user orchestration system.
 
-## Architecture Goals
+## Component Map
 
-- Keep the `.spec` file as the portable project artifact and authoritative
-  interchange format.
-- Let downstream pipelines consume explicit versions of explicit spec blocks.
-- Let each pipeline run independently and asynchronously.
-- Make pipeline actions discoverable from Python configuration so adding a new
-  action can update the UI without custom UI code.
-- Preserve provenance: every generated result must point back to the source spec
-  versions, action version, parameters, tool versions, and run status.
-- Automatically attach valid artifact metadata, while routing malformed or
-  ambiguous outputs to human feedback.
-- Keep pipeline stages loosely coupled, matching the project constitution.
+```text
+spec2gds/agent_spec/
+  api/
+    app.py              action/run API mounted at /agent-spec
+    document_app.py     editor API, file browser, IP-XACT endpoints, API mount
+    __main__.py         uvicorn entry point
+  document/
+    semantic.py         content.xml parser and plain-text edit application
+    session.py          editor facade around one AgentSpecArchive
+    relations.py        section-version and IP-XACT attachment metadata
+    ipxact_view.py      lightweight IP-XACT summaries for the editor
+    editor_web/         React/Vite frontend and Playwright smoke test
+  package/
+    archive.py          .spec package load/save and spec_data preservation
+    cli.py              list/inject/extract/validate CLI
+    verifier.py         package/link validation
+  plugins/
+    base.py             modality plugin protocol
+    manager.py          plugin registry and spec:// URI resolution
+    json_payload.py     JSON payload plugin
+    ipxact.py           IP-XACT payload plugin
+  storage/
+    repository.py       graph projection, metadata persistence, sidecar writes
+  actions/
+    builtin.py          action registry and built-in pseudo actions
+  runs/
+    runner.py           snapshot capture, action execution, writeback checks
+  models.py            Pydantic contracts shared across the v1 action flow
+  samples/             sample .spec builders and checked-in generated samples
+```
 
-## Non-Goals For The First Architecture Slice
+Focused tests live under `tests/agent_spec/`. Benchmark fixtures live under
+`benchmarks/agent_spec/`.
 
-- Full multi-user collaborative editing.
-- Distributed build farm orchestration.
-- Exact LibreOffice rendering in the browser.
-- Replacing agent-spec with a database as the primary source of truth.
-- Running proprietary EDA tools directly from the browser.
-
-## Core Vocabulary
-
-The shared vocabulary is maintained in
-[`agent_spec_vocabulary.md`](agent_spec_vocabulary.md). Current key decisions:
-
-- Every agent-spec heading or subheading creates a versioned block.
-- A block can also be called a document section or subsection.
-- A block version includes both the human prose under that heading and linked
-  artifacts.
-- Pipeline outputs are artifacts attached to existing blocks. They do not create
-  new headings or blocks by default.
-- Actions are assigned through block tags.
-
-## High-Level Shape
+## Runtime Shape
 
 ```mermaid
 flowchart LR
-  UI["Browser UI\nDocument view, action buttons, run status"]
-  API["Python Central Server\nFastAPI, WebSocket/SSE"]
+  Web["React/Vite editor\neditor_web/src/main.tsx"]
+  EditorAPI["Editor FastAPI app\napi/document_app.py"]
+  ActionAPI["Action/run API\napi/app.py"]
+  Session["EditorSession\ndocument/session.py"]
+  Repo["AgentSpecRepository\nstorage/repository.py"]
+  Runner["AgentSpecRunner\nruns/runner.py"]
+  Registry["ActionRegistry\nactions/builtin.py"]
+  Archive["AgentSpecArchive\npackage/archive.py"]
+  Plugins["PluginManager\nplugins/manager.py"]
+  Spec[".spec package\ncontent.xml + spec_data/"]
+  Sidecar[".agent-spec-sidecar/\nrun output files"]
 
-  subgraph Core["agent-spec core services"]
-    Docs["Document Service\nagent-spec load/save"]
-    Graph["Spec Graph Service\nblocks, versions, links"]
-    Actions["Action Registry\nPython action specs"]
-    Runs["Run Coordinator\njobs, leases, status"]
-    Events["Event Bus\npub-sub + event log"]
-    Writeback["Writeback Service\nvalidate, apply, feedback"]
-  end
-
-  subgraph Storage["agent-spec-backed storage"]
-    agent-spec[".spec package"]
-    Content["content.xml\ntext, tables, figures"]
-    SpecData["spec_data/\nartifact references"]
-  end
-
-  subgraph Workers["Pipeline workers"]
-    SystemC["SystemC generator"]
-    RTL["RTL generator"]
-    UVM["UVM generator"]
-    Synth["Synthesis runner"]
-  end
-
-  UI <--> API
-  API --> Docs
-  API --> Graph
-  API --> Actions
-  API --> Runs
-  API --> Events
-  Runs --> Workers
-  Workers --> Events
-  Workers --> Writeback
-  Docs --> agent-spec
-  Graph --> SpecData
-  Writeback --> Docs
-  agent-spec --> Content
-  agent-spec --> SpecData
+  Web <--> EditorAPI
+  EditorAPI --> Session
+  EditorAPI --> ActionAPI
+  ActionAPI --> Repo
+  ActionAPI --> Runner
+  Runner --> Registry
+  Runner --> Repo
+  Session --> Archive
+  Repo --> Archive
+  Session --> Plugins
+  Archive <--> Spec
+  Runner --> Sidecar
 ```
 
-## Recommended Python Package Boundaries
+There are two related API surfaces:
 
-The existing `spec2gds.spec.agent_spec_package` package should remain the agent-spec archive
-engine. The new architecture should add an orchestration package above it:
+- `spec2gds.agent_spec.api.document_app.create_app()` is the local editor API.
+  It serves document snapshots, text edits, active section choices, IP-XACT
+  preview/editing, image assets, and file browsing. It mounts the action API at
+  `/agent-spec`.
+- `spec2gds.agent_spec.api.app.create_app()` is the action/run API. It opens one
+  active document session, exposes blocks, updates block tags, lists available
+  actions for a block, triggers action runs, and returns run events.
+
+Run the combined local API with:
+
+```bash
+uv run python -m spec2gds.agent_spec.api
+```
+
+## Document Storage
+
+A `.spec` file is an office-compatible package handled by
+`package/archive.py`. The human document body is `content.xml`. Project-owned
+metadata and structured hardware payloads are stored as package parts below
+`spec_data/`.
+
+Current important paths:
 
 ```text
-spec2gds/
-  agent_spec/
-    api/              central FastAPI app and websocket/event routes
-    actions/          action registry, plugin loading, built-in actions
-    events/           event envelope, in-process bus, durable event log
-    graph/            block/version graph models and queries
-    runs/             run coordinator, leases, worker protocol
-    storage/          agent-spec-backed repository and artifact policies
-    writeback/        validation, auto-apply, feedback, and audit logic
-    workers/          local worker runtime and adapters
-  spec/
-    agent_spec_package/    existing agent-spec archive, plugins, editor core, web shell
+spec_data/
+  ipxact/*.xml
+  agent-spec/
+    manifest.json
+    graph.json
+    versions/<block_id>/<version_id>.json
+    artifacts/<artifact_id>.json
+    runs/<run_id>/input_snapshot.json
+    runs/<run_id>/run.json
+    runs/<run_id>/events.ndjson
+    writebacks/<writeback_id>.json
+    checkpoints/<checkpoint_id>.json
+  agent-spec-editor/
+    relations.json
+    active_section_versions.json
 ```
 
-The current editor API can either stay as an agent-spec-only development surface or be
-gradually folded under `agent_spec/api` once the action/event model exists.
+`AgentSpecArchive` preserves all `spec_data/` custom files during load/save and
+keeps the package mimetype compatible with office tooling. The repository layer
+adds the `spec_data/agent-spec/` graph/run metadata. The editor layer adds
+`spec_data/agent-spec-editor/` UI relation metadata.
 
-## agent-spec Storage Model
-
-The `.spec` remains the portable artifact. The server should project it into an
-in-memory spec graph while editing or running actions, then persist important
-state back into `spec_data/agent-spec/`.
-
-Recommended paths:
+Large generated files are written to the sidecar directory, which defaults to:
 
 ```text
-spec_data/agent-spec/
-  manifest.json
-  graph.json
-  versions/<block_id>/<version_id>.json
-  runs/<run_id>/run.json
-  runs/<run_id>/events.ndjson
-  artifacts/<artifact_id>.json
-  writebacks/<writeback_id>.json
+<document>.agent-spec-sidecar/
 ```
 
-Rules:
+The `.spec` file stores artifact metadata, hashes, summaries, and `file://`
+references to those sidecar outputs.
 
-- `manifest.json` identifies the agent-spec schema version and document ID.
-- `graph.json` stores block IDs, active versions, tags, relationships, section
-  anchors, and artifact references.
-- `versions/` stores immutable block snapshots. The content hash can become part
-  of the version ID.
-- `runs/` stores action execution records, event summaries, produced artifact
-  IDs, logs, metrics, and tool metadata.
-- `artifacts/` stores embedded summaries, hashes, media types, producers, and
-  external locations for artifacts.
-- `writebacks/` stores applied writeback records and `needs_human_feedback`
-  records for malformed or ambiguous outputs.
-- Large artifacts live externally. The agent-spec stores hashes, summaries, and stable
-  artifact references; the exact external mechanism will be designed later.
-
-## Versioning Model
-
-Pipelines must consume immutable inputs. The UI may show an active version, but
-an action run should record the exact versions it used.
+## Editor Flow
 
 ```mermaid
-flowchart TD
-  Block["Block: dma_controller"]
-  V1["Version v1\nhash abc"]
-  V2["Version v2\nhash def"]
-  Active["Active pointer\nv2"]
-  Run["Run systemc.generate\ninputs: dma_controller@v2"]
-  Output["Writeback record\nattach SystemC artifacts"]
+sequenceDiagram
+  participant UI as React editor
+  participant API as document_app.py
+  participant Session as EditorSession
+  participant Archive as AgentSpecArchive
+  participant Spec as .spec file
 
-  Block --> V1
-  Block --> V2
-  Block --> Active
-  Active --> V2
-  V2 --> Run
-  Run --> Output
+  UI->>API: GET /files
+  API-->>UI: directories and .spec files
+  UI->>API: GET /documents/snapshot?path=...
+  API->>Session: EditorSession.from_path(path)
+  Session->>Archive: load package and custom files
+  Session->>Session: ensure heading xml:id values
+  Session->>Session: parse content.xml into SemanticDocument
+  Session->>Session: load relations and IP-XACT summaries
+  Session-->>API: EditorSnapshot
+  API-->>UI: document blocks, relations, diagnostics
+  UI->>API: POST /documents/save
+  API->>Session: apply text, relation, and XML edits
+  Session->>Archive: inject metadata and save package
 ```
 
-Version rules:
+`document/semantic.py` is intentionally a semantic projection, not a full word
+processor. It supports headings, paragraphs, list items, tables, images, links,
+and adjacent legacy section variants named `Title//version`. Plain-text edits
+are applied only to simple editable text blocks. Blocks with inline markup,
+tables, and images remain read-only in the current editor.
 
-- A block version is immutable after creation.
-- Editing a block creates a new version.
-- A pipeline action receives a snapshot containing exact block version IDs.
-- A run records a read set: all block versions and artifacts it read.
-- A writeback records a write set: artifact references, links, diagnostics, and
-  metadata it wants to add or update.
-- Applying a writeback attaches artifacts, diagnostics, links, and metadata to
-  existing blocks rather than creating new blocks by default.
+`document/session.py` validates links and IP-XACT summaries before save. Warnings
+and errors are blocking for the current save flow.
 
-## Event-Driven Runtime
+## Action And Run Flow
 
-The first implementation can use an in-process event bus. The contract should be
-designed so Redis Streams, NATS, or another broker can replace it later without
-changing action code.
+```mermaid
+sequenceDiagram
+  participant Client
+  participant API as /agent-spec API
+  participant Repo as AgentSpecRepository
+  participant Runner as AgentSpecRunner
+  participant Registry as ActionRegistry
+  participant Action as Python action
+  participant Sidecar
+  participant Spec as .spec file
 
-Important topics:
+  Client->>API: POST /agent-spec/documents/open
+  API->>Repo: load archive, project graph, persist metadata
+  Client->>API: POST /agent-spec/blocks/{block}/tags
+  API->>Repo: validate v1 tags and save graph
+  Client->>API: GET /agent-spec/blocks/{block}/actions
+  API->>Runner: available_actions(block)
+  Runner->>Registry: actions_for_tags(block.tags)
+  Client->>API: POST /agent-spec/blocks/{block}/actions/{action}/runs
+  API->>Runner: trigger_action(action, block, parameters)
+  Runner->>Repo: capture active block version and attachments
+  Runner->>Action: run(ActionRunContext)
+  Action->>Sidecar: write generated artifact body
+  Action-->>Runner: ActionResult
+  Runner->>Runner: validate artifact metadata
+  Runner->>Repo: append artifacts, writeback, run, events, checkpoint
+  Repo->>Spec: save spec_data/agent-spec/*
+```
 
-| Topic | Producer | Consumers |
+The current runner executes actions synchronously in-process. It still records
+the lifecycle as run events so the persisted data shape remains auditable.
+
+Implemented built-in actions:
+
+| Action ID | Required tag | Behavior |
 | --- | --- | --- |
-| `document.opened` | API | UI, graph service |
-| `document.updated` | document/writeback service | UI, action eligibility cache |
-| `action.requested` | UI/API | run coordinator |
-| `run.created` | run coordinator | UI, workers |
-| `run.started` | worker | UI, audit log |
-| `run.log` | worker | UI, run record |
-| `run.artifact.created` | worker | UI, artifact index |
-| `run.writeback.applied` | writeback service | UI, audit log |
-| `run.needs_human_feedback` | writeback service | UI, feedback queue |
-| `run.completed` | worker | UI, downstream automation |
-| `run.failed` | worker | UI, diagnostics |
+| `agent_spec.inspect` | none | Emits an informational diagnostic for the captured snapshot. |
+| `systemc.perf.pseudo` | `systemc-perf` | Writes a fixed pseudo SystemC performance artifact to the sidecar. |
+| `systemc.bitaccurate.pseudo` | `systemc-bitaccurate` | Writes a fixed pseudo bit-accurate artifact to the sidecar. |
 
-Event envelope:
+Action enablement can be controlled by a small JSON-or-simple-YAML config passed
+when opening the action API session.
 
-```json
-{
-  "event_id": "evt_...",
-  "event_type": "run.started",
-  "document_id": "doc_...",
-  "aggregate_id": "run_...",
-  "correlation_id": "run_...",
-  "causation_id": "evt_...",
-  "sequence": 42,
-  "created_at": "2026-07-05T00:00:00Z",
-  "actor": {"kind": "user", "id": "local"},
-  "payload": {}
-}
-```
+## Graph And Version Model
 
-The UI should subscribe to server events through WebSocket or SSE and update
-visible state from events plus periodic snapshot refreshes.
+`AgentSpecRepository.project_graph()` parses current headings from `content.xml`
+and creates one block per heading. For each heading block it gathers the content
+until the next heading at the same or higher level, combines that content with
+attached artifact IDs, and computes a content-hash version ID.
 
-## Action Trigger Flow
+Current rules:
 
-```mermaid
-sequenceDiagram
-  participant User
-  participant UI
-  participant API
-  participant Registry as Action Registry
-  participant Runs as Run Coordinator
-  participant Worker
-  participant agent-spec as agent-spec Repository
+- A block ID is the heading `xml:id`.
+- Missing heading IDs are assigned by `document.semantic.ensure_heading_ids()`.
+- New content hashes create new immutable `BlockVersionRecord` entries.
+- The active version pointer moves to a new version when content changes.
+- Tags are stored on `BlockRecord` and validated against `models.V1_TAGS`.
+- Attachments are append-only relationships from a block to artifact metadata.
 
-  UI->>API: GET /actions?context=block
-  API->>Registry: actions_for_context(block, active_versions)
-  Registry-->>API: action specs + parameter schemas
-  API-->>UI: render buttons/forms
-  User->>UI: click "Generate SystemC"
-  UI->>API: POST /actions/systemc.generate/runs
-  API->>agent-spec: create immutable input snapshot
-  API->>Runs: create run
-  Runs-->>UI: event run.created
-  Runs->>Worker: lease run
-  Worker->>agent-spec: read snapshot artifacts
-  Worker-->>UI: events run.started/run.log
-  Worker->>agent-spec: store artifacts + writeback record
-  Worker-->>UI: event run.writeback.applied
-```
+The graph is stored in `spec_data/agent-spec/graph.json`; individual version and
+artifact records are also persisted under `versions/` and `artifacts/`.
 
-## Writeback Flow
+## Writeback And Safety
 
-```mermaid
-sequenceDiagram
-  participant Worker
-  participant Writeback
-  participant UI
-  participant agent-spec
-  participant Events
+Pipeline actions do not edit source prose directly. The current writeback path
+accepts generated artifact metadata only when sanity checks pass:
 
-  Worker->>Writeback: submit artifact metadata
-  Writeback->>agent-spec: validate and persist writeback record
-  Writeback->>Events: publish run.writeback.applied
-  Events-->>UI: artifact appears in document context
-  Writeback->>agent-spec: attach artifacts/links
-  Writeback->>Events: publish document.updated
-```
+- artifact hash must be a `sha256:` value
+- external URI must use `file://` or `artifact-store://`
+- artifact source version must be part of the input snapshot
+- artifact role must match the action output contract when one is declared
+- summary, media type, and artifact kind must be present
 
-Default policy is auto-apply after sanity checks pass. Outputs that are
-malformed, ambiguous, or attempt source-block updates are recorded as
+Accepted artifacts are attached to the target block and persisted in the graph.
+Malformed or unsupported output produces a `WritebackRecord` with
 `needs_human_feedback`.
 
-## Service Responsibilities
+`AgentSpecRepository.save()` also refuses to write when the `.spec` file changed
+outside the loaded server session. This protects the local single-writer model
+from silently overwriting external edits.
 
-| Service | Responsibility |
-| --- | --- |
-| Document Service | Load, save, validate, and checkpoint agent-spec documents using the existing container layer. |
-| Spec Graph Service | Resolve block IDs, tags, active versions, `spec://` links, artifact references, and dependency relationships. |
-| Action Registry | Load Python action definitions and expose UI-ready action metadata. |
-| Run Coordinator | Create runs, lock input snapshots, lease work to local or remote workers, and maintain run status. |
-| Event Bus | Publish runtime events, route UI subscriptions, and persist durable event summaries. |
-| Worker Runtime | Execute action handlers with typed context, collect outputs, and report events. |
-| Writeback Service | Validate pipeline output, detect conflicts, auto-attach accepted artifacts, and route questionable output to `needs_human_feedback`. |
-| Artifact Service | Store generated files, hashes, summaries, and download metadata. |
+## Where To Read Next
 
-## UI Responsibilities
-
-The UI should remain a client of the architecture:
-
-- Render the human document, tables, figures, block version controls, tags, and
-  artifact previews.
-- Ask the server for available actions for the current document/block/context.
-- Render action buttons and parameter forms from server-provided schemas.
-- Trigger runs and subscribe to run/document events.
-- Show logs, artifacts, diagnostics, and feedback-needed items in context.
-- Let the user review and apply generated updates.
-
-The UI should not hard-code pipeline behavior such as how to generate RTL or how
-to run synthesis. It should only understand action metadata and generic run
-states.
-
-## First Implementation Slice
-
-1. Add `spec2gds/agent_spec/` with Pydantic models for documents, blocks,
-   versions, actions, runs, events, artifacts, and writebacks.
-2. Implement an in-process event bus with a durable event-log abstraction.
-3. Implement a Python action registry from repo Python modules plus YAML config.
-4. Add pseudo `systemc.perf` and `systemc.bitaccurate` actions that return fixed
-   artifact metadata after a short delay.
-5. Add API endpoints for action discovery, run creation, run status, events, and
-  auto-apply, feedback, and audit flows.
-6. Persist `spec_data/agent-spec/manifest.json`, `graph.json`, run records, and
-   writeback records inside sample agent-spec files.
-7. Update the React UI to fetch actions by context and render generic action
-   buttons/forms.
-8. Add tests around action discovery, snapshot immutability, event ordering,
-   writeback persistence, and agent-spec reload.
-
-## Design Risks
-
-- agent-spec files are ZIP packages, so frequent append-only event persistence can be
-  expensive. Keep live events in server memory and checkpoint durable summaries
-  into the agent-spec at run boundaries.
-- Large artifacts need a stable external storage mechanism. Keep hashes and
-  summaries in agent-spec so the agent-spec document remains authoritative.
-- Concurrency is subtle. Start with a single-writer document lock per agent-spec file,
-  then add optimistic conflict checks based on read/write sets.
-- Action plugin freedom can become unsafe. Use typed schemas, explicit
-  capabilities, timeouts, and visible provenance before running external tools.
+- Vocabulary: [`agent_spec_vocabulary.md`](agent_spec_vocabulary.md)
+- Action contracts: [`agent_spec_action_contract.md`](agent_spec_action_contract.md)
+- Current setup and commands: [`agent_spec_v1_setup.md`](agent_spec_v1_setup.md)
+- Roadmap and open questions: [`agent_spec_roadmap_questions.md`](agent_spec_roadmap_questions.md)
+- Benchmarks: [`agent_spec_benchmarks.md`](agent_spec_benchmarks.md)

@@ -1,97 +1,84 @@
-# Agent-Spec Roadmap and Design Questions
+# Agent-Spec Roadmap And Open Questions
 
-## Roadmap
+This document is for future work and unresolved design choices. Current
+architecture and setup details live in:
 
-### Phase 0: Freeze the Architecture Vocabulary
+- [`agent_spec_architecture.md`](agent_spec_architecture.md)
+- [`agent_spec_v1_setup.md`](agent_spec_v1_setup.md)
+- [`agent_spec_action_contract.md`](agent_spec_action_contract.md)
 
-- Agree on what a block is and which tags exist first.
-- Agree on where version boundaries live: section, table, IP block, register
-  map, interface, requirement, or a mix.
-- Design the external artifact storage mechanism.
-- Pick the first real pipeline target.
+## Current Baseline
 
-### Phase 1: Core Models and agent-spec Persistence
+The repository already has a local `.spec` document workflow:
 
-- Add `spec2gds/agent_spec/` Pydantic models.
-- Persist `spec_data/agent-spec/manifest.json` and `graph.json`.
-- Map existing .spec headings and relation metadata into block IDs.
-- Add immutable block version records.
-- Add graph validation tests and .spec reload tests.
+- office-compatible `.spec` archive load/save
+- `spec_data/` preservation and package validation
+- semantic document projection for the editor
+- section version and IP-XACT attachment metadata
+- React/Vite local editor shell
+- local FastAPI editor API
+- mounted action/run API
+- graph projection from headings into blocks and block versions
+- built-in pseudo actions
+- run snapshots, run records, events, writebacks, checkpoints, and artifact
+  attachment metadata
+- hardware-document benchmark fixtures
 
-### Phase 2: Action Registry and Event Bus
+The next roadmap items should build from that baseline rather than re-planning
+the package split or migration that has already happened.
 
-- Implement Python action provider protocol.
-- Add API endpoints for action discovery and run creation.
-- Implement in-process pub-sub with a durable event envelope.
-- Add a generic local worker runtime.
-- Add pseudo SystemC performance and bit-accurate actions.
+## Near-Term Priorities
 
-### Phase 3: UI Integration
+1. Stabilize the current local editor/action loop.
+2. Improve diagnostics so users can fix blocking save issues quickly.
+3. Make action parameter validation stricter and clearer.
+4. Decide the first real hardware pipeline target.
+5. Add focused tests when changing graph projection, action contracts, package
+   persistence, or editor save behavior.
 
-- Fetch available actions from the server by document/block context.
-- Render generic action buttons and parameter forms.
-- Subscribe to run events through WebSocket or SSE.
-- Show run logs, artifacts, diagnostics, and feedback-needed items.
-- Show automatically applied artifact attachments in document context.
+## Candidate Pipeline Targets
 
-### Phase 4: First Real Pipeline
+| Candidate | Why it may be useful | Main unknown |
+| --- | --- | --- |
+| SystemC stub generator | Builds directly on the pseudo SystemC actions. | Minimum useful generated model shape. |
+| RTL stub generator | Helps connect specs to implementation skeletons. | Required input schema beyond current prose/IP-XACT. |
+| UVM register model stub | Good fit if IP-XACT register maps become reliable. | Current benchmark XML is not strict schema-clean. |
+| Validation/report action | Lower risk than generation and useful for users immediately. | Which checks should be project-owned versus plugin-owned. |
 
-- Implement one real generator, preferably the shortest path that proves value.
-- Candidate options: SystemC stub generator, RTL stub generator, UVM register
-  model stub generator, or synthesis wrapper around an existing RTL artifact.
-- Store generated artifact hashes, summaries, and references in agent-spec.
-- Record tool versions, parameters, and source block versions.
+## Open Design Questions
 
-### Phase 5: Hardening
+| Topic | Question |
+| --- | --- |
+| Artifact storage | Should sidecar files remain the default, or should artifacts move to a content-addressed store? |
+| Imports | Which source format should be productized first: PDF/HTML benchmark conversion, Markdown, SystemRDL, CSV/register tables, or office documents? |
+| Native schema | What project-owned schema is needed beside IP-XACT for requirements, assumptions, interfaces, and generated reports? |
+| Action parameters | Should parameter metadata remain the current simple model or move to JSON Schema? |
+| Event delivery | Is polling `/agent-spec/events` enough for now, or should the UI use SSE/WebSocket updates? |
+| Source updates | What reviewed workflow is acceptable before an action can update source prose? |
+| Concurrency | Is the current file-hash write guard enough, or do we need document locks and finer conflict reports? |
+| Security | What restrictions are needed before actions can invoke external tools or user-provided scripts? |
+| Naming | Should user-facing text say `agent-spec document`, `.spec document`, or a more domain-specific term? |
 
-- Add document locks and optimistic conflict checks.
-- Add action capability restrictions, timeouts, and subprocess isolation.
-- Harden the external artifact storage mechanism.
-- Add multi-user or remote-worker support only after local single-writer flow is
-  reliable.
+## Deferred Work
+
+- remote workers, leases, and queues
+- authentication and multi-user editing
+- exact office rendering in the browser
+- rich table editing
+- full IP-XACT schema normalization
+- real EDA tool integration
+- cancellation, retry, pause, and resume
+- PR/CI packaging for frontend browser dependencies
 
 ## Decision Ledger
 
-These decisions are captured in more detail in
-[`agent_spec_v1_setup.md`](agent_spec_v1_setup.md).
-
-| Area | V1 decision |
+| Area | Decision |
 | --- | --- |
-| Blocks | Every .spec heading/subheading creates a block, also called a section/subsection. |
-| Block versions | A version snapshots prose and linked artifacts together. |
-| Action inputs | An action captures the currently selected block version at trigger time. |
-| Generated output | Pipeline outputs are artifacts attached to existing blocks, not new sections or blocks. |
-| Tags | V1 tags are `systemc-perf`, `systemc-bitaccurate`, `rtl`, `ip`, `interface`, and `configuration`. |
-| Artifact storage | Large artifacts live externally; agent-spec stores hashes, summaries, and artifact references. |
-| Server writes | The server owns all .spec writes during a session. |
-| Sidecar | The server uses a sidecar working directory and checkpoints agent-spec-facing metadata back into agent-spec. |
-| First pipelines | V1 demo pipelines are pseudo SystemC performance and SystemC bit-accurate pipelines. |
-| Pipeline interface | Public pipeline interface is Python functions, even if internals use mixed tools. |
-| Remote workers | Remote workers receive input snapshots derived from agent-spec data only. |
-| Run lifecycle | V1 requires `queued`, `running`, `completed`, and `failed`. |
-| Writeback | Valid artifact metadata auto-applies after sanity checks. Bad output becomes `needs_human_feedback`. |
-| Reruns | Reruns append new attachments with metadata. Existing attachments remain. |
-| Attachment ownership | The agent-spec server owns attachments after receiving valid data. |
-| Source content | Pipelines cannot directly update source block content. A future reviewed source-update artifact may handle that. |
-| Traceability | V1 requires source block version plus artifact/reference traceability. |
-| Action registration | Repo Python modules plus YAML config. |
-| Action visibility | Actions declare tag/context rules. |
-| Parameters | Strings, enums, paths, booleans, numbers, block selectors, and version selectors. |
-| Enablement | Per server deployment config. |
-| Server mode | Local single-user first. |
-| Identity | No auth in v1; user identity comes from config. |
-| Events | Durable enough to audit completed runs, not replay whole sessions. |
-| Schema | Minimal extensible native agent-spec schema beside IP-XACT. |
-| Register maps | IP-XACT only in v1. Other sources arrive later through import functionality. |
-| Pipeline models | Each action defines the inputs it needs; no single universal pipeline model is required. |
-| Acceptance demo | Pseudo SystemC actions return fixed artifacts after a few seconds and update the document. |
-| Safety | Prevent stale pipeline input, silent overwrite, untraceable artifacts, and malformed artifact metadata application. |
-
-## Remaining Design Topics
-
-- Git diff friendliness for .spec internals.
-- Exact external artifact storage and retrieval mechanism.
-- Real SystemC performance and bit-accurate pipeline contracts.
-- Source-block update artifact review flow.
-- Future import actions for SystemRDL, CSV, custom tables, and other formats.
-- Later remote-worker deployment details beyond the snapshot contract.
+| Active package path | Active code lives under `spec2gds/agent_spec/`. |
+| Active document extension | `.spec`. |
+| Current server mode | Local single-user. |
+| Current action execution | Synchronous in-process runs. |
+| Current generated artifacts | Sidecar files plus metadata in `.spec`. |
+| Current writeback policy | Auto-attach valid artifact metadata; record diagnostics for invalid output. |
+| Current block model | Every heading becomes a block in the action graph. |
+| Current tags | `systemc-perf`, `systemc-bitaccurate`, `rtl`, `ip`, `interface`, `configuration`. |

@@ -1,0 +1,1117 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="readthedocs-addons-api-version" content="1"><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>APB Timer &mdash; CORE-V MCU  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=9edc463e" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <script src="../../_static/js/versions.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="APB I2C SLAVE" href="apb_i2cs.html" />
+    <link rel="prev" title="APB GPIO" href="apb_gpio.html" /> 
+<script async type="text/javascript" src="/_/static/javascript/readthedocs-addons.js"></script><meta name="readthedocs-project-slug" content="openhw-group-core-v-mcu" /><meta name="readthedocs-version-slug" content="latest" /><meta name="readthedocs-resolver-filename" content="/doc-src/ip-blocks/apb_timer.html" /><meta name="readthedocs-http-status" content="200" /></head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: #DDDDDD" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            CORE-V MCU
+              <img src="../../_static/openhw-landscape.svg" class="logo" alt="Logo"/>
+          </a>
+              <div class="switch-menus">
+                <div class="version-switch"></div>
+                <div class="language-switch"></div>
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">CORE-V-MCU Introduction:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">CORE-V-MCU Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../terminology.html">Terminology</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../open-source-development-at-openhw.html">Open Source Development at the OpenHW Group</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../high_level_architecture.html">High Level Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../device_characteristics.html">Device Characteristics</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../package_information.html">Package Information</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../integration.html">CORE-V-MCU Integration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../io_assignment_tables.html">I/O Assignment Tables</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../startup.html">Start-up</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../mmap.html">Memory Map</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../interrupts.html">Interrupt Strategy</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../clock_domains.html">Clock Domains</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../debug_approach.html">Debug Approach</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../evaluation_kits.html">Evaluation Kits</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../software_support.html">Software Support</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">CORE-V-MCU Bus Interconnect:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../tcdm_interconnect.html">TCDM Interconnect</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../apb_peripheral_interconnect.html">APB Peripheral Interconnect</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">CORE-V-MCU Subsystems:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../core_complex_subsystem.html">Core Complex Subsystem</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../udma_subsystem.html">Micro-DMA Subsystem</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../efpga_subsystem.html">eFPGA SubSystem</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">CORE-V-MCU IP Blocks:</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="apb_adv_timer.html">APB ADVANCED TIMER</a></li>
+<li class="toctree-l1"><a class="reference internal" href="apb_soc_ctrl.html">APB SoC controller</a></li>
+<li class="toctree-l1"><a class="reference internal" href="apb_fll_if.html"><strong>APB FLL Interface CSRs</strong></a></li>
+<li class="toctree-l1"><a class="reference internal" href="apb_gpio.html">APB GPIO</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">APB Timer</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#features">Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#block-architecture">Block Architecture</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#bit-timer-lo-timer">32 bit Timer_lo Timer</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#prescaler">Prescaler</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#timer-counter">Timer Counter</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#bit-timer-hi-timer">32 bit Timer_hi Timer</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id4">Prescaler</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id6">Timer Counter</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#bit-timer">64 bit Timer</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id8">Prescaler</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#bit-timer-counter">64 bit Timer Counter</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#important-note">Important Note:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#one-shot-mode">One shot mode:</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#for-32-bit-timer">For 32-bit Timer:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#for-64-bit-timer">For 64-bit Timer:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#compare-clear-mode">Compare Clear Mode</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id9">For 32-bit Timer:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#id10">For 64-bit Timer:</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#system-architecture">System Architecture:</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#programmers-view">Programmers View:</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#initial-configurations">Initial Configurations:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#control-configurations-operations">Control configurations/operations:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#status-configurations">Status configurations:</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#apb-timer-csrs">APB Timer CSRs</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#cfg-reg-lo">CFG_REG_LO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cfg-reg-hi">CFG_REG_HI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-val-lo">TIMER_VAL_LO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-val-hi">TIMER_VAL_HI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-cmp-lo">TIMER_CMP_LO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-cmp-hi">TIMER_CMP_HI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-start-lo">TIMER_START_LO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-start-hi">TIMER_START_HI</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-reset-lo">TIMER_RESET_LO</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#timer-reset-hi">TIMER_RESET_HI</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#firmware-guidelines">Firmware Guidelines</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#initialization">Initialization:</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#initializing-the-prescaler">Initializing the Prescaler:</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#initializing-the-timer-counter">Initializing the Timer counter:</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#start-the-timer">Start the timer:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#stop-the-timer">Stop the timer:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reset-the-timer">Reset the timer:</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#interrupt-generation">Interrupt generation:</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#pin-diagram">Pin Diagram</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#clock-and-reset">Clock and Reset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#apb-interface">APB Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#apb-event-generator-interface">APB Event generator Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core-complex-interface">Core Complex Interface</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="apb_i2cs.html">APB I2C SLAVE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="apb_event_cntrl.html">APB EVENT CONTROL</a></li>
+<li class="toctree-l1"><a class="reference internal" href="udma_cam.html">uDMA CAMERA</a></li>
+<li class="toctree-l1"><a class="reference internal" href="udma_i2cm.html">UDMA I2C Master</a></li>
+<li class="toctree-l1"><a class="reference internal" href="udma_sdio.html">UDMA SDIO(SD Input/Output) INTERFACE</a></li>
+<li class="toctree-l1"><a class="reference internal" href="udma_qspim.html">UDMA QSPI Master</a></li>
+<li class="toctree-l1"><a class="reference internal" href="udma_uart.html">uDMA UART</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: #DDDDDD" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">CORE-V MCU</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">APB Timer</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../../_sources/doc-src/ip-blocks/apb_timer.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="apb-timer">
+<span id="id1"></span><h1>APB Timer<a class="headerlink" href="#apb-timer" title="Link to this heading"></a></h1>
+<p>APB Timer generates interrupts to the Core complex or CPU subsystem with a finite configurable delay. It manages the interrupt generation through various configurations of prescaler, reference clock and timer counters.</p>
+<section id="features">
+<h2>Features<a class="headerlink" href="#features" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Multiple trigger input sources</p></li>
+<li><p>Two 32-bit configurable prescaler</p></li>
+<li><p>Configurable interrupts</p></li>
+<li><p>Support for two independent 32-bit timers or a single 64-bit timer</p></li>
+<li><p>Supports one-shot and compare-clear modes.</p></li>
+<li><p>Configurable control operations of timer: (Start, Stop and Reset)</p></li>
+</ul>
+</section>
+<section id="block-architecture">
+<h2>Block Architecture<a class="headerlink" href="#block-architecture" title="Link to this heading"></a></h2>
+<p>APB timer can either be configured as two 32-bit independent timers or a single 64 bit timer.
+It has two timers, Timer_hi and Timer_lo which are responsible to generate irq_lo_o or irq_hi_o interrupt signals to Core Complex/CPU.
+Working of Timer_lo and Timer_hi is functionally identical in the 32 bit mode, whereas Timer_lo and Timer_hi are cascaded in 64 bit mode.
+The APB timer can be configured using CSRs. The CSRs of the APB timer are accessible using the APB bus.</p>
+<p>The figure below is a high-level block Diagram of APB Timer:</p>
+<figure class="align-center" id="apb-timer-block-diagram">
+<img alt="" src="../../_images/apb_timer_block_diagram.png" />
+</figure>
+<p>If the MODE_64_BIT in CFG_REG_LO CSR is ‘0’, the APB timer can be configured as a 32-bit timer i.e. Timer_hi/Timer_lo in one of the below following ways.</p>
+<ul class="simple">
+<li><p>Only Timer_hi can be configured.</p></li>
+<li><p>Only Timer_lo can be configured.</p></li>
+<li><p>Both Timer_hi/Timer_lo can be configured independently at the same time.</p></li>
+</ul>
+<p>Timer_hi and Timer_lo have the same design, with matching CSRs and input/output signals that differ only by ‘_hi’ and ‘_lo’ suffixes, making their control and behavior consistent.</p>
+<section id="bit-timer-lo-timer">
+<h3>32 bit Timer_lo Timer<a class="headerlink" href="#bit-timer-lo-timer" title="Link to this heading"></a></h3>
+<p>Timer_lo is designed using a prescaller and Timer counters
+The figure below is a high-level block diagram of a 32 bit APB Timer:</p>
+<figure class="align-center" id="bit-apb-timer">
+<img alt="" src="../../_images/32_bit_apb_timer.png" />
+</figure>
+<section id="prescaler">
+<span id="id2"></span><h4>Prescaler<a class="headerlink" href="#prescaler" title="Link to this heading"></a></h4>
+<p>Prescaler’s main objective is to scale down the frequency of the input clock with the PRESCALER_COMP amount of times. Where PRESCALER_COMP is the bitfield of CFG_REG_LO CSR.
+Prescaler generates prescaler_lo_target_reached event after PRESCALER_COMP number of clock cycles.</p>
+<p>Prescaler maintains a prescaler counter whose initial value is ‘0’.</p>
+<p>The prescaler counter increments on the positive edge of one of two clock sources, based on the value of the REF_CLK_EN_BIT in the CFG_REG_LO CSR:</p>
+<ul class="simple">
+<li><p>If REF_CLK_EN_BIT = 1, it increments on the positive edge of the reference clock.</p></li>
+<li><p>If REF_CLK_EN_BIT = 0, it increments on the positive edge of the system clock (HCLK).</p></li>
+</ul>
+<p>For every positive edge of the selected clock, if prescaler is enabled, prescaler counter is incremented by value ‘1’ until it reaches the PRESCALER_COMP bitfield of CFG_REG_LO CSR value.
+Once the prescaler counter reaches the PRESCALER_COMP bitfield of CFG_REG_LO CSR value then prescaler_lo_target_reached event is ‘1’.
+In the next positive edge of the selected clock, prescaler counter and prescaler_lo_target_reached are reset to ‘0’.
+The prescaler counter starts incrementing and the same process repeats to set the prescaler_lo_target_reached multiple times.</p>
+<p><strong>Reset Prescaler:</strong></p>
+<p>When the prescaler is reset, the prescaler counter and prescaler_lo_target_reached are reset to ‘0’.
+Prescaler is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT in the CFG_REG_LO CSR is ‘1’ and prescaler_lo_target_reached is ‘1’ for one clock cycle.</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_LO CSR is ‘1’.</p></li>
+<li><p>When the RESET_LO in the TIMER_RESET_LO CSR is ‘1’.</p></li>
+<li><p>When the HRESETn is ‘0’.</p></li>
+</ul>
+<p><strong>Enable Prescaler:</strong></p>
+<p>When the prescaler is enabled, it will start its operation and it can be enabled in the below condition:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT and ENABLE_BIT of CFG_REG_LO is ‘1’ and stoptimer_i is ‘0’.</p></li>
+</ul>
+<p><strong>Disable Prescaler:</strong></p>
+<p>When the prescaler is disabled, it will pause its operation, that is the prescaler counter will retain its current value.
+Prescaler is disabled, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT in the CFG_REG_LO CSR is ‘0’.</p></li>
+<li><p>When ENABLE_BIT of CFG_REG_LO is ‘0’.</p></li>
+<li><p>When the input signal stoptimer_i is ‘1’.</p></li>
+</ul>
+</section>
+<section id="timer-counter">
+<h4>Timer Counter<a class="headerlink" href="#timer-counter" title="Link to this heading"></a></h4>
+<p>Timer counter generates the output interrupt irq_lo_o for the Core complex.
+if the IRQ_BIT of CFG_REG_LO CSR is ‘1’, 32 bit Timer generates irq_lo_o interrupt when timer counter matches TIMER_CMP_LO CSR value.</p>
+<p>Timer maintains a counter whose initial value is ‘0’ and FW can overwrite/program this counter to any value by configuring TIMER_VAL_LO CSR.</p>
+<p>Timer counter operation is synchronized using HCLK or reference clock.
+If the REF_CLK_EN_BIT in the CFG_REG_LO CSR is  1, it increments on the positive edge of the reference clock else it increments on the positive edge of the system clock (HCLK).</p>
+<p>Timer_lo can be enabled via the FW (ENABLE_BIT bitfield in CFG_REG_LO CSR is ‘1’) or the external device input (When event_lo_i input signal and IEM_BIT bitfield in CFG_REG_LO CSR is ‘1’). The Timer counter checks whether the prescaler is enabled or not via the PRESCALER_EN_BIT bitfield in CFG_REG_LO CSR.</p>
+<p>If the prescaler is not enabled. For every positive edge of either the HCLK or reference clock, the Timer counter will start incrementing its internal counter till it reaches the TIMER_CMP_LO.Once the counter reaches TIMER_CMP_LO value and if the IRQ_BIT is ‘1’, then the irq_lo_o interrupt will be asserted.</p>
+<p>If the prescaler is enabled. For every positive edge of either the HCLK or reference clock, the prescaler will start incrementing its internal counter till it reaches the PRESCALER_COMP bitfield in CFG_REG_LO CSR and it sets the prescaler_lo_target_reached to ‘1’. For every instance of prescaler_lo_target_reached is ‘1’, Timer counter if enabled, increments the internal counter by ‘1’ until it reaches the TIMER_CMP_LO and generates the irq_lo_o interrupt.</p>
+<p>Further functioning of 32 bit Timer_lo timer depends on whether the timer is configured in one shot mode or compare clear mode.</p>
+<p><strong>Reset Timer counter:</strong></p>
+<p>When the Timer counter is reset, the counter is reset to ‘0’.
+Timer counter is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When CMP_CLR_BIT in the CFG_REG_LO CSR is ‘1’ and the counter reaches TIMER_CMP_LO value. (i.e Compare clear mode is enabled)</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_LO CSR is ‘1’.</p></li>
+<li><p>When the RESET_LO in the TIMER_RESET_LO CSR is ‘1’.</p></li>
+</ul>
+<p><strong>Enable Timer counter:</strong></p>
+<p>Timer counter will be enabled and it will start its operation, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_LO is ‘1’, PRESCALER_EN_BIT of CFG_REG_LO is ‘0’ and stoptimer_i is ‘0’(If prescaler of Timer_lo is disabled).</p></li>
+<li><p>When PRESCALER_EN_BIT and ENABLE_BIT of CFG_REG_LO is ‘1’ and prescaler_lo_target_reached is ‘1’ and stoptimer_i is ‘0’(If prescaler of Timer_lo is enabled).</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_LO is set, when TIMER_START_LO CSR is having any value other than ‘0’.</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_LO is set, when the event_lo_i signal is ‘1’ and IEM_BIT of CFG_REG_LO is ‘1’.</p></li>
+</ul>
+<p><strong>Disable Timer counter:</strong></p>
+<p>When the Timer counter is disabled, it will pause its operation, that is the counter will not be set to ‘0’.
+Timer counter is disabled, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_LO CSR is ‘0’.</p></li>
+<li><p>When the input signal stoptimer_i is ‘1’.</p></li>
+</ul>
+</section>
+</section>
+<section id="bit-timer-hi-timer">
+<h3>32 bit Timer_hi Timer<a class="headerlink" href="#bit-timer-hi-timer" title="Link to this heading"></a></h3>
+<p>Timer_hi is designed using a prescaller and Timer counters
+The figure below is a high-level block diagram of a 32 bit APB Timer:</p>
+<figure class="align-center" id="id3">
+<img alt="" src="../../_images/32_bit_apb_timer.png" />
+</figure>
+<section id="id4">
+<span id="id5"></span><h4>Prescaler<a class="headerlink" href="#id4" title="Link to this heading"></a></h4>
+<p>Prescaler’s main objective is to scale down the frequency of the input clock with the PRESCALER_COMP amount of times. Where PRESCALER_COMP is the bitfield of CFG_REG_HI CSR.
+Prescaler generates prescaler_hi_target_reached event after PRESCALER_COMP number of clock cycles.</p>
+<p>Prescaler maintains a prescaler counter whose initial value is ‘0’.</p>
+<p>The prescaler counter increments on the positive edge of one of two clock sources, based on the value of the REF_CLK_EN_BIT in the CFG_REG_HI CSR:</p>
+<ul class="simple">
+<li><p>If REF_CLK_EN_BIT = 1, it increments on the positive edge of the reference clock.</p></li>
+<li><p>If REF_CLK_EN_BIT = 0, it increments on the positive edge of the system clock (HCLK).</p></li>
+</ul>
+<p>For every positive edge of the selected clock, if prescaler is enabled, prescaler counter is incremented by value ‘1’ until it reaches the PRESCALER_COMP bitfield of CFG_REG_HI CSR value.
+Once the prescaler counter reaches the PRESCALER_COMP bitfield of CFG_REG_HI CSR value then prescaler_hi_target_reached event is ‘1’.
+In the next positive edge of the selected clock, prescaler counter and prescaler_hi_target_reached are reset to ‘0’.
+The prescaler counter starts incrementing and the same process repeats to set the prescaler_hi_target_reached multiple times.</p>
+<p><strong>Reset Prescaler:</strong></p>
+<p>When the prescaler is reset, the prescaler counter and prescaler_hi_target_reached are reset to ‘0’.
+Prescaler is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT in the CFG_REG_HI CSR is ‘1’ and prescaler_hi_target_reached is ‘1’ for one clock cycle.</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_HI CSR is ‘1’.</p></li>
+<li><p>When the RESET_HI in the TIMER_RESET_HI CSR is ‘1’.</p></li>
+<li><p>When the HRESETn is ‘0’.</p></li>
+</ul>
+<p><strong>Enable Prescaler:</strong></p>
+<p>When the prescaler is enabled, it will start its operation and it can be enabled in the below condition:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT and ENABLE_BIT of CFG_REG_HI is ‘1’ and stoptimer_i is ‘0’.</p></li>
+</ul>
+<p><strong>Disable Prescaler:</strong></p>
+<p>When the prescaler is disabled, it will pause its operation, that is the prescaler counter will retain its current value.
+Prescaler is disabled, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When PRESCALER_EN_BIT in the CFG_REG_HI CSR is ‘0’.</p></li>
+<li><p>When ENABLE_BIT of CFG_REG_HI is ‘0’.</p></li>
+<li><p>When the input signal stoptimer_i is ‘1’.</p></li>
+</ul>
+</section>
+<section id="id6">
+<h4>Timer Counter<a class="headerlink" href="#id6" title="Link to this heading"></a></h4>
+<p>Timer counter generates the output interrupt irq_hi_o for the Core complex.
+if the IRQ_BIT of CFG_REG_HI CSR is ‘1’, 32 bit Timer generates irq_hi_o interrupt when timer counter matches TIMER_CMP_HI CSR value.</p>
+<p>Timer maintains a counter whose initial value is ‘0’ and FW can overwrite/program this counter to any value by configuring TIMER_VAL_HI CSR.</p>
+<p>Timer counter operation is synchronized using HCLK or reference clock.
+If the REF_CLK_EN_BIT in the CFG_REG_HI CSR is  1, it increments on the positive edge of the reference clock else it increments on the positive edge of the system clock (HCLK).</p>
+<p>Timer_hi can be enabled via the FW (ENABLE_BIT bitfield in CFG_REG_HI CSR is ‘1’) or the external device input (When event_hi_i input signal and IEM_BIT bitfield in CFG_REG_HI CSR is ‘1’). The Timer counter checks whether the prescaler is enabled or not via the PRESCALER_EN_BIT bitfield in CFG_REG_HI CSR.</p>
+<p>If the prescaler is not enabled. For every positive edge of either the HCLK or reference clock, the Timer counter will start incrementing its internal counter till it reaches the TIMER_CMP_HI.Once the counter reaches TIMER_CMP_HI value and if the IRQ_BIT is ‘1’, then the irq_hi_o interrupt will be asserted.</p>
+<p>If the prescaler is enabled. For every positive edge of either the HCLK or reference clock, the prescaler will start incrementing its internal counter till it reaches the PRESCALER_COMP bitfield in CFG_REG_HI CSR and it sets the prescaler_hi_target_reached to ‘1’. For every instance of prescaler_hi_target_reached is ‘1’, Timer counter if enabled, increments the internal counter by ‘1’ until it reaches the TIMER_CMP_HI and generates the irq_hi_o interrupt.</p>
+<p>Further functioning of 32 bit Timer_hi timer depends on whether the timer is configured in one shot mode or compare clear mode.</p>
+<p><strong>Reset Timer counter:</strong></p>
+<p>When the Timer counter is reset, the counter is reset to ‘0’.
+Timer counter is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When CMP_CLR_BIT in the CFG_REG_HI CSR is ‘1’ and the counter reaches TIMER_CMP_HI value. (i.e Compare clear mode is enabled)</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_HI CSR is ‘1’.</p></li>
+<li><p>When the RESET_HI in the TIMER_RESET_HI CSR is ‘1’.</p></li>
+<li><p>When the HRESETn is ‘0’.</p></li>
+</ul>
+<p><strong>Enable Timer counter:</strong></p>
+<p>Timer counter will be enabled and it will start its operation, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_HI is ‘1’, PRESCALER_EN_BIT of CFG_REG_HI is ‘0’ and stoptimer_i is ‘0’(If prescaler of Timer_hi is disabled).</p></li>
+<li><p>When PRESCALER_EN_BIT and ENABLE_BIT of CFG_REG_HI is ‘1’ and prescaler_hi_target_reached is ‘1’ and stoptimer_i is ‘0’(If prescaler of Timer_hi is enabled).</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_HI is set, when TIMER_START_HI CSR is having any value other than ‘0’.</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_HI is set, when the event_hi_i signal is ‘1’ and IEM_BIT of CFG_REG_HI is ‘1’.</p></li>
+</ul>
+<p><strong>Disable Timer counter:</strong></p>
+<p>When the Timer counter is disabled, it will pause its operation, that is the counter will not be set to ‘0’.
+Timer counter is disabled, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_HI CSR is ‘0’.</p></li>
+<li><p>When the input signal stoptimer_i is ‘1’.</p></li>
+</ul>
+<p>The busy_o pin is used to provide the status of APB Timer, it will be driven high, if either Timer_lo or Timer_hi is enabled.</p>
+</section>
+</section>
+<section id="bit-timer">
+<h3>64 bit Timer<a class="headerlink" href="#bit-timer" title="Link to this heading"></a></h3>
+<p>If the MODE_64_BIT in CFG_REG_LO CSR is ‘1’, APB timer can be configured as 64-bit timer. TIMER_VAL_LO CSR will specify the lower 32 bit and TIMER_VAL_HI CSR will specify the upper 32 bit of the 64 bit timer.
+Timer_lo and Timer_hi are cascaded to acts as a single 64 bit Timer. For control operations CFG_REG_LO CSR, event_lo_i input signal and irq_lo_o output signals are used.
+All the CSRs of Timer_lo are used, whereas only TIMER_CMP_HI, TIMER_VAL_HI, TIMER_RESET_HI CSRS, and RESET_HI bitfield in CFG_REG_HI  CSRs of Timer_hi are used.</p>
+<p>Like 32 bit timers, 64-bit timer is also designed using a prescaller and Timer counters. The figure below is a high-level block diagram of a 64 bit APB Timer:</p>
+<figure class="align-center" id="id7">
+<img alt="" src="../../_images/64_bit_apb_timer.png" />
+</figure>
+<section id="id8">
+<h4>Prescaler<a class="headerlink" href="#id8" title="Link to this heading"></a></h4>
+<p>Only the prescaler of Timer_lo is used in 64 bit Timer. The working of the prescaler in 64 bit Timer is exactly the same as of the prescaler in 32 bit timer.
+Please refer to the Timer_lo <a href="#id11"><span class="problematic" id="id12">Prescaler_</span></a> for more information.</p>
+</section>
+<section id="bit-timer-counter">
+<span id="counter"></span><h4>64 bit Timer Counter<a class="headerlink" href="#bit-timer-counter" title="Link to this heading"></a></h4>
+<p>The 64-bit Timer counter is formed by combining two 32-bit timer counters of Timer_lo and Timer_hi.
+Timer counter of Timer_lo maintains a counter (i.e counter_lo) whose initial value is TIMER_VAL_LO CSR. Timer counter of Timer_hi maintains a counter (i.e counter_hi) whose initial value is TIMER_VAL_HI CSR.</p>
+<p>This means <strong>64-bit counter = { counter_hi (32 bits), counter_lo (32 bits) }</strong></p>
+<p>The counter_lo and counter_hi are incremented on the positive edge of one of two clock sources, based on the value of the REF_CLK_EN_BIT in the CFG_REG_LO CSR:</p>
+<ul class="simple">
+<li><p>If REF_CLK_EN_BIT = 1: increments on the positive edge of the reference clock.</p></li>
+<li><p>If REF_CLK_EN_BIT = 0: increments on the positive edge of the system clock (HCLK)</p></li>
+</ul>
+<p>64 bit Timer can be enabled when the ENABLE_BIT bitfield in CFG_REG_LO CSR is ‘1’ or the external device input (i.e. event_lo_i input signal and IEM_BIT bitfield in CFG_REG_LO CSR is ‘1’). The Timer counter of Timer_lo checks whether the prescaler is enabled or not via the PRESCALER_EN_BIT bitfield in CFG_REG_LO CSR.</p>
+<p>If the prescaler is enabled, for every positive edge depending upon REF_CLK_EN_BIT bit, either the HCLK or reference clock, the prescaler will start incrementing its internal counter till it reaches the PRESCALER_COMP bitfield in CFG_REG_LO CSR and it sets the prescaler_lo_target_reached to ‘1’ for 1 clock cycle.
+For every instance of prescaler_lo_target_reached is ‘1’, Timer counter of Timer_lo timer will be incremented by 1.</p>
+<p>If the prescaler is not enabled, for every positive edge depending upon REF_CLK_EN_BIT bit, either the HCLK or reference clock, the Timer counter of Timer_lo timer will be incremented by 1.</p>
+<p>Timer counter of timer-lo timer keeps incrementing until it reaches the 0xFFFFFFFF.  Since the Timer counter of Timer_lo has overflowed, the Timer counter(counter_hi) of Timer_hi is incremented by value ‘1’.
+That means for every overflow of Timer_lo Timer counter and the positive edge of the selected clock, the counter_hi is incremented by ‘1’. The same process is repeated till the counter_hi reaches TIMER_CMP_HI value.
+Once the counter_hi reaches TIMER_CMP_HI value and if the IRQ_BIT is ‘1’, Timer_lo will assert irq_lo_o interrupt as soon as counter_lo reaches the TIMER_CMP_LO value.</p>
+<p>That is the irq_lo_o interrupt is generated when the <strong>{counter_hi(32 bits), counter_lo (32 bits)}</strong> matches the <strong>{TIMER_CMP_HI (32 bits),TIMER_CMP_LO (32 bits)}</strong></p>
+<p>Further functioning of 64 bit Timer depends on whether the timer is configured in one shot mode or compare clear mode.</p>
+<p><strong>Enable Timer counter of Timer_lo:</strong></p>
+<p>Timer counter of Timer_lo will be enabled and it will start its operation if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_LO is ‘1’, PRESCALER_EN_BIT of CFG_REG_LO is ‘0’ and stoptimer_i is ‘0’ (If prescaler of Timer_lo is disabled).</p></li>
+<li><p>When PRESCALER_EN_BIT and ENABLE_BIT of CFG_REG_LO is ‘1’ and prescaler_lo_target_reached is ‘1’ and stoptimer_i is ‘0’ (If prescaler of Timer_lo is enabled).</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_LO is set, when TIMER_START_LO CSR is having any value other than ‘0’.</p></li>
+<li><p>The ENABLE_BIT of CFG_REG_LO is set, when the event_lo_i signal is ‘1’ and IEM_BIT of CFG_REG_LO is ‘1’.</p></li>
+</ul>
+<p><strong>Reset Timer counter of Timer_lo:</strong></p>
+<p>When the Timer counter of Timer_lo is reset, the counter is reset to ‘0’.
+Timer counter of Timer_lo is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When CMP_CLR_BIT in the CFG_REG_LO CSR is ‘1’ counter of Timer_lo reaches TIMER_CMP_LO value and the counter of Timer_hi reaches TIMER_CMP_HI value. (i.e Compare clear mode is enabled)</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_LO CSR is ‘1’.</p></li>
+<li><p>When the RESET_LO in the TIMER_RESET_LO CSR is ‘1’.</p></li>
+<li><p>When the HRESETn is ‘0’.</p></li>
+</ul>
+<p><strong>Enable Timer counter of Timer_hi:</strong></p>
+<p>Timer counter of Timer_hi will be enabled and it will start its operation if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_LO is ‘1’, counter_lo is 0xFFFFFFFF and stoptimer_i is ‘0’ (If prescaler_lo is disabled).</p></li>
+<li><p>When ENABLE_BIT of CFG_REG_LO and prescaler_lo_target_reached is ‘1’, and counter_lo is 0xFFFFFFFF and stoptimer_i is ‘0’ (If prescaler_lo is enabled).</p></li>
+</ul>
+<p><strong>Reset Timer counter of Timer_hi:</strong></p>
+<p>When the Timer counter of Timer_hi is reset, the counter is reset to ‘0’.
+Timer counter of Timer_hi is reset, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When CMP_CLR_BIT in the CFG_REG_LO CSR, counter of Timer_lo reaches TIMER_CMP_LO value and the counter of Timer_hi reaches TIMER_CMP_HI value</p></li>
+<li><p>When the RESET_BIT in the CFG_REG_HI CSR is ‘1’.</p></li>
+<li><p>When the RESET_HI in the TIMER_RESET_HI CSR is ‘1’.</p></li>
+<li><p>When the HRESETn is ‘0’.</p></li>
+</ul>
+<p><strong>Disable Timer counter of Timer_lo and Timer_hi:</strong></p>
+<p>When the Timer counter of the Timer_lo and Timer_hi are disabled, it will pause its operation, that is the counters of Timer_lo and Timer_hi will retain their current values.
+Timer counter of both Timer_lo and Timer_hi are disabled, if any of the below conditions is satisfied:</p>
+<ul class="simple">
+<li><p>When ENABLE_BIT of CFG_REG_LO CSR is ‘0’.</p></li>
+<li><p>When the input signal stoptimer_i is ‘1’.</p></li>
+</ul>
+</section>
+<section id="important-note">
+<h4>Important Note:<a class="headerlink" href="#important-note" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>For 64 bit mode, if the MODE_MTIME_BIT is ‘1’, then issue an interrupt irq_lo_o irrespective of whether the interrupt is enabled or disabled through the IRQ_BIT.</p></li>
+<li><p>For 64 bit mode, the busy_o pin is used to provide the status of APB Timer and it will be driven high if the 64 bit Timer is enabled.</p></li>
+</ul>
+</section>
+</section>
+<section id="one-shot-mode">
+<h3>One shot mode:<a class="headerlink" href="#one-shot-mode" title="Link to this heading"></a></h3>
+<section id="for-32-bit-timer">
+<h4>For 32-bit Timer:<a class="headerlink" href="#for-32-bit-timer" title="Link to this heading"></a></h4>
+<p>One-shot mode can be independently enabled for both Timer_lo and Timer_hi.</p>
+<ul class="simple">
+<li><p>If the ONE_SHOT_BIT bitfield in the CFG_REG_LO CSR is set to ‘1’, one-shot mode is enabled for Timer_lo. The timer will automatically disable when the Timer_lo counter reaches the value in TIMER_CMP_LO for the first time. When its disabled, the Timer_lo will pause its operation (i.e the timer counter and irq_lo_o will retain its current value).</p></li>
+<li><p>Similarly, if the ONE_SHOT_BIT bitfield in the CFG_REG_HI CSR is set to ‘1’, one-shot mode is enabled for Timer_hi, The timer will automatically disable when the Timer_hi counter reaches TIMER_CMP_HI. When its disabled, the Timer_hi will pause its operation (i.e the timer counter and irq_hi_o will retain its current value).</p></li>
+<li><p>Timer_lo timer counter and irq_lo_o are reset to ‘0’, when the reset is issued to Timer_lo.</p></li>
+<li><p>Timer_hi timer counter and irq_hi_o are reset to ‘0’, when the reset is issued to Timer_hi.</p></li>
+</ul>
+</section>
+<section id="for-64-bit-timer">
+<h4>For 64-bit Timer:<a class="headerlink" href="#for-64-bit-timer" title="Link to this heading"></a></h4>
+<p>In 64-bit mode (where Timer_lo and Timer_hi operate in cascade):
+If the ONE_SHOT_BIT bitfield in the CFG_REG_LO CSR is set to ‘1’, one-shot mode is enabled for the entire 64-bit timer.
+The cascaded timer (Timer_lo + Timer_hi) will automatically disable when Timer_lo counter reaches TIMER_CMP_LO, and Timer_hi counter reaches TIMER_CMP_HI for the first time.
+When its disabled, the cascaded timer (Timer_lo + Timer_hi) will pause its operation (i.e the timer counter and irq_lo_o will retain its current value).</p>
+</section>
+</section>
+<section id="compare-clear-mode">
+<h3>Compare Clear Mode<a class="headerlink" href="#compare-clear-mode" title="Link to this heading"></a></h3>
+<section id="id9">
+<h4>For 32-bit Timer:<a class="headerlink" href="#id9" title="Link to this heading"></a></h4>
+<p>Compare Clear mode can be independently enabled for both Timer_lo and Timer_hi.</p>
+<ul class="simple">
+<li><p>Timer_lo: If the CMP_CLR_BIT bitfield in the CFG_REG_LO CSR is set to ‘1’, Compare Clear mode is enabled for Timer_lo.  When the counter reaches TIMER_CMP_LO value, the timer is not disabled; instead, the counter and irq_lo_o is reset to 0. Since the timer remains enabled, the counter continues to increment on every positive edge of the clock until it again reaches TIMER_CMP_LO value. This process repeats cyclically.</p></li>
+<li><p>Timer_hi: If the CMP_CLR_BIT bitfield in the CFG_REG_HI CSR is set to ‘1’, Compare Clear mode is enabled for Timer_hi.  When the counter reaches TIMER_CMP_HI value, the timer is not disabled; instead, the counter and irq_hi_o is reset to 0. The counter then continues to increment on every positive clock edge until it again reaches TIMER_CMP_HI value. This process repeats cyclically.</p></li>
+</ul>
+</section>
+<section id="id10">
+<h4>For 64-bit Timer:<a class="headerlink" href="#id10" title="Link to this heading"></a></h4>
+<p>In 64-bit mode (with cascaded Timer_lo and Timer_hi), the Compare Clear mode is enabled when the CMP_CLR_BIT bitfield in CFG_REG_LO CSR is set to ‘1’.
+When both Timer_lo counter reaches TIMER_CMP_LO, and, Timer_hi counter reaches TIMER_CMP_HI, the timer is not disabled; instead, the irq_lo_o and both counters are reset to 0.
+As both timers remain enabled, the counters continue to increment on each positive clock edge until Timer_lo reaches TIMER_CMP_LO and Timer_hi reaches TIMER_CMP_HI again. This process repeats cyclically.</p>
+</section>
+</section>
+</section>
+<section id="system-architecture">
+<h2>System Architecture:<a class="headerlink" href="#system-architecture" title="Link to this heading"></a></h2>
+<p>The figure below depicts the connections between the APB TIMER and rest of the modules in Core-V-MCU:-</p>
+<figure class="align-center" id="apb-timer-soc-connections">
+<img alt="" src="../../_images/apb_timer_soc_connections.png" />
+<figcaption>
+<p><span class="caption-text">APB TIMER Core-V-MCU connections diagram</span><a class="headerlink" href="#apb-timer-soc-connections" title="Link to this image"></a></p>
+</figcaption>
+</figure>
+<ul class="simple">
+<li><p>The event_lo_i and event_hi_i input to the APB Timer is provided by APB_EVENT_GENERATOR.</p></li>
+<li><p>APB Timer processes this input signals based on the various CSR configurations.</p></li>
+<li><p>APB Timer generates few output event signals that are further passed as interrupts to the Core complex.</p></li>
+<li><p>APB Timer receives the input stoptimer_i from the core complex that can stop the operations of APB TIMER.</p></li>
+</ul>
+</section>
+<section id="programmers-view">
+<h2>Programmers View:<a class="headerlink" href="#programmers-view" title="Link to this heading"></a></h2>
+<section id="initial-configurations">
+<h3>Initial Configurations:<a class="headerlink" href="#initial-configurations" title="Link to this heading"></a></h3>
+<p>There are CSR bitfields in the APB timer that are required to be configured before any operations are initiated.
+As we have 2 Timer modules that can be configured individually. Each timer has to be configured with appropriate values.</p>
+<ul class="simple">
+<li><p>Mode selection of 32 bit or 64 bit counters by configuring the MODE_64_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Enable or disable the ref_clk by configuring the REF_CLK_EN_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Enable or disable the prescaler by configuring the PRESCALER_EN_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Prescaler compare values can be configured by using the PRESCALER_COMP in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>One shot mode can be enabled or disabled by configuring the ONE_SHOT_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Compare clear mode can be enabled or disabled by configuring the CMP_CLR_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>The event input can be enabled or disabled by configuring the IEM_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Configure the MODE_MTIME_BIT bit so that in the 64 bit mode even if the IRQ_bit is not set an interrupt is being driven when the count == compare_value. Configure the MODE_MTIME_BIT in CFG_REG_LO or CFG_REG_HI CSR.</p></li>
+<li><p>Overwriting the counter value directly via the by configuring the TIMER_VAL_LO or TIMER_VAL_HI CSR.</p></li>
+<li><p>Initial counter value can be configured by using the TIMER_VAL_LO or TIMER_VAL_HI CSR.</p></li>
+<li><p>Timer compare value can be configured by using the TIMER_CMP_LO or TIMER_CMP_HI CSR.</p></li>
+<li><p>the stoptimer_i is used to stop the counter operation of both the Timer_lo and Timer_hi directly.</p></li>
+</ul>
+</section>
+<section id="control-configurations-operations">
+<h3>Control configurations/operations:<a class="headerlink" href="#control-configurations-operations" title="Link to this heading"></a></h3>
+<p>There are CSR bitfields in the APB advanced timer which controls operations of each of the timer modules and its sub modules.</p>
+<ul class="simple">
+<li><p>Set the ENABLE_BIT in CFG_REG_LO or CFG_REG_HI CSR so that Timer_lo or Timer_hi can start counting.</p></li>
+<li><p>Set the START_LO or START_HI in TIMER_START_LO or TIMER_START_HI CSR respectively so that Timer_lo or Timer_hi can start counting.</p></li>
+<li><p>Set the RESET_BIT in CFG_REG_LO or CFG_REG_HI CSR so that Timer_lo or Timer_hi can be reset.</p></li>
+<li><p>Set the RESET_LO or RESET_HI in TIMER_RESET_LO or TIMER_RESET_HI CSR respectively so that Timer_lo or Timer_hi can be reset.</p></li>
+</ul>
+</section>
+<section id="status-configurations">
+<h3>Status configurations:<a class="headerlink" href="#status-configurations" title="Link to this heading"></a></h3>
+<p>The counter values of both the Timers can be read via the following CSR bitfields in the APB timer.</p>
+<ul class="simple">
+<li><p>Use the TIMER_VAL_LO or TIMER_VAL_HI CSR for the current value of the Timer_lo counter or Timer_hi counter respectively.</p></li>
+<li><p>The busy_o pin is used to provide the status of APB Timer will be driven high if anyone of the counter is enabled..</p></li>
+</ul>
+</section>
+</section>
+<section id="apb-timer-csrs">
+<h2>APB Timer CSRs<a class="headerlink" href="#apb-timer-csrs" title="Link to this heading"></a></h2>
+<p>Refer to  <a class="reference external" href="https://github.com/openhwgroup/core-v-mcu/blob/master/docs/doc-src/mmap.rst">Memory Map</a> for the peripheral domain address of the SoC Controller.</p>
+<p>NOTE: Several of the APB Timer CSRs are volatile, meaning that their read value may be changed by the hardware.
+For example, writing the TIMER_VAL_LO CSR will set the initial counter value of Timer_lo. A subsequent read will return the latest updated counter value of Timer_lo.
+As the name suggests, the value of non-volatile CSRs is not changed by the hardware. These CSRs retain the last value written by the software.
+A CSR’s volatility is indicated by its “type”.</p>
+<p>Details of CSR access type are explained <a class="reference external" href="https://docs.openhwgroup.org/projects/core-v-mcu/doc-src/mmap.html#csr-access-types">here</a>.</p>
+<section id="cfg-reg-lo">
+<h3>CFG_REG_LO<a class="headerlink" href="#cfg-reg-lo" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x000</p></li>
+<li><p>Type: volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>MODE_64_BIT</p></td>
+<td><p>31:31</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = 64-bit mode, 0=32-bit mode</p></td>
+</tr>
+<tr class="row-odd"><td><p>MODE_MTIME_BIT</p></td>
+<td><p>30:30</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= Generate the interrupt even
+if the IRQ_BIT is disabled.</p></td>
+</tr>
+<tr class="row-even"><td><p>PRESCALER_COMP</p></td>
+<td><p>15:8</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>Prescaler compare value</p></td>
+</tr>
+<tr class="row-odd"><td><p>REF_CLK_EN_BIT</p></td>
+<td><p>7:7</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= use Refclk for counter,
+0 = use APB bus clk for counter</p></td>
+</tr>
+<tr class="row-even"><td><p>PRESCALER_EN_BIT</p></td>
+<td><p>6:6</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= Use prescaler
+0= no prescaler</p></td>
+</tr>
+<tr class="row-odd"><td><p>ONE_SHOT_BIT</p></td>
+<td><p>5:5</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= disable timer when Timer
+counter == TIMER_CMP_LO value</p></td>
+</tr>
+<tr class="row-even"><td><p>CMP_CLR_BIT</p></td>
+<td><p>4:4</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1=counter is reset once Timer
+counter == TIMER_CMP_LO,
+0 = counter is not reset</p></td>
+</tr>
+<tr class="row-odd"><td><p>IEM_BIT</p></td>
+<td><p>3:3</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = event input is enabled</p></td>
+</tr>
+<tr class="row-even"><td><p>IRQ_BIT</p></td>
+<td><p>2:2</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = IRQ is enabled when Timer
+counter ==TIMER_CMP_LO</p></td>
+</tr>
+<tr class="row-odd"><td><p>RESET_BIT</p></td>
+<td><p>1:1</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = reset the counter</p></td>
+</tr>
+<tr class="row-even"><td><p>ENABLE_BIT</p></td>
+<td><p>0:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = enable the counter to count</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="cfg-reg-hi">
+<h3>CFG_REG_HI<a class="headerlink" href="#cfg-reg-hi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x004</p></li>
+<li><p>Type: volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>MODE_64_BIT</p></td>
+<td><p>31:31</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = 64-bit mode, 0=32-bit mode</p></td>
+</tr>
+<tr class="row-odd"><td><p>MODE_MTIME_BIT</p></td>
+<td><p>30:30</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= Generate the interrupt even
+if the IRQ_BIT is disabled.</p></td>
+</tr>
+<tr class="row-even"><td><p>PRESCALER_COMP</p></td>
+<td><p>15:8</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>Prescaler compare value</p></td>
+</tr>
+<tr class="row-odd"><td><p>REF_CLK_EN_BIT</p></td>
+<td><p>7:7</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= use Refclk for counter,
+0 = use APB bus clk for counter</p></td>
+</tr>
+<tr class="row-even"><td><p>PRESCALER_EN_BIT</p></td>
+<td><p>6:6</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= Use prescaler
+0= no prescaler</p></td>
+</tr>
+<tr class="row-odd"><td><p>ONE_SHOT_BIT</p></td>
+<td><p>5:5</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1= disable timer when Timer
+counter == TIMER_CMP_HI value</p></td>
+</tr>
+<tr class="row-even"><td><p>CMP_CLR_BIT</p></td>
+<td><p>4:4</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1=counter is reset once Timer
+counter == TIMER_CMP_HI,
+0=counter is not reset</p></td>
+</tr>
+<tr class="row-odd"><td><p>IEM_BIT</p></td>
+<td><p>3:3</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = event input is enabled</p></td>
+</tr>
+<tr class="row-even"><td><p>IRQ_BIT</p></td>
+<td><p>2:2</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = IRQ is enabled when Timer
+counter ==TIMER_CMP_HI value</p></td>
+</tr>
+<tr class="row-odd"><td><p>RESET_BIT</p></td>
+<td><p>1:1</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = reset the counter</p></td>
+</tr>
+<tr class="row-even"><td><p>ENABLE_BIT</p></td>
+<td><p>0:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>1 = enable the counter to count</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-val-lo">
+<h3>TIMER_VAL_LO<a class="headerlink" href="#timer-val-lo" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x008</p></li>
+<li><p>Type: volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TIMER_VAL_LO</p></td>
+<td><p>31:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>32-bit counter value</p>
+<p>Low 32-bits in 64-bit mode</p>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-val-hi">
+<h3>TIMER_VAL_HI<a class="headerlink" href="#timer-val-hi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x00C</p></li>
+<li><p>Type: volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TIMER_VAL_HI</p></td>
+<td><p>31:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>32-bit counter value</p>
+<p>High 32-bits in 64-bit mode</p>
+</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-cmp-lo">
+<h3>TIMER_CMP_LO<a class="headerlink" href="#timer-cmp-lo" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x010</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TIMER_CMP_LO</p></td>
+<td><p>31:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>compare value for low
+32-bit counter</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-cmp-hi">
+<h3>TIMER_CMP_HI<a class="headerlink" href="#timer-cmp-hi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x014</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>TIMER_CMP_HI</p></td>
+<td><p>31:0</p></td>
+<td><p>RW</p></td>
+<td><p>0x0</p></td>
+<td><p>compare value for high
+32-bit counter</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-start-lo">
+<h3>TIMER_START_LO<a class="headerlink" href="#timer-start-lo" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x018</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>START_LO</p></td>
+<td><p>31:0</p></td>
+<td><p>WS</p></td>
+<td><p>0x0</p></td>
+<td><p>Start Timer_lo APB Timer</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-start-hi">
+<h3>TIMER_START_HI<a class="headerlink" href="#timer-start-hi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x01C</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>START_HI</p></td>
+<td><p>31:0</p></td>
+<td><p>WS</p></td>
+<td><p>0x0</p></td>
+<td><p>Start Timer_hi APB Timer</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-reset-lo">
+<h3>TIMER_RESET_LO<a class="headerlink" href="#timer-reset-lo" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x020</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>RESET_LO</p></td>
+<td><p>31:0</p></td>
+<td><p>WS</p></td>
+<td><p>0x0</p></td>
+<td><p>Reset Timer_lo APB Timer</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="timer-reset-hi">
+<h3>TIMER_RESET_HI<a class="headerlink" href="#timer-reset-hi" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>Address Offset = 0x024</p></li>
+<li><p>Type: non-volatile</p></li>
+</ul>
+<table class="docutils align-default">
+<thead>
+<tr class="row-odd"><th class="head"><p>Field</p></th>
+<th class="head"><p>Bits</p></th>
+<th class="head"><p>Access</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Description</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>RESET_HI</p></td>
+<td><p>31:0</p></td>
+<td><p>WS</p></td>
+<td><p>0x0</p></td>
+<td><p>Reset Timer_hi APB Timer</p></td>
+</tr>
+</tbody>
+</table>
+</section>
+</section>
+<section id="firmware-guidelines">
+<h2>Firmware Guidelines<a class="headerlink" href="#firmware-guidelines" title="Link to this heading"></a></h2>
+<section id="initialization">
+<h3>Initialization:<a class="headerlink" href="#initialization" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>When the HRESETn signal is low, CSRs default to 0 and outputs are low.</p></li>
+<li><p>At every positive edge of either the HCLK or reference clock the CSRs are updated based on APB signals.</p></li>
+</ul>
+<section id="initializing-the-prescaler">
+<h4>Initializing the Prescaler:<a class="headerlink" href="#initializing-the-prescaler" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>By default prescalers are disabled, set PRESCALER_EN_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to enable the prescaler_lo or prescaler_hi respectively.</p></li>
+<li><p>If the Prescalers are enabled, Write to the PRESCALER_COUNT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to specify the compare value for the prescaler_lo or prescaler_hi respectively.</p></li>
+</ul>
+</section>
+<section id="initializing-the-timer-counter">
+<h4>Initializing the Timer counter:<a class="headerlink" href="#initializing-the-timer-counter" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Write to CSRs TIMER_VAL_LO and TIMER_VAL_HI to specify the initial counter value for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>Write to CSRs TIMER_CMP_LO and TIMER_CMP_HI to specify the compare count for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>Write ‘1’ to either ONE_SHOT_BIT bitfield or CMP_CLR_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to select the mode for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>By default interrupts are disabled, set IRQ_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to enable the interrupts irq_lo_o or irq_hi_o for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>By default input events are disabled, set IEM_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to enable the input events event_lo_i or event_hi_i for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>By default reference clock is disabled, set REF_CLK_EN_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to enable the reference clocks for Timer_lo or Timer_hi respectively.</p></li>
+<li><p>By default 64 bit mode is disabled and 32 bit mode is enabled, set MODE_64_BIT bitfield of CFG_REG_LO  CSR to enable the 64 bit mode.</p></li>
+<li><p>Set MODE_MTIME_BIT bitfield of CFG_REG_LO or CFG_REG_HI CSRs to generate interrupt irq_lo_o for 64 bit timer irrespective of whether the interrupt is enabled or disabled through the IRQ_BIT.</p></li>
+</ul>
+</section>
+</section>
+<section id="start-the-timer">
+<h3>Start the timer:<a class="headerlink" href="#start-the-timer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Timer can be started in the following 3 ways:</dt><dd><ul>
+<li><p>When ENABLE_BIT of CFG_REG_LO or CFG_REG_HI is ‘1’ for timer_lo or timer_hi respectively.</p></li>
+<li><p>When the event_lo_i or event_hi_i signal is read as ‘1’ and IEM_BIT of CFG_REG_LO or CFG_REG_HI is ‘1’ for timer_lo or timer_hi respectively.</p></li>
+<li><p>When TIMER_START_LO or TIMER_START_HI is any value other than ‘0’ for timer_lo or timer_hi respectively.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Once the timer is started FW can observe the counter value getting incremented in the TIMER_VAL_LO or TIMER_VAL_HI CSR  for timer_lo or timer_hi respectively.</p></li>
+</ul>
+</section>
+<section id="stop-the-timer">
+<h3>Stop the timer:<a class="headerlink" href="#stop-the-timer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Timer can be stopped in the following 2 ways:</dt><dd><ul>
+<li><p>When ENABLE_BIT of CFG_REG_LO or CFG_REG_HI is ‘0’ for timer_lo or timer_hi respectively.</p></li>
+<li><p>When stoptimer_i is ‘1’.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Once the timer is stopped FW can observe the counter value remain the same in the TIMER_VAL_LO or TIMER_VAL_HI CSR for timer_lo or timer_hi respectively.</p></li>
+</ul>
+</section>
+<section id="reset-the-timer">
+<h3>Reset the timer:<a class="headerlink" href="#reset-the-timer" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><dl class="simple">
+<dt>Timer can be reset in the following 2 ways:</dt><dd><ul>
+<li><p>When the RESET_BIT in the CFG_REG_LO or CFG_REG_HI CSR is ‘1’ for timer_lo or timer_hi respectively.</p></li>
+<li><p>When the RESET_LO in the TIMER_RESET_LO or TIMER_RESET_HI CSR is ‘1’  for timer_lo or timer_hi respectively.</p></li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><p>Once the timer is stopped FW can observe the counter value reset to ‘0’ in the TIMER_VAL_LO or TIMER_VAL_HI CSR for timer_lo or timer_hi respectively.</p></li>
+</ul>
+</section>
+<section id="interrupt-generation">
+<h3>Interrupt generation:<a class="headerlink" href="#interrupt-generation" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>If the IRQ_BIT of  CFG_REG_LO is ‘1’ , irq_lo_o will be asserted when the counter value of Timer_lo reaches the TIMER_CMP_LO.</p></li>
+<li><p>If the IRQ_BIT of  CFG_REG_HI is ‘1’ , irq_hi_o will be asserted when the counter value of Timer_hi reaches the TIMER_CMP_HI.</p></li>
+</ul>
+</section>
+</section>
+<section id="pin-diagram">
+<h2>Pin Diagram<a class="headerlink" href="#pin-diagram" title="Link to this heading"></a></h2>
+<p>The figure below represents the input and output pins for the APB Timer:-</p>
+<figure class="align-center" id="apb-timer-pin-diagram">
+<img alt="" src="../../_images/apb_timer_pin_diagram.png" />
+</figure>
+<p>APB Timer Pin Diagram</p>
+<section id="clock-and-reset">
+<h3>Clock and Reset<a class="headerlink" href="#clock-and-reset" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>HCLK: System clock input</p></li>
+<li><p>HRESETn: Active-low reset input</p></li>
+<li><p>low_speed_clk_i: Reference clock input</p></li>
+</ul>
+</section>
+<section id="apb-interface">
+<h3>APB Interface<a class="headerlink" href="#apb-interface" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>PADDR[11:0]: APB address bus input</p></li>
+<li><p>PSEL: APB peripheral select input</p></li>
+<li><p>PENABLE: APB enable input</p></li>
+<li><p>PWRITE: APB write control input (high for write, low for read)</p></li>
+<li><p>PWDATA[31:0]: APB write data bus input</p></li>
+<li><p>PREADY: APB ready output to indicate transfer completion</p></li>
+<li><p>PRDATA[31:0]: APB read data bus output</p></li>
+<li><p>PSLVERR: APB slave error</p></li>
+</ul>
+</section>
+<section id="apb-event-generator-interface">
+<h3>APB Event generator Interface<a class="headerlink" href="#apb-event-generator-interface" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>event_lo_i: Input event for the Timer_lo</p></li>
+<li><p>event_hi_i: Input event for the Timer_hi</p></li>
+</ul>
+</section>
+<section id="core-complex-interface">
+<h3>Core Complex Interface<a class="headerlink" href="#core-complex-interface" title="Link to this heading"></a></h3>
+<ul class="simple">
+<li><p>stoptimer_i: Input signal to stop timer</p></li>
+<li><p>irq_lo_o: Output interrupt from Timer_lo</p></li>
+<li><p>irq_hi_o: Output interrupt from Timer_hi</p></li>
+<li><p>busy_o: Output busy signal that signifies that any one of the timer is active</p></li>
+</ul>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="apb_gpio.html" class="btn btn-neutral float-left" title="APB GPIO" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="apb_i2cs.html" class="btn btn-neutral float-right" title="APB I2C SLAVE" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022-present, OpenHW Group.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
