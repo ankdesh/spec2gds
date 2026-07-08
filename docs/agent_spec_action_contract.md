@@ -106,6 +106,9 @@ Current rules:
 - The snapshot is persisted under
   `spec_data/agent-spec/runs/<run_id>/input_snapshot.json`.
 
+External pipelines use the same snapshot contract. A pipeline run can request
+the active block version or pass an explicit `version_id` for reproducibility.
+
 ## Run Lifecycle
 
 The current `AgentSpecRunner.trigger_action()` flow is synchronous:
@@ -160,7 +163,7 @@ Current event types emitted by the runner:
 
 The in-memory `/agent-spec/events` endpoint returns events accumulated since
 the current API session opened. Completed runs also persist their own
-`events.ndjson`.
+`events.ndjson`, with one compact JSON object per line.
 
 ## Artifact Contract
 
@@ -184,6 +187,7 @@ The runner accepts an artifact only when:
 
 - `sha256` starts with `sha256:` and has the expected length
 - `external_uri` starts with `file://` or `artifact-store://`
+- `source_trace.block_id` is part of the input snapshot
 - `source_trace.version_id` is part of the input snapshot
 - `role` is allowed by `ActionSpec.output_roles`, when roles are declared
 - `summary`, `media_type`, and `artifact_kind` are non-empty
@@ -230,6 +234,37 @@ spec_data/agent-spec/writebacks/<writeback_id>.json
 Action handlers should not mutate `.spec` source prose directly. Current
 supported output is artifact metadata plus diagnostics.
 
+External pipeline writebacks follow the same policy. They may attach accepted
+artifact metadata and diagnostics, but they do not auto-edit human-readable
+document prose.
+
+## Pipeline Read Contract
+
+Pipeline read endpoints expose curated information from the active `.spec`
+document without saving or normalizing the package. The UI snapshot endpoint
+and the pipeline read endpoints share the same read/query service so the UI and
+pipelines see the same semantic blocks, relations, IP-XACT summaries, links,
+artifacts, and diagnostics.
+
+Pipeline read responses use a v1 envelope:
+
+```text
+schema_version: "agent-spec.pipeline.v1"
+document_hash: str
+loaded_at: str
+data: object
+diagnostics: list[AgentSpecDiagnostic]
+```
+
+The main execution-oriented read shape is the block context endpoint. It
+returns the selected block, selected version, active version id, covered
+semantic blocks, section links, relevant relations, attached IP-XACT summaries
+with raw XML endpoint hints, attached artifacts, attachments, and diagnostics.
+
+Read endpoints must remain read-only. If heading IDs, graph metadata, manifest
+entries, or other structure need repair, callers should use explicit editor,
+action, or sanitization flows.
+
 ## API Endpoints
 
 The action API is mounted under `/agent-spec` by `document_app.py`.
@@ -242,6 +277,25 @@ The action API is mounted under `/agent-spec` by `document_app.py`.
 | `GET /agent-spec/blocks/{block_id}/actions` | Return enabled actions available for a block's tags. |
 | `POST /agent-spec/blocks/{block_id}/actions/{action_id}/runs` | Trigger one synchronous action run. |
 | `GET /agent-spec/events` | Return in-memory run events for the current session. |
+
+Pipeline endpoints are also mounted under `/agent-spec` and use the same active
+document session:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /agent-spec/pipeline/documents/open` | Open one active document for read-only pipeline queries without saving graph metadata. |
+| `GET /agent-spec/pipeline/document` | Return document identity, hash, counts, and diagnostic summary. |
+| `GET /agent-spec/pipeline/blocks` | Return block summaries with active versions and attachment counts. |
+| `GET /agent-spec/pipeline/blocks/{block_id}` | Return one block and all known versions. |
+| `GET /agent-spec/pipeline/blocks/{block_id}/context?version_id=...` | Return the pipeline-ready section bundle for the active or explicit version. |
+| `GET /agent-spec/pipeline/ipxact` | Return embedded IP-XACT component/interface summaries. |
+| `GET /agent-spec/pipeline/ipxact/raw?file_path=...` | Return raw embedded IP-XACT XML bytes. |
+| `GET /agent-spec/pipeline/artifacts` | Return artifact refs and block attachments. |
+| `GET /agent-spec/pipeline/runs` | Return persisted run and writeback summaries. |
+| `GET /agent-spec/pipeline/runs/{run_id}` | Return one persisted run with input snapshot and events. |
+| `GET /agent-spec/pipeline/links` | Return visible document links and link diagnostics. |
+| `POST /agent-spec/pipeline/runs` | Start an external pipeline run and persist its input snapshot. |
+| `POST /agent-spec/pipeline/runs/{run_id}/outputs` | Validate and attach external pipeline artifact metadata. |
 
 ## Deferred Extensions
 

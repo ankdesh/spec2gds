@@ -1,4 +1,5 @@
 import os
+import pathlib
 import sys
 import tempfile
 import json
@@ -94,3 +95,72 @@ def test_cli_inject_extract_and_validate() -> None:
         for p in [temp_container_path, temp_json_path, temp_extract_path]:
             if os.path.exists(p):
                 os.remove(p)
+
+
+def test_cli_inspect_reports_detailed_spec_anatomy() -> None:
+    """Test that inspect emits package, semantic, and IP-XACT diagnostics."""
+    sample_path = pathlib.Path("spec2gds/agent_spec/samples/generated/synthetic_basic_with_ipxact.spec")
+    inspect_argv = [
+        "agent_spec_cli",
+        "inspect",
+        "--container",
+        str(sample_path),
+    ]
+
+    stdout_capture = io.StringIO()
+    with mock.patch.object(sys, "argv", inspect_argv), mock.patch.object(sys, "stdout", stdout_capture):
+        cli.main()
+
+    report = json.loads(stdout_capture.getvalue())
+
+    if report["document"]["sha256"] == "":
+        raise AssertionError("Expected inspect report to include document hash.")
+    if report["package"]["part_count"] <= 0:
+        raise AssertionError("Expected inspect report to include package parts.")
+    if report["semantic_document"]["block_count"] <= 0:
+        raise AssertionError("Expected inspect report to include semantic blocks.")
+    if not report["ipxact"]:
+        raise AssertionError("Expected inspect report to include embedded IP-XACT summaries.")
+
+
+def test_cli_sanitize_writes_output_copy() -> None:
+    """Test that sanitize can write a structurally normalized copy."""
+    sample_path = pathlib.Path("spec2gds/agent_spec/samples/generated/synthetic_basic_with_ipxact.spec")
+    temp_output_fd, temp_output_path = tempfile.mkstemp(suffix=".spec")
+    os.close(temp_output_fd)
+
+    try:
+        sanitize_argv = [
+            "agent_spec_cli",
+            "sanitize",
+            "--container",
+            str(sample_path),
+            "--output",
+            temp_output_path,
+        ]
+        stdout_capture = io.StringIO()
+        with mock.patch.object(sys, "argv", sanitize_argv), mock.patch.object(sys, "stdout", stdout_capture):
+            cli.main()
+
+        result = json.loads(stdout_capture.getvalue())
+        if not result["saved"]:
+            raise AssertionError(f"Expected sanitize to save output, got: {result}")
+        if not os.path.exists(temp_output_path) or os.path.getsize(temp_output_path) == 0:
+            raise AssertionError("Expected sanitize output to be a non-empty .spec file.")
+
+        inspect_argv = [
+            "agent_spec_cli",
+            "inspect",
+            "--container",
+            temp_output_path,
+            "--format",
+            "text",
+        ]
+        text_capture = io.StringIO()
+        with mock.patch.object(sys, "argv", inspect_argv), mock.patch.object(sys, "stdout", text_capture):
+            cli.main()
+        if "Agent-Spec Diagnostic Report" not in text_capture.getvalue():
+            raise AssertionError("Expected text inspect report after sanitize.")
+    finally:
+        if os.path.exists(temp_output_path):
+            os.remove(temp_output_path)

@@ -311,7 +311,10 @@ class AgentSpecRepository:
         """Persist a run record and its event stream into the archive."""
         run_path = f"spec_data/agent-spec/runs/{run_record.run_id}/run.json"
         events_path = f"spec_data/agent-spec/runs/{run_record.run_id}/events.ndjson"
-        event_lines = b"\n".join(_json_bytes(event).strip() for event in events)
+        event_lines = b"\n".join(
+            json.dumps(event.model_dump(mode="json"), sort_keys=True).encode("utf-8")
+            for event in events
+        )
         self._persist_model(run_path, run_record)
         self._persist_bytes(events_path, event_lines + b"\n")
 

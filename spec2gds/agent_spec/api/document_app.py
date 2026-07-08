@@ -9,6 +9,7 @@ import spec2gds.agent_spec.package.archive as container_module
 import spec2gds.agent_spec.document.relations as editor_relations
 import spec2gds.agent_spec.document.session as editor_session
 import spec2gds.agent_spec.api.app as agent_spec_api
+import spec2gds.agent_spec.query as agent_query
 
 
 class IpxactXmlRequest(pydantic.BaseModel):
@@ -117,8 +118,7 @@ def create_app() -> typing.Any:
     @app.get("/documents/snapshot")
     def document_snapshot(path: str) -> dict[str, typing.Any]:
         """Return a full editor snapshot for the requested document path."""
-        session = editor_session.EditorSession.from_path(path)
-        return session.snapshot().model_dump()
+        return agent_query.AgentSpecQueryService(path).editor_snapshot().model_dump()
 
     @app.post("/documents/active-section-versions")
     def update_active_section_versions(

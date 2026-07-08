@@ -10,6 +10,7 @@ import spec2gds.agent_spec.plugins.manager as manager
 import spec2gds.agent_spec.plugins.json_payload as json_plugin
 import spec2gds.agent_spec.plugins.ipxact as ipxact_plugin
 import spec2gds.agent_spec.package.verifier as verifier
+import spec2gds.agent_spec.package.diagnostics as diagnostics
 
 
 def _build_default_manager() -> manager.PluginManager:
@@ -113,6 +114,54 @@ def main() -> None:
         help="Path to target hybrid agent-spec file."
     )
 
+    # `inspect` prints the full package anatomy for debugging documents that
+    # cannot be understood from the editor UI alone.
+    inspect_parser = subparsers.add_parser(
+        "inspect",
+        help="Print a detailed diagnostic report for a .spec document."
+    )
+    inspect_parser.add_argument(
+        "--container",
+        required=True,
+        help="Path to target .spec file."
+    )
+    inspect_parser.add_argument(
+        "--format",
+        choices=["json", "text"],
+        default="json",
+        help="Report output format. Defaults to json for scriptability."
+    )
+    inspect_parser.add_argument(
+        "--output",
+        help="Optional file path to write the report. Defaults to stdout."
+    )
+
+    # `sanitize` performs conservative structural repairs while preserving
+    # payload contents and IP-XACT protocol semantics.
+    sanitize_parser = subparsers.add_parser(
+        "sanitize",
+        help="Normalize a .spec package and add missing safe metadata."
+    )
+    sanitize_parser.add_argument(
+        "--container",
+        required=True,
+        help="Path to source .spec file."
+    )
+    sanitize_parser.add_argument(
+        "--output",
+        help="Path to write the sanitized .spec file. Required unless --in-place is set."
+    )
+    sanitize_parser.add_argument(
+        "--in-place",
+        action="store_true",
+        help="Rewrite the source .spec file in place."
+    )
+    sanitize_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report intended sanitization actions without writing a file."
+    )
+
     args = parser.parse_args()
     # The manager is built after parsing so import-time users of this module do
     # not pay plugin setup cost.
@@ -198,6 +247,43 @@ def main() -> None:
             # Exit with standard shell code 1 on link/schema validation failures.
             if not report.is_fully_consistent:
                 sys.exit(1)
+
+        elif args.command == "inspect":
+            if not os.path.exists(args.container):
+                print(f"Error: Container file '{args.container}' does not exist.", file=sys.stderr)
+                sys.exit(1)
+
+            report = diagnostics.build_diagnostic_report(args.container)
+            if args.format == "text":
+                output = diagnostics.render_text_report(report)
+            else:
+                output = json.dumps(report, indent=2, sort_keys=True)
+
+            if args.output:
+                with open(args.output, "w", encoding="utf-8") as f:
+                    f.write(output)
+                    f.write("\n")
+            else:
+                print(output)
+
+            if report.get("errors"):
+                sys.exit(1)
+
+        elif args.command == "sanitize":
+            if not os.path.exists(args.container):
+                print(f"Error: Container file '{args.container}' does not exist.", file=sys.stderr)
+                sys.exit(1)
+            if not args.in_place and not args.output:
+                print("Error: sanitize requires --output unless --in-place is set.", file=sys.stderr)
+                sys.exit(1)
+
+            result = diagnostics.sanitize_spec_document(
+                args.container,
+                output_path=args.output,
+                in_place=args.in_place,
+                dry_run=args.dry_run,
+            )
+            print(result.model_dump_json(indent=2))
 
     except Exception as e:
         print(f"CLI Command Execution Failed: {e}", file=sys.stderr)

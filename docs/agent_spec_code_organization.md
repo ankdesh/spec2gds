@@ -65,7 +65,8 @@ When behavior changes, update the document that owns that purpose:
 | Component boundaries or flow | `docs/agent_spec_architecture.md` |
 | Data contract for actions/runs/writebacks | `docs/agent_spec_action_contract.md` |
 | Terms or naming | `docs/agent_spec_vocabulary.md` |
-| Setup commands or test commands | `README.md` and `docs/agent_spec_v1_setup.md` |
+| Setup commands or test commands | `README.md` |
+| Pipeline read/writeback APIs | `docs/agent_spec_pipeline_api.md` |
 | Open design choices | `docs/agent_spec_roadmap_questions.md` |
 | Benchmarks | `docs/agent_spec_benchmarks.md` |
 | Contributor rules | `docs/coding_guidelines.md` |

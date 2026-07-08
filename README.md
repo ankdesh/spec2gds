@@ -20,13 +20,14 @@ Key pieces:
 - semantic document parsing for headings, paragraphs, lists, tables, images,
   links, and simple text edits
 - section-version and IP-XACT attachment metadata
-- FastAPI editor API plus mounted action/run API
+- FastAPI editor API plus mounted action/run and pipeline APIs
 - React/Vite local document editor
 - block graph projection from document headings
 - Pydantic action, run, artifact, and writeback contracts
+- shared read/query service for UI snapshots and pipeline context
 - built-in pseudo SystemC actions for exercising the run/writeback flow
-- package CLI for listing plugins, injecting/extracting payloads, and validating
-  `.spec` files
+- package CLI for listing plugins, injecting/extracting payloads, validating,
+  inspecting, and sanitizing `.spec` files
 
 Start with the docs index:
 
@@ -36,8 +37,8 @@ Most-used docs:
 
 - [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
 - [`docs/agent_spec_document_schema.md`](docs/agent_spec_document_schema.md)
-- [`docs/agent_spec_v1_setup.md`](docs/agent_spec_v1_setup.md)
 - [`docs/agent_spec_action_contract.md`](docs/agent_spec_action_contract.md)
+- [`docs/agent_spec_pipeline_api.md`](docs/agent_spec_pipeline_api.md)
 - [`docs/agent_spec_vocabulary.md`](docs/agent_spec_vocabulary.md)
 - [`docs/ipxact_protocol.md`](docs/ipxact_protocol.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
@@ -74,7 +75,29 @@ uv run python -m spec2gds.agent_spec.api
 ```
 
 The API entry point starts the editor API and mounts the action/run API at
-`/agent-spec`.
+`/agent-spec`, including the pipeline read/writeback endpoints under
+`/agent-spec/pipeline`.
+
+## Inspect Or Sanitize A `.spec`
+
+Print a detailed diagnostic report:
+
+```bash
+PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli inspect \
+  --container benchmarks/agent_spec/hw_docs/generated/apb_timer.spec \
+  --format text
+```
+
+Write a conservative sanitized copy:
+
+```bash
+PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli sanitize \
+  --container broken.spec \
+  --output repaired.spec
+```
+
+See [`docs/agent_spec_diagnostics.md`](docs/agent_spec_diagnostics.md) for the
+full report contents and sanitization rules.
 
 ## Run The Editor UI Test
 

@@ -560,10 +560,25 @@ The mounted action API under `/agent-spec` also reads and writes the same
 document package, especially `manifest.json`, `graph.json`, versions,
 artifacts, runs, and writebacks.
 
+Pipeline read endpoints under `/agent-spec/pipeline/` use a shared read/query
+service rather than the editor-only response shape. They are read-only and
+return versioned response envelopes with document hash, loaded timestamp, data,
+and diagnostics. The section context endpoint is the primary pipeline input
+shape: it joins block metadata, the active or explicit version, covered
+semantic blocks, section links, relevant relations, attached IP-XACT summaries,
+artifact attachments, and diagnostics.
+
+Pipeline writeback endpoints are explicit mutation routes. They start external
+pipeline runs, persist input snapshots, validate returned `ArtifactRef`
+metadata, attach accepted artifacts, and record writeback/audit metadata under
+`spec_data/agent-spec/`. They do not automatically rewrite visible document
+prose.
+
 Implementation:
 
 - `spec2gds.agent_spec.api.document_app`
 - `spec2gds.agent_spec.api.app`
+- `spec2gds.agent_spec.query`
 
 ## Verification Interface
 
@@ -603,4 +618,6 @@ Use this table when deciding where a document-model change belongs.
 | New structured payload modality | `plugins/base.py`, `plugins/manager.py`, and a new plugin |
 | Action graph blocks, versions, artifacts, and persisted run metadata | `models.py` and `storage/repository.py` |
 | Editor HTTP request/response shape | `api/document_app.py` |
+| Pipeline read context APIs | `query.py` and `api/app.py` |
+| Pipeline artifact writeback APIs | `runs/runner.py` and `api/app.py` |
 | Package consistency checks | `package/verifier.py` |

@@ -4,8 +4,8 @@ This document is for future work and unresolved design choices. Current
 architecture and setup details live in:
 
 - [`agent_spec_architecture.md`](agent_spec_architecture.md)
-- [`agent_spec_v1_setup.md`](agent_spec_v1_setup.md)
 - [`agent_spec_action_contract.md`](agent_spec_action_contract.md)
+- [`agent_spec_pipeline_api.md`](agent_spec_pipeline_api.md)
 
 ## Current Baseline
 

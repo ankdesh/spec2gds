@@ -16,10 +16,13 @@ not blur together.
 - [Action and Pipeline Contract](agent_spec_action_contract.md): implemented
   action metadata, input snapshots, run events, artifact validation, and
   writeback records.
-- [V1 Setup](agent_spec_v1_setup.md): environment, run commands, tests, current
-  v1 decisions, and non-goals.
+- [Pipeline API](agent_spec_pipeline_api.md): read-only pipeline context
+  endpoints and explicit artifact writeback endpoints.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): protocol fidelity rules for
   embedded IP-XACT payloads, bus interfaces, editor behavior, and benchmarks.
+- [Diagnostics and Sanitization](agent_spec_diagnostics.md): CLI commands for
+  inspecting full `.spec` package anatomy and applying conservative structural
+  repairs.
 - [Code Organization](agent_spec_code_organization.md): current package layout,
   naming guidelines, and where new code should go.
 - [Roadmap and Open Questions](agent_spec_roadmap_questions.md): future work and

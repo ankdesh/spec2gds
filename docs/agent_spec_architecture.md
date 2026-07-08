@@ -27,9 +27,10 @@ future multi-user orchestration system.
 ```text
 spec2gds/agent_spec/
   api/
-    app.py              action/run API mounted at /agent-spec
+    app.py              action/run and pipeline APIs mounted at /agent-spec
     document_app.py     editor API, file browser, IP-XACT endpoints, API mount
     __main__.py         uvicorn entry point
+  query.py              shared read-only query service for UI and pipelines
   document/
     semantic.py         content.xml parser and plain-text edit application
     session.py          editor facade around one AgentSpecArchive
@@ -65,6 +66,7 @@ flowchart LR
   Web["React/Vite editor\neditor_web/src/main.tsx"]
   EditorAPI["Editor FastAPI app\napi/document_app.py"]
   ActionAPI["Action/run API\napi/app.py"]
+  Query["Read/query service\nquery.py"]
   Session["EditorSession\ndocument/session.py"]
   Repo["AgentSpecRepository\nstorage/repository.py"]
   Runner["AgentSpecRunner\nruns/runner.py"]
@@ -75,8 +77,10 @@ flowchart LR
   Sidecar[".agent-spec-sidecar/\nrun output files"]
 
   Web <--> EditorAPI
+  EditorAPI --> Query
   EditorAPI --> Session
   EditorAPI --> ActionAPI
+  ActionAPI --> Query
   ActionAPI --> Repo
   ActionAPI --> Runner
   Runner --> Registry
@@ -94,9 +98,15 @@ There are two related API surfaces:
   It serves document snapshots, text edits, active section choices, IP-XACT
   preview/editing, image assets, and file browsing. It mounts the action API at
   `/agent-spec`.
-- `spec2gds.agent_spec.api.app.create_app()` is the action/run API. It opens one
-  active document session, exposes blocks, updates block tags, lists available
-  actions for a block, triggers action runs, and returns run events.
+- `spec2gds.agent_spec.api.app.create_app()` is the action/run and pipeline API.
+  It opens one active document session, exposes blocks, updates block tags,
+  lists available actions, triggers action runs, returns run events, exposes
+  read-only pipeline context endpoints, and accepts explicit external pipeline
+  artifact writebacks.
+- `spec2gds.agent_spec.query.AgentSpecQueryService` is the shared read-only
+  source for editor snapshots and pipeline context. It assembles semantic
+  blocks, relations, IP-XACT summaries, graph metadata, artifacts, runs, links,
+  and diagnostics without saving the source package.
 
 Run the combined local API with:
 
@@ -158,9 +168,8 @@ sequenceDiagram
   UI->>API: GET /files
   API-->>UI: directories and .spec files
   UI->>API: GET /documents/snapshot?path=...
-  API->>Session: EditorSession.from_path(path)
+  API->>Session: AgentSpecQueryService(path)
   Session->>Archive: load package and custom files
-  Session->>Session: ensure heading xml:id values
   Session->>Session: parse content.xml into SemanticDocument
   Session->>Session: load relations and IP-XACT summaries
   Session-->>API: EditorSnapshot
@@ -224,6 +233,35 @@ Implemented built-in actions:
 Action enablement can be controlled by a small JSON-or-simple-YAML config passed
 when opening the action API session.
 
+## Pipeline API Flow
+
+```mermaid
+sequenceDiagram
+  participant Pipeline
+  participant API as /agent-spec/pipeline
+  participant Query as AgentSpecQueryService
+  participant Runner as AgentSpecRunner
+  participant Repo as AgentSpecRepository
+  participant Spec as .spec file
+
+  Pipeline->>API: POST /documents/open
+  API-->>Pipeline: read envelope with document hash
+  Pipeline->>API: GET /blocks/{block}/context?version_id=...
+  API->>Query: assemble read-only section bundle
+  Query-->>API: block, version, content, IP-XACT, artifacts, diagnostics
+  Pipeline->>API: POST /runs
+  API->>Runner: capture input snapshot
+  Runner->>Repo: persist run and snapshot
+  Pipeline->>API: POST /runs/{run}/outputs
+  API->>Runner: validate artifact metadata
+  Runner->>Repo: attach artifacts, persist writeback/events/checkpoint
+  Repo->>Spec: save spec_data/agent-spec/*
+```
+
+Pipeline reads are deliberately read-only and return a versioned envelope.
+Pipeline writeback is a separate mutation surface for artifact metadata and
+diagnostics. It does not auto-edit visible document prose.
+
 ## Graph And Version Model
 
 `AgentSpecRepository.project_graph()` parses current headings from `content.xml`
@@ -250,6 +288,7 @@ accepts generated artifact metadata only when sanity checks pass:
 
 - artifact hash must be a `sha256:` value
 - external URI must use `file://` or `artifact-store://`
+- artifact source block must be part of the input snapshot
 - artifact source version must be part of the input snapshot
 - artifact role must match the action output contract when one is declared
 - summary, media type, and artifact kind must be present
@@ -266,6 +305,6 @@ from silently overwriting external edits.
 
 - Vocabulary: [`agent_spec_vocabulary.md`](agent_spec_vocabulary.md)
 - Action contracts: [`agent_spec_action_contract.md`](agent_spec_action_contract.md)
-- Current setup and commands: [`agent_spec_v1_setup.md`](agent_spec_v1_setup.md)
+- Pipeline API: [`agent_spec_pipeline_api.md`](agent_spec_pipeline_api.md)
 - Roadmap and open questions: [`agent_spec_roadmap_questions.md`](agent_spec_roadmap_questions.md)
 - Benchmarks: [`agent_spec_benchmarks.md`](agent_spec_benchmarks.md)
