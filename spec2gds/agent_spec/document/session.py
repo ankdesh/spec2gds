@@ -1,3 +1,5 @@
+"""Stateful editor facade over `.spec` archive content and editor metadata."""
+
 import json
 import typing
 
@@ -27,6 +29,7 @@ class EditorSnapshot(pydantic.BaseModel):
 
     @property
     def has_blocking_diagnostics(self) -> bool:
+        """Return whether the snapshot should prevent saving."""
         for diagnostic in self.diagnostics:
             if diagnostic.blocks_save:
                 return True
@@ -39,7 +42,12 @@ class EditorSnapshot(pydantic.BaseModel):
 
 
 class EditorSession:
-    """Stateful v1 editor facade around an AgentSpecArchive."""
+    """Stateful v1 editor facade around an `AgentSpecArchive`.
+
+    The session keeps package reads/writes, semantic projection, IP-XACT
+    summaries, relation metadata, and active-version state behind one API used
+    by the FastAPI document editor.
+    """
 
     _container: container.AgentSpecArchive
     _manager: manager.PluginManager
@@ -47,6 +55,7 @@ class EditorSession:
     _relations: relation_model.EditorRelations
 
     def __init__(self, container_instance: container.AgentSpecArchive) -> None:
+        """Create a session and register built-in modality plugins."""
         self._container = container_instance
         self._manager = manager.PluginManager()
         self._manager.register_plugin(json_plugin.SimpleJSONPlugin())
@@ -56,19 +65,23 @@ class EditorSession:
 
     @classmethod
     def from_path(cls, path: str) -> "EditorSession":
+        """Open a `.spec` file from disk and wrap it in an editor session."""
         return cls(container.AgentSpecArchive(path))
 
     @property
     def active_versions(self) -> dict[str, str]:
+        """Return active section versions from the newest available state."""
         if self._relations.section_groups:
             return self._relations.active_versions()
         return dict(self._active_versions)
 
     @property
     def editor_relations(self) -> relation_model.EditorRelations:
+        """Return a defensive copy of editor relation metadata."""
         return self._relations.model_copy(deep=True)
 
     def _load_active_versions(self) -> dict[str, str]:
+        """Load legacy active-version state from pre-relations documents."""
         if ACTIVE_STATE_PATH not in self._container.custom_files:
             return {}
         try:
@@ -88,8 +101,11 @@ class EditorSession:
         return active_versions
 
     def persist_active_versions(self, active_versions: dict[str, str]) -> None:
+        """Persist active section versions in both legacy and relation formats."""
         self._active_versions = dict(active_versions)
         if self._relations.section_groups:
+            # Newer documents keep active versions inside relations, but we also
+            # write the legacy state below for older editor builds.
             for group in self._relations.section_groups:
                 if group.group_id in active_versions:
                     group.active_version = active_versions[group.group_id]
@@ -105,11 +121,13 @@ class EditorSession:
         )
 
     def _load_relations(self) -> relation_model.EditorRelations:
+        """Load relation metadata from the archive, tolerating missing state."""
         if relation_model.RELATIONS_PATH not in self._container.custom_files:
             return relation_model.EditorRelations()
         return relation_model.load_relations(self._container.extract_file(relation_model.RELATIONS_PATH))
 
     def _persist_relations(self, editor_relations: relation_model.EditorRelations) -> None:
+        """Persist relation metadata under the editor-owned package path."""
         self._relations = editor_relations.model_copy(deep=True)
         self._container.inject_file(
             relation_model.RELATIONS_PATH,
@@ -118,6 +136,7 @@ class EditorSession:
         )
 
     def _content_xml(self) -> bytes:
+        """Return raw ODT `content.xml` bytes from the archive."""
         content_part: typing.Any = self._container.document.get_part("content.xml")
         if hasattr(content_part, "serialize"):
             return typing.cast(bytes, content_part.serialize())
@@ -126,9 +145,11 @@ class EditorSession:
         return str(content_part).encode("utf-8")
 
     def _set_content_xml(self, content_xml: bytes) -> None:
+        """Replace the archive's document body XML."""
         self._container.document.set_part("content.xml", content_xml)
 
     def _content_xml_with_heading_ids(self) -> bytes:
+        """Ensure headings have ids before any semantic projection or save."""
         content_xml = self._content_xml()
         updated_xml = document.ensure_heading_ids(content_xml)
         if updated_xml != content_xml:
@@ -136,6 +157,7 @@ class EditorSession:
         return updated_xml
 
     def _extract_ipxact_components(self) -> list[ipxact_view.IpxactComponentSummary]:
+        """Summarize every IP-XACT payload currently embedded in the archive."""
         summaries: list[ipxact_view.IpxactComponentSummary] = []
         for file_path in sorted(self._container.custom_files.keys()):
             if not file_path.startswith("spec_data/ipxact/"):
@@ -145,12 +167,14 @@ class EditorSession:
         return summaries
 
     def _ipxact_summary_by_path(self) -> dict[str, ipxact_view.IpxactComponentSummary]:
+        """Return IP-XACT summaries keyed by archive path."""
         return {summary.file_path: summary for summary in self._extract_ipxact_components()}
 
     def _link_diagnostics(
         self,
         semantic_document: document.SemanticDocument,
     ) -> list[document.Diagnostic]:
+        """Check semantic `spec://` links against registered plugins."""
         diagnostics: list[document.Diagnostic] = []
         for link in semantic_document.links:
             if not link.href.startswith("spec://"):
@@ -169,6 +193,7 @@ class EditorSession:
         return diagnostics
 
     def _attachment_diagnostics(self, heading_ids: set[str]) -> list[document.Diagnostic]:
+        """Validate that relation-owned attachments point at live headings/files."""
         diagnostics: list[document.Diagnostic] = []
         for heading_id, attachments in self._relations.ipxact_attachments.items():
             if heading_id not in heading_ids:
@@ -192,32 +217,12 @@ class EditorSession:
                     )
         return diagnostics
 
-    def _build_relations_from_legacy(
+    def _relations_for_snapshot(
         self,
         semantic_document: document.SemanticDocument,
     ) -> relation_model.EditorRelations:
+        """Return editor relations enriched with inferred IP-XACT attachments."""
         editor_relations = self._relations.model_copy(deep=True)
-        if not editor_relations.section_groups:
-            for group in semantic_document.section_groups:
-                variants: list[relation_model.SectionVersionRef] = []
-                for variant in group.variants:
-                    variants.append(
-                        relation_model.SectionVersionRef(
-                            version=variant.version,
-                            heading_id=variant.heading_block_id,
-                            block_ids=variant.block_ids,
-                        )
-                    )
-                active_version = self._active_versions.get(group.group_id, group.active_version)
-                editor_relations.section_groups.append(
-                    relation_model.SectionVersionGroup(
-                        group_id=group.group_id,
-                        title=group.title,
-                        level=group.level,
-                        variants=variants,
-                        active_version=active_version,
-                    )
-                )
         self._migrate_legacy_ipxact_attachments(semantic_document, editor_relations)
         return editor_relations
 
@@ -226,6 +231,7 @@ class EditorSession:
         semantic_document: document.SemanticDocument,
         editor_relations: relation_model.EditorRelations,
     ) -> None:
+        """Infer IP-XACT heading attachments for documents without relations."""
         if editor_relations.ipxact_attachments:
             return
         ipxact_paths = sorted(
@@ -240,6 +246,8 @@ class EditorSession:
         active_heading_id: str | None = None
         ipxact_heading_ids: list[str] = []
         for block in semantic_document.blocks:
+            # Track the nearest heading before each block so links can be
+            # attached to the section where they appear.
             if block.block_type == "heading" and block.heading_id is not None:
                 active_heading_id = block.heading_id
                 if "ip-xact" in block.display_text.lower() or "ipxact" in block.display_text.lower():
@@ -263,6 +271,8 @@ class EditorSession:
         if editor_relations.ipxact_attachments:
             return
         if len(ipxact_heading_ids) == 1:
+            # Final fallback: if the document has exactly one explicit IP-XACT
+            # heading, attach all embedded XML payloads there.
             editor_relations.ipxact_attachments[ipxact_heading_ids[0]] = [
                 relation_model.HeadingIpxactAttachment(file_path=path)
                 for path in ipxact_paths
@@ -272,6 +282,7 @@ class EditorSession:
         self,
         editor_relations: relation_model.EditorRelations,
     ) -> list[document.SectionVariantGroup]:
+        """Convert persisted relation groups into semantic snapshot groups."""
         groups: list[document.SectionVariantGroup] = []
         for group in editor_relations.section_groups:
             groups.append(
@@ -293,15 +304,11 @@ class EditorSession:
         return groups
 
     def snapshot(self) -> EditorSnapshot:
+        """Build the complete editor snapshot for the current archive state."""
         content_xml = self._content_xml_with_heading_ids()
-        semantic_document = document.parse_content_xml(
-            content_xml,
-            self._active_versions,
-        )
-        editor_relations = self._build_relations_from_legacy(semantic_document)
+        semantic_document = document.parse_content_xml(content_xml)
+        editor_relations = self._relations_for_snapshot(semantic_document)
         semantic_document.section_groups = self._relations_as_document_groups(editor_relations)
-        if editor_relations.section_groups and not self._relations.section_groups:
-            self._relations = editor_relations
         diagnostics = self._link_diagnostics(semantic_document)
         heading_id_set = {
             block.heading_id
@@ -318,10 +325,12 @@ class EditorSession:
         )
 
     def apply_text_edits(self, edits: dict[str, str]) -> None:
+        """Apply plain-text semantic block edits to `content.xml`."""
         updated_xml = document.apply_text_edits_to_content_xml(self._content_xml_with_heading_ids(), edits)
         self._container.document.set_part("content.xml", updated_xml)
 
     def persist_relations(self, editor_relations: relation_model.EditorRelations) -> None:
+        """Normalize and persist editor relation metadata."""
         for heading_id, attachments in list(editor_relations.ipxact_attachments.items()):
             normalized = [
                 relation_model.HeadingIpxactAttachment(file_path=path)
@@ -336,6 +345,7 @@ class EditorSession:
         editor_relations: relation_model.EditorRelations | None,
         ipxact_xml_edits: dict[str, str],
     ) -> None:
+        """Apply a combined editor save payload in document/relation/XML order."""
         if text_edits:
             self.apply_text_edits(text_edits)
         if editor_relations is not None:
@@ -348,13 +358,18 @@ class EditorSession:
         file_path: str,
         xml_text: str,
     ) -> ipxact_view.IpxactComponentSummary:
+        """Parse unsaved IP-XACT XML and return the same summary shape as snapshots."""
         full_path = self._normalize_ipxact_path(file_path)
         return ipxact_view.extract_ipxact_summary(full_path, xml_text.encode("utf-8"))
 
     def update_ipxact_xml(self, file_path: str, xml_text: str) -> None:
+        """Validate and replace one embedded IP-XACT XML file."""
         full_path = self._normalize_ipxact_path(file_path)
         preview = ipxact_view.extract_ipxact_summary(full_path, xml_text.encode("utf-8"))
         if preview.has_blocking_diagnostics:
+            # The editor-facing gate preserves IP-XACT semantics: malformed XML
+            # or missing formal bus interfaces should be fixed in the payload,
+            # not hidden by save-time fallback behavior.
             raise ValueError("Cannot update IP-XACT XML while preview diagnostics remain.")
         self._container.inject_file(
             full_path,
@@ -363,9 +378,11 @@ class EditorSession:
         )
 
     def _normalize_ipxact_path(self, file_path: str) -> str:
+        """Normalize an IP-XACT file reference to its archive path."""
         return relation_model.normalize_ipxact_path(file_path)
 
     def asset_bytes(self, asset_id: str) -> tuple[bytes, str]:
+        """Return embedded image bytes for an image block asset id."""
         snapshot = self.snapshot()
         for block in snapshot.document.blocks:
             if block.image is None or block.image.asset_id != asset_id:
@@ -379,6 +396,7 @@ class EditorSession:
         raise KeyError(f"Unknown asset id: {asset_id}")
 
     def save(self, path: str) -> None:
+        """Persist editor metadata and save the archive after diagnostics pass."""
         if self._relations.section_groups or self._relations.ipxact_attachments:
             self._persist_relations(self._relations)
         snapshot = self.snapshot()

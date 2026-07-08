@@ -8,6 +8,9 @@ not blur together.
 
 - [Architecture](agent_spec_architecture.md): current components, runtime
   flows, storage layout, and pointers from concepts to code.
+- [Document Schema and Interfaces](agent_spec_document_schema.md): `.spec`
+  archive layout, schema-bearing package parts, `spec://` links, and
+  document-facing code/API interfaces.
 - [Vocabulary](agent_spec_vocabulary.md): shared terms for `.spec` documents,
   blocks, sections, actions, runs, artifacts, and editor concepts.
 - [Action and Pipeline Contract](agent_spec_action_contract.md): implemented
@@ -15,6 +18,8 @@ not blur together.
   writeback records.
 - [V1 Setup](agent_spec_v1_setup.md): environment, run commands, tests, current
   v1 decisions, and non-goals.
+- [IP-XACT Protocol Rules](ipxact_protocol.md): protocol fidelity rules for
+  embedded IP-XACT payloads, bus interfaces, editor behavior, and benchmarks.
 - [Code Organization](agent_spec_code_organization.md): current package layout,
   naming guidelines, and where new code should go.
 - [Roadmap and Open Questions](agent_spec_roadmap_questions.md): future work and

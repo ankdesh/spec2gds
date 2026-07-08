@@ -1,6 +1,10 @@
+"""Build checked-in sample `.spec` documents for smoke tests and the editor."""
+
 from pathlib import Path
 
 import spec2gds.agent_spec.package.archive as container
+import spec2gds.agent_spec.document.relations as relations
+import spec2gds.agent_spec.document.semantic as semantic
 import spec2gds.agent_spec.plugins.ipxact as ipxact_plugin
 import spec2gds.agent_spec.plugins.json_payload as json_plugin
 import spec2gds.agent_spec.plugins.manager as manager
@@ -39,10 +43,10 @@ VERSIONED_CONTENT_XML: bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
   <office:body>
     <office:text>
       <text:h text:outline-level="1">Timer block specification</text:h>
-      <text:p>Document with heading-based section variants.</text:p>
-      <text:h text:outline-level="2">Register behavior//v1</text:h>
+      <text:p>Document with relation-based section variants.</text:p>
+      <text:h text:outline-level="2">Register behavior v1</text:h>
       <text:p>Version one behavior for the generated timer sample.</text:p>
-      <text:h text:outline-level="2">Register behavior//v2</text:h>
+      <text:h text:outline-level="2">Register behavior v2</text:h>
       <text:p>Version two behavior for the generated timer sample.</text:p>
       <text:h text:outline-level="2">IP-XACT reference</text:h>
       <text:p><text:a xlink:type="simple" xlink:href="spec://ipxact/sample_component.xml/VLNV/Vendor">Linked IP vendor</text:a></text:p>
@@ -53,6 +57,7 @@ VERSIONED_CONTENT_XML: bytes = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 
 def _manager() -> manager.PluginManager:
+    """Build the same default plugin set used by the package CLI."""
     plugin_manager = manager.PluginManager()
     plugin_manager.register_plugin(json_plugin.SimpleJSONPlugin())
     plugin_manager.register_plugin(ipxact_plugin.IPXACTPlugin())
@@ -60,6 +65,7 @@ def _manager() -> manager.PluginManager:
 
 
 def _write_synthetic_raw(name: str, content_xml: bytes) -> Path:
+    """Write a small ODT-compatible `.spec` package from literal content XML."""
     output_path = RAW_DIR / name
     archive = container.AgentSpecArchive()
     archive.document.set_part("content.xml", content_xml)
@@ -67,17 +73,64 @@ def _write_synthetic_raw(name: str, content_xml: bytes) -> Path:
     return output_path
 
 
+def _write_versioned_raw() -> Path:
+    """Write the sample that demonstrates explicit section-version relations."""
+    output_path = RAW_DIR / "synthetic_versioned_sections.spec"
+    content_with_ids = semantic.ensure_heading_ids(VERSIONED_CONTENT_XML)
+    parsed = semantic.parse_content_xml(content_with_ids)
+    heading_by_text = {
+        block.text: block
+        for block in parsed.blocks
+        if block.block_type == "heading"
+    }
+    v1_heading = heading_by_text["Register behavior v1"]
+    v2_heading = heading_by_text["Register behavior v2"]
+    editor_relations = relations.EditorRelations(
+        section_groups=[
+            relations.SectionVersionGroup(
+                group_id="register-behavior",
+                title="Register behavior",
+                level=2,
+                variants=[
+                    relations.SectionVersionRef(
+                        version="v1",
+                        heading_id=v1_heading.heading_id or v1_heading.block_id,
+                        block_ids=[v1_heading.block_id, "block-3"],
+                    ),
+                    relations.SectionVersionRef(
+                        version="v2",
+                        heading_id=v2_heading.heading_id or v2_heading.block_id,
+                        block_ids=[v2_heading.block_id, "block-5"],
+                    ),
+                ],
+                active_version="v1",
+            )
+        ],
+    )
+    archive = container.AgentSpecArchive()
+    archive.document.set_part("content.xml", content_with_ids)
+    archive.inject_file(
+        relations.RELATIONS_PATH,
+        relations.dump_relations(editor_relations),
+        relations.RELATIONS_MEDIA_TYPE,
+    )
+    archive.save(str(output_path))
+    return output_path
+
+
 def _candidate_raw_documents() -> list[Path]:
+    """Ensure raw sample inputs exist and return them in deterministic order."""
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
 
     _write_synthetic_raw("synthetic_basic.spec", BASIC_CONTENT_XML)
-    _write_synthetic_raw("synthetic_versioned_sections.spec", VERSIONED_CONTENT_XML)
+    _write_versioned_raw()
 
     return sorted(path for path in RAW_DIR.glob("*.spec") if path.is_file())
 
 
 def _inject_ipxact(raw_path: Path, ipxact_bytes: bytes) -> Path:
+    """Generate a sample by injecting the shared IP-XACT component XML."""
     output_path = GENERATED_DIR / f"{raw_path.stem}_with_ipxact.spec"
     archive = container.AgentSpecArchive(str(raw_path))
     plugin_manager = _manager()
@@ -92,6 +145,7 @@ def _inject_ipxact(raw_path: Path, ipxact_bytes: bytes) -> Path:
 
 
 def _verify_document(path: Path) -> verifier.ContainerVerificationReport:
+    """Verify a generated sample before it becomes a test/editor fixture."""
     archive = container.AgentSpecArchive(str(path))
     report = verifier.ContainerVerifier(archive, _manager()).verify_all()
     if not report.is_fully_consistent:
@@ -100,7 +154,9 @@ def _verify_document(path: Path) -> verifier.ContainerVerificationReport:
 
 
 def build_samples() -> list[Path]:
+    """Build every generated sample and return the output paths."""
     ipxact_bytes = IPXACT_PATH.read_bytes()
+    # Validate the shared XML once before injecting it into each sample package.
     ipxact_plugin.IPXACTPlugin().validate_data(ipxact_bytes)
 
     generated_paths: list[Path] = []
@@ -112,6 +168,7 @@ def build_samples() -> list[Path]:
 
 
 def main() -> None:
+    """CLI entry point for rebuilding sample documents."""
     generated_paths = build_samples()
     for generated_path in generated_paths:
         print(generated_path)

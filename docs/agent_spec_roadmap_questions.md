@@ -42,7 +42,7 @@ the package split or migration that has already happened.
 | --- | --- | --- |
 | SystemC stub generator | Builds directly on the pseudo SystemC actions. | Minimum useful generated model shape. |
 | RTL stub generator | Helps connect specs to implementation skeletons. | Required input schema beyond current prose/IP-XACT. |
-| UVM register model stub | Good fit if IP-XACT register maps become reliable. | Current benchmark XML is not strict schema-clean. |
+| UVM register model stub | Good fit if IP-XACT register maps become reliable. | Current benchmark XML is schema-clean but still lacks rich register maps. |
 | Validation/report action | Lower risk than generation and useful for users immediately. | Which checks should be project-owned versus plugin-owned. |
 
 ## Open Design Questions

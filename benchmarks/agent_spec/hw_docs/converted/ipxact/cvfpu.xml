@@ -1,10 +1,10 @@
-<?xml version="1.0" ?>
+<?xml version='1.0' encoding='UTF-8'?>
 <ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.accellera.org/XMLSchema/IPXACT/1685-2014 http://www.accellera.org/XMLSchema/IPXACT/1685-2014/index.xsd">
   <ipxact:vendor>openhwgroup.org</ipxact:vendor>
   <ipxact:library>ip-blocks</ipxact:library>
   <ipxact:name>CVFPU</ipxact:name>
   <ipxact:version>1.0</ipxact:version>
-  <ipxact:model>
+  <ipxact:busInterfaces><ipxact:busInterface><ipxact:name>fpu_operation</ipxact:name><ipxact:busType vendor="openhwgroup.org" library="interfaces" name="fpu_operation" version="1.0"/><ipxact:abstractionTypes><ipxact:abstractionType><ipxact:abstractionRef vendor="openhwgroup.org" library="interfaces" name="fpu_operation_rtl" version="1.0"/><ipxact:portMaps><ipxact:portMap><ipxact:logicalPort><ipxact:name>CLK_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>clk_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>RST_NI</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>rst_ni</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>OPERANDS_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>operands_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>RND_MODE_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>rnd_mode_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>OP_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>op_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>SRC_FMT_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>src_fmt_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>DST_FMT_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>dst_fmt_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>IN_VALID_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>in_valid_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>IN_READY_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>in_ready_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>FLUSH_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>flush_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>RESULT_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>result_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>STATUS_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>status_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>OUT_VALID_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>out_valid_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>OUT_READY_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>out_ready_i</ipxact:name></ipxact:physicalPort></ipxact:portMap></ipxact:portMaps></ipxact:abstractionType></ipxact:abstractionTypes><ipxact:slave/><ipxact:connectionRequired>true</ipxact:connectionRequired><ipxact:bitsInLau>8</ipxact:bitsInLau><ipxact:endianness>little</ipxact:endianness></ipxact:busInterface></ipxact:busInterfaces><ipxact:model>
     <ipxact:views>
       <ipxact:view>
         <ipxact:name>RTL</ipxact:name>
@@ -28,11 +28,11 @@
         <ipxact:name>operands_i</ipxact:name>
         <ipxact:wire>
           <ipxact:direction>in</ipxact:direction>
-          <ipxact:vector>
+          <ipxact:vectors><ipxact:vector>
             <ipxact:left>2</ipxact:left>
             <ipxact:right>0</ipxact:right>
           </ipxact:vector>
-        </ipxact:wire>
+        </ipxact:vectors></ipxact:wire>
       </ipxact:port>
       <ipxact:port>
         <ipxact:name>rnd_mode_i</ipxact:name>
@@ -80,11 +80,11 @@
         <ipxact:name>result_o</ipxact:name>
         <ipxact:wire>
           <ipxact:direction>out</ipxact:direction>
-          <ipxact:vector>
+          <ipxact:vectors><ipxact:vector>
             <ipxact:left>W-1</ipxact:left>
             <ipxact:right>0</ipxact:right>
           </ipxact:vector>
-        </ipxact:wire>
+        </ipxact:vectors></ipxact:wire>
       </ipxact:port>
       <ipxact:port>
         <ipxact:name>status_o</ipxact:name>
@@ -110,38 +110,38 @@
     <ipxact:parameter parameterId="Features" type="string" resolve="user">
       <ipxact:name>Features</ipxact:name>
       <ipxact:displayName>Features</ipxact:displayName>
-      <ipxact:value>fpnew_pkg::fpu_features_t</ipxact:value>
       <ipxact:description>FPU features definition</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>fpnew_pkg::fpu_features_t</ipxact:value>
+      </ipxact:parameter>
     <ipxact:parameter parameterId="Implementation" type="string" resolve="user">
       <ipxact:name>Implementation</ipxact:name>
       <ipxact:displayName>Implementation</ipxact:displayName>
-      <ipxact:value>fpnew_pkg::fpu_implementation_t</ipxact:value>
       <ipxact:description>FPU implementation definition</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>fpnew_pkg::fpu_implementation_t</ipxact:value>
+      </ipxact:parameter>
     <ipxact:parameter parameterId="DivSqrtSel" type="string" resolve="user">
       <ipxact:name>DivSqrtSel</ipxact:name>
       <ipxact:displayName>DivSqrtSel</ipxact:displayName>
-      <ipxact:value>fpnew_pkg::fpu_divsqrt_t</ipxact:value>
       <ipxact:description>Select division/square root unit</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>fpnew_pkg::fpu_divsqrt_t</ipxact:value>
+      </ipxact:parameter>
     <ipxact:parameter parameterId="TagType" type="string" resolve="user">
       <ipxact:name>TagType</ipxact:name>
       <ipxact:displayName>TagType</ipxact:displayName>
-      <ipxact:value>logic</ipxact:value>
       <ipxact:description>SV data type of the operation tag</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>logic</ipxact:value>
+      </ipxact:parameter>
     <ipxact:parameter parameterId="TrueSIMDClass" type="bit" resolve="user">
       <ipxact:name>TrueSIMDClass</ipxact:name>
       <ipxact:displayName>TrueSIMDClass</ipxact:displayName>
-      <ipxact:value>true</ipxact:value>
       <ipxact:description>Vectorial class RISC-V compliance</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>true</ipxact:value>
+      </ipxact:parameter>
     <ipxact:parameter parameterId="EnableSIMDMask" type="bit" resolve="user">
       <ipxact:name>EnableSIMDMask</ipxact:name>
       <ipxact:displayName>EnableSIMDMask</ipxact:displayName>
-      <ipxact:value>true</ipxact:value>
       <ipxact:description>Enable status flags masking of inactive lanes</ipxact:description>
-    </ipxact:parameter>
+    <ipxact:value>true</ipxact:value>
+      </ipxact:parameter>
   </ipxact:parameters>
 </ipxact:component>

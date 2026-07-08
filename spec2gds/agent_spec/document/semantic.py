@@ -1,3 +1,11 @@
+"""Semantic projection and text-edit helpers for ODT `content.xml`.
+
+The editor does not work directly with ODT XML. Instead, this module converts
+the human-readable document body into a compact list of semantic blocks
+(headings, paragraphs, list items, tables, images) and applies plain-text edits
+back to the matching XML elements when it is safe to do so.
+"""
+
 import copy
 import typing
 
@@ -41,14 +49,20 @@ class DocumentLink(pydantic.BaseModel):
 
 
 class TableCell(pydantic.BaseModel):
+    """Plain-text projection of one table cell."""
+
     text: str
 
 
 class TableRow(pydantic.BaseModel):
+    """Plain-text projection of one table row."""
+
     cells: list[TableCell] = pydantic.Field(default_factory=list)
 
 
 class ImageRef(pydantic.BaseModel):
+    """Reference to an embedded image block in the ODT package."""
+
     asset_id: str
     href: str
     title: str = ""
@@ -106,29 +120,32 @@ class SemanticDocument(pydantic.BaseModel):
 
 
 def _local_name(element: etree._Element) -> str:
+    """Return the namespace-free XML tag name for dispatch."""
     return etree.QName(element).localname
 
 
 def _is_text_element(element: etree._Element, local_name: str) -> bool:
+    """Return whether an element is an ODT `text:*` element by local name."""
     return element.tag == f"{{{TEXT_NS}}}{local_name}"
 
 
 def _element_text(element: etree._Element) -> str:
+    """Return visible text from an element, collapsed to a trimmed string."""
     return "".join(element.itertext()).strip()
 
 
 def _display_text(text_value: str) -> str:
-    parts = _heading_parts(text_value)
-    if parts is None:
-        return text_value
-    return parts[0]
+    """Return the text shown for a semantic block."""
+    return text_value
 
 
 def _style_name(element: etree._Element) -> str | None:
+    """Return the ODT text style name attached to a block-like element."""
     return element.get(f"{{{TEXT_NS}}}style-name")
 
 
 def _has_complex_inline_markup(element: etree._Element) -> bool:
+    """Return true when editing plain text would destroy inline child markup."""
     for child in element:
         if isinstance(child.tag, str):
             return True
@@ -136,6 +153,7 @@ def _has_complex_inline_markup(element: etree._Element) -> bool:
 
 
 def _element_links(element: etree._Element, block_id: str) -> list[DocumentLink]:
+    """Collect hyperlinks contained in one semantic block element."""
     links: list[DocumentLink] = []
     for link_element in element.xpath(".//text:a", namespaces=OFFICE_DOCUMENT_NS):
         href_value: typing.Optional[str] = link_element.get(f"{{{XLINK_NS}}}href")
@@ -151,28 +169,8 @@ def _element_links(element: etree._Element, block_id: str) -> list[DocumentLink]
     return links
 
 
-def _heading_parts(text_value: str) -> tuple[str, str] | None:
-    if "//" not in text_value:
-        return None
-    title, version = text_value.rsplit("//", 1)
-    title = title.strip()
-    version = version.strip()
-    if not title or not version:
-        return None
-    return title, version
-
-
-def _make_group_id(title: str, level: int, ordinal: int) -> str:
-    normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in title)
-    while "--" in normalized:
-        normalized = normalized.replace("--", "-")
-    normalized = normalized.strip("-")
-    if not normalized:
-        normalized = "section"
-    return f"h{level}-{normalized}-{ordinal}"
-
-
 def _slug(value: str) -> str:
+    """Normalize text into a compact id fragment."""
     normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in value)
     while "--" in normalized:
         normalized = normalized.replace("--", "-")
@@ -181,14 +179,17 @@ def _slug(value: str) -> str:
 
 
 def _xml_id(element: etree._Element) -> str | None:
+    """Return the XML id used as the stable heading/block id."""
     return element.get(f"{{{XML_NS}}}id")
 
 
 def _set_xml_id(element: etree._Element, value: str) -> None:
+    """Set an XML id on a heading element."""
     element.set(f"{{{XML_NS}}}id", value)
 
 
 def _make_unique_id(candidate: str, used: set[str]) -> str:
+    """Suffix an id candidate until it is unique within the document."""
     base = candidate
     ordinal = 2
     while candidate in used:
@@ -199,6 +200,7 @@ def _make_unique_id(candidate: str, used: set[str]) -> str:
 
 
 def _heading_level(element: etree._Element) -> int:
+    """Read ODT outline level, defaulting to top-level headings on bad input."""
     level_attr = element.get(f"{{{TEXT_NS}}}outline-level")
     if level_attr is None:
         return 1
@@ -209,22 +211,25 @@ def _heading_level(element: etree._Element) -> int:
 
 
 def ensure_heading_ids(content_xml: bytes) -> bytes:
-    """Assign stable xml:id values to headings that do not already have one."""
+    """Assign stable `xml:id` values to headings that do not already have one."""
     root = etree.fromstring(content_xml)
     used: set[str] = set()
     headings = root.xpath("//text:h", namespaces=OFFICE_DOCUMENT_NS)
     for ordinal, heading in enumerate(headings):
         existing = _xml_id(heading)
         if existing:
+            # Preserve author/editor-assigned ids; they may already be referenced
+            # by graph metadata or editor relations.
             used.add(existing)
             continue
-        text_value = _display_text(_element_text(heading))
+        text_value = _element_text(heading)
         candidate = f"h{_heading_level(heading)}-{_slug(text_value)}-{ordinal}"
         _set_xml_id(heading, _make_unique_id(candidate, used))
     return etree.tostring(root, encoding="UTF-8", xml_declaration=True)
 
 
 def heading_ids(content_xml: bytes) -> list[str]:
+    """Return all heading ids currently present in document order."""
     root = etree.fromstring(content_xml)
     values: list[str] = []
     for heading in root.xpath("//text:h", namespaces=OFFICE_DOCUMENT_NS):
@@ -239,8 +244,11 @@ def _collect_blocks_from_element(
     blocks: list[SemanticBlock],
     links: list[DocumentLink],
 ) -> None:
+    """Append semantic blocks discovered beneath one ODT XML element."""
     local = _local_name(element)
     if _is_text_element(element, "h"):
+        # Headings are the only semantic blocks with stable ids because action
+        # graph blocks are keyed by heading id.
         heading_id = _xml_id(element) or f"block-{len(blocks)}"
         block_id = heading_id
         level = _heading_level(element)
@@ -264,6 +272,8 @@ def _collect_blocks_from_element(
         return
 
     if _is_text_element(element, "p"):
+        # Paragraph ids are positional because ODT paragraphs do not have stable
+        # ids in the current editor model.
         block_id = f"block-{len(blocks)}"
         block_links = _element_links(element, block_id)
         complex_inline = _has_complex_inline_markup(element)
@@ -283,6 +293,8 @@ def _collect_blocks_from_element(
         return
 
     if _is_text_element(element, "list"):
+        # Phase 2 flattens list item paragraphs into editable blocks while
+        # preserving enough order to apply edits back to the original XML.
         for paragraph in element.xpath(".//text:list-item/text:p", namespaces=OFFICE_DOCUMENT_NS):
             block_id = f"block-{len(blocks)}"
             block_links = _element_links(paragraph, block_id)
@@ -301,6 +313,7 @@ def _collect_blocks_from_element(
         return
 
     if local == "table":
+        # Tables are visible to the UI but read-only in this implementation.
         block_id = f"block-{len(blocks)}"
         rows: list[TableRow] = []
         for row in element.xpath(".//table:table-row", namespaces=OFFICE_DOCUMENT_NS):
@@ -323,6 +336,8 @@ def _collect_blocks_from_element(
         return
 
     if local == "frame":
+        # Image frames become asset references; bytes are served later through
+        # `EditorSession.asset_bytes`.
         image_elements = element.xpath(".//draw:image", namespaces=OFFICE_DOCUMENT_NS)
         if image_elements:
             href = image_elements[0].get(f"{{{XLINK_NS}}}href") or ""
@@ -342,110 +357,20 @@ def _collect_blocks_from_element(
 
     for child in element:
         if isinstance(child.tag, str):
+            # Recurse through wrapper elements we do not model directly.
             _collect_blocks_from_element(child, blocks, links)
-
-
-def _find_variant_end(blocks: list[SemanticBlock], start_index: int) -> int:
-    heading = blocks[start_index]
-    heading_level = heading.level if heading.level is not None else 1
-    end_index = len(blocks)
-    for idx in range(start_index + 1, len(blocks)):
-        candidate = blocks[idx]
-        if candidate.block_type != "heading":
-            continue
-        candidate_level = candidate.level if candidate.level is not None else 1
-        if candidate_level <= heading_level:
-            end_index = idx
-            break
-    return end_index
-
-
-def _build_section_groups(
-    blocks: list[SemanticBlock],
-    active_versions: dict[str, str],
-) -> list[SectionVariantGroup]:
-    groups: list[SectionVariantGroup] = []
-    group_ordinal: int = 0
-    idx = 0
-    while idx < len(blocks):
-        block = blocks[idx]
-        if block.block_type != "heading" or block.level is None:
-            idx += 1
-            continue
-        first_parts = _heading_parts(block.text)
-        if first_parts is None:
-            idx += 1
-            continue
-
-        title, _version = first_parts
-        level = block.level
-        variant_starts: list[int] = [idx]
-        cursor = _find_variant_end(blocks, idx)
-        while cursor < len(blocks):
-            next_block = blocks[cursor]
-            if (
-                next_block.block_type != "heading"
-                or next_block.level != level
-            ):
-                break
-            next_parts = _heading_parts(next_block.text)
-            if next_parts is None or next_parts[0] != title:
-                break
-            variant_starts.append(cursor)
-            cursor = _find_variant_end(blocks, cursor)
-
-        if len(variant_starts) < 2:
-            idx += 1
-            continue
-
-        group_id = _make_group_id(title, level, group_ordinal)
-        group_ordinal += 1
-        variants: list[SectionVariant] = []
-        for variant_idx, start in enumerate(variant_starts):
-            end = cursor
-            if variant_idx + 1 < len(variant_starts):
-                end = variant_starts[variant_idx + 1]
-            variant_block = blocks[start]
-            variant_parts = _heading_parts(variant_block.text)
-            if variant_parts is None:
-                continue
-            block_ids = [candidate.block_id for candidate in blocks[start:end]]
-            variants.append(
-                SectionVariant(
-                    version=variant_parts[1],
-                    heading_block_id=variant_block.block_id,
-                    block_ids=block_ids,
-                )
-            )
-
-        active_version = variants[0].version
-        if group_id in active_versions:
-            requested_version = active_versions[group_id]
-            for variant in variants:
-                if variant.version == requested_version:
-                    active_version = requested_version
-                    break
-
-        groups.append(
-            SectionVariantGroup(
-                group_id=group_id,
-                title=title,
-                level=level,
-                variants=variants,
-                active_version=active_version,
-            )
-        )
-        idx = cursor
-    return groups
 
 
 def parse_content_xml(
     content_xml: bytes,
     active_versions: typing.Optional[dict[str, str]] = None,
 ) -> SemanticDocument:
-    """Parse agent-spec content.xml into the v1 semantic editor projection."""
+    """Parse ODT `content.xml` into the v1 semantic editor projection."""
     diagnostics: list[Diagnostic] = []
-    active_map: dict[str, str] = active_versions if active_versions is not None else {}
+    # Section-version groups are now metadata-owned (`relations.json`). Keep
+    # this optional parameter for older callers, but do not infer groups from
+    # heading text.
+    _ = active_versions
     try:
         root = etree.fromstring(content_xml)
     except Exception as exc:
@@ -482,18 +407,20 @@ def parse_content_xml(
     office_text = text_nodes[0]
     for child in office_text:
         if isinstance(child.tag, str):
+            # The parser starts at the document body and recursively descends
+            # through supported block-level structures.
             _collect_blocks_from_element(child, blocks, links)
 
-    section_groups = _build_section_groups(blocks, active_map)
     return SemanticDocument(
         blocks=blocks,
-        section_groups=section_groups,
+        section_groups=[],
         links=links,
         diagnostics=diagnostics,
     )
 
 
 def _set_element_plain_text(element: etree._Element, text_value: str) -> None:
+    """Replace one editable XML element with plain text content."""
     element.clear(keep_tail=True)
     element.text = text_value
 
@@ -503,6 +430,7 @@ def _collect_editable_elements(
     elements: list[tuple[str, etree._Element]],
     block_index: list[int],
 ) -> None:
+    """Collect XML elements that can map to editable semantic block ids."""
     local = _local_name(element)
     if _is_text_element(element, "h"):
         elements.append((_xml_id(element) or f"block-{block_index[0]}", element))
@@ -518,9 +446,11 @@ def _collect_editable_elements(
             block_index[0] += 1
         return
     if local == "table":
+        # Tables consume one semantic block id but are not editable.
         block_index[0] += 1
         return
     if local == "frame" and element.xpath(".//draw:image", namespaces=OFFICE_DOCUMENT_NS):
+        # Image frames also consume one semantic block id and remain read-only.
         block_index[0] += 1
         return
     for child in element:
@@ -529,6 +459,7 @@ def _collect_editable_elements(
 
 
 def _editable_elements(root: etree._Element) -> list[tuple[str, etree._Element]]:
+    """Return editable XML elements paired with their semantic block ids."""
     elements: list[tuple[str, etree._Element]] = []
     text_nodes = root.xpath("//office:text", namespaces=OFFICE_DOCUMENT_NS)
     if not text_nodes:
@@ -561,6 +492,9 @@ def apply_text_edits_to_content_xml(
         if block_id not in edits:
             continue
         if _has_complex_inline_markup(element):
+            # Skip complex blocks defensively even if the caller sends an edit;
+            # the snapshot marks them read-only because plain-text replacement
+            # would discard inline XML.
             continue
         _set_element_plain_text(element, edits[block_id])
     return etree.tostring(root, encoding="UTF-8", xml_declaration=True)

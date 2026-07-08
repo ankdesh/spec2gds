@@ -7,6 +7,7 @@ import spec2gds.agent_spec.package.archive as container
 import spec2gds.agent_spec.api.document_app as api_app
 import spec2gds.agent_spec.document.semantic as editor_document
 import spec2gds.agent_spec.document.ipxact_view as ipxact_view
+import spec2gds.agent_spec.document.relations as editor_relations
 import spec2gds.agent_spec.document.session as editor_session
 import spec2gds.agent_spec.plugins.manager as manager
 import spec2gds.agent_spec.package.verifier as verifier
@@ -128,24 +129,54 @@ SYNTHETIC_IPXACT_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 
 
 def test_parse_synthetic_content_and_group_heading_versions() -> None:
-    """Test semantic parsing and adjacent heading version grouping."""
+    """Test semantic parsing keeps `//` heading text literal."""
     parsed = editor_document.parse_content_xml(SYNTHETIC_CONTENT_XML)
 
     if parsed.has_blocking_diagnostics:
         raise AssertionError(f"Unexpected diagnostics: {parsed.diagnostics}")
     if len(parsed.blocks) != 9:
         raise AssertionError(f"Expected 9 semantic blocks, got {len(parsed.blocks)}")
-    if len(parsed.section_groups) != 1:
-        raise AssertionError(f"Expected 1 section version group, got {len(parsed.section_groups)}")
+    if parsed.section_groups:
+        raise AssertionError(f"Heading text should not create section groups: {parsed.section_groups}")
+    headings = [block for block in parsed.blocks if block.block_type == "heading"]
+    if headings[1].display_text != "Bus behavior//v1":
+        raise AssertionError(f"Expected literal heading text, got {headings[1].display_text}")
 
-    group = parsed.section_groups[0]
-    if group.title != "Bus behavior":
-        raise AssertionError(f"Unexpected section title: {group.title}")
-    versions = [variant.version for variant in group.variants]
-    if versions != ["v1", "v2"]:
-        raise AssertionError(f"Unexpected variants: {versions}")
-    if group.active_version != "v1":
-        raise AssertionError(f"Expected default active version v1, got {group.active_version}")
+
+def _version_relations_from_snapshot(
+    snapshot: editor_session.EditorSnapshot,
+) -> editor_relations.EditorRelations:
+    """Create an explicit relation group for the synthetic v1/v2 headings."""
+    heading_by_text = {
+        block.text: block
+        for block in snapshot.document.blocks
+        if block.block_type == "heading"
+    }
+    v1_heading = heading_by_text["Bus behavior//v1"]
+    v2_heading = heading_by_text["Bus behavior//v2"]
+    return editor_relations.EditorRelations(
+        section_groups=[
+            editor_relations.SectionVersionGroup(
+                group_id="bus-behavior",
+                title="Bus behavior",
+                level=2,
+                variants=[
+                    editor_relations.SectionVersionRef(
+                        version="v1",
+                        heading_id=v1_heading.heading_id or v1_heading.block_id,
+                        block_ids=[v1_heading.block_id, "block-3", "block-4"],
+                    ),
+                    editor_relations.SectionVersionRef(
+                        version="v2",
+                        heading_id=v2_heading.heading_id or v2_heading.block_id,
+                        block_ids=[v2_heading.block_id, "block-6"],
+                    ),
+                ],
+                active_version="v1",
+            )
+        ],
+        ipxact_attachments=snapshot.relations.ipxact_attachments,
+    )
 
 
 def test_apply_text_edits_to_synthetic_content() -> None:
@@ -221,7 +252,7 @@ def test_ipxact_interface_summary_from_synthetic_xml() -> None:
 
 
 def test_editor_session_snapshot_persists_active_versions_and_saves() -> None:
-    """Test v1 editor session over a synthetic agent-spec archive."""
+    """Test active section versions are stored through explicit relations."""
     cont = container.AgentSpecArchive()
     cont.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
     cont.inject_file(
@@ -234,7 +265,11 @@ def test_editor_session_snapshot_persists_active_versions_and_saves() -> None:
     snapshot = session.snapshot()
     if snapshot.has_blocking_diagnostics:
         raise AssertionError(f"Unexpected snapshot diagnostics: {snapshot}")
+    if snapshot.document.section_groups:
+        raise AssertionError("Section groups should come only from relations metadata.")
 
+    session.persist_relations(_version_relations_from_snapshot(snapshot))
+    snapshot = session.snapshot()
     group = snapshot.document.section_groups[0]
     session.persist_active_versions({group.group_id: "v2"})
     updated_snapshot = session.snapshot()
@@ -254,24 +289,20 @@ def test_editor_session_snapshot_persists_active_versions_and_saves() -> None:
             os.remove(temp_path)
 
 
-def test_editor_session_migrates_legacy_versions_to_relations() -> None:
-    """Test legacy Title//version groups are projected into global relation metadata."""
+def test_editor_session_does_not_migrate_title_version_headings_to_relations() -> None:
+    """Test `Title//version` headings are not inferred as relation groups."""
     cont = container.AgentSpecArchive()
     cont.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
     session = editor_session.EditorSession(cont)
 
     snapshot = session.snapshot()
-    if len(snapshot.relations.section_groups) != 1:
-        raise AssertionError(f"Expected migrated relation group, got {snapshot.relations}")
-    group = snapshot.relations.section_groups[0]
-    if group.title != "Bus behavior":
-        raise AssertionError(f"Unexpected migrated title: {group.title}")
-    if [variant.version for variant in group.variants] != ["v1", "v2"]:
-        raise AssertionError(f"Unexpected migrated versions: {group.variants}")
-    if not all(variant.heading_id.startswith("h2-bus-behavior") for variant in group.variants):
-        raise AssertionError(f"Expected stable heading ids, got {group.variants}")
+    if snapshot.relations.section_groups:
+        raise AssertionError(f"Unexpected inferred relation group: {snapshot.relations}")
 
-    session.persist_relations(snapshot.relations)
+    session.persist_relations(_version_relations_from_snapshot(snapshot))
+    snapshot = session.snapshot()
+    if [variant.version for variant in snapshot.relations.section_groups[0].variants] != ["v1", "v2"]:
+        raise AssertionError(f"Explicit relation group was not preserved: {snapshot.relations}")
     if "spec_data/agent-spec-editor/relations.json" not in cont.custom_files:
         raise AssertionError("Relations metadata was not persisted.")
 
@@ -388,6 +419,8 @@ def test_verifier_accepts_editor_state_metadata() -> None:
     cont.document.set_part("content.xml", SYNTHETIC_CONTENT_XML)
     session = editor_session.EditorSession(cont)
     snapshot = session.snapshot()
+    session.persist_relations(_version_relations_from_snapshot(snapshot))
+    snapshot = session.snapshot()
     group = snapshot.document.section_groups[0]
     session.persist_active_versions({group.group_id: "v2"})
 
@@ -474,8 +507,21 @@ def test_editor_api_endpoints_with_synthetic_spec() -> None:
 
         snapshot = endpoints[("GET", "/documents/snapshot")](temp_path)
         groups = snapshot["document"]["section_groups"]
+        if groups:
+            raise AssertionError(f"Heading text should not create API section groups: {groups}")
+
+        relation_payload = _version_relations_from_snapshot(
+            editor_session.EditorSnapshot.model_validate(snapshot)
+        )
+        save_relations_payload = endpoints[("POST", "/documents/save")](
+            temp_path,
+            api_app.EditorSaveRequest(
+                relations=relation_payload,
+            ),
+        )
+        groups = save_relations_payload["document"]["section_groups"]
         if len(groups) != 1:
-            raise AssertionError(f"Expected one section group from API, got {groups}")
+            raise AssertionError(f"Expected one explicit section group from API, got {groups}")
 
         group_id = groups[0]["group_id"]
         version_payload = endpoints[("POST", "/documents/active-section-versions")](

@@ -77,7 +77,7 @@ Restricted-environment notes live in
 | Write ownership | The API assumes the server owns writes while a document session is open. Saving is rejected if the file changed externally. |
 | Editor model | The editor uses a semantic projection of `content.xml`, not full word-processor fidelity. |
 | Editable content | Simple headings, paragraphs, and list item paragraphs are editable. Inline-markup blocks, tables, and images are read-only. |
-| Section variants | Adjacent legacy headings named `Title//version` are projected into section version groups. |
+| Section variants | Section-version groups and active selections are stored in `spec_data/agent-spec-editor/relations.json`; heading text is not parsed for variant metadata. |
 | IP-XACT | Embedded XML under `spec_data/ipxact/` can be attached to headings and previewed through lightweight summaries. |
 | Block model | Every heading becomes an action graph block. |
 | Block version | A version hashes the heading section content plus attached artifact IDs. |

@@ -41,7 +41,7 @@ Implemented backend/core capabilities:
 - Assign stable heading `xml:id` values when missing.
 - Apply plain-text edits to simple headings, paragraphs, and list item
   paragraphs.
-- Detect adjacent legacy heading variants named `Title//version`.
+- Project section-version groups from explicit editor relation metadata.
 - Persist section-version and IP-XACT relation metadata in
   `spec_data/agent-spec-editor/relations.json`.
 - Read embedded IP-XACT XML from `spec_data/ipxact/` and render
@@ -71,22 +71,12 @@ The React editor currently:
 
 ## Section Versioning Rule
 
-Legacy versioned sections are identified by adjacent headings with this suffix:
+Versioned sections are identified by relation metadata stored in
+`spec_data/agent-spec-editor/relations.json`.
 
-```text
-Section title//version
-```
-
-Only adjacent headings with the same base title and same heading level are one
-version group. For example:
-
-```text
-Cache behavior//v1
-Cache behavior//v2
-```
-
-The UI displays the base title, `Cache behavior`, and stores the active version
-choice in relation metadata.
+The relation group names the user-facing section title, lists the heading IDs
+for each variant, and stores the active version choice. The visible heading text
+is not parsed for version metadata.
 
 ## Editing Scope
 

@@ -5,6 +5,7 @@ import benchmarks.agent_spec.hw_docs.build_benchmark as hw_docs_benchmark
 import spec2gds.agent_spec.document.relations as relations
 import spec2gds.agent_spec.document.session as editor_session
 import spec2gds.agent_spec.package.archive as archive
+import spec2gds.agent_spec.plugins.ipxact as ipxact_plugin
 
 
 def test_hw_docs_benchmark_builds_loadable_spec_files() -> None:
@@ -47,7 +48,13 @@ def test_hw_docs_benchmark_builds_loadable_spec_files() -> None:
         if not attachments or attachments[0].file_path != ipxact_path:
             raise AssertionError(f"IP-XACT relation missing from {spec_path}: {attachments}")
 
-        if case["strict_ipxact_schema_valid"]:
-            raise AssertionError("Current benchmark XML should track strict-schema validation gaps.")
-        if case["semantic_interface_count"] != 0:
-            raise AssertionError("Current benchmark XML should track missing busInterface extraction.")
+        if not case["strict_ipxact_schema_valid"]:
+            raise AssertionError(f"Benchmark XML should be strict IP-XACT: {case}")
+        if case["semantic_interface_count"] < 1:
+            raise AssertionError("Benchmark XML should expose formal bus interfaces.")
+        if snapshot.ipxact_components[0].diagnostics:
+            raise AssertionError(f"Benchmark XML should have no IP-XACT diagnostics: {snapshot.ipxact_components[0].diagnostics}")
+        if any(item.name == "component_ports" for item in snapshot.ipxact_components[0].interfaces):
+            raise AssertionError(f"Benchmark XML must not rely on component-port fallback: {spec_path}")
+        xml_path = hw_docs_benchmark.BENCHMARK_ROOT / files["ipxact_xml"]
+        ipxact_plugin.IPXACTPlugin().validate_data(xml_path.read_bytes())

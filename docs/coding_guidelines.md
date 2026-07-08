@@ -35,12 +35,21 @@ uv run python -m pytest -q
 - Follow existing package boundaries before adding new abstractions.
 - Use Pydantic models for API and persistence contracts that cross module
   boundaries.
-- Keep public contracts and non-obvious logic documented with useful docstrings
-  or short comments.
+- Use module docstrings to explain each module's role in the `.spec` workflow.
+- Use class/function docstrings for Python contracts, public helpers, and
+  package-boundary behavior.
+- Use short inline comments for invariants, archive/path conventions,
+  compatibility fallbacks, migration behavior, and data-loss guards.
+- Keep comments focused on why code exists or what must remain true; avoid
+  repeating obvious syntax.
 - Prefer explicit errors and diagnostics over silent fallback when saving or
   mutating `.spec` documents.
 - Preserve user data and custom `spec_data/` package entries unless the caller
   explicitly asks to delete them.
+- Preserve external protocol semantics. In particular, do not reinterpret
+  IP-XACT `model/ports` as bus interfaces; benchmark and generated IP-XACT
+  payloads should use formal `busInterfaces/busInterface` records with
+  `portMaps`.
 
 ## Testing
 
@@ -50,6 +59,8 @@ uv run python -m pytest -q
 - Use the existing test layout under `tests/agent_spec/`.
 - Keep generated benchmark artifacts intentional and documented when they are
   checked in.
+- Benchmarks for protocol payloads should validate against the protocol parser
+  used by the toolchain, not just against project-specific summaries.
 
 ## Documentation Ownership
 

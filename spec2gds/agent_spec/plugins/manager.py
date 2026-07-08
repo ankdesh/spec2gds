@@ -1,8 +1,11 @@
+"""Registry and URI router for agent-spec structured payload plugins."""
+
 import copy
 import typing
-import urllib.parse
+
 import spec2gds.agent_spec.plugins.base as plugin
 import spec2gds.agent_spec.package.archive as container
+
 
 class PluginManager:
     """
@@ -27,7 +30,8 @@ class PluginManager:
             plugin_inst: An object implementing the ModalityPlugin protocol.
         """
         mod_id: str = plugin_inst.config.modality_id
-        # Map the unique modality ID (e.g., 'simple-json') to its concrete handler
+        # Modality IDs are the first path segment beneath `spec_data/` and the
+        # first segment of `spec://` links, so registration must be unique.
         self._plugins[mod_id] = plugin_inst
 
     def get_plugin(self, modality_id: str) -> plugin.ModalityPlugin:
@@ -71,13 +75,13 @@ class PluginManager:
         """
         target_plugin: plugin.ModalityPlugin = self.get_plugin(modality_id)
         
-        # 1. Force the plugin to run its strict schema validation first.
-        # This guarantees data integrity before we modify the archive.
+        # Validate before mutating the archive so a failed injection leaves the
+        # existing package bytes untouched.
         is_valid: bool = target_plugin.validate_data(data)
         if not is_valid:
             raise ValueError(f"Payload validation failed for modality '{modality_id}'.")
 
-        # 2. Delegate the raw injection and manifest synchronization to the plugin
+        # The plugin owns serialization details and the precise container path.
         target_plugin.inject_data(container_instance, file_path, data)
 
     def extract_payload(
@@ -99,10 +103,11 @@ class PluginManager:
         """
         target_plugin: plugin.ModalityPlugin = self.get_plugin(modality_id)
         
-        # Extract parsed payload (e.g. parsed JSON dict)
+        # Extract parsed payload (for example, a JSON dict or IP-XACT object).
         extracted_data: typing.Any = target_plugin.extract_data(container_instance, file_path)
         
-        # Enforce value copy semantics strictly on boundary exit (Mojo migration rule)
+        # Enforce value semantics at the manager boundary. Callers can mutate the
+        # returned data without accidentally changing plugin internals.
         return copy.deepcopy(extracted_data)
 
     def resolve_uri(
@@ -129,7 +134,8 @@ class PluginManager:
         if not uri.startswith("spec://"):
             raise ValueError(f"Invalid URI protocol. Expected 'spec://', got: '{uri}'")
 
-        # Strip scheme (7 characters for 'spec://') and split
+        # Strip the scheme and split the URI into plugin id, file path, and a
+        # plugin-specific selector path.
         uri_body: str = uri[7:]
         components: list[str] = uri_body.split("/")
         if len(components) < 2:
@@ -138,12 +144,15 @@ class PluginManager:
         modality_id: str = components[0]
         file_path: str = components[1]
         
-        # Reconstruct the inner selector path (e.g. `/metadata/0/value` for JSON)
+        # Reconstruct the inner selector path (for example,
+        # `/metadata/0/value` for JSON).
         node_path: str = "/"
         if len(components) > 2:
             node_path = "/" + "/".join(components[2:])
 
-        # Locate the modality plugin and delegate query traversal
+        # Locate the modality plugin and delegate query traversal. Each modality
+        # decides whether the selector means object fields, list indices, XPath,
+        # or another domain-specific addressing scheme.
         target_plugin: plugin.ModalityPlugin = self.get_plugin(modality_id)
         resolved_value: typing.Any = target_plugin.resolve_path(
             container_instance,
@@ -151,5 +160,5 @@ class PluginManager:
             node_path
         )
 
-        # Enforce decoupled deep copy value semantics on final return
+        # Keep resolved values decoupled from any parser-owned mutable objects.
         return copy.deepcopy(resolved_value)

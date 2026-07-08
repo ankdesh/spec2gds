@@ -20,10 +20,10 @@ The metadata contains:
 - `ipxact_attachments`: a map from heading ID to one or more embedded
   `spec_data/ipxact/*.xml` files.
 
-Legacy headings such as `Register behavior//v1` are detected on load. The
-backend projects them into relation metadata and gives each heading a stable
-`xml:id`; on explicit Save, the relation file is written into the `.spec`
-archive.
+Section-version groups are read from relation metadata. Heading text is treated
+as user-visible prose, so strings such as `Register behavior//v1` are not parsed
+as variant metadata. On explicit Save, the relation file is written into the
+`.spec` archive.
 
 ## Rendering Behavior
 

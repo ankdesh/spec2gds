@@ -9,7 +9,8 @@ the agent-spec editor pipeline.
 - `inputs/pdf/`: original PDF source documents.
 - `inputs/html/`: original HTML source documents.
 - `converted/odt/`: office-compatible converted documents.
-- `converted/ipxact/`: extracted XML interface/component payloads.
+- `converted/ipxact/`: strict IP-XACT XML component payloads with formal
+  `busInterfaces/busInterface` records.
 - `generated/`: `.spec` packages built from the converted ODT files with XML
   embedded under `spec_data/ipxact/`.
 - `benchmark_manifest.json`: generated manifest with file paths, hashes,
@@ -24,7 +25,7 @@ From the repository root:
 PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m benchmarks.agent_spec.hw_docs.build_benchmark
 ```
 
-The XML files currently embed and summarize component VLNV fields, but strict
-IP-XACT schema validation fails and no `busInterface` entries are extracted.
-Those current limitations are recorded in the manifest so future spec2gds
-progress can be measured against this dataset.
+The XML files embed and summarize component VLNV fields and formal IP-XACT bus
+interfaces. The PDF/HTML files are the benchmark ground truth; converted ODT/XML
+and generated `.spec` files may be regenerated to keep the benchmark
+protocol-correct.

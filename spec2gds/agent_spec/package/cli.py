@@ -1,12 +1,16 @@
+"""Command-line entry points for inspecting and modifying `.spec` packages."""
+
 import argparse
 import json
 import os
 import sys
+
 import spec2gds.agent_spec.package.archive as container
 import spec2gds.agent_spec.plugins.manager as manager
 import spec2gds.agent_spec.plugins.json_payload as json_plugin
 import spec2gds.agent_spec.plugins.ipxact as ipxact_plugin
 import spec2gds.agent_spec.package.verifier as verifier
+
 
 def _build_default_manager() -> manager.PluginManager:
     """
@@ -16,11 +20,13 @@ def _build_default_manager() -> manager.PluginManager:
     """
     pm = manager.PluginManager()
     
-    # Instantiate and register the test JSON plugin
+    # Keep the CLI self-contained: every command gets the built-in modalities
+    # without requiring an external plugin configuration file.
     json_plug = json_plugin.SimpleJSONPlugin()
     pm.register_plugin(json_plug)
     
-    # Instantiate and register the IPXACT plugin
+    # IP-XACT is the primary structured hardware payload used by samples and
+    # benchmarks.
     ipxact_plug = ipxact_plugin.IPXACTPlugin()
     pm.register_plugin(ipxact_plug)
     
@@ -34,16 +40,17 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Hybrid Agent-Spec Management Tool - Embeds structured hardware specs inside agent-spec."
     )
-    # Target command routing
+    # Subcommands keep package operations explicit and script-friendly.
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # 1. list-plugins command
+    # `list-plugins` is useful in tests and for users checking what the local
+    # CLI build can handle.
     subparsers.add_parser(
         "list-plugins",
         help="List all registered modality plugins."
     )
 
-    # 2. inject command
+    # `inject` adds one structured payload to an existing or new archive.
     inject_parser = subparsers.add_parser(
         "inject",
         help="Inject custom modality data payload into agent-spec archive."
@@ -69,7 +76,7 @@ def main() -> None:
         help="Local file path of the source payload to inject."
     )
 
-    # 3. extract command
+    # `extract` prints or writes one plugin-owned payload.
     extract_parser = subparsers.add_parser(
         "extract",
         help="Extract custom modality payload from agent-spec archive."
@@ -94,7 +101,8 @@ def main() -> None:
         help="Optional local file path to write the extracted payload. Defaults to stdout."
     )
 
-    # 4. validate command
+    # `validate` checks manifest registration, payload schemas, and `spec://`
+    # link resolution.
     validate_parser = subparsers.add_parser(
         "validate",
         help="Run verification on all files and links inside agent-spec archive."
@@ -106,26 +114,29 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    # Bootstrap PluginManager and registers
+    # The manager is built after parsing so import-time users of this module do
+    # not pay plugin setup cost.
     pm = _build_default_manager()
 
     try:
-        # Route command actions
+        # Route command actions. Each branch prints JSON or concise status text
+        # and exits non-zero for user-actionable failures.
         if args.command == "list-plugins":
-            # list-plugins: output currently loaded plugins
             plugins = pm.list_plugins()
             print(json.dumps({"plugins": plugins}, indent=2))
 
         elif args.command == "inject":
-            # inject: serialize raw JSON metadata, validate, write to ZIP, update manifest, save
             if not os.path.exists(args.source):
                 print(f"Error: Source file '{args.source}' does not exist.", file=sys.stderr)
                 sys.exit(1)
 
             if args.modality == "ipxact":
+                # IP-XACT is XML bytes; the plugin validator handles parsing and
+                # schema checks after the file is read.
                 with open(args.source, "rb") as f:
                     payload = f.read()
             else:
+                # Non-binary built-ins currently expect JSON documents.
                 with open(args.source, "r", encoding="utf-8") as f:
                     raw_content = f.read()
                 try:
@@ -134,21 +145,21 @@ def main() -> None:
                     print(f"Error: Injected payload is not valid JSON: {e}", file=sys.stderr)
                     sys.exit(1)
 
-            # Open existing container or instantiate a fresh blank text container
-            # Handles 0-size files correctly inside AgentSpecArchive.__init__
+            # Open an existing package when present; otherwise create a blank ODT
+            # package and save it to the requested path.
             cont = container.AgentSpecArchive(
                 args.container if os.path.exists(args.container) else None
             )
 
-            # Delegate injection (runs schema validations automatically)
+            # Delegate injection so each plugin controls validation, path
+            # normalization, serialization, and manifest media type.
             pm.inject_payload(cont, args.modality, args.file, payload)
             
-            # Enforce uncompressed mimetype alignments and save container ZIP
+            # `save` performs the final ODT mimetype normalization.
             cont.save(args.container)
             print(f"Successfully injected '{args.file}' into '{args.container}' under modality '{args.modality}'.")
 
         elif args.command == "extract":
-            # extract: load hybrid agent-spec, extract targeted payload file, print/save
             if not os.path.exists(args.container):
                 print(f"Error: Container file '{args.container}' does not exist.", file=sys.stderr)
                 sys.exit(1)
@@ -157,6 +168,8 @@ def main() -> None:
             payload = pm.extract_payload(cont, args.modality, args.file)
 
             if args.modality == "ipxact":
+                # pyEDAA components keep their XML root internally; serialize it
+                # for CLI-friendly output.
                 import lxml.etree
                 output_str = lxml.etree.tostring(payload._xmlRoot, pretty_print=True).decode("utf-8")
             else:
@@ -170,7 +183,6 @@ def main() -> None:
                 print(output_str)
 
         elif args.command == "validate":
-            # validate: run complete verifications of all files and links, print Pydantic report
             if not os.path.exists(args.container):
                 print(f"Error: Container file '{args.container}' does not exist.", file=sys.stderr)
                 sys.exit(1)
@@ -179,10 +191,11 @@ def main() -> None:
             engine = verifier.ContainerVerifier(cont, pm)
             report = engine.verify_all()
 
-            # Output validation report as clean, pretty JSON
+            # Output validation report as clean, pretty JSON so other tools can
+            # consume it directly.
             print(report.model_dump_json(indent=2))
             
-            # Exit with standard shell code 1 on link/schema validation failures
+            # Exit with standard shell code 1 on link/schema validation failures.
             if not report.is_fully_consistent:
                 sys.exit(1)
 

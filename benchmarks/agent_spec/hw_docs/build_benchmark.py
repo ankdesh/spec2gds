@@ -1,10 +1,11 @@
 """Build the hardware-document benchmark `.spec` files.
 
 The benchmark stores original PDF/HTML source documents, converted office
-documents, and extracted IP-XACT-like XML. This builder turns each converted
-office document into a loadable `.spec` file by embedding the matching XML
-payload under `spec_data/ipxact/` and adding editor relation metadata that
-attaches the payload to the first document heading.
+documents, and extracted XML. This builder normalizes the converted XML into
+strict IP-XACT with formal bus interfaces, then turns each converted office
+document into a loadable `.spec` file by embedding the matching payload under
+`spec_data/ipxact/` and adding editor relation metadata that attaches the
+payload to the first document heading.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import json
 from pathlib import Path
 import typing
 
+import lxml.etree as etree
 import spec2gds.agent_spec.document.ipxact_view as ipxact_view
 import spec2gds.agent_spec.document.relations as relations
 import spec2gds.agent_spec.document.session as editor_session
@@ -29,6 +31,13 @@ CONVERTED_ODT_DIR = BENCHMARK_ROOT / "converted" / "odt"
 CONVERTED_IPXACT_DIR = BENCHMARK_ROOT / "converted" / "ipxact"
 GENERATED_DIR = BENCHMARK_ROOT / "generated"
 MANIFEST_PATH = BENCHMARK_ROOT / "benchmark_manifest.json"
+IPXACT_NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2014"
+IPXACT = f"{{{IPXACT_NS}}}"
+
+
+def _qname(local_name: str) -> str:
+    """Return an IP-XACT 2014 qualified tag name."""
+    return f"{IPXACT}{local_name}"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -99,6 +108,65 @@ CASES: tuple[BenchmarkCase, ...] = (
     ),
 )
 
+APB_MAPS: dict[str, list[tuple[str, str]]] = {
+    "apb_gpio": [
+        ("PCLK", "HCLK"),
+        ("PRESETn", "HRESETn"),
+        ("PADDR", "PADDR"),
+        ("PWDATA", "PWDATA"),
+        ("PWRITE", "PWRITE"),
+        ("PSEL", "PSEL"),
+        ("PENABLE", "PENABLE"),
+        ("PRDATA", "PRDATA"),
+        ("PREADY", "PREADY"),
+        ("PSLVERR", "PSLVERR"),
+    ],
+    "apb_i2c_slave": [
+        ("PCLK", "apb_pclk_i"),
+        ("PRESETn", "apb_presetn_i"),
+        ("PADDR", "apb_paddr_i"),
+        ("PSEL", "apb_psel_i"),
+        ("PENABLE", "apb_penable_i"),
+        ("PWRITE", "apb_pwrite_i"),
+        ("PWDATA", "apb_pwdata_i"),
+        ("PREADY", "apb_pready_o"),
+        ("PRDATA", "apb_prdata_o"),
+    ],
+    "apb_timer": [
+        ("PCLK", "HCLK"),
+        ("PRESETn", "HRESETn"),
+        ("PADDR", "PADDR"),
+        ("PSEL", "PSEL"),
+        ("PENABLE", "PENABLE"),
+        ("PWRITE", "PWRITE"),
+        ("PWDATA", "PWDATA"),
+        ("PREADY", "PREADY"),
+        ("PRDATA", "PRDATA"),
+        ("PSLVERR", "PSLVERR"),
+    ],
+}
+
+CUSTOM_INTERFACE_MAPS: dict[str, list[tuple[str, list[str]]]] = {
+    "apb_gpio": [
+        ("gpio", ["gpio_in", "gpio_in_sync", "gpio_out", "gpio_dir", "interrupt"]),
+    ],
+    "apb_i2c_slave": [
+        ("i2c", ["i2c_scl_i", "i2c_sda_i", "i2c_sda_o", "i2c_sda_oe", "i2c_interrupt_o"]),
+    ],
+    "apb_timer": [
+        ("timer_events", ["event_lo_o", "event_hi_o", "irq_lo_o", "irq_hi_o"]),
+    ],
+    "cv_hpdcache": [
+        ("hpdcache_core", ["core_req", "core_rsp"]),
+        ("hpdcache_memory_read", ["mem_req_read", "mem_resp_read"]),
+        ("hpdcache_memory_write", ["mem_req_write", "mem_resp_write"]),
+        ("hpdcache_events", ["evt_o"]),
+    ],
+    "cvfpu": [
+        ("fpu_operation", []),
+    ],
+}
+
 
 def _sha256(path: Path) -> str:
     """Return a stable content hash for benchmark provenance."""
@@ -129,6 +197,175 @@ def _strict_ipxact_status(xml_bytes: bytes) -> tuple[bool, str | None]:
     return True, None
 
 
+def _child_text(element: etree._Element, local_name: str) -> str:
+    """Read direct child text from a namespaced XML element."""
+    child = element.find(_qname(local_name))
+    if child is None or child.text is None:
+        return ""
+    return child.text.strip()
+
+
+def _port_names(root: etree._Element) -> list[str]:
+    """Return component physical port names in document order."""
+    names: list[str] = []
+    for port in root.xpath("./*[local-name()='model']/*[local-name()='ports']/*[local-name()='port']"):
+        name = _child_text(typing.cast(etree._Element, port), "name")
+        if name:
+            names.append(name)
+    return names
+
+
+def _fix_vector_elements(root: etree._Element) -> None:
+    """Normalize `wire/vector` into the IP-XACT 2014 `wire/vectors/vector` shape."""
+    for wire in root.xpath(".//*[local-name()='wire']"):
+        wire_element = typing.cast(etree._Element, wire)
+        vector = wire_element.find(_qname("vector"))
+        if vector is None:
+            continue
+        wire_element.remove(vector)
+        vectors = etree.Element(_qname("vectors"))
+        vectors.append(vector)
+        insert_at = 0
+        direction = wire_element.find(_qname("direction"))
+        if direction is not None:
+            insert_at = list(wire_element).index(direction) + 1
+        wire_element.insert(insert_at, vectors)
+
+
+def _fix_parameter_description_order(root: etree._Element) -> None:
+    """Move parameter descriptions before values as required by IP-XACT 2014."""
+    for parameter in root.xpath(".//*[local-name()='parameters']/*[local-name()='parameter']"):
+        parameter_element = typing.cast(etree._Element, parameter)
+        description = parameter_element.find(_qname("description"))
+        value = parameter_element.find(_qname("value"))
+        if description is None or value is None:
+            continue
+        if list(parameter_element).index(description) < list(parameter_element).index(value):
+            continue
+        parameter_element.remove(description)
+        insert_at = list(parameter_element).index(value)
+        parameter_element.insert(insert_at, description)
+
+
+def _append_port_map(parent: etree._Element, logical_port: str, physical_port: str) -> None:
+    """Append one standard IP-XACT logical-to-physical port map."""
+    port_map = etree.SubElement(parent, _qname("portMap"))
+    logical = etree.SubElement(port_map, _qname("logicalPort"))
+    etree.SubElement(logical, _qname("name")).text = logical_port
+    physical = etree.SubElement(port_map, _qname("physicalPort"))
+    etree.SubElement(physical, _qname("name")).text = physical_port
+
+
+def _append_interface(
+    parent: etree._Element,
+    name: str,
+    bus_type: tuple[str, str, str, str],
+    abstraction_type: tuple[str, str, str, str],
+    port_maps: list[tuple[str, str]],
+) -> None:
+    """Append one formal IP-XACT busInterface with abstraction-owned port maps."""
+    if not port_maps:
+        return
+    interface = etree.SubElement(parent, _qname("busInterface"))
+    etree.SubElement(interface, _qname("name")).text = name
+    etree.SubElement(
+        interface,
+        _qname("busType"),
+        vendor=bus_type[0],
+        library=bus_type[1],
+        name=bus_type[2],
+        version=bus_type[3],
+    )
+    abstraction_types = etree.SubElement(interface, _qname("abstractionTypes"))
+    abstraction = etree.SubElement(abstraction_types, _qname("abstractionType"))
+    etree.SubElement(
+        abstraction,
+        _qname("abstractionRef"),
+        vendor=abstraction_type[0],
+        library=abstraction_type[1],
+        name=abstraction_type[2],
+        version=abstraction_type[3],
+    )
+    port_map_container = etree.SubElement(abstraction, _qname("portMaps"))
+    for logical_port, physical_port in port_maps:
+        _append_port_map(port_map_container, logical_port, physical_port)
+    etree.SubElement(interface, _qname("slave"))
+    etree.SubElement(interface, _qname("connectionRequired")).text = "true"
+    etree.SubElement(interface, _qname("bitsInLau")).text = "8"
+    etree.SubElement(interface, _qname("endianness")).text = "little"
+
+
+def _custom_port_maps(case: BenchmarkCase, port_names: list[str]) -> list[tuple[str, list[tuple[str, str]]]]:
+    """Group non-APB physical ports into benchmark-specific formal interfaces."""
+    if case.case_id.startswith("cv_hpdcache"):
+        config_key = "cv_hpdcache"
+    elif case.case_id.startswith("cvfpu"):
+        config_key = "cvfpu"
+    else:
+        config_key = case.case_id
+    groups = CUSTOM_INTERFACE_MAPS.get(config_key, [])
+    if not groups:
+        return []
+    grouped: list[tuple[str, list[tuple[str, str]]]] = []
+    for interface_name, prefixes in groups:
+        if prefixes:
+            physical_ports = [
+                port_name
+                for port_name in port_names
+                if any(port_name.startswith(prefix) for prefix in prefixes)
+            ]
+        else:
+            physical_ports = list(port_names)
+        maps = [(port_name.upper(), port_name) for port_name in physical_ports]
+        grouped.append((interface_name, maps))
+    return grouped
+
+
+def _normalized_ipxact_bytes(case: BenchmarkCase, xml_path: Path) -> bytes:
+    """Return strict IP-XACT XML that preserves ports while adding interfaces."""
+    root = etree.fromstring(xml_path.read_bytes())
+    _fix_vector_elements(root)
+    _fix_parameter_description_order(root)
+
+    existing_interfaces = root.find(_qname("busInterfaces"))
+    if existing_interfaces is not None:
+        root.remove(existing_interfaces)
+    bus_interfaces = etree.Element(_qname("busInterfaces"))
+    port_names = _port_names(root)
+    port_name_set = set(port_names)
+
+    apb_maps = [
+        (logical, physical)
+        for logical, physical in APB_MAPS.get(case.case_id, [])
+        if physical in port_name_set
+    ]
+    _append_interface(
+        bus_interfaces,
+        "apb_slave",
+        ("amba.com", "AMBA4", "APB", "r0p0"),
+        ("amba.com", "AMBA4", "APB_rtl", "r0p0"),
+        apb_maps,
+    )
+
+    for interface_name, maps in _custom_port_maps(case, port_names):
+        _append_interface(
+            bus_interfaces,
+            interface_name,
+            ("openhwgroup.org", "interfaces", interface_name, "1.0"),
+            ("openhwgroup.org", "interfaces", f"{interface_name}_rtl", "1.0"),
+            maps,
+        )
+
+    if len(bus_interfaces) == 0:
+        raise ValueError(f"No formal IP-XACT bus interfaces could be created for {case.case_id}.")
+
+    version = root.find(_qname("version"))
+    if version is None:
+        raise ValueError(f"Missing IP-XACT version in {xml_path}.")
+    root.insert(list(root).index(version) + 1, bus_interfaces)
+    return etree.tostring(root, xml_declaration=True, encoding="UTF-8", pretty_print=True)
+
+
 def _first_heading_id(document_path: Path) -> str:
     """Find a stable heading for attaching the benchmark XML in the editor."""
     session = editor_session.EditorSession.from_path(str(document_path))
@@ -152,7 +389,10 @@ def _build_case(case: BenchmarkCase) -> dict[str, typing.Any]:
 
     GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     output_path = GENERATED_DIR / case.spec_name
-    xml_bytes = xml_path.read_bytes()
+    xml_bytes = _normalized_ipxact_bytes(case, xml_path)
+    xml_path.write_bytes(xml_bytes)
+    # Start from the converted ODT so the generated `.spec` preserves the
+    # visible benchmark document exactly, then add structured IP-XACT metadata.
     spec_archive = archive.AgentSpecArchive(str(odt_path))
     ipxact_container_path = f"spec_data/ipxact/{case.ipxact_name}"
     spec_archive.inject_file(
@@ -162,6 +402,8 @@ def _build_case(case: BenchmarkCase) -> dict[str, typing.Any]:
     )
     spec_archive.save(str(output_path))
 
+    # Attach the XML payload to a visible heading so the editor can show the
+    # relation instead of leaving the embedded file as orphaned package data.
     heading_id = _first_heading_id(output_path)
     editor_relations = relations.EditorRelations(
         ipxact_attachments={
@@ -180,6 +422,8 @@ def _build_case(case: BenchmarkCase) -> dict[str, typing.Any]:
 
     summary = ipxact_view.extract_ipxact_summary(ipxact_container_path, xml_bytes)
     strict_valid, strict_error = _strict_ipxact_status(xml_bytes)
+    if not strict_valid:
+        raise ValueError(f"Benchmark IP-XACT must validate for {case.case_id}: {strict_error}")
     files = {
         "pdf": pdf_path,
         "html": html_path,
@@ -188,6 +432,8 @@ def _build_case(case: BenchmarkCase) -> dict[str, typing.Any]:
         "spec": output_path,
     }
     return {
+        # The manifest intentionally records both semantic summary data and file
+        # hashes so benchmark consumers can detect accidental fixture drift.
         "case_id": case.case_id,
         "title": case.title,
         "files": {name: _relative(path) for name, path in files.items()},

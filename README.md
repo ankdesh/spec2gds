@@ -35,10 +35,13 @@ Start with the docs index:
 Most-used docs:
 
 - [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
+- [`docs/agent_spec_document_schema.md`](docs/agent_spec_document_schema.md)
 - [`docs/agent_spec_v1_setup.md`](docs/agent_spec_v1_setup.md)
 - [`docs/agent_spec_action_contract.md`](docs/agent_spec_action_contract.md)
 - [`docs/agent_spec_vocabulary.md`](docs/agent_spec_vocabulary.md)
-- [`docs/coding_guidelines.md`](docs/coding_guidelines.md)
+- [`docs/ipxact_protocol.md`](docs/ipxact_protocol.md)
+- [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
+  documentation expectations, and Python docstring/comment conventions
 
 ## Development Setup
 

@@ -1,4 +1,11 @@
-"""Office-compatible archive support for `.spec` documents."""
+"""Office-compatible archive support for `.spec` documents.
+
+`.spec` files are ODT-style ZIP packages with an extra `spec_data/` subtree.
+The office document body remains readable by normal ODT tooling, while
+agent-spec metadata and structured hardware payloads live in custom package
+parts. This wrapper centralizes the package rules so callers do not need to
+know the quirks of `odfdo` or the ODT manifest.
+"""
 
 import copy
 import os
@@ -42,7 +49,12 @@ class AgentSpecArchive:
             self.document = odfdo.Document.new("text")
 
     def _load_custom_files(self) -> None:
-        """Populate the custom-file cache from package entries under `spec_data/`."""
+        """Populate the custom-file cache from package entries under `spec_data/`.
+
+        `odfdo` may return raw bytes, serializable objects, or small wrapper
+        objects depending on the part type. This method normalizes all custom
+        parts to bytes so plugin code can be simple and deterministic.
+        """
         self.custom_files.clear()
 
         for part_name in self.document.get_parts():
@@ -62,7 +74,12 @@ class AgentSpecArchive:
             self.custom_files[part_name] = copy.deepcopy(content_bytes)
 
     def inject_file(self, full_path_in_container: str, content: bytes, media_type: str) -> None:
-        """Store a custom payload and register it so office editors preserve it."""
+        """Store a custom payload and register it so office editors preserve it.
+
+        The manifest update is as important as the byte write: some ODT-aware
+        tools drop unknown package entries that are not represented in
+        `META-INF/manifest.xml`.
+        """
         if not full_path_in_container.startswith("spec_data/"):
             raise ValueError("All custom files must reside in the 'spec_data/' sub-directory.")
 
@@ -80,7 +97,11 @@ class AgentSpecArchive:
         return copy.deepcopy(self.custom_files[full_path_in_container])
 
     def delete_file(self, full_path_in_container: str) -> None:
-        """Remove a custom payload from the archive and package manifest."""
+        """Remove a custom payload from the archive and package manifest.
+
+        Deletion is best-effort because older documents or `odfdo` versions may
+        disagree about whether a package part exists after a partial edit.
+        """
         if full_path_in_container in self.custom_files:
             del self.custom_files[full_path_in_container]
 
@@ -94,7 +115,12 @@ class AgentSpecArchive:
             manifest.del_full_path(full_path_in_container)
 
     def save(self, path: typing.Optional[str] = None) -> None:
-        """Save the archive and normalize the office-compatible package header."""
+        """Save the archive and normalize the office-compatible package header.
+
+        ODT readers expect the `mimetype` ZIP entry to be the first entry and
+        stored without compression. `odfdo` handles most package details, then
+        `_enforce_mimetype_integrity` performs this final compatibility pass.
+        """
         if path is not None:
             save_target = path
         elif self.container_path is not None:

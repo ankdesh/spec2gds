@@ -1,10 +1,10 @@
-<?xml version="1.0" ?>
+<?xml version='1.0' encoding='UTF-8'?>
 <ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2014" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.accellera.org/XMLSchema/IPXACT/1685-2014 http://www.accellera.org/XMLSchema/IPXACT/1685-2014/index.xsd">
   <ipxact:vendor>openhwgroup.org</ipxact:vendor>
   <ipxact:library>ip-blocks</ipxact:library>
   <ipxact:name>APB_I2C_Slave</ipxact:name>
   <ipxact:version>1.0</ipxact:version>
-  <ipxact:model>
+  <ipxact:busInterfaces><ipxact:busInterface><ipxact:name>apb_slave</ipxact:name><ipxact:busType vendor="amba.com" library="AMBA4" name="APB" version="r0p0"/><ipxact:abstractionTypes><ipxact:abstractionType><ipxact:abstractionRef vendor="amba.com" library="AMBA4" name="APB_rtl" version="r0p0"/><ipxact:portMaps><ipxact:portMap><ipxact:logicalPort><ipxact:name>PCLK</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_pclk_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PRESETn</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_presetn_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PADDR</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_paddr_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PSEL</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_psel_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PENABLE</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_penable_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PWRITE</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_pwrite_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PWDATA</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_pwdata_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PREADY</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_pready_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>PRDATA</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>apb_prdata_o</ipxact:name></ipxact:physicalPort></ipxact:portMap></ipxact:portMaps></ipxact:abstractionType></ipxact:abstractionTypes><ipxact:slave/><ipxact:connectionRequired>true</ipxact:connectionRequired><ipxact:bitsInLau>8</ipxact:bitsInLau><ipxact:endianness>little</ipxact:endianness></ipxact:busInterface><ipxact:busInterface><ipxact:name>i2c</ipxact:name><ipxact:busType vendor="openhwgroup.org" library="interfaces" name="i2c" version="1.0"/><ipxact:abstractionTypes><ipxact:abstractionType><ipxact:abstractionRef vendor="openhwgroup.org" library="interfaces" name="i2c_rtl" version="1.0"/><ipxact:portMaps><ipxact:portMap><ipxact:logicalPort><ipxact:name>I2C_SCL_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>i2c_scl_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>I2C_SDA_I</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>i2c_sda_i</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>I2C_SDA_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>i2c_sda_o</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>I2C_SDA_OE</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>i2c_sda_oe</ipxact:name></ipxact:physicalPort></ipxact:portMap><ipxact:portMap><ipxact:logicalPort><ipxact:name>I2C_INTERRUPT_O</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>i2c_interrupt_o</ipxact:name></ipxact:physicalPort></ipxact:portMap></ipxact:portMaps></ipxact:abstractionType></ipxact:abstractionTypes><ipxact:slave/><ipxact:connectionRequired>true</ipxact:connectionRequired><ipxact:bitsInLau>8</ipxact:bitsInLau><ipxact:endianness>little</ipxact:endianness></ipxact:busInterface></ipxact:busInterfaces><ipxact:model>
     <ipxact:views>
       <ipxact:view>
         <ipxact:name>RTL</ipxact:name>
@@ -28,11 +28,11 @@
         <ipxact:name>apb_paddr_i</ipxact:name>
         <ipxact:wire>
           <ipxact:direction>in</ipxact:direction>
-          <ipxact:vector>
+          <ipxact:vectors><ipxact:vector>
             <ipxact:left>11</ipxact:left>
             <ipxact:right>0</ipxact:right>
           </ipxact:vector>
-        </ipxact:wire>
+        </ipxact:vectors></ipxact:wire>
       </ipxact:port>
       <ipxact:port>
         <ipxact:name>apb_psel_i</ipxact:name>
@@ -56,11 +56,11 @@
         <ipxact:name>apb_pwdata_i</ipxact:name>
         <ipxact:wire>
           <ipxact:direction>in</ipxact:direction>
-          <ipxact:vector>
+          <ipxact:vectors><ipxact:vector>
             <ipxact:left>31</ipxact:left>
             <ipxact:right>0</ipxact:right>
           </ipxact:vector>
-        </ipxact:wire>
+        </ipxact:vectors></ipxact:wire>
       </ipxact:port>
       <ipxact:port>
         <ipxact:name>apb_pready_o</ipxact:name>
@@ -72,11 +72,11 @@
         <ipxact:name>apb_prdata_o</ipxact:name>
         <ipxact:wire>
           <ipxact:direction>out</ipxact:direction>
-          <ipxact:vector>
+          <ipxact:vectors><ipxact:vector>
             <ipxact:left>31</ipxact:left>
             <ipxact:right>0</ipxact:right>
           </ipxact:vector>
-        </ipxact:wire>
+        </ipxact:vectors></ipxact:wire>
       </ipxact:port>
       <ipxact:port>
         <ipxact:name>i2c_scl_i</ipxact:name>

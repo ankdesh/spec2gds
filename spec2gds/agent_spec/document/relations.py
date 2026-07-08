@@ -1,3 +1,12 @@
+"""Persisted editor-only relationships that do not belong in document text.
+
+The semantic document parser can infer headings, paragraphs, tables, and links
+from `content.xml`, but it cannot infer every relationship the editor needs.
+This module owns the small JSON sidecar stored inside the `.spec` archive under
+`spec_data/agent-spec-editor/`. Keeping this shape explicit lets the editor
+round-trip UI state without polluting the user-visible document body.
+"""
+
 import json
 import typing
 
@@ -44,6 +53,12 @@ class EditorRelations(pydantic.BaseModel):
 
 
 def load_relations(raw_bytes: bytes | None) -> EditorRelations:
+    """Load editor relations from archive bytes, falling back to an empty model.
+
+    Relations are user-editable metadata, so callers should be resilient to
+    older files, missing files, and partially written JSON. Invalid relation
+    state should not make the whole document unreadable.
+    """
     if raw_bytes is None:
         return EditorRelations()
     try:
@@ -59,6 +74,7 @@ def load_relations(raw_bytes: bytes | None) -> EditorRelations:
 
 
 def dump_relations(relations: EditorRelations) -> bytes:
+    """Serialize relations deterministically for stable diffs and hashes."""
     return json.dumps(
         relations.model_dump(),
         indent=2,
@@ -67,6 +83,12 @@ def dump_relations(relations: EditorRelations) -> bytes:
 
 
 def normalize_ipxact_path(file_path: str) -> str:
+    """Normalize user/editor IP-XACT file references to archive paths.
+
+    The UI often deals in friendly names such as `timer` or `timer.xml`, while
+    the package stores the actual bytes under `spec_data/ipxact/`. Normalizing
+    at the boundary keeps relation records consistent.
+    """
     if file_path.startswith("spec_data/ipxact/"):
         return file_path
     if file_path.endswith(".xml"):
@@ -77,6 +99,11 @@ def normalize_ipxact_path(file_path: str) -> str:
 def attachment_paths(
     attachments: typing.Iterable[HeadingIpxactAttachment | dict[str, typing.Any]],
 ) -> list[str]:
+    """Return unique normalized attachment paths while preserving first-seen order.
+
+    The `dict` arm is intentional: API payloads may be plain JSON dictionaries
+    before Pydantic has rebuilt them as `HeadingIpxactAttachment` instances.
+    """
     seen: set[str] = set()
     paths: list[str] = []
     for attachment in attachments:

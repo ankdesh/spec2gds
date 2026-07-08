@@ -171,10 +171,10 @@ sequenceDiagram
 ```
 
 `document/semantic.py` is intentionally a semantic projection, not a full word
-processor. It supports headings, paragraphs, list items, tables, images, links,
-and adjacent legacy section variants named `Title//version`. Plain-text edits
-are applied only to simple editable text blocks. Blocks with inline markup,
-tables, and images remain read-only in the current editor.
+processor. It supports headings, paragraphs, list items, tables, images, and
+links. Section-version groups are relation metadata, not heading-name syntax.
+Plain-text edits are applied only to simple editable text blocks. Blocks with
+inline markup, tables, and images remain read-only in the current editor.
 
 `document/session.py` validates links and IP-XACT summaries before save. Warnings
 and errors are blocking for the current save flow.

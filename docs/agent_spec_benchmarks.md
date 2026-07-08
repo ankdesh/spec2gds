@@ -15,7 +15,8 @@ PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m benchmarks.agent_spec.hw_do
 PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m pytest tests/agent_spec/test_hw_docs_benchmark.py -q
 ```
 
-The current XML payloads are intentionally tracked even though strict IP-XACT
-schema validation fails. This makes the benchmark useful for measuring future
-improvements in XML normalization, bus-interface extraction, and document-to-
-artifact traceability.
+The PDF and HTML files are the benchmark ground truth. Converted ODT/XML and
+generated `.spec` files can be regenerated to keep the benchmark loadable and
+protocol-correct. IP-XACT payloads must use formal `busInterfaces/busInterface`
+records; the editor should report missing bus interfaces instead of inventing
+them from component-level ports.

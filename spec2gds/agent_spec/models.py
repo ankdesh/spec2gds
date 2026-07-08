@@ -1,10 +1,18 @@
-"""Pydantic contracts for the agent-spec v1 architecture."""
+"""Pydantic contracts for the agent-spec v1 architecture.
+
+These models are the durable JSON shapes stored inside `.spec` archives under
+`spec_data/agent-spec/` and exchanged by the local API. Keep them boring and
+explicit: migrations, UI rendering, and run replay all depend on these field
+names remaining understandable.
+"""
 
 import typing
 
 import pydantic
 
 
+# Tags are intentionally constrained because they drive action discovery and
+# should remain stable across documents and editor sessions.
 V1_TAGS: set[str] = {
     "systemc-perf",
     "systemc-bitaccurate",
@@ -14,6 +22,7 @@ V1_TAGS: set[str] = {
     "configuration",
 }
 
+# Persisted state machines for run execution and artifact writeback.
 RUN_STATES: set[str] = {"queued", "running", "completed", "failed"}
 WRITEBACK_STATES: set[str] = {"auto_applied", "needs_human_feedback"}
 
@@ -146,6 +155,7 @@ class RunRecord(pydantic.BaseModel):
     @pydantic.field_validator("status")
     @classmethod
     def _validate_status(cls, value: str) -> str:
+        """Reject unknown run states before they are persisted."""
         if value not in RUN_STATES:
             raise ValueError(f"Unsupported run status: {value}")
         return value
@@ -167,6 +177,7 @@ class WritebackRecord(pydantic.BaseModel):
     @pydantic.field_validator("status")
     @classmethod
     def _validate_status(cls, value: str) -> str:
+        """Reject unknown writeback states before they are persisted."""
         if value not in WRITEBACK_STATES:
             raise ValueError(f"Unsupported writeback status: {value}")
         return value
@@ -212,4 +223,3 @@ class ActionResult(pydantic.BaseModel):
 
     artifacts: list[ArtifactRef] = pydantic.Field(default_factory=list)
     diagnostics: list[AgentSpecDiagnostic] = pydantic.Field(default_factory=list)
-

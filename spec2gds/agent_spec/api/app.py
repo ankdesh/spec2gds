@@ -11,6 +11,8 @@ import spec2gds.agent_spec.runs.runner as agent_runner
 
 
 class OpenDocumentRequest(pydantic.BaseModel):
+    """Request body for opening a document in the action/run API."""
+
     path: str
     sidecar_root: str | None = None
     user_identity: str = "local"
@@ -18,10 +20,14 @@ class OpenDocumentRequest(pydantic.BaseModel):
 
 
 class TagUpdateRequest(pydantic.BaseModel):
+    """Request body for replacing a block's action-discovery tags."""
+
     tags: list[str]
 
 
 class RunActionRequest(pydantic.BaseModel):
+    """Request body for triggering an action run."""
+
     parameters: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
 
 
@@ -43,6 +49,7 @@ class ServerSession:
 
 
 def _document_state(session: ServerSession) -> dict[str, typing.Any]:
+    """Return the API's compact view of graph state for the open document."""
     return {
         "document_id": session.repository.manifest.document_id,
         "blocks": [
@@ -61,6 +68,7 @@ def _document_state(session: ServerSession) -> dict[str, typing.Any]:
 
 
 def create_app() -> typing.Any:
+    """Create the single-user FastAPI app for graph/actions/runs."""
     try:
         import fastapi
     except Exception as exc:
@@ -70,6 +78,7 @@ def create_app() -> typing.Any:
     state: dict[str, ServerSession] = {}
 
     def active_session() -> ServerSession:
+        """Return the current in-memory session or raise an HTTP error."""
         session = state.get("session")
         if session is None:
             raise fastapi.HTTPException(status_code=400, detail="No agent-spec document is open.")
@@ -77,10 +86,12 @@ def create_app() -> typing.Any:
 
     @app.get("/health")
     def health() -> dict[str, str]:
+        """Simple process health probe."""
         return {"status": "ok"}
 
     @app.post("/documents/open")
     def open_document(request: OpenDocumentRequest) -> dict[str, typing.Any]:
+        """Open a `.spec` document, project its graph, and save metadata."""
         session = ServerSession(request)
         session.repository.project_graph()
         session.repository.save()
@@ -89,12 +100,14 @@ def create_app() -> typing.Any:
 
     @app.get("/blocks")
     def blocks() -> dict[str, typing.Any]:
+        """Return the latest projected block graph for the active document."""
         session = active_session()
         session.repository.project_graph()
         return _document_state(session)
 
     @app.post("/blocks/{block_id}/tags")
     def set_tags(block_id: str, request: TagUpdateRequest) -> dict[str, typing.Any]:
+        """Replace tags on a block and persist the document metadata."""
         session = active_session()
         try:
             session.repository.set_block_tags(block_id, request.tags)
@@ -107,6 +120,7 @@ def create_app() -> typing.Any:
 
     @app.get("/blocks/{block_id}/actions")
     def block_actions(block_id: str) -> dict[str, typing.Any]:
+        """Return actions available for a block's current tags."""
         session = active_session()
         try:
             actions = session.runner.available_actions(block_id)
@@ -120,6 +134,7 @@ def create_app() -> typing.Any:
         action_id: str,
         request: RunActionRequest,
     ) -> dict[str, typing.Any]:
+        """Trigger an action run for a block and return the run record."""
         session = active_session()
         try:
             run_record = session.runner.trigger_action(action_id, block_id, request.parameters)
@@ -131,6 +146,7 @@ def create_app() -> typing.Any:
 
     @app.get("/events")
     def events() -> dict[str, typing.Any]:
+        """Return events emitted during this in-memory server session."""
         session = active_session()
         return {"events": [event.model_dump(mode="json") for event in session.runner.events]}
 

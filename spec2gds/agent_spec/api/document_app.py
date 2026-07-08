@@ -1,3 +1,5 @@
+"""FastAPI app used by the local React document editor."""
+
 import pathlib
 import typing
 
@@ -10,23 +12,31 @@ import spec2gds.agent_spec.api.app as agent_spec_api
 
 
 class IpxactXmlRequest(pydantic.BaseModel):
+    """Request body carrying editable IP-XACT XML text."""
+
     file_path: str
     xml_text: str
 
 
 class EditorSaveRequest(pydantic.BaseModel):
+    """Combined save payload from the document editor."""
+
     text_edits: dict[str, str] = pydantic.Field(default_factory=dict)
     relations: editor_relations.EditorRelations | None = None
     ipxact_xml_edits: dict[str, str] = pydantic.Field(default_factory=dict)
 
 
 class FileBrowserEntry(pydantic.BaseModel):
+    """One entry displayed by the editor's restricted file browser."""
+
     name: str
     path: str
     entry_type: str
 
 
 class FileBrowserResponse(pydantic.BaseModel):
+    """File browser response for one directory."""
+
     directory: str
     parent: str | None = None
     entries: list[FileBrowserEntry]
@@ -101,10 +111,12 @@ def create_app() -> typing.Any:
 
     @app.get("/health")
     def health() -> dict[str, str]:
+        """Simple health endpoint for frontend/dev-server checks."""
         return {"status": "ok"}
 
     @app.get("/documents/snapshot")
     def document_snapshot(path: str) -> dict[str, typing.Any]:
+        """Return a full editor snapshot for the requested document path."""
         session = editor_session.EditorSession.from_path(path)
         return session.snapshot().model_dump()
 
@@ -113,6 +125,7 @@ def create_app() -> typing.Any:
         path: str,
         active_section_versions: dict[str, str],
     ) -> dict[str, typing.Any]:
+        """Persist active section-version selections and return a fresh snapshot."""
         session = editor_session.EditorSession.from_path(path)
         session.persist_active_versions(active_section_versions)
         session.save(path)
@@ -123,6 +136,7 @@ def create_app() -> typing.Any:
         path: str,
         edits: dict[str, str],
     ) -> dict[str, typing.Any]:
+        """Apply plain-text block edits and return a fresh snapshot."""
         session = editor_session.EditorSession.from_path(path)
         session.apply_text_edits(edits)
         session.save(path)
@@ -130,6 +144,7 @@ def create_app() -> typing.Any:
 
     @app.post("/ipxact/preview")
     def preview_ipxact_xml(request: IpxactXmlRequest) -> dict[str, typing.Any]:
+        """Summarize unsaved IP-XACT XML without touching a document package."""
         empty_container = container_module.AgentSpecArchive()
         session = editor_session.EditorSession(empty_container)
         return session.preview_ipxact_xml(request.file_path, request.xml_text).model_dump()
@@ -139,6 +154,7 @@ def create_app() -> typing.Any:
         path: str,
         request: IpxactXmlRequest,
     ) -> dict[str, typing.Any]:
+        """Replace one embedded IP-XACT XML payload and return a fresh snapshot."""
         session = editor_session.EditorSession.from_path(path)
         session.update_ipxact_xml(request.file_path, request.xml_text)
         session.save(path)
@@ -149,6 +165,7 @@ def create_app() -> typing.Any:
         path: str,
         request: EditorSaveRequest,
     ) -> dict[str, typing.Any]:
+        """Apply all editor save changes in one session and return a snapshot."""
         session = editor_session.EditorSession.from_path(path)
         session.apply_editor_save(
             text_edits=request.text_edits,
@@ -160,6 +177,7 @@ def create_app() -> typing.Any:
 
     @app.get("/documents/assets/{asset_id}")
     def document_asset(path: str, asset_id: str) -> typing.Any:
+        """Serve embedded image bytes referenced by a semantic image block."""
         session = editor_session.EditorSession.from_path(path)
         try:
             data, media_type = session.asset_bytes(asset_id)
@@ -169,6 +187,7 @@ def create_app() -> typing.Any:
 
     @app.get("/files")
     def browse_files(directory: str = GENERATED_SAMPLES_ALIAS) -> dict[str, typing.Any]:
+        """Browse directories and expose only subdirectories plus `.spec` files."""
         try:
             current = _resolve_browse_directory(directory)
             entries: list[FileBrowserEntry] = []

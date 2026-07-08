@@ -1,3 +1,12 @@
+"""Lightweight IP-XACT summarizer for editor previews.
+
+This module intentionally extracts a small namespace-tolerant summary instead
+of replacing the strict IP-XACT plugin. The editor needs fast, readable
+component/interface feedback, but it must still preserve IP-XACT semantics:
+ports are not treated as bus interfaces unless formal `busInterface` nodes
+exist in the XML.
+"""
+
 import typing
 
 import lxml.etree as etree
@@ -5,12 +14,16 @@ import pydantic
 
 
 class Diagnostic(pydantic.BaseModel):
+    """Editor-facing diagnostic produced while summarizing IP-XACT XML."""
+
     severity: str
     source: str
     message: str
 
 
 class IpxactVLNV(pydantic.BaseModel):
+    """Vendor/library/name/version identifier used throughout IP-XACT."""
+
     vendor: str = ""
     library: str = ""
     name: str = ""
@@ -18,11 +31,15 @@ class IpxactVLNV(pydantic.BaseModel):
 
 
 class IpxactPortMap(pydantic.BaseModel):
+    """Logical-to-physical port mapping for one bus interface."""
+
     logical_port: str = ""
     physical_port: str = ""
 
 
 class IpxactInterfaceSummary(pydantic.BaseModel):
+    """Compact editor summary of one IP-XACT bus interface."""
+
     name: str
     mode: str = ""
     bus_type: IpxactVLNV = pydantic.Field(default_factory=IpxactVLNV)
@@ -31,6 +48,8 @@ class IpxactInterfaceSummary(pydantic.BaseModel):
 
 
 class IpxactComponentSummary(pydantic.BaseModel):
+    """Compact editor summary of one IP-XACT component XML file."""
+
     file_path: str
     component: IpxactVLNV = pydantic.Field(default_factory=IpxactVLNV)
     interfaces: list[IpxactInterfaceSummary] = pydantic.Field(default_factory=list)
@@ -38,6 +57,7 @@ class IpxactComponentSummary(pydantic.BaseModel):
 
     @property
     def has_blocking_diagnostics(self) -> bool:
+        """Return whether the editor should block saving this XML."""
         for diagnostic in self.diagnostics:
             if diagnostic.severity in {"warning", "error"}:
                 return True
@@ -45,6 +65,7 @@ class IpxactComponentSummary(pydantic.BaseModel):
 
 
 def _text(element: etree._Element, local_name: str) -> str:
+    """Return direct child text by local name, ignoring XML namespace prefixes."""
     result = element.xpath(f"./*[local-name()='{local_name}']/text()")
     if not result:
         return ""
@@ -52,6 +73,7 @@ def _text(element: etree._Element, local_name: str) -> str:
 
 
 def _vlnv_from_children(element: etree._Element) -> IpxactVLNV:
+    """Read VLNV fields stored as child elements."""
     return IpxactVLNV(
         vendor=_text(element, "vendor"),
         library=_text(element, "library"),
@@ -61,6 +83,7 @@ def _vlnv_from_children(element: etree._Element) -> IpxactVLNV:
 
 
 def _vlnv_from_attributes(element: etree._Element | None) -> IpxactVLNV:
+    """Read VLNV fields stored as attributes on a reference element."""
     if element is None:
         return IpxactVLNV()
     return IpxactVLNV(
@@ -72,6 +95,7 @@ def _vlnv_from_attributes(element: etree._Element | None) -> IpxactVLNV:
 
 
 def _first_child(element: etree._Element, local_name: str) -> etree._Element | None:
+    """Return the first direct child with a matching local name."""
     result = element.xpath(f"./*[local-name()='{local_name}']")
     if not result:
         return None
@@ -79,6 +103,7 @@ def _first_child(element: etree._Element, local_name: str) -> etree._Element | N
 
 
 def _extract_port_maps(interface_element: etree._Element) -> list[IpxactPortMap]:
+    """Extract all logical/physical port map pairs from an interface."""
     port_maps: list[IpxactPortMap] = []
     for port_map in interface_element.xpath(".//*[local-name()='portMap']"):
         logical = ""
@@ -99,6 +124,7 @@ def _extract_port_maps(interface_element: etree._Element) -> list[IpxactPortMap]
 
 
 def _extract_mode(interface_element: etree._Element) -> str:
+    """Infer interface mode across IP-XACT schema variants."""
     for mode_name in [
         "master",
         "slave",
@@ -116,11 +142,14 @@ def _extract_mode(interface_element: etree._Element) -> str:
 
     legacy_mode = _text(interface_element, "interfaceMode")
     if legacy_mode:
+        # Some older or simplified XML stores mode as text rather than a named
+        # child element.
         return legacy_mode
     return ""
 
 
 def _extract_interface(interface_element: etree._Element) -> IpxactInterfaceSummary:
+    """Build a compact summary for one `busInterface` element."""
     bus_type = _vlnv_from_attributes(_first_child(interface_element, "busType"))
     abstraction_type = IpxactVLNV()
     abstraction_ref_elements = interface_element.xpath(".//*[local-name()='abstractionRef']")
@@ -144,6 +173,7 @@ def _extract_interface(interface_element: etree._Element) -> IpxactInterfaceSumm
 
 
 def extract_ipxact_summary(file_path: str, xml_bytes: bytes) -> IpxactComponentSummary:
+    """Parse XML bytes and return a namespace-tolerant component summary."""
     diagnostics: list[Diagnostic] = []
     try:
         root = etree.fromstring(xml_bytes)
