@@ -455,7 +455,6 @@ def _agent_spec_metadata_info(spec_archive: archive.AgentSpecArchive) -> dict[st
                         "heading_id": block.heading_id,
                         "title": block.title,
                         "level": block.level,
-                        "tags": block.tags,
                         "version_count": len(block.versions),
                         "active_version": graph_payload.active_versions.get(block.block_id, ""),
                     }

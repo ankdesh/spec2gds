@@ -123,6 +123,9 @@ class AgentSpecRepository:
             agent_models.SpecGraph,
         )
         if isinstance(loaded, agent_models.SpecGraph):
+            # Graph v1 stored tag metadata. Pydantic ignores that retired field
+            # while loading; normal saves emit the v2 shape without it.
+            loaded.version = 2
             return loaded
         return agent_models.SpecGraph()
 
@@ -240,19 +243,6 @@ class AgentSpecRepository:
         }
         return stable_hash(_json_bytes(data))
 
-    def set_block_tags(self, block_id: str, tags: list[str]) -> None:
-        """Set validated action-discovery tags on a block."""
-        self.project_graph()
-        if block_id not in self.graph.blocks:
-            raise KeyError(f"Unknown block: {block_id}")
-        clean_tags: list[str] = []
-        for tag in tags:
-            if tag not in agent_models.V1_TAGS:
-                raise ValueError(f"Unsupported v1 tag: {tag}")
-            if tag not in clean_tags:
-                clean_tags.append(tag)
-        self.graph.blocks[block_id].tags = clean_tags
-
     def active_version(self, block_id: str) -> agent_models.BlockVersionRecord:
         """Return a defensive copy of the active version for a block."""
         self.project_graph()
@@ -321,6 +311,13 @@ class AgentSpecRepository:
     def persist_snapshot(self, run_id: str, snapshot: agent_models.InputSnapshot) -> None:
         """Persist the immutable action input snapshot for reproducibility."""
         self._persist_model(f"spec_data/agent-spec/runs/{run_id}/input_snapshot.json", snapshot)
+
+    def persist_report(self, report: agent_models.ActionReport, a2ui_messages: list[dict[str, typing.Any]]) -> None:
+        """Persist structured executor output and its derived A2UI stream."""
+        run_root = f"spec_data/agent-spec/runs/{report.run_id}"
+        self._persist_model(f"{run_root}/report.json", report)
+        message_lines = b"\n".join(json.dumps(message, sort_keys=True).encode("utf-8") for message in a2ui_messages)
+        self._persist_bytes(f"{run_root}/report.a2ui.jsonl", message_lines + b"\n")
 
     def persist_writeback(self, writeback: agent_models.WritebackRecord) -> None:
         """Persist the writeback decision produced by the runner."""

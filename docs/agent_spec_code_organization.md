@@ -45,7 +45,7 @@ tests/agent_spec/
 | Need | Location |
 | --- | --- |
 | New API route for editor snapshots, saves, file browsing, or IP-XACT editing | `spec2gds/agent_spec/api/document_app.py` |
-| New API route for blocks, tags, actions, runs, or run events | `spec2gds/agent_spec/api/app.py` |
+| New API route for blocks, actions, executor callbacks, runs, or reports | `spec2gds/agent_spec/api/app.py` |
 | New document parsing or edit behavior | `spec2gds/agent_spec/document/semantic.py` |
 | New editor save/session behavior | `spec2gds/agent_spec/document/session.py` |
 | New relation metadata | `spec2gds/agent_spec/document/relations.py` |
@@ -66,7 +66,7 @@ When behavior changes, update the document that owns that purpose:
 | Data contract for actions/runs/writebacks | `docs/agent_spec_action_contract.md` |
 | Terms or naming | `docs/agent_spec_vocabulary.md` |
 | Setup commands or test commands | `README.md` |
-| Pipeline read/writeback APIs | `docs/agent_spec_pipeline_api.md` |
+| Action context/executor completion APIs | `docs/agent_spec_action_execution.md` |
 | Open design choices | `docs/agent_spec_roadmap_questions.md` |
 | Benchmarks | `docs/agent_spec_benchmarks.md` |
 | Contributor rules | `docs/coding_guidelines.md` |

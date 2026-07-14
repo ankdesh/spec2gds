@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { ReportSurface } from "./ReportSurface";
 import "./styles.css";
 
 type Diagnostic = {
@@ -111,14 +112,32 @@ type AgentBlock = {
   block_id: string;
   title: string;
   level: number;
-  tags: string[];
 };
 
 type AgentAction = {
   action_id: string;
   title: string;
   summary: string;
+  input_schema: JsonSchema;
 };
+
+type JsonSchema = {
+  type?: string;
+  title?: string;
+  description?: string;
+  default?: unknown;
+  enum?: unknown[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  additionalProperties?: boolean;
+};
+
+type ConditionCheck = { check_id: string; severity: string; message: string; passed: boolean };
+type PreconditionReport = { can_execute: boolean; checks: ConditionCheck[] };
+type RunRecord = { run_id: string; status: string; action_id: string; completed_at?: string };
+type ActionSelection = { blockId: string; action: AgentAction };
+type ActionReportDrawer = { surface_id: string; messages: Record<string, unknown>[]; title: string };
+type DashboardRun = { document_id: string; document_path: string; run: RunRecord & { started_at?: string }; report: { review_required: boolean; surface_id: string } | null };
 
 type AgentArtifact = {
   artifact_id: string;
@@ -147,7 +166,6 @@ type AgentDocumentState = {
 
 const apiBase = "http://127.0.0.1:8000";
 const initialBrowseDirectory = "agent-spec://samples/generated";
-const v1Tags = ["systemc-perf", "systemc-bitaccurate", "rtl", "ip", "interface", "configuration"];
 
 function headingForVariant(variant: SectionVariant): string {
   return variant.heading_id ?? variant.heading_block_id ?? "";
@@ -201,15 +219,22 @@ function App() {
   const [xmlEdits, setXmlEdits] = useState<Record<string, string>>({});
   const [openAttachHeading, setOpenAttachHeading] = useState<string | null>(null);
   const [openVersionGroup, setOpenVersionGroup] = useState<string | null>(null);
-  const [openTagHeading, setOpenTagHeading] = useState<string | null>(null);
+  const [openActionHeading, setOpenActionHeading] = useState<string | null>(null);
   const [openAgentArtifactHeading, setOpenAgentArtifactHeading] = useState<string | null>(null);
   const [drawerPath, setDrawerPath] = useState<string | null>(null);
+  const [reportDrawer, setReportDrawer] = useState<ActionReportDrawer | null>(null);
   const [xmlEditPath, setXmlEditPath] = useState<string | null>(null);
   const [status, setStatus] = useState("Choose an agent-spec file to load.");
   const [agentBlocks, setAgentBlocks] = useState<Record<string, AgentBlock>>({});
-  const [agentActions, setAgentActions] = useState<Record<string, AgentAction[]>>({});
+  const [agentActions, setAgentActions] = useState<AgentAction[]>([]);
   const [agentArtifacts, setAgentArtifacts] = useState<Record<string, AgentArtifact>>({});
   const [agentAttachments, setAgentAttachments] = useState<Record<string, AgentAttachment[]>>({});
+  const [actionSelection, setActionSelection] = useState<ActionSelection | null>(null);
+  const [actionInputs, setActionInputs] = useState<Record<string, unknown>>({});
+  const [preconditions, setPreconditions] = useState<PreconditionReport | null>(null);
+  const [inputsDirty, setInputsDirty] = useState(false);
+  const [runsDashboardOpen, setRunsDashboardOpen] = useState(false);
+  const [dashboardRuns, setDashboardRuns] = useState<DashboardRun[]>([]);
 
   const relations = relationsDraft ?? snapshot?.relations ?? null;
   const sectionGroups = relations?.section_groups ?? snapshot?.document.section_groups ?? [];
@@ -225,10 +250,28 @@ function App() {
     return Object.fromEntries(entries) as Record<string, IpxactSummary>;
   }, [snapshot]);
   const drawerComponent = drawerPath ? componentsByPath[drawerPath] : null;
+  const drawerOpen = Boolean(drawerComponent || reportDrawer || runsDashboardOpen);
   const hasDraft =
     Object.keys(textEdits).length > 0 ||
     Object.keys(xmlEdits).length > 0 ||
     JSON.stringify(relationsDraft) !== JSON.stringify(snapshot?.relations ?? null);
+
+  function closeRightPanels() {
+    setDrawerPath(null);
+    setReportDrawer(null);
+    setRunsDashboardOpen(false);
+    setXmlEditPath(null);
+  }
+
+  function openIpxactPanel(filePath: string) {
+    closeRightPanels();
+    setDrawerPath(filePath);
+  }
+
+  function openRunsPanel() {
+    closeRightPanels();
+    setRunsDashboardOpen(true);
+  }
 
   useEffect(() => {
     if (sidebarOpen) {
@@ -247,13 +290,27 @@ function App() {
       }
       setOpenAttachHeading(null);
       setOpenVersionGroup(null);
-      setOpenTagHeading(null);
+      setOpenActionHeading(null);
       setOpenAgentArtifactHeading(null);
     }
 
     document.addEventListener("pointerdown", closeFloatingMenus);
     return () => document.removeEventListener("pointerdown", closeFloatingMenus);
   }, []);
+
+  async function refreshDashboardRuns() {
+    const response = await fetch(`${apiBase}/agent-spec/runs`);
+    if (!response.ok) return;
+    const payload = (await response.json()) as { runs: DashboardRun[] };
+    setDashboardRuns(payload.runs);
+  }
+
+  useEffect(() => {
+    if (!runsDashboardOpen) return;
+    void refreshDashboardRuns();
+    const timer = window.setInterval(() => void refreshDashboardRuns(), 5000);
+    return () => window.clearInterval(timer);
+  }, [runsDashboardOpen]);
 
   async function browseFiles(directory: string) {
     const response = await fetch(`${apiBase}/files?directory=${encodeURIComponent(directory)}`);
@@ -279,7 +336,7 @@ function App() {
     setRelationsDraft(cloneRelations(data.relations));
     setTextEdits({});
     setXmlEdits({});
-    setDrawerPath(null);
+    closeRightPanels();
     setStatus("Document loaded.");
     await openAgentSpec(nextPath);
   }
@@ -365,55 +422,76 @@ function App() {
     setAgentBlocks(nextBlocks);
     setAgentArtifacts(data.artifact_refs);
     setAgentAttachments(data.attachments);
-    await refreshAgentActions(data.blocks);
+    const actionsResponse = await fetch(`${apiBase}/agent-spec/actions`);
+    if (actionsResponse.ok) {
+      const actions = (await actionsResponse.json()) as { actions: AgentAction[] };
+      setAgentActions(actions.actions);
+    }
   }
 
-  async function refreshAgentActions(blocks: AgentBlock[]) {
-    const entries = await Promise.all(
-      blocks.map(async (block) => {
-        const response = await fetch(`${apiBase}/agent-spec/blocks/${encodeURIComponent(block.block_id)}/actions`);
-        if (!response.ok) {
-          return [block.block_id, []] as const;
-        }
-        const data = (await response.json()) as { actions: AgentAction[] };
-        return [block.block_id, data.actions] as const;
-      })
+  function defaultsForSchema(schema: JsonSchema): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(schema.properties ?? {}).flatMap(([name, field]) =>
+      field.default === undefined ? [] : [[name, field.default]]
+    ));
+  }
+
+  async function checkAction(selection = actionSelection, inputs = actionInputs) {
+    if (!selection) return;
+    const response = await fetch(
+      `${apiBase}/agent-spec/blocks/${encodeURIComponent(selection.blockId)}/actions/${encodeURIComponent(selection.action.action_id)}/preconditions`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inputs }) }
     );
-    setAgentActions(Object.fromEntries(entries) as Record<string, AgentAction[]>);
-  }
-
-  async function updateAgentTags(blockId: string, tags: string[]) {
-    const response = await fetch(`${apiBase}/agent-spec/blocks/${encodeURIComponent(blockId)}/tags`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tags })
-    });
     if (!response.ok) {
-      setStatus(`Tag update failed: ${response.status}`);
+      setStatus(`Precondition check failed: ${response.status}`);
       return;
     }
-    const block = (await response.json()) as AgentBlock;
-    const nextBlocks = { ...agentBlocks, [block.block_id]: block };
-    setAgentBlocks(nextBlocks);
-    await refreshAgentActions(Object.values(nextBlocks));
+    setPreconditions((await response.json()) as PreconditionReport);
+    setInputsDirty(false);
   }
 
-  async function runAgentAction(blockId: string, actionId: string) {
-    setStatus(`Running ${actionId}...`);
+  async function selectAction(blockId: string, action: AgentAction) {
+    const inputs = defaultsForSchema(action.input_schema);
+    const selection = { blockId, action };
+    setActionSelection(selection);
+    setActionInputs(inputs);
+    setPreconditions(null);
+    setInputsDirty(false);
+    await checkAction(selection, inputs);
+  }
+
+  async function runAgentAction() {
+    if (!actionSelection) return;
+    const { blockId, action } = actionSelection;
+    setStatus(`Dispatching ${action.title}...`);
     const response = await fetch(
-      `${apiBase}/agent-spec/blocks/${encodeURIComponent(blockId)}/actions/${encodeURIComponent(actionId)}/runs`,
+      `${apiBase}/agent-spec/blocks/${encodeURIComponent(blockId)}/actions/${encodeURIComponent(action.action_id)}/runs`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ parameters: { delay_seconds: 1 } })
+        body: JSON.stringify({ inputs: actionInputs })
       }
     );
     if (!response.ok) {
-      setStatus(`Action failed: ${response.status}`);
+      setStatus(`Action launch failed: ${response.status}`);
       return;
     }
-    await openAgentSpec(path);
-    setStatus(`${actionId} completed and attached artifact metadata.`);
+    setStatus(`${action.title} was dispatched. Track it from Runs.`);
+    setOpenActionHeading(null);
+  }
+
+  async function openRunReport(item: DashboardRun) {
+    const response = await fetch(`${apiBase}/agent-spec/runs/${encodeURIComponent(item.run.run_id)}`);
+    if (!response.ok) {
+      setStatus(`Could not load report: ${response.status}`);
+      return;
+    }
+    const payload = (await response.json()) as { data: { report: { surface_id: string } | null; a2ui_messages: Record<string, unknown>[] } };
+    if (!payload.data.report) {
+      setStatus("This run has no completed report yet.");
+      return;
+    }
+    closeRightPanels();
+    setReportDrawer({ surface_id: payload.data.report.surface_id, messages: payload.data.a2ui_messages, title: `Action report: ${item.run.action_id}` });
   }
 
   function renderText(block: SemanticBlock) {
@@ -446,7 +524,7 @@ function App() {
     const headingId = block.heading_id ?? block.block_id;
     const attachments = relations?.ipxact_attachments[headingId] ?? [];
     const agentBlock = agentBlocks[headingId];
-    const actions = agentActions[headingId] ?? [];
+    const actions = agentActions;
     const agentBlockAttachments = agentAttachments[headingId] ?? [];
     const attachedComponents = attachments
       .map((attachment) => componentsByPath[attachment.file_path])
@@ -474,16 +552,6 @@ function App() {
             <span aria-hidden="true">⧉</span>
             <span>{attachments.length}</span>
           </button>
-          {agentBlock && (
-            <button
-              className={agentBlock.tags.length > 0 ? "icon-button tag-button has-tags" : "icon-button tag-button"}
-              type="button"
-              title={`${agentBlock.tags.length} tag${agentBlock.tags.length === 1 ? "" : "s"}`}
-              onClick={() => setOpenTagHeading(openTagHeading === headingId ? null : headingId)}
-            >
-              #
-            </button>
-          )}
           {agentBlockAttachments.length > 0 && (
             <button
               className="icon-button agent-artifact-button has-agent-artifacts"
@@ -496,17 +564,16 @@ function App() {
               <span>{agentBlockAttachments.length}</span>
             </button>
           )}
-          {actions.map((action) => (
+          {agentBlock && (
             <button
-              key={action.action_id}
               className="action-button"
               type="button"
-              title={action.summary}
-              onClick={() => void runAgentAction(headingId, action.action_id)}
+              title="Choose an action"
+              onClick={() => setOpenActionHeading(openActionHeading === headingId ? null : headingId)}
             >
-              {action.title}
+              Actions ▾
             </button>
-          ))}
+          )}
         </div>
         {group && openVersionGroup === group.group_id && (
           <div className="floating-menu version-menu">
@@ -532,7 +599,7 @@ function App() {
               <div key={component.file_path} className="attachment-row">
                 <span>{component.component.name || component.file_path}</span>
                 <div className="attachment-actions">
-                  <button type="button" onClick={() => setDrawerPath(component.file_path)}>
+                  <button type="button" onClick={() => openIpxactPanel(component.file_path)}>
                     Open
                   </button>
                   <button type="button" onClick={() => toggleAttachment(headingId, component.file_path)}>
@@ -547,25 +614,35 @@ function App() {
             {attachedComponents.length === 0 && <p className="empty-note">No IP-XACT attached to this heading.</p>}
           </div>
         )}
-        {openTagHeading === headingId && agentBlock && (
-          <div className="floating-menu tag-menu">
-            <strong>Tags</strong>
-            {v1Tags.map((tag) => {
-              const checked = agentBlock.tags.includes(tag);
-              const nextTags = checked
-                ? agentBlock.tags.filter((candidate) => candidate !== tag)
-                : [...agentBlock.tags, tag];
-              return (
-                <button
-                  key={tag}
-                  className={checked ? "menu-item active" : "menu-item"}
-                  type="button"
-                  onClick={() => void updateAgentTags(headingId, nextTags)}
-                >
-                  {tag}
-                </button>
-              );
-            })}
+        {openActionHeading === headingId && (
+          <div className="floating-menu action-menu">
+            {!actionSelection || actionSelection.blockId !== headingId ? (
+              <>
+                <strong>Actions</strong>
+                {actions.map((action) => (
+                  <button key={action.action_id} className="menu-item" type="button" onClick={() => void selectAction(headingId, action)}>
+                    <strong>{action.title}</strong><small>{action.summary}</small>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                <button className="secondary-button" type="button" onClick={() => { setActionSelection(null); setPreconditions(null); }}>← All actions</button>
+                <strong>{actionSelection.action.title}</strong>
+                <p>{actionSelection.action.summary}</p>
+                {Object.entries(actionSelection.action.input_schema.properties ?? {}).map(([name, field]) => {
+                  const unsupported = field.type === "object" || field.type === "array" || !["string", "number", "integer", "boolean", undefined].includes(field.type);
+                  const value = actionInputs[name];
+                  return <label key={name} className="action-input">{field.title ?? name}
+                    {field.description && <small>{field.description}</small>}
+                    {unsupported ? <span className="input-error">Unsupported input schema.</span> : field.enum ? <select value={String(value ?? "")} onChange={(event) => { setActionInputs((current) => ({ ...current, [name]: event.target.value })); setInputsDirty(true); }}><option value="">Select…</option>{field.enum.map((item) => <option key={String(item)} value={String(item)}>{String(item)}</option>)}</select> : field.type === "boolean" ? <input type="checkbox" checked={Boolean(value)} onChange={(event) => { setActionInputs((current) => ({ ...current, [name]: event.target.checked })); setInputsDirty(true); }} /> : <input type={field.type === "number" || field.type === "integer" ? "number" : "text"} value={String(value ?? "")} onChange={(event) => { const next = field.type === "number" || field.type === "integer" ? Number(event.target.value) : event.target.value; setActionInputs((current) => ({ ...current, [name]: next })); setInputsDirty(true); }} />}
+                  </label>;
+                })}
+                {preconditions && <div className="condition-list">{preconditions.checks.map((check) => <p key={check.check_id} className={check.passed ? "passed" : "failed"}>{check.passed ? "✓" : "!"} {check.message}</p>)}</div>}
+                <button type="button" className="secondary-button" onClick={() => void checkAction()}>Check prerequisites</button>
+                <button type="button" disabled={!preconditions?.can_execute || inputsDirty} onClick={() => void runAgentAction()}>Trigger action</button>
+              </>
+            )}
           </div>
         )}
         {openAgentArtifactHeading === headingId && (
@@ -643,6 +720,7 @@ function App() {
           <button type="button" onClick={() => setSidebarOpen(true)}>Open</button>
           <button type="button" onClick={loadSnapshot} disabled={!path}>Reload</button>
           <button type="button" onClick={saveAll} disabled={!snapshot || !hasDraft}>Save</button>
+          <button type="button" onClick={openRunsPanel}>Runs{dashboardRuns.length ? ` (${dashboardRuns.length})` : ""}</button>
         </div>
       </header>
 
@@ -656,7 +734,7 @@ function App() {
         </section>
       )}
 
-      <section className={`${drawerComponent ? "workspace drawer-open" : "workspace"} ${sidebarOpen ? "sidebar-open" : ""}`}>
+      <section className={`${drawerOpen ? "workspace drawer-open" : "workspace"} ${sidebarOpen ? "sidebar-open" : ""}`}>
         {sidebarOpen && (
           <aside className="file-sidebar">
             <div className="sidebar-header">
@@ -704,6 +782,30 @@ function App() {
           {!snapshot && <p className="empty-state">Load an agent-spec file to begin.</p>}
           {snapshot?.document.blocks.map(renderBlock)}
         </article>
+
+        {runsDashboardOpen && (
+          <aside className="ipxact-drawer runs-sidebar" aria-label="All runs">
+            <div className="drawer-header">
+              <div><h2>All runs</h2><p>Runs continue after changing documents.</p></div>
+              <button type="button" className="icon-button" onClick={() => setRunsDashboardOpen(false)}>×</button>
+            </div>
+            <button type="button" className="secondary-button" onClick={() => void refreshDashboardRuns()}>Refresh</button>
+            <div className="runs-list">
+              {dashboardRuns.map((item) => (
+                <article key={item.run.run_id} className="run-card">
+                  <div><strong>{item.run.action_id}</strong><p>{item.document_path}</p><small>{item.run.run_id}</small></div>
+                  <span className={`run-state ${item.run.status}`}>{item.run.status}{item.report?.review_required ? " · review" : ""}</span>
+                  <div className="run-card-actions">
+                    <button type="button" disabled={!item.report} onClick={() => void openRunReport(item)}>Report</button>
+                    <button type="button" className="secondary-button" onClick={() => setStatus("Cancel will be available in a future executor update.")}>Cancel</button>
+                    <button type="button" className="secondary-button" onClick={() => setStatus("Restart will be available in a future executor update.")}>Restart</button>
+                  </div>
+                </article>
+              ))}
+              {dashboardRuns.length === 0 && <p className="empty-note">No runs have been dispatched in this server session.</p>}
+            </div>
+          </aside>
+        )}
 
         {drawerComponent && (
           <aside className="ipxact-drawer">
@@ -758,6 +860,15 @@ function App() {
                 placeholder="Paste replacement IP-XACT XML here"
               />
             )}
+          </aside>
+        )}
+        {reportDrawer && (
+          <aside className="ipxact-drawer report-drawer">
+            <div className="drawer-header">
+              <div><h2>{reportDrawer.title}</h2><p>Read-only executor result</p></div>
+              <button type="button" className="icon-button" onClick={() => setReportDrawer(null)}>×</button>
+            </div>
+            <ReportSurface messages={reportDrawer.messages} surfaceId={reportDrawer.surface_id} />
           </aside>
         )}
       </section>

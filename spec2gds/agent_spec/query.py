@@ -1,6 +1,6 @@
-"""Shared read/query services for UI and pipeline-facing `.spec` APIs.
+"""Shared read/query services for UI and action-facing `.spec` APIs.
 
-The editor and external pipelines need different response shapes, but they
+The editor and external executors need different response shapes, but they
 should agree on the same source facts: semantic blocks, active versions,
 relations, IP-XACT attachments, links, artifacts, and diagnostics. This module
 assembles those facts without saving or sanitizing the source document.
@@ -20,13 +20,13 @@ import spec2gds.agent_spec.package.archive as archive
 import spec2gds.agent_spec.storage.repository as repository
 
 
-PIPELINE_SCHEMA_VERSION: str = "agent-spec.pipeline.v1"
+ACTION_SCHEMA_VERSION: str = "agent-spec.actions.v1"
 
 
-class PipelineEnvelope(pydantic.BaseModel):
-    """Versioned response wrapper for pipeline read APIs."""
+class ActionEnvelope(pydantic.BaseModel):
+    """Versioned response wrapper for action and executor read APIs."""
 
-    schema_version: str = PIPELINE_SCHEMA_VERSION
+    schema_version: str = ACTION_SCHEMA_VERSION
     document_hash: str
     loaded_at: str
     data: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
@@ -34,7 +34,7 @@ class PipelineEnvelope(pydantic.BaseModel):
 
 
 class AgentSpecQueryService:
-    """Read-only facade over a `.spec` document for UI and pipeline consumers."""
+    """Read-only facade over a `.spec` document for UI and executor consumers."""
 
     document_path: pathlib.Path
     container: archive.AgentSpecArchive
@@ -62,16 +62,16 @@ class AgentSpecQueryService:
         self,
         data: dict[str, typing.Any],
         diagnostics: list[agent_models.AgentSpecDiagnostic] | None = None,
-    ) -> PipelineEnvelope:
-        """Wrap endpoint data in the v1 pipeline response envelope."""
-        return PipelineEnvelope(
+    ) -> ActionEnvelope:
+        """Wrap endpoint data in the v1 action response envelope."""
+        return ActionEnvelope(
             document_hash=self.document_hash,
             loaded_at=self.loaded_at,
             data=data,
             diagnostics=diagnostics or [],
         )
 
-    def document_summary(self) -> PipelineEnvelope:
+    def document_summary(self) -> ActionEnvelope:
         """Return document-level identity and diagnostic summary."""
         manifest_value = self.manifest.model_dump(mode="json") if self.manifest is not None else None
         return self.envelope(
@@ -89,16 +89,16 @@ class AgentSpecQueryService:
             self._all_diagnostics(),
         )
 
-    def blocks(self) -> PipelineEnvelope:
-        """Return pipeline-friendly block summaries."""
+    def blocks(self) -> ActionEnvelope:
+        """Return executor-friendly block summaries."""
         return self.envelope({"blocks": [self._block_summary(block) for block in self.graph.blocks.values()]})
 
-    def block(self, block_id: str) -> PipelineEnvelope:
+    def block(self, block_id: str) -> ActionEnvelope:
         """Return one block with all version records."""
         block = self._require_block(block_id)
         return self.envelope({"block": self._block_detail(block)})
 
-    def block_context(self, block_id: str, version_id: str | None = None) -> PipelineEnvelope:
+    def block_context(self, block_id: str, version_id: str | None = None) -> ActionEnvelope:
         """Return a section bundle for one block and active or explicit version."""
         block = self._require_block(block_id)
         selected_version = self._select_version(block, version_id)
@@ -148,7 +148,7 @@ class AgentSpecQueryService:
         }
         return self.envelope(data, self._context_diagnostics(block_id, attached_paths))
 
-    def ipxact_components(self) -> PipelineEnvelope:
+    def ipxact_components(self) -> ActionEnvelope:
         """Return summaries for all embedded IP-XACT payloads."""
         return self.envelope(
             {"components": [self._ipxact_summary(summary) for summary in self.snapshot.ipxact_components]},
@@ -166,7 +166,7 @@ class AgentSpecQueryService:
             raise KeyError(f"Unknown IP-XACT file: {file_path}")
         return self.container.extract_file(normalized), "application/xml+ipxact"
 
-    def artifacts(self) -> PipelineEnvelope:
+    def artifacts(self) -> ActionEnvelope:
         """Return all persisted artifact refs and block attachments."""
         return self.envelope(
             {
@@ -181,8 +181,8 @@ class AgentSpecQueryService:
             }
         )
 
-    def runs(self) -> PipelineEnvelope:
-        """Return persisted run and writeback summaries from the package."""
+    def runs(self) -> ActionEnvelope:
+        """Return persisted run and artifact-application summaries."""
         return self.envelope(
             {
                 "runs": [self._json_file(path) for path in self._run_paths()],
@@ -190,21 +190,25 @@ class AgentSpecQueryService:
             }
         )
 
-    def run(self, run_id: str) -> PipelineEnvelope:
+    def run(self, run_id: str) -> ActionEnvelope:
         """Return persisted metadata for one run."""
         run_path = f"spec_data/agent-spec/runs/{run_id}/run.json"
         if run_path not in self.container.custom_files:
             raise KeyError(f"Unknown run: {run_id}")
         snapshot_path = f"spec_data/agent-spec/runs/{run_id}/input_snapshot.json"
         events_path = f"spec_data/agent-spec/runs/{run_id}/events.ndjson"
+        report_path = f"spec_data/agent-spec/runs/{run_id}/report.json"
+        a2ui_path = f"spec_data/agent-spec/runs/{run_id}/report.a2ui.jsonl"
         data = {
             "run": self._json_file(run_path),
             "input_snapshot": self._json_file(snapshot_path) if snapshot_path in self.container.custom_files else None,
             "events": self._ndjson_file(events_path) if events_path in self.container.custom_files else [],
+            "report": self._json_file(report_path) if report_path in self.container.custom_files else None,
+            "a2ui_messages": self._ndjson_file(a2ui_path) if a2ui_path in self.container.custom_files else [],
         }
         return self.envelope(data)
 
-    def links(self) -> PipelineEnvelope:
+    def links(self) -> ActionEnvelope:
         """Return all visible document links and current link diagnostics."""
         link_diagnostics = [
             _diagnostic_from_editor(item)
@@ -268,7 +272,6 @@ class AgentSpecQueryService:
             "heading_id": block.heading_id,
             "title": block.title,
             "level": block.level,
-            "tags": list(block.tags),
             "active_version_id": self.graph.active_versions.get(block.block_id, ""),
             "version_count": len(block.versions),
             "artifact_count": len(attachments),
@@ -304,9 +307,9 @@ class AgentSpecQueryService:
         return {attachment.file_path for attachment in self.snapshot.relations.ipxact_attachments.get(block_id, [])}
 
     def _ipxact_summary(self, summary: typing.Any) -> dict[str, typing.Any]:
-        """Return a pipeline summary with a stable raw XML endpoint hint."""
+        """Return an action-context summary with a stable raw XML endpoint hint."""
         data = summary.model_dump(mode="json")
-        data["raw_endpoint"] = "/agent-spec/pipeline/ipxact/raw"
+        data["raw_endpoint"] = "/agent-spec/ipxact/raw"
         data["raw_query"] = {"file_path": summary.file_path}
         return data
 
@@ -442,7 +445,7 @@ def _block_content_hash(
 
 
 def _diagnostic_from_editor(diagnostic: typing.Any) -> agent_models.AgentSpecDiagnostic:
-    """Convert editor diagnostics into the pipeline diagnostic contract."""
+    """Convert editor diagnostics into the action diagnostic contract."""
     return agent_models.AgentSpecDiagnostic(
         severity=diagnostic.severity,
         source=diagnostic.source,
@@ -452,7 +455,7 @@ def _diagnostic_from_editor(diagnostic: typing.Any) -> agent_models.AgentSpecDia
 
 
 def _diagnostic_from_ipxact(diagnostic: typing.Any) -> agent_models.AgentSpecDiagnostic:
-    """Convert IP-XACT summary diagnostics into the pipeline diagnostic contract."""
+    """Convert IP-XACT summary diagnostics into the action diagnostic contract."""
     return agent_models.AgentSpecDiagnostic(
         severity=diagnostic.severity,
         source=diagnostic.source,

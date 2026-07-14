@@ -12,7 +12,7 @@ extra project-owned data. The visible specification remains normal ODT
 `content.xml`; structured payloads and app metadata live under `spec_data/`.
 
 This document focuses on the document contract itself. It does not cover import
-pipelines, benchmark rebuild workflows, or external execution systems.
+executor integrations, benchmark rebuild workflows, or external execution systems.
 
 ## Mental Model
 
@@ -466,15 +466,14 @@ All JSON entries use media type
 
 | Field | Type |
 | --- | --- |
-| `version` | `int`, default `1` |
+| `version` | `int`, default `2` |
 | `blocks` | `dict[str, BlockRecord]` |
 | `active_versions` | `dict[str, str]` mapping block ID to active version ID |
 | `artifact_refs` | `dict[str, ArtifactRef]` |
 | `attachments` | `dict[str, list[AttachmentRecord]]` |
 
-`BlockRecord` fields are `block_id`, `heading_id`, `title`, `level`, `tags`,
-and `versions`. Supported tags are `systemc-perf`, `systemc-bitaccurate`,
-`rtl`, `ip`, `interface`, and `configuration`.
+`BlockRecord` fields are `block_id`, `heading_id`, `title`, `level`, and
+`versions`.
 
 `BlockVersionRecord` fields are `version_id`, `block_id`, `content_hash`,
 `block_ids`, `artifact_ref_ids`, and `created_at`. A version covers the heading
@@ -488,9 +487,9 @@ level. The content hash includes section text and attached artifact IDs.
 `AttachmentRecord` fields are `attachment_id`, `block_id`, `artifact_id`,
 `role`, `run_id`, and `created_at`.
 
-Run, writeback, and checkpoint records are part of the persisted document schema
+Run, report, artifact-application, and checkpoint records are part of the persisted document schema
 because they live inside the package. Their runtime lifecycle is described in
-`docs/agent_spec_action_contract.md`.
+`docs/agent_spec_action_execution.md`.
 
 Implementation:
 
@@ -560,19 +559,18 @@ The mounted action API under `/agent-spec` also reads and writes the same
 document package, especially `manifest.json`, `graph.json`, versions,
 artifacts, runs, and writebacks.
 
-Pipeline read endpoints under `/agent-spec/pipeline/` use a shared read/query
-service rather than the editor-only response shape. They are read-only and
+Action context endpoints under `/agent-spec/` use a shared read/query service
+rather than the editor-only response shape. They are read-only and
 return versioned response envelopes with document hash, loaded timestamp, data,
-and diagnostics. The section context endpoint is the primary pipeline input
+and diagnostics. The section context endpoint is the primary executor input
 shape: it joins block metadata, the active or explicit version, covered
 semantic blocks, section links, relevant relations, attached IP-XACT summaries,
 artifact attachments, and diagnostics.
 
-Pipeline writeback endpoints are explicit mutation routes. They start external
-pipeline runs, persist input snapshots, validate returned `ArtifactRef`
-metadata, attach accepted artifacts, and record writeback/audit metadata under
-`spec_data/agent-spec/`. They do not automatically rewrite visible document
-prose.
+Executor completion is an explicit mutation route. It validates returned
+`ArtifactRef` metadata and report data, attaches accepted artifacts, and records
+report/audit metadata under `spec_data/agent-spec/`. It does not automatically
+rewrite visible document prose.
 
 Implementation:
 
@@ -583,7 +581,7 @@ Implementation:
 ## Verification Interface
 
 `ContainerVerifier` checks whether the package is internally consistent without
-running import flows or action pipelines.
+running import flows or action execution.
 
 It validates:
 
@@ -618,6 +616,6 @@ Use this table when deciding where a document-model change belongs.
 | New structured payload modality | `plugins/base.py`, `plugins/manager.py`, and a new plugin |
 | Action graph blocks, versions, artifacts, and persisted run metadata | `models.py` and `storage/repository.py` |
 | Editor HTTP request/response shape | `api/document_app.py` |
-| Pipeline read context APIs | `query.py` and `api/app.py` |
-| Pipeline artifact writeback APIs | `runs/runner.py` and `api/app.py` |
+| Action context APIs | `query.py` and `api/app.py` |
+| Executor completion APIs | `runs/runner.py` and `api/app.py` |
 | Package consistency checks | `package/verifier.py` |

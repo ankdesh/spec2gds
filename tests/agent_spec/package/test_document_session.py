@@ -451,7 +451,7 @@ def test_editor_web_scaffold_is_minimal_and_present() -> None:
         if script_name not in scripts:
             raise AssertionError(f"Missing frontend npm script: {script_name}")
 
-    allowed_dependencies = {"react", "react-dom"}
+    allowed_dependencies = {"@a2ui/react", "@a2ui/web_core", "react", "react-dom", "zod"}
     actual_dependencies = set(package_data.get("dependencies", {}).keys())
     if actual_dependencies != allowed_dependencies:
         raise AssertionError(f"Unexpected frontend runtime dependencies: {actual_dependencies}")
@@ -482,6 +482,8 @@ def test_editor_web_scaffold_is_minimal_and_present() -> None:
         "closeFloatingMenus",
         "pointerdown",
         "contentEditable",
+        "Actions ▾",
+        "ReportSurface",
     ]
     for fragment in expected_fragments:
         if fragment not in main_source:

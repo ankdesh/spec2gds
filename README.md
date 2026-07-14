@@ -20,12 +20,12 @@ Key pieces:
 - semantic document parsing for headings, paragraphs, lists, tables, images,
   links, and simple text edits
 - section-version and IP-XACT attachment metadata
-- FastAPI editor API plus mounted action/run and pipeline APIs
+- FastAPI editor API plus mounted action, executor, run, and report APIs
 - React/Vite local document editor
 - block graph projection from document headings
 - Pydantic action, run, artifact, and writeback contracts
-- shared read/query service for UI snapshots and pipeline context
-- built-in pseudo SystemC actions for exercising the run/writeback flow
+- shared read/query service for UI snapshots and executor context
+- declarative SystemC example actions for exercising the action contract
 - package CLI for listing plugins, injecting/extracting payloads, validating,
   inspecting, and sanitizing `.spec` files
 
@@ -37,8 +37,7 @@ Most-used docs:
 
 - [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
 - [`docs/agent_spec_document_schema.md`](docs/agent_spec_document_schema.md)
-- [`docs/agent_spec_action_contract.md`](docs/agent_spec_action_contract.md)
-- [`docs/agent_spec_pipeline_api.md`](docs/agent_spec_pipeline_api.md)
+- [`docs/agent_spec_action_execution.md`](docs/agent_spec_action_execution.md)
 - [`docs/agent_spec_vocabulary.md`](docs/agent_spec_vocabulary.md)
 - [`docs/ipxact_protocol.md`](docs/ipxact_protocol.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
@@ -74,9 +73,8 @@ uv run python -m pytest -q
 uv run python -m spec2gds.agent_spec.api
 ```
 
-The API entry point starts the editor API and mounts the action/run API at
-`/agent-spec`, including the pipeline read/writeback endpoints under
-`/agent-spec/pipeline`.
+The API entry point starts the editor API and mounts action, executor, run, and
+report endpoints at `/agent-spec`.
 
 ## Inspect Or Sanitize A `.spec`
 

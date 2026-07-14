@@ -1,7 +1,6 @@
 """Action registry and built-in action providers for agent-spec."""
 
 from spec2gds.agent_spec.actions.builtin import (
-    ActionHandler,
     ActionRegistry,
     RegisteredAction,
     create_default_registry,
@@ -10,7 +9,6 @@ from spec2gds.agent_spec.actions.builtin import (
 )
 
 __all__ = [
-    "ActionHandler",
     "ActionRegistry",
     "RegisteredAction",
     "create_default_registry",

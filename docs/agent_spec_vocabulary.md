@@ -19,22 +19,25 @@ like future features already exist.
 | Section version group | Editor metadata for adjacent legacy headings such as `Cache behavior//v1` and `Cache behavior//v2`. Stored in `spec_data/agent-spec-editor/relations.json`. |
 | Block version | An immutable metadata snapshot for one block, stored as a `BlockVersionRecord`. The version ID is derived from a hash of the section content and attached artifact IDs. |
 | Active version | The block version selected as the default action input. For editor section groups, the active section variant is tracked separately in editor relation metadata. |
-| Tag | A label on a block that controls action availability. Current supported tags are `systemc-perf`, `systemc-bitaccurate`, `rtl`, `ip`, `interface`, and `configuration`. |
-| Artifact | A generated or embedded payload described by `ArtifactRef`, such as a pseudo SystemC output or an IP-XACT XML payload. |
+| Executor | The external system identified by an action's `executor_id`; it later completes a dispatched run. |
+| Artifact | A generated or embedded payload described by `ArtifactRef`, such as a SystemC output or an IP-XACT XML payload. |
 | Artifact reference | The metadata stored for an artifact: ID, kind, media type, summary, hash, external URI, producer, source trace, role, and timestamp. |
 | Attachment | An append-only relationship from a block to an artifact. Current action attachments are stored in the graph; editor IP-XACT heading attachments are stored in editor relations. |
 | IP-XACT payload | XML stored under `spec_data/ipxact/` and handled by the IP-XACT plugin and editor summary view. |
 | `spec://` link | A document link scheme resolved by the plugin manager. Current support resolves modality, file path, and node path through registered plugins. |
-| Action | A Python handler plus `ActionSpec` metadata. Actions are listed by the registry and made available to blocks based on tags. |
+| Action | A declarative `ActionSpec` with input/report schemas and an executor identity. Enabled actions are selectable for every block. |
 | Action registry | The in-process registry in `actions/builtin.py`. It registers built-in actions, loads optional modules, and applies config enablement. |
 | Run | One execution of an action against an immutable input snapshot. Stored as a `RunRecord`. |
-| Input snapshot | The captured block version, attached artifacts, document hash, and parameters used by a run. Later document edits do not change this snapshot. |
+| Input snapshot | The captured block version, attached artifacts, document hash, validated inputs, and preconditions used by a run. Later document edits do not change this snapshot. |
+| Precondition report | The checks that determine whether an action may be triggered for a block and input values. |
+| Postcondition report | The checks that validate executor report data and returned artifacts. |
+| Action report | Durable executor report data plus the derived read-only A2UI surface stream. |
 | Read set | The block versions and artifact references recorded as inputs for a run. |
 | Writeback record | The server-owned record of accepted artifact metadata or `needs_human_feedback` diagnostics produced by a run. |
 | Run event | A durable audit event for one run, persisted as `events.ndjson` at run boundaries. |
 | Sidecar | A directory beside the `.spec` file used for run output files and temporary artifacts. By default it is `<document>.agent-spec-sidecar/`. |
 | Editor API | The local FastAPI app in `api/document_app.py`, used by the React editor for snapshots, saves, IP-XACT operations, assets, and file browsing. |
-| Action API | The FastAPI app in `api/app.py`, mounted under `/agent-spec`, used for block tags, action discovery, runs, and events. |
+| Action API | The FastAPI app in `api/app.py`, mounted under `/agent-spec`, used for action discovery, preconditions, runs, executor completion, and reports. |
 
 ## Deferred Terms
 
@@ -43,9 +46,9 @@ current implementation.
 
 | Term | Current status |
 | --- | --- |
-| Remote worker | The current runner executes actions synchronously in-process. Remote execution would need a worker protocol, queue, leases, and deployment model. |
+| Remote worker | The current dispatcher records a run and awaits an executor callback. Queue, lease, and deployment support remain future work. |
 | Event bus | Current events are per-run audit records in memory and in `events.ndjson`. There is no standalone pub-sub service. |
-| External artifact store | Current pseudo actions write files to the sidecar and reference them with `file://`. A content-addressed or remote artifact store remains open design work. |
+| External artifact store | A content-addressed or remote artifact store remains open design work. |
 | Source update writeback | Current actions can attach artifacts and diagnostics. Direct edits to source prose from actions are not implemented. |
 | Multi-user server | The current API is local and single-user, with no authentication. |
 | Import adapter | The benchmark builder and sample tools produce `.spec` files, but general Word/PDF/Markdown/SystemRDL/CSV import adapters are not implemented as product flows. |

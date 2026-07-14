@@ -81,8 +81,7 @@ const agentDocumentState = {
     {
       block_id: "h1-synthetic-basic-sample",
       title: "Synthetic basic sample",
-      level: 1,
-      tags: ["ip"]
+      level: 1
     }
   ],
   artifact_refs: {},
@@ -115,15 +114,16 @@ test.beforeEach(async ({ page }) => {
     await route.fulfill({ contentType: "application/json", body: JSON.stringify(agentDocumentState) });
   });
 
-  await page.route("http://127.0.0.1:8000/agent-spec/blocks/**/actions", async (route) => {
+  await page.route("http://127.0.0.1:8000/agent-spec/actions", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
         actions: [
           {
-            action_id: "agent_spec.inspect",
-            title: "Inspect Agent Spec",
-            summary: "Validate graph, tags, versions, and artifact references."
+            action_id: "systemc.perf",
+            title: "SystemC Performance",
+            summary: "Request an external executor.",
+            input_schema: { type: "object", properties: { output_name: { type: "string", default: "model.txt" } } }
           }
         ]
       })
@@ -141,6 +141,6 @@ test("loads a generated .spec document through the editor shell", async ({ page 
 
   await expect(page.getByRole("heading", { name: "Synthetic basic sample" })).toBeVisible();
   await expect(page.getByText("This small agent-spec is generated for spec2gds smoke testing.")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Inspect Agent Spec" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Actions ▾" })).toBeVisible();
   await expect(page.getByText("Document loaded.")).toBeVisible();
 });

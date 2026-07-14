@@ -24,7 +24,7 @@
         "ipxact_xml": "43d15d2eca6bccd807c7f4246f14d3bd29c62c836ce0e4602d057a9e040c779e",
         "odt": "75afdd400e78d0da4944dd6536f7dbd56459d09f2e012562d150b568ccebf64e",
         "pdf": "bf8455453477b54cb016a699ac4d7fb5a57451830e877a8844c15590b1400c15",
-        "spec": "b2e8c3ecd6b2e52cd0a89c31df37e2077de46f4120de1d546d6e9f073cc65c4c"
+        "spec": "13ded8a065ba9ee3dad50b790b25f6f6154e32d9b5203a5b6f9ed94eabfb0182"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,
@@ -54,7 +54,7 @@
         "ipxact_xml": "cb0d37137bd63350e31a28e10ff924c5a02886ed96ced433aa8518dd95819f48",
         "odt": "a857b40323df3fbbeb15977c9c5fa302bfa54fa8625f1f0a4b277daa9392e872",
         "pdf": "8fb2581ddfce5b6242b45aca7fcb70725e631b348e8d098cf0fae1bd8ecc075e",
-        "spec": "f5b93908da5387d5fbd2d9034b5eee0631b0cdfa2b8b76cc8c8e16c713e0acd9"
+        "spec": "41715626182f4376326ebdd34cd378d7addb0a26cbcef43ab1646b1b46ea4410"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,
@@ -84,7 +84,7 @@
         "ipxact_xml": "0ea15ae17a1699dcfdcc094e3aa0d02fc164fa9c629a05c26f3b8f9bde34d507",
         "odt": "eea4a820ef428a694f19cfedab3bfe1ea2dadc83d16744f0f7c40329149e59f4",
         "pdf": "6ec85140be3a4beaff3b21224ff0fb6ecc3109dd933b8cd630ef9683e3a07b11",
-        "spec": "781bcd3c35f92f345a5f6e8e9f1653530f67525cd213ba646fab57ebdcc84db0"
+        "spec": "072e6d3931016962ddf20f5b81aaa6f5e5e49ca7ce507e81391f94773777f703"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,
@@ -114,7 +114,7 @@
         "ipxact_xml": "3be48ac0d5ae8576d0b98564db6d98a0b1895eb8693a96a2259c734e15fa5da4",
         "odt": "ba55701216d2470bb9463590cf6cc22bc40d8f4047a65f5df4d69de9b4a9c423",
         "pdf": "280499b91c20092c32ffe84d41e46d9eb7ceb9083fcb19ee62a021e9c5e567ba",
-        "spec": "dba1243b2f9bc352cc9f510367b72efc2117a7bdce5817cfab28d23d26c67a9a"
+        "spec": "d56cf7b10180b7cffa2c39baf2ae9fbae3d678e7af7de6797f13bd3f99c5df23"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,
@@ -144,7 +144,7 @@
         "ipxact_xml": "3be48ac0d5ae8576d0b98564db6d98a0b1895eb8693a96a2259c734e15fa5da4",
         "odt": "e52fffc6762963fe6f522ab5c9fa56d083d05c2657a4ee18182c9a6e18678485",
         "pdf": "e17cc71eb080c05660c4b7ae7e24cf4a5a0dec6523b65afbe92612ceec16629c",
-        "spec": "10649494510f663ed10da0903456931f581a046e6b3c55885d01ea5d549f7b55"
+        "spec": "58fb733d2f0d67b9bd4d06392be1beb7dad96f7f06d1038ab15116cc06945e04"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,
@@ -174,7 +174,7 @@
         "ipxact_xml": "b82d1b1e5707e3a5597f9b7bab77daf266ff1f09e043f95d6fca8950df4790bd",
         "odt": "669003782359197aad6ef62fd2391e3fbaac0abbcde232ec4d1cc4108ac63693",
         "pdf": "2a0759c10c9418255175bfb820eebd8f8adba866e0438336274f1f2c75e35903",
-        "spec": "bb914d0a305ca0f2393ade9fffa2fc2379b1ef8fbd3001eca42244306e66b2af"
+        "spec": "82f4fb5ef8f198b16b55562ceef9a72dc7593f51157c23132bec8e77452d1973"
       },
       "strict_ipxact_schema_error": null,
       "strict_ipxact_schema_valid": true,

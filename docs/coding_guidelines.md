@@ -68,8 +68,8 @@ uv run python -m pytest -q
 | --- | --- |
 | Project overview and commands | `README.md` |
 | Current component architecture | `docs/agent_spec_architecture.md` |
-| Action/run/writeback contracts | `docs/agent_spec_action_contract.md` |
+| Action/executor/report contracts | `docs/agent_spec_action_execution.md` |
 | Shared terms | `docs/agent_spec_vocabulary.md` |
-| Pipeline read/writeback APIs | `docs/agent_spec_pipeline_api.md` |
+| Action context/executor completion APIs | `docs/agent_spec_action_execution.md` |
 | Roadmap and open questions | `docs/agent_spec_roadmap_questions.md` |
 | Code layout | `docs/agent_spec_code_organization.md` |

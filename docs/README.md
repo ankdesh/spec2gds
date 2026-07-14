@@ -13,11 +13,8 @@ not blur together.
   document-facing code/API interfaces.
 - [Vocabulary](agent_spec_vocabulary.md): shared terms for `.spec` documents,
   blocks, sections, actions, runs, artifacts, and editor concepts.
-- [Action and Pipeline Contract](agent_spec_action_contract.md): implemented
-  action metadata, input snapshots, run events, artifact validation, and
-  writeback records.
-- [Pipeline API](agent_spec_pipeline_api.md): read-only pipeline context
-  endpoints and explicit artifact writeback endpoints.
+- [Action Execution Contract](agent_spec_action_execution.md): action input,
+  executor callbacks, reports, artifacts, and A2UI report surfaces.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): protocol fidelity rules for
   embedded IP-XACT payloads, bus interfaces, editor behavior, and benchmarks.
 - [Diagnostics and Sanitization](agent_spec_diagnostics.md): CLI commands for

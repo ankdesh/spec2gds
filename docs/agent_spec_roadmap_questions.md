@@ -4,8 +4,7 @@ This document is for future work and unresolved design choices. Current
 architecture and setup details live in:
 
 - [`agent_spec_architecture.md`](agent_spec_architecture.md)
-- [`agent_spec_action_contract.md`](agent_spec_action_contract.md)
-- [`agent_spec_pipeline_api.md`](agent_spec_pipeline_api.md)
+- [`agent_spec_action_execution.md`](agent_spec_action_execution.md)
 
 ## Current Baseline
 
@@ -19,7 +18,7 @@ The repository already has a local `.spec` document workflow:
 - local FastAPI editor API
 - mounted action/run API
 - graph projection from headings into blocks and block versions
-- built-in pseudo actions
+- declarative example actions
 - run snapshots, run records, events, writebacks, checkpoints, and artifact
   attachment metadata
 - hardware-document benchmark fixtures
@@ -31,16 +30,16 @@ the package split or migration that has already happened.
 
 1. Stabilize the current local editor/action loop.
 2. Improve diagnostics so users can fix blocking save issues quickly.
-3. Make action parameter validation stricter and clearer.
-4. Decide the first real hardware pipeline target.
+3. Improve action input/report schemas and condition feedback.
+4. Decide the first real hardware executor target.
 5. Add focused tests when changing graph projection, action contracts, package
    persistence, or editor save behavior.
 
-## Candidate Pipeline Targets
+## Candidate Executor Targets
 
 | Candidate | Why it may be useful | Main unknown |
 | --- | --- | --- |
-| SystemC stub generator | Builds directly on the pseudo SystemC actions. | Minimum useful generated model shape. |
+| SystemC stub generator | Builds directly on the example SystemC actions. | Minimum useful generated model shape. |
 | RTL stub generator | Helps connect specs to implementation skeletons. | Required input schema beyond current prose/IP-XACT. |
 | UVM register model stub | Good fit if IP-XACT register maps become reliable. | Current benchmark XML is schema-clean but still lacks rich register maps. |
 | Validation/report action | Lower risk than generation and useful for users immediately. | Which checks should be project-owned versus plugin-owned. |
@@ -52,7 +51,7 @@ the package split or migration that has already happened.
 | Artifact storage | Should sidecar files remain the default, or should artifacts move to a content-addressed store? |
 | Imports | Which source format should be productized first: PDF/HTML benchmark conversion, Markdown, SystemRDL, CSV/register tables, or office documents? |
 | Native schema | What project-owned schema is needed beside IP-XACT for requirements, assumptions, interfaces, and generated reports? |
-| Action parameters | Should parameter metadata remain the current simple model or move to JSON Schema? |
+| Action inputs | Which input JSON Schema keywords should the popover support next? |
 | Event delivery | Is polling `/agent-spec/events` enough for now, or should the UI use SSE/WebSocket updates? |
 | Source updates | What reviewed workflow is acceptable before an action can update source prose? |
 | Concurrency | Is the current file-hash write guard enough, or do we need document locks and finer conflict reports? |
@@ -77,8 +76,7 @@ the package split or migration that has already happened.
 | Active package path | Active code lives under `spec2gds/agent_spec/`. |
 | Active document extension | `.spec`. |
 | Current server mode | Local single-user. |
-| Current action execution | Synchronous in-process runs. |
-| Current generated artifacts | Sidecar files plus metadata in `.spec`. |
-| Current writeback policy | Auto-attach valid artifact metadata; record diagnostics for invalid output. |
+| Current action execution | Dispatch record followed by an executor callback. |
+| Current generated artifacts | Executor-supplied metadata attached to `.spec`. |
+| Current report policy | Validate structured executor reports and render a read-only A2UI report. |
 | Current block model | Every heading becomes a block in the action graph. |
-| Current tags | `systemc-perf`, `systemc-bitaccurate`, `rtl`, `ip`, `interface`, `configuration`. |

@@ -11,17 +11,6 @@ import typing
 import pydantic
 
 
-# Tags are intentionally constrained because they drive action discovery and
-# should remain stable across documents and editor sessions.
-V1_TAGS: set[str] = {
-    "systemc-perf",
-    "systemc-bitaccurate",
-    "rtl",
-    "ip",
-    "interface",
-    "configuration",
-}
-
 # Persisted state machines for run execution and artifact writeback.
 RUN_STATES: set[str] = {"queued", "running", "completed", "failed"}
 WRITEBACK_STATES: set[str] = {"auto_applied", "needs_human_feedback"}
@@ -89,14 +78,13 @@ class BlockRecord(pydantic.BaseModel):
     heading_id: str
     title: str
     level: int
-    tags: list[str] = pydantic.Field(default_factory=list)
     versions: list[BlockVersionRecord] = pydantic.Field(default_factory=list)
 
 
 class SpecGraph(pydantic.BaseModel):
-    """The agent-spec-persisted graph of blocks, versions, tags, and artifacts."""
+    """The agent-spec-persisted graph of blocks, versions, and artifacts."""
 
-    version: int = 1
+    version: int = 2
     blocks: dict[str, BlockRecord] = pydantic.Field(default_factory=dict)
     active_versions: dict[str, str] = pydantic.Field(default_factory=dict)
     artifact_refs: dict[str, ArtifactRef] = pydantic.Field(default_factory=dict)
@@ -123,7 +111,8 @@ class InputSnapshot(pydantic.BaseModel):
     created_at: str
     selected_versions: list[BlockVersionRecord]
     artifact_refs: list[ArtifactRef] = pydantic.Field(default_factory=list)
-    parameters: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
+    inputs: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
+    precondition_report: "PreconditionReport | None" = None
 
 
 class RunEvent(pydantic.BaseModel):
@@ -162,7 +151,7 @@ class RunRecord(pydantic.BaseModel):
 
 
 class WritebackRecord(pydantic.BaseModel):
-    """Server-owned record of applying or rejecting pipeline artifact metadata."""
+    """Server-owned record of applying or rejecting executor artifact metadata."""
 
     writeback_id: str
     run_id: str
@@ -183,14 +172,46 @@ class WritebackRecord(pydantic.BaseModel):
         return value
 
 
-class ActionParameter(pydantic.BaseModel):
-    """UI-renderable action parameter metadata."""
+class ConditionCheck(pydantic.BaseModel):
+    """One human-readable precondition or postcondition result."""
 
-    name: str
-    parameter_type: str
-    required: bool = False
-    enum_values: list[str] = pydantic.Field(default_factory=list)
-    default: typing.Any = None
+    check_id: str
+    severity: str
+    message: str
+    passed: bool
+
+
+class PreconditionReport(pydantic.BaseModel):
+    """Checks evaluated before an action run may be dispatched."""
+
+    action_id: str
+    block_id: str
+    can_execute: bool
+    checks: list[ConditionCheck] = pydantic.Field(default_factory=list)
+    checked_at: str
+
+
+class PostconditionReport(pydantic.BaseModel):
+    """Checks evaluated after executor completion and artifact validation."""
+
+    action_id: str
+    run_id: str
+    review_required: bool
+    checks: list[ConditionCheck] = pydantic.Field(default_factory=list)
+    checked_at: str
+
+
+class ActionReport(pydantic.BaseModel):
+    """Durable executor report and the derived, read-only A2UI surface."""
+
+    run_id: str
+    action_id: str
+    executor_outcome: str
+    data: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
+    artifact_ids: list[str] = pydantic.Field(default_factory=list)
+    postcondition_report: PostconditionReport
+    review_required: bool
+    surface_id: str
 
 
 class ActionSpec(pydantic.BaseModel):
@@ -201,21 +222,20 @@ class ActionSpec(pydantic.BaseModel):
     summary: str
     version: str
     provider: str
-    required_tags: list[str] = pydantic.Field(default_factory=list)
-    context: list[str] = pydantic.Field(default_factory=lambda: ["block"])
-    parameters: list[ActionParameter] = pydantic.Field(default_factory=list)
+    executor_id: str
+    input_schema: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
+    report_schema: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
+    report_catalog_id: str = "agent-spec.report.v1"
     output_roles: list[str] = pydantic.Field(default_factory=list)
     enabled: bool = True
 
 
-class ActionRunContext(pydantic.BaseModel):
-    """Data passed to a Python action handler."""
+class ActionLaunch(pydantic.BaseModel):
+    """Run creation response consumed by the editor and future executors."""
 
-    action: ActionSpec
+    run: RunRecord
     snapshot: InputSnapshot
-    run_id: str
-    sidecar_root: str
-    user_identity: str
+    completion_url: str
 
 
 class ActionResult(pydantic.BaseModel):

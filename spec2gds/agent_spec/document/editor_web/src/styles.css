@@ -79,7 +79,7 @@ th {
 
 .command-actions {
   display: grid;
-  grid-template-columns: minmax(10rem, 1fr) auto auto auto;
+  grid-template-columns: minmax(10rem, 1fr) auto auto auto auto;
   gap: 0.5rem;
   align-items: center;
 }
@@ -337,12 +337,6 @@ th {
   color: #2d5d1f;
 }
 
-.tag-button.has-tags {
-  border-color: #d29b30;
-  background: #fff8e5;
-  color: #694604;
-}
-
 .agent-artifact-button.has-agent-artifacts {
   border-color: #2f6f4f;
   background: #edf8f2;
@@ -396,10 +390,126 @@ th {
   width: min(24rem, 80vw);
 }
 
-.tag-menu {
+.action-menu {
+  display: grid;
+  gap: 0.55rem;
+  width: min(27rem, 88vw);
+}
+
+.action-menu .menu-item {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.action-menu small,
+.action-input small,
+.report-artifacts small {
+  color: #64748b;
+}
+
+.action-input {
   display: grid;
   gap: 0.25rem;
-  width: min(18rem, 80vw);
+  color: #243245;
+  font-size: 0.9rem;
+}
+
+.action-input input,
+.action-input select {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid #c8d2df;
+  border-radius: 5px;
+}
+
+.input-error,
+.condition-list .failed,
+.report-checks .failed {
+  color: #9b1c1c;
+}
+
+.condition-list .passed,
+.report-checks .passed {
+  color: #23543b;
+}
+
+.run-status {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.85rem;
+}
+
+.runs-sidebar {
+  min-width: 22rem;
+}
+
+.runs-list {
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 0.75rem;
+}
+
+.run-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.6rem 1rem;
+  padding: 0.75rem;
+  border: 1px solid #d8dee8;
+  border-radius: 6px;
+}
+
+.run-card p,
+.run-card small {
+  display: block;
+  margin: 0.2rem 0;
+  color: #64748b;
+  overflow-wrap: anywhere;
+}
+
+.run-state {
+  align-self: start;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  background: #e8f2fb;
+  color: #1c5d99;
+  font-size: 0.8rem;
+}
+
+.run-state.failed {
+  background: #fff1f1;
+  color: #9b1c1c;
+}
+
+.run-state.completed {
+  background: #edf8f2;
+  color: #23543b;
+}
+
+.run-card-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.report-summary {
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: #eef5ff;
+}
+
+.report-summary.failed {
+  background: #fff1f1;
+}
+
+.report-summary p,
+.report-checks p,
+.report-artifacts p {
+  margin: 0.35rem 0;
+}
+
+.report-artifacts small {
+  display: block;
 }
 
 .agent-artifact-menu {
