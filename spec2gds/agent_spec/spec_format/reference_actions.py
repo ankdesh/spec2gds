@@ -9,10 +9,12 @@ import typing
 
 
 def _write_json(path: Path, value: dict[str, typing.Any]) -> None:
+    """Write deterministic executor output consumed by the action service."""
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _snapshot_summary(input_dir: Path, output_dir: Path) -> None:
+    """Summarize the language-neutral immutable snapshot bundle."""
     snapshot = json.loads((input_dir / "snapshot.json").read_text(encoding="utf-8"))
     summary = {
         "snapshot_id": snapshot["snapshot_id"],
@@ -45,6 +47,7 @@ def _snapshot_summary(input_dir: Path, output_dir: Path) -> None:
 
 
 def _artifact_transform(input_dir: Path, output_dir: Path) -> None:
+    """Demonstrate verified input-artifact consumption and parent lineage."""
     snapshot = json.loads((input_dir / "snapshot.json").read_text(encoding="utf-8"))
     artifacts = snapshot["input_artifacts"]
     if len(artifacts) != 1:
@@ -76,6 +79,7 @@ def _artifact_transform(input_dir: Path, output_dir: Path) -> None:
 
 
 def _narrative_proposal(input_dir: Path, output_dir: Path) -> None:
+    """Produce a harmless review-gated narrative edit proposal."""
     snapshot = json.loads((input_dir / "snapshot.json").read_text(encoding="utf-8"))
     target = snapshot["target"]
     block_id = f"proposal_{target['entity_id']}"
@@ -102,6 +106,7 @@ def _narrative_proposal(input_dir: Path, output_dir: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Dispatch one trusted reference executor command."""
     parser = argparse.ArgumentParser(description="spec2gds V1.3 reference action executor")
     parser.add_argument("action", choices=["snapshot-summary", "artifact-transform", "narrative-proposal"])
     parser.add_argument("--input", required=True)

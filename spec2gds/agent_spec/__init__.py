@@ -1,17 +1,9 @@
-"""Agent-spec v1 orchestration layer."""
+"""IP-XACT-centered hardware specification tooling.
 
-import spec2gds.agent_spec.actions as actions
-import spec2gds.agent_spec.api as api
-import spec2gds.agent_spec.models as models
-import spec2gds.agent_spec.query as query
-import spec2gds.agent_spec.storage.repository as repository
-import spec2gds.agent_spec.runs.runner as runner
+The public implementation lives in :mod:`spec2gds.agent_spec.spec_format`.
+Keeping this package initializer free of eager imports is intentional: callers
+can use the source model, CLI, or API independently without loading the web
+stack or creating hidden compatibility ties to the removed ODT prototype.
+"""
 
-__all__ = [
-    "actions",
-    "api",
-    "models",
-    "query",
-    "repository",
-    "runner",
-]
+__all__: list[str] = []

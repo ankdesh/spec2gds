@@ -331,14 +331,17 @@ def _assert_local(package: SpecPackage, ref: EntityRef) -> None:
 
 
 def _q(name: str) -> str:
+    """Qualify an IP-XACT local name for element construction."""
     return f"{{{ipxact.IPXACT_NAMESPACE}}}{name}"
 
 
 def _child(root: etree._Element, name: str) -> etree._Element | None:
+    """Return the first direct child with the requested local name."""
     return next((child for child in root if etree.QName(child).localname == name), None)
 
 
 def _required_child(root: etree._Element, name: str) -> etree._Element:
+    """Resolve a required XML container with an actionable error."""
     child = _child(root, name)
     if child is None:
         raise KeyError(f"Missing {name} container.")
@@ -346,6 +349,7 @@ def _required_child(root: etree._Element, name: str) -> etree._Element:
 
 
 def _named_child(parent: etree._Element, tag: str, name: str, name_child: str) -> etree._Element | None:
+    """Find a typed child by the text of its stable name element."""
     for child in parent:
         if etree.QName(child).localname == tag and _text(child, name_child) == name:
             return child
@@ -353,6 +357,7 @@ def _named_child(parent: etree._Element, tag: str, name: str, name_child: str) -
 
 
 def _text(node: etree._Element, name: str) -> str:
+    """Read normalized direct-child text, defaulting to empty."""
     child = _child(node, name)
     return (child.text or "").strip() if child is not None else ""
 
@@ -370,6 +375,7 @@ def _insert_ordered(root: etree._Element, element: etree._Element, name: str) ->
 
 
 def _ensure_container(root: etree._Element, name: str) -> etree._Element:
+    """Return or create an XML container at its schema-defined position."""
     container = _child(root, name)
     if container is None:
         container = etree.Element(_q(name))
@@ -378,6 +384,7 @@ def _ensure_container(root: etree._Element, name: str) -> etree._Element:
 
 
 def _upsert_instance(root: etree._Element, instance: InstanceIR) -> None:
+    """Replace an instance by name while preserving canonical document order."""
     container = _ensure_container(root, "componentInstances")
     existing = _named_child(container, "componentInstance", instance.name, "instanceName")
     if existing is not None:
@@ -390,6 +397,7 @@ def _upsert_instance(root: etree._Element, instance: InstanceIR) -> None:
 
 
 def _upsert_connection(root: etree._Element, connection: ConnectionIR) -> None:
+    """Serialize an interface or ad-hoc connection from its typed IR."""
     _delete_connection(root, connection.name)
     if connection.kind == "interface":
         container = _ensure_container(root, "interconnections")
@@ -412,6 +420,7 @@ def _upsert_connection(root: etree._Element, connection: ConnectionIR) -> None:
 
 
 def _delete_connection(root: etree._Element, connection_name: str) -> bool:
+    """Delete a connection from either legal container and prune empties."""
     deleted = False
     for container_name, connection_name_tag in (("interconnections", "interconnection"), ("adHocConnections", "adHocConnection")):
         container = _child(root, container_name)
@@ -427,6 +436,7 @@ def _delete_connection(root: etree._Element, connection_name: str) -> bool:
 
 
 def _reorder_named_children(parent: etree._Element, tag: str, names: tuple[str, ...], name_child: str) -> None:
+    """Apply an exact permutation after validating its membership."""
     children = [child for child in parent if etree.QName(child).localname == tag]
     by_name = {_text(child, name_child): child for child in children}
     if len(by_name) != len(children) or set(names) != set(by_name) or len(names) != len(by_name):
@@ -438,14 +448,17 @@ def _reorder_named_children(parent: etree._Element, tag: str, names: tuple[str, 
 
 
 def _serialize(root: etree._Element) -> bytes:
+    """Serialize edited XML in the package's canonical readable form."""
     return etree.tostring(root, encoding="UTF-8", xml_declaration=True, pretty_print=True)
 
 
 def _blocks_copy(package: SpecPackage) -> list[NarrativeBlock]:
+    """Copy the narrative tree so a failed edit cannot mutate source state."""
     return copy.deepcopy(package.narrative.blocks)
 
 
 def _find_block_list(blocks: list[NarrativeBlock], block_id: str) -> tuple[list[NarrativeBlock], int] | None:
+    """Locate a block together with its owning list and index."""
     for index, block in enumerate(blocks):
         if block.block_id == block_id:
             return blocks, index
@@ -456,6 +469,7 @@ def _find_block_list(blocks: list[NarrativeBlock], block_id: str) -> tuple[list[
 
 
 def _upsert_narrative_block(package: SpecPackage, operation: UpsertNarrativeBlock) -> None:
+    """Replace a block by id or insert it at a validated tree location."""
     blocks = _blocks_copy(package)
     existing = _find_block_list(blocks, operation.block.block_id)
     if existing is not None:
@@ -476,6 +490,7 @@ def _upsert_narrative_block(package: SpecPackage, operation: UpsertNarrativeBloc
 
 
 def _delete_narrative_block(package: SpecPackage, block_id: str) -> None:
+    """Remove one narrative subtree by stable block id."""
     blocks = _blocks_copy(package)
     location = _find_block_list(blocks, block_id)
     if location is None:
@@ -485,6 +500,7 @@ def _delete_narrative_block(package: SpecPackage, block_id: str) -> None:
 
 
 def _reorder_narrative_blocks(package: SpecPackage, operation: ReorderNarrativeBlocks) -> None:
+    """Apply an exact sibling permutation at the root or below a parent."""
     blocks = _blocks_copy(package)
     target = blocks
     if operation.parent_block_id is not None:
@@ -500,6 +516,7 @@ def _reorder_narrative_blocks(package: SpecPackage, operation: ReorderNarrativeB
 
 
 def _set_narrative_links(package: SpecPackage, operation: SetNarrativeEntityLinks) -> None:
+    """Replace entity links on one narrative block without changing its id."""
     blocks = _blocks_copy(package)
     location = _find_block_list(blocks, operation.block_id)
     if location is None:
@@ -510,6 +527,7 @@ def _set_narrative_links(package: SpecPackage, operation: SetNarrativeEntityLink
 
 
 def _remove_asset(package: SpecPackage, asset_id: str) -> None:
+    """Remove both source bytes and manifest metadata for one asset."""
     asset = next((item for item in package.manifest.assets if item.asset_id == asset_id), None)
     if asset is None:
         raise KeyError(f"Unknown asset: {asset_id}")

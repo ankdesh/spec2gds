@@ -1,31 +1,23 @@
-# Agent-Spec Hardware-Document Benchmark
+# Archived Hardware-Document Source Corpus
 
-This benchmark captures hardware documentation inputs from
-`/home/ankdesh/temp/temp_hw_docs` and the current conversion artifacts used by
-the agent-spec editor pipeline.
+This directory preserves source material collected for the pre-pivot import
+experiment. It is not an active V1 `.spec` benchmark or editor fixture. The
+original documents and useful IP-XACT conversions remain available for a
+future import pipeline without keeping the ODT runtime alive.
 
 ## Layout
 
 - `inputs/pdf/`: original PDF source documents.
 - `inputs/html/`: original HTML source documents.
-- `converted/odt/`: office-compatible converted documents.
 - `converted/ipxact/`: strict IP-XACT XML component payloads with formal
   `busInterfaces/busInterface` records.
-- `generated/`: `.spec` packages built from the converted ODT files with XML
-  embedded under `spec_data/ipxact/`.
-- `benchmark_manifest.json`: generated manifest with file paths, hashes,
-  attachment metadata, semantic extraction status, and strict IP-XACT validation
-  status.
 
-## Rebuild
+The removed ODT conversions, generated prototype packages, manifest, and
+builder are recoverable from Git history if their historical behavior needs to
+be studied.
 
-From the repository root:
+## V1 Samples
 
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m benchmarks.agent_spec.hw_docs.build_benchmark
-```
-
-The XML files embed and summarize component VLNV fields and formal IP-XACT bus
-interfaces. The PDF/HTML files are the benchmark ground truth; converted ODT/XML
-and generated `.spec` files may be regenerated to keep the benchmark
-protocol-correct.
+The active deterministic visual fixture is built by
+`spec2gds.agent_spec.spec_format.samples` and checked in at
+`spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec`.

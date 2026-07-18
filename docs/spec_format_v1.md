@@ -6,14 +6,10 @@ deterministic ZIP package; it is deliberately not an ODT container.
 
 ## Status and Boundary
 
-The implementation is available at
-`spec2gds.agent_spec.spec_format`. It currently provides package creation,
-loading, validation, inspection, and pack/unpack commands. It is not wired
-into the legacy editor or action APIs until the later V1 plans are complete.
-
-The legacy ODT-oriented package implementation remains available only for the
-existing product path while cutover work is in progress. The new V1 CLI rejects
-ODT packages and does not provide migration or import support.
+The implementation is available at `spec2gds.agent_spec.spec_format` and is
+the sole production source model. Package I/O, immutable SpecIR, transactions,
+actions, the local API, and the browser editor all use it. The V1 CLI rejects
+pre-pivot ODT packages and does not provide migration or import support.
 
 ## Source Layout
 
@@ -40,7 +36,8 @@ and excluded from the source hash; V1.1 does not assign it a payload schema.
 The checked-in representative package is
 [`v1_demo.spec`](../spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec).
 It contains leaf and composite components, one bus/abstraction pair, an
-internal design mapping, two entry designs, a narrative tree, and a PNG asset.
+internal design mapping, two entry designs, a narrative tree, a live topology
+view, and an architecture SVG asset.
 
 ## CLI
 

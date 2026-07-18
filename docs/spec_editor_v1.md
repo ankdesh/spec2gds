@@ -1,16 +1,44 @@
 # V1.4 Local API and Editor
 
-The production local server is now the IP-XACT-centered V1 surface. Start it
-from the repository root with:
+The production local server is the IP-XACT-centered V1 surface. Synchronize the
+environment and start it from the repository root:
+
+```bash
+uv sync
+uv run spec2gds-server
+```
+
+The browser editor needs no separate frontend build or development server; it
+is served by the API process. Open `http://127.0.0.1:8000/editor`.
+
+For an editor-oriented command, use the equivalent alias:
+
+```bash
+uv run spec2gds-editor
+```
+
+Choose the checked-in **V1 Demo** sample to visually inspect components,
+design reuse, derived topology, typed narrative content, action executions,
+artifacts, proposals, and diagnostics. The API is the authoritative editing
+surface; source changes are submitted as validated entity-targeted
+transactions.
+
+Override the default local bind address with environment variables:
+
+```bash
+AGENT_SPEC_HOST=0.0.0.0 AGENT_SPEC_PORT=8080 uv run spec2gds-server
+```
+
+The original module command remains available:
 
 ```bash
 uv run python -m spec2gds.agent_spec.api
 ```
 
-Open `http://127.0.0.1:8000/editor` for the lightweight V1 editor shell. Its
-navigation exposes Components, Designs, Narrative, Actions, Artifacts, and
-Diagnostics. The API is the authoritative editing surface; source changes are
-submitted as validated entity-targeted transactions.
+The browser holds presentation state only. It obtains one immutable editor
+snapshot from `/documents/open`, uses stable entity references for navigation
+and actions, derives topology from the design projection, and commits narrative
+edits through `/transactions` with the last observed source revision hash.
 
 ## API Workflow
 

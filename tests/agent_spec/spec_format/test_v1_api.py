@@ -26,7 +26,15 @@ def _endpoints() -> dict[str, object]:
 
 
 def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> None:
+    """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()
+    samples = endpoints["samples"]()["samples"]
+    assert len(samples) == 1
+    assert samples[0]["name"] == "V1 Demo"
+    assert Path(samples[0]["path"]).is_file()
+    editor_html = endpoints["editor"]()
+    assert "Architecture workbench" in editor_html
+    assert "/editor-assets/app.js" in editor_html
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "acceptance.spec"
         created = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="api_acceptance"))

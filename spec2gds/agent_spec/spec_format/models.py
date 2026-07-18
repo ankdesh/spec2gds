@@ -103,6 +103,7 @@ class EntityRef(StrictModel):
     @pydantic.field_validator("document_id", "entity_id")
     @classmethod
     def _validate_id(cls, value: str) -> str:
+        """Require stable references to use the shared XML-compatible grammar."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("Entity identifiers must be XML-ID-compatible opaque values.")
         return value
@@ -120,11 +121,13 @@ class DocumentEntry(StrictModel):
     @pydantic.field_validator("vlnv")
     @classmethod
     def _validate_vlnv(cls, value: str) -> str:
+        """Validate the manifest's canonical four-part hardware identity."""
         return validate_vlnv(value)
 
     @pydantic.field_validator("entity_id")
     @classmethod
     def _validate_entity_id(cls, value: str) -> str:
+        """Require a stable XML-compatible document identity."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("Document entity_id must be XML-ID-compatible.")
         return value
@@ -132,17 +135,20 @@ class DocumentEntry(StrictModel):
     @pydantic.field_validator("path")
     @classmethod
     def _validate_path(cls, value: str) -> str:
+        """Reject archive traversal and non-canonical paths."""
         return validate_safe_path(value)
 
     @pydantic.field_validator("sha256")
     @classmethod
     def _validate_sha256(cls, value: str) -> str:
+        """Require a canonical source-content digest."""
         if not SHA256_PATTERN.fullmatch(value):
             raise ValueError("sha256 must use the sha256:<64 lowercase hex> format.")
         return value
 
     @pydantic.model_validator(mode="after")
     def _validate_kind_path(self) -> "DocumentEntry":
+        """Keep each IP-XACT kind in its fixed package directory."""
         expected_prefix = document_directory(self.kind) + "/"
         if not self.path.startswith(expected_prefix) or not self.path.endswith(".xml"):
             raise ValueError(f"{self.kind} documents must be stored below {expected_prefix}.")
@@ -160,6 +166,7 @@ class AssetEntry(StrictModel):
     @pydantic.field_validator("asset_id")
     @classmethod
     def _validate_asset_id(cls, value: str) -> str:
+        """Require a stable XML-compatible asset identity."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("asset_id must be XML-ID-compatible.")
         return value
@@ -167,6 +174,7 @@ class AssetEntry(StrictModel):
     @pydantic.field_validator("path")
     @classmethod
     def _validate_asset_path(cls, value: str) -> str:
+        """Confine source assets to the package asset directory."""
         value = validate_safe_path(value)
         if not value.startswith("assets/"):
             raise ValueError("Assets must be stored below assets/.")
@@ -175,6 +183,7 @@ class AssetEntry(StrictModel):
     @pydantic.field_validator("sha256")
     @classmethod
     def _validate_asset_hash(cls, value: str) -> str:
+        """Require a canonical digest for immutable asset bytes."""
         if not SHA256_PATTERN.fullmatch(value):
             raise ValueError("sha256 must use the sha256:<64 lowercase hex> format.")
         return value
@@ -190,6 +199,7 @@ class AnnotationSchemaEntry(StrictModel):
     @pydantic.field_validator("namespace")
     @classmethod
     def _validate_namespace(cls, value: str) -> str:
+        """Keep annotation namespaces compact and path-safe."""
         if not value or "/" in value or " " in value:
             raise ValueError("Annotation namespaces must be compact path-safe identifiers.")
         return value
@@ -197,6 +207,7 @@ class AnnotationSchemaEntry(StrictModel):
     @pydantic.field_validator("path_prefix")
     @classmethod
     def _validate_annotation_path(cls, value: str) -> str:
+        """Confine extension schemas to the annotation subtree."""
         value = validate_safe_path(value)
         if not value.startswith("annotations/"):
             raise ValueError("Annotation schemas must be stored below annotations/.")
@@ -211,6 +222,7 @@ class ComponentComposition(StrictModel):
 
     @pydantic.model_validator(mode="after")
     def _validate_kinds(self) -> "ComponentComposition":
+        """Enforce the local component-to-design ownership relationship."""
         if self.component.entity_kind != "component":
             raise ValueError("Component composition source must be a component.")
         if self.internal_design.entity_kind != "design":
@@ -230,6 +242,7 @@ class InlineNode(StrictModel):
 
     @pydantic.model_validator(mode="after")
     def _validate_link(self) -> "InlineNode":
+        """Require link nodes to name a URL or stable source entity."""
         if self.type == "link" and not self.href and self.entity_ref is None:
             raise ValueError("Links require href or entity_ref.")
         return self
@@ -255,12 +268,14 @@ class NarrativeBlock(StrictModel):
     @pydantic.field_validator("block_id")
     @classmethod
     def _validate_block_id(cls, value: str) -> str:
+        """Require narrative identity to survive JSON and XML projections."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("Narrative block ids must be XML-ID-compatible.")
         return value
 
     @pydantic.model_validator(mode="after")
     def _validate_shape(self) -> "NarrativeBlock":
+        """Validate fields whose meaning depends on the narrative node type."""
         if self.type == "image" and not self.asset_id:
             raise ValueError("Image blocks require asset_id.")
         if self.type == "entity_link" and not self.entity_refs:
@@ -287,15 +302,18 @@ class NarrativeDocument(StrictModel):
     @pydantic.field_validator("document_id")
     @classmethod
     def _validate_document_id(cls, value: str) -> str:
+        """Require the narrative tree to carry a stable document identity."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("Narrative document_id must be XML-ID-compatible.")
         return value
 
     @pydantic.model_validator(mode="after")
     def _validate_unique_block_ids(self) -> "NarrativeDocument":
+        """Ensure every nested narrative node is addressable without ambiguity."""
         seen: set[str] = set()
 
         def visit(block: NarrativeBlock) -> None:
+            """Collect one subtree while rejecting repeated stable ids."""
             if block.block_id in seen:
                 raise ValueError(f"Narrative block id is duplicated: {block.block_id}")
             seen.add(block.block_id)
@@ -324,6 +342,7 @@ class SpecManifest(StrictModel):
     @pydantic.field_validator("document_id")
     @classmethod
     def _validate_document_id(cls, value: str) -> str:
+        """Require the package's root identity to be XML-compatible."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("document_id must be XML-ID-compatible.")
         return value
@@ -331,6 +350,7 @@ class SpecManifest(StrictModel):
     @pydantic.field_validator("ipxact_version")
     @classmethod
     def _validate_ipxact_version(cls, value: str) -> str:
+        """Reject schema generations outside the explicit V1 profile."""
         if value != IPXACT_VERSION:
             raise ValueError("V1 requires IP-XACT 1685-2022.")
         return value
@@ -338,6 +358,7 @@ class SpecManifest(StrictModel):
     @pydantic.field_validator("narrative_path")
     @classmethod
     def _validate_narrative_path(cls, value: str) -> str:
+        """Keep the narrative document at its single canonical path."""
         value = validate_safe_path(value)
         if value != "document/document.json":
             raise ValueError("V1 narrative_path must be document/document.json.")
@@ -345,6 +366,7 @@ class SpecManifest(StrictModel):
 
     @pydantic.model_validator(mode="after")
     def _validate_manifest_relations(self) -> "SpecManifest":
+        """Validate uniqueness and every cross-entity manifest relationship."""
         document_ids = [entry.entity_id for entry in self.documents]
         document_paths = [entry.path for entry in self.documents]
         document_keys = [(entry.kind, entry.vlnv) for entry in self.documents]

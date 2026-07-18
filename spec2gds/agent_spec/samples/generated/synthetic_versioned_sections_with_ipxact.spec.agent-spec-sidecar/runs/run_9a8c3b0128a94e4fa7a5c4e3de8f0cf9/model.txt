@@ -1,4 +1,0 @@
-Pseudo SystemC performance artifact
-action=systemc.perf.pseudo
-block=h2-register-behavior-1
-version=v-c55fb2c730ee

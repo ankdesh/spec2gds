@@ -30,12 +30,11 @@ Start with the docs index:
 
 Most-used docs:
 
-- [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
-- [`docs/mvc_architecture_assessment.md`](docs/mvc_architecture_assessment.md)
-- [`docs/agent_spec_document_schema.md`](docs/agent_spec_document_schema.md)
-- [`docs/agent_spec_action_execution.md`](docs/agent_spec_action_execution.md)
-- [`docs/agent_spec_vocabulary.md`](docs/agent_spec_vocabulary.md)
-- [`docs/ipxact_protocol.md`](docs/ipxact_protocol.md)
+- [`docs/post_pivot_code_map.md`](docs/post_pivot_code_map.md)
+- [`docs/spec_format_v1.md`](docs/spec_format_v1.md)
+- [`docs/spec_ir_v1.md`](docs/spec_ir_v1.md)
+- [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md)
+- [`docs/spec_editor_v1.md`](docs/spec_editor_v1.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
 
@@ -63,23 +62,53 @@ UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" \
 uv run python -m pytest -q
 ```
 
-## Run The Local V1 API
+## Run the Server and UI Editor
+
+Install/synchronize the environment once:
+
+```bash
+uv sync
+```
+
+Start the API server:
+
+```bash
+uv run spec2gds-server
+```
+
+The no-build UI editor is served by that same process. Open:
+
+```text
+http://127.0.0.1:8000/editor
+```
+
+`spec2gds-editor` is an equivalent convenience command when the editor is your
+primary intent:
+
+```bash
+uv run spec2gds-editor
+```
+
+To bind another address or port:
+
+```bash
+AGENT_SPEC_HOST=0.0.0.0 AGENT_SPEC_PORT=8080 uv run spec2gds-server
+```
+
+The module form remains supported:
 
 ```bash
 uv run python -m spec2gds.agent_spec.api
 ```
 
-The API entry point starts the ODT-free V1 editor/API. Open
-`http://127.0.0.1:8000/editor` after startup. See
-[`docs/spec_editor_v1.md`](docs/spec_editor_v1.md) for the entity-targeted API.
+See [`docs/spec_editor_v1.md`](docs/spec_editor_v1.md) for endpoints and the
+editor/API interaction model.
 
-## New V1 Source Package Foundation
+## V1 Source Package
 
-The replacement ODT-free `.spec` package is available alongside the legacy
-editor/API path while the V1 cutover is implemented. It stores canonical
-IP-XACT 1685-2022 source documents, a typed narrative AST, and assets in a
-deterministic ZIP package. The new package CLI intentionally rejects legacy
-ODT `.spec` containers.
+The active `.spec` package stores canonical IP-XACT 1685-2022 source
+documents, a typed narrative AST, and assets in a deterministic ZIP package.
+The CLI intentionally rejects pre-pivot ODT containers.
 
 ```bash
 uv run python -m spec2gds.agent_spec.spec_format.cli validate \
@@ -94,61 +123,20 @@ implementation roadmap is in [`docs/pivot/README.md`](docs/pivot/README.md).
 V1.3's generic external-action, artifact, and reviewed-proposal layer is
 documented in [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md).
 
-## Archived Prototype CLI
+## Visual Verification Sample
 
-The commands below belong to the pre-cutover ODT/heading prototype and are
-retained only for historical investigation. They are not part of the production
-V1 API or package format.
+The checked-in V1 demo contains leaf and composite components, an internal
+design, two reusable entry designs, a narrative table and architecture image,
+an entity link, and a live topology view. Start the API, open `/editor`, and
+choose **V1 Demo** from the sample selector. The browser reads the validated
+SpecIR snapshot and sends every edit or action back through the V1 API.
 
-Print a detailed diagnostic report:
-
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli inspect \
-  --container benchmarks/agent_spec/hw_docs/generated/apb_timer.spec \
-  --format text
-```
-
-Write a conservative sanitized copy:
+Rebuild the deterministic sample after changing its builder:
 
 ```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli sanitize \
-  --container broken.spec \
-  --output repaired.spec
+uv run python -c "from pathlib import Path; from spec2gds.agent_spec.spec_format.samples import write_v1_sample; write_v1_sample(Path('spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec'))"
 ```
 
-See [`docs/agent_spec_diagnostics.md`](docs/agent_spec_diagnostics.md) for the
-full report contents and sanitization rules.
-
-## Archived Prototype UI Test
-
-```bash
-cd spec2gds/agent_spec/document/editor_web
-npm install
-npx playwright install chromium
-npm run test:e2e
-```
-
-See [`docs/agent_spec_ui_testing.md`](docs/agent_spec_ui_testing.md) for
-restricted-environment notes.
-
-## Benchmarks
-
-Hardware-document benchmarks live under
-[`benchmarks/agent_spec/`](benchmarks/agent_spec/). The `hw_docs` benchmark
-preserves PDF/HTML inputs, converted ODT/XML artifacts, and generated `.spec`
-packages with embedded XML payloads.
-
-Rebuild the benchmark:
-
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m benchmarks.agent_spec.hw_docs.build_benchmark
-```
-
-Run the benchmark test:
-
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m pytest tests/agent_spec/test_hw_docs_benchmark.py -q
-```
-
-See [`docs/agent_spec_benchmarks.md`](docs/agent_spec_benchmarks.md) for
-details.
+Original PDF/HTML and converted IP-XACT benchmark inputs remain under
+[`benchmarks/agent_spec/hw_docs/`](benchmarks/agent_spec/hw_docs/) as future
+import-pipeline source material; they are not active V1 `.spec` fixtures.

@@ -39,10 +39,12 @@ _BUNDLE_VERSION = 1
 
 
 def _utc_now() -> str:
+    """Return a stable UTC timestamp string for durable action events."""
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _json_bytes(value: typing.Any) -> bytes:
+    """Serialize model or plain data to deterministic, human-readable JSON."""
     if hasattr(value, "model_dump"):
         value = value.model_dump(mode="json")
     return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
@@ -69,12 +71,14 @@ class ActionDefinition(StrictModel):
     @pydantic.field_validator("action_id", "version")
     @classmethod
     def _nonempty(cls, value: str) -> str:
+        """Reject identifiers that would be unusable in provenance."""
         if not value.strip():
             raise ValueError("Action id and version cannot be empty.")
         return value
 
     @pydantic.model_validator(mode="after")
     def _validate_contract(self) -> "ActionDefinition":
+        """Enforce the minimum executable contract at registration time."""
         if not self.target_entity_kinds or not self.executor:
             raise ValueError("Actions require target entity kinds and an executor command.")
         if self.timeout_seconds <= 0:
@@ -104,6 +108,7 @@ class ArtifactRef(StrictModel):
     @pydantic.field_validator("sha256")
     @classmethod
     def _hash(cls, value: str) -> str:
+        """Require the canonical prefixed digest representation."""
         if not SHA256_PATTERN.fullmatch(value):
             raise ValueError("Artifact sha256 must use sha256:<64 lowercase hex>.")
         return value
@@ -111,12 +116,14 @@ class ArtifactRef(StrictModel):
     @pydantic.field_validator("size")
     @classmethod
     def _size(cls, value: int) -> int:
+        """Reject impossible negative byte counts."""
         if value < 0:
             raise ValueError("Artifact size cannot be negative.")
         return value
 
     @pydantic.model_validator(mode="after")
     def _metadata(self) -> "ArtifactRef":
+        """Ensure every artifact remains attributable and entity-addressable."""
         if not all((self.role, self.kind, self.media_type, self.storage_locator, self.producer_execution_id, self.producer_action_id)):
             raise ValueError("Artifact role, kind, media type, locator, and producer metadata are required.")
         if not self.source_entities:
@@ -248,20 +255,25 @@ class SnapshotSdk:
     """Read-only convenience view of an ``ActionSnapshot`` for Python actions."""
 
     def __init__(self, snapshot: ActionSnapshot) -> None:
+        """Wrap one immutable snapshot without exposing mutable internals."""
         self._snapshot = snapshot
 
     @property
     def target(self) -> ComponentIR | DesignIR:
+        """Resolve the action target from the captured revision."""
         return typing.cast(ComponentIR | DesignIR, self._snapshot._revision.resolve(self._snapshot.target))
 
     @property
     def inputs(self) -> dict[str, typing.Any]:
+        """Return a defensive copy of normalized action inputs."""
         return json.loads(json.dumps(self._snapshot.normalized_inputs, sort_keys=True))
 
     def resolve(self, reference: EntityRef) -> typing.Any:
+        """Resolve an entity only from the captured source revision."""
         return self._snapshot._revision.resolve(reference)
 
     def closure(self) -> tuple[EntityRef, ...]:
+        """Return the dependency closure captured for execution."""
         return self._snapshot.dependency_closure
 
 
@@ -269,17 +281,21 @@ class ArtifactSidecar:
     """Content-addressed filesystem storage for immutable generated artifact bytes."""
 
     def __init__(self, root: str | Path) -> None:
+        """Bind storage to one explicit filesystem root."""
         self.root = Path(root)
 
     def locator(self, digest: str) -> str:
+        """Convert a canonical digest into its portable sidecar locator."""
         return f"sha256/{digest.removeprefix('sha256:')}"
 
     def path_for_locator(self, locator: str) -> Path:
+        """Validate a locator before resolving it beneath the sidecar root."""
         if not locator.startswith("sha256/") or len(locator.split("/", 1)[1]) != 64:
             raise ValueError("Unsupported artifact sidecar locator.")
         return self.root / locator
 
     def ingest(self, data: bytes) -> tuple[str, str]:
+        """Store bytes once and return their digest and stable locator."""
         digest = sha256_digest(data)
         target = self.path_for_locator(self.locator(digest))
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -290,6 +306,7 @@ class ArtifactSidecar:
         return digest, self.locator(digest)
 
     def read(self, artifact: ArtifactRef) -> bytes:
+        """Read artifact bytes and verify them against durable metadata."""
         target = self.path_for_locator(artifact.storage_locator)
         if not target.is_file():
             raise FileNotFoundError(f"Artifact sidecar content is missing: {artifact.artifact_id}")
@@ -303,18 +320,22 @@ class ActivityStore:
     """Mutable activity facade that never mutates V1 source entries."""
 
     def __init__(self, package: SpecPackage, sidecar: ArtifactSidecar) -> None:
+        """Load activity metadata while generated bytes stay in the sidecar."""
         self.package = package
         self.sidecar = sidecar
         raw = package.files.get(_ACTIVITY_PATH)
         self.state = _ActivityState.model_validate_json(raw) if raw else _ActivityState()
 
     def save(self) -> None:
+        """Persist activity without changing the source revision hash."""
         self.package.files[_ACTIVITY_PATH] = _json_bytes(self.state)
 
     def artifacts_for(self, target: EntityRef) -> tuple[ArtifactRef, ...]:
+        """Return artifacts whose provenance names the target entity."""
         return tuple(artifact for artifact in self.state.artifacts if target in artifact.source_entities)
 
     def artifact_lineage(self, artifact_id: str) -> tuple[ArtifactRef, ...]:
+        """Traverse parent links once, tolerating missing ancestors."""
         by_id = {artifact.artifact_id: artifact for artifact in self.state.artifacts}
         result: list[ArtifactRef] = []
         pending = [artifact_id]
@@ -332,6 +353,7 @@ class ActivityStore:
         return tuple(result)
 
     def artifact_diagnostics(self) -> tuple[str, ...]:
+        """Report missing or corrupted sidecar content without raising."""
         diagnostics: list[str] = []
         for artifact in self.state.artifacts:
             try:
@@ -341,15 +363,19 @@ class ActivityStore:
         return tuple(sorted(set(diagnostics)))
 
     def _append_execution(self, execution: ActionExecution) -> None:
+        """Append one immutable execution record."""
         self.state = self.state.model_copy(update={"executions": (*self.state.executions, execution)})
 
     def _append_artifacts(self, artifacts: tuple[ArtifactRef, ...]) -> None:
+        """Append accepted artifact metadata after content verification."""
         self.state = self.state.model_copy(update={"artifacts": (*self.state.artifacts, *artifacts)})
 
     def _append_proposals(self, proposals: tuple[ChangeProposal, ...]) -> None:
+        """Append review-gated proposals generated by an execution."""
         self.state = self.state.model_copy(update={"proposals": (*self.state.proposals, *proposals)})
 
     def _replace_proposal(self, proposal: ChangeProposal) -> None:
+        """Replace one proposal while preserving durable list order."""
         self.state = self.state.model_copy(
             update={"proposals": tuple(item if item.proposal_id != proposal.proposal_id else proposal for item in self.state.proposals)}
         )
@@ -359,19 +385,23 @@ class ActionRegistry:
     """Small explicit registry for trusted V1.3 local actions."""
 
     def __init__(self, actions: typing.Iterable[ActionDefinition] = ()) -> None:
+        """Index trusted action definitions by stable action id."""
         self._actions = {action.action_id: action for action in actions}
 
     def register(self, action: ActionDefinition) -> None:
+        """Register a definition without silently replacing an action."""
         if action.action_id in self._actions:
             raise ValueError(f"Action already registered: {action.action_id}")
         self._actions[action.action_id] = action
 
     def get(self, action_id: str) -> ActionDefinition:
+        """Resolve a definition or raise an actionable key error."""
         if action_id not in self._actions:
             raise KeyError(f"Unknown V1.3 action: {action_id}")
         return self._actions[action_id]
 
     def list(self) -> tuple[ActionDefinition, ...]:
+        """Return definitions in deterministic identifier order."""
         return tuple(self._actions[action_id] for action_id in sorted(self._actions))
 
 
@@ -379,6 +409,7 @@ class ActionService:
     """Creates snapshots, invokes local commands, accepts artifacts, and reviews proposals."""
 
     def __init__(self, registry: ActionRegistry, sidecar: ArtifactSidecar) -> None:
+        """Compose trusted definitions with verified artifact storage."""
         self.registry = registry
         self.sidecar = sidecar
 
@@ -460,6 +491,7 @@ class ActionService:
         inputs: dict[str, typing.Any] | None = None,
         input_artifact_ids: tuple[str, ...] = (),
     ) -> ActionExecution:
+        """Build a consistent failed record for timeout or contract failures."""
         """Execute one trusted local command and append only activity metadata."""
         action = self.registry.get(action_id)
         snapshot = self.create_snapshot(revision, action, target, inputs, input_artifact_ids, activity)
@@ -572,6 +604,7 @@ class ActionService:
         events: list[ActionEvent],
         diagnostic: str,
     ) -> ActionExecution:
+        """Build one consistent failed record for timeout or contract errors."""
         events.append(ActionEvent(sequence=len(events) + 1, event_type="action.execution.failed", timestamp=_utc_now(), payload={"diagnostic": diagnostic}))
         return ActionExecution(
             execution_id=execution_id,
@@ -591,6 +624,7 @@ class ActionService:
         output_dir: Path,
         completion: dict[str, typing.Any],
     ) -> tuple[ArtifactRef, ...]:
+        """Validate declared outputs and ingest immutable artifact content."""
         artifacts: list[ArtifactRef] = []
         for declared in completion.get("artifacts", []):
             if not isinstance(declared, dict):
@@ -649,6 +683,7 @@ class ActionService:
         execution_id: str,
         completion: dict[str, typing.Any],
     ) -> tuple[ChangeProposal, ...]:
+        """Decode executor proposals and enforce action-level permission."""
         declared = completion.get("proposals", [])
         if declared and not action.allows_change_proposals:
             raise ValueError("Action is not permitted to create source proposals.")
@@ -672,6 +707,7 @@ class ActionService:
 
 
 def _load_completion(output_dir: Path) -> dict[str, typing.Any]:
+    """Load and minimally validate the executor completion manifest."""
     path = output_dir / "completion.json"
     if not path.is_file():
         raise FileNotFoundError("Action output is missing completion.json.")
@@ -684,6 +720,7 @@ def _load_completion(output_dir: Path) -> dict[str, typing.Any]:
 
 
 def _proposal(activity: ActivityStore, proposal_id: str) -> ChangeProposal:
+    """Resolve a durable proposal by id."""
     proposal = next((item for item in activity.state.proposals if item.proposal_id == proposal_id), None)
     if proposal is None:
         raise KeyError(f"Unknown proposal: {proposal_id}")

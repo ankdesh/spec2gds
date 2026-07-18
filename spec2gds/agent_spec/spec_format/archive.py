@@ -33,6 +33,7 @@ class SpecValidationError(ValueError):
     """Raised when a package violates the V1 format, profile, or source rules."""
 
     def __init__(self, diagnostics: list[str]) -> None:
+        """Join diagnostics for humans while retaining the structured list."""
         super().__init__("; ".join(diagnostics))
         self.diagnostics = diagnostics
 
@@ -78,6 +79,7 @@ class SpecPackage:
         files: dict[str, bytes] | None = None,
         path: str | None = None,
     ) -> None:
+        """Create a working package from already typed source structures."""
         self.manifest = manifest
         self.narrative = narrative
         self.files: dict[str, bytes] = copy.deepcopy(files or {})
@@ -264,6 +266,7 @@ class SpecPackage:
         narrative_block_ids = {block.block_id for block in _walk_blocks(self.narrative.blocks)}
 
         def validate_reference(block_id: str, reference: EntityRef) -> None:
+            """Validate one narrative reference against package-local identity."""
             if reference.document_id != self.manifest.document_id:
                 diagnostics.append(f"Narrative block {block_id} references another document.")
             elif reference.entity_kind == "narrative_block":

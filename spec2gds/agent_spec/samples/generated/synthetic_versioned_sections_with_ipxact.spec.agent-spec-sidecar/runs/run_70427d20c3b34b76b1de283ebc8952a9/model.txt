@@ -1,4 +1,0 @@
-Pseudo SystemC bit-accurate artifact
-action=systemc.bitaccurate.pseudo
-block=h1-timer-block-specification-0
-version=v-8e946b126cdd

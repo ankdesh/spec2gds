@@ -1,6 +1,0 @@
-{
-  "catalogId": "agent-spec.report.v1",
-  "purpose": "Read-only action execution reports.",
-  "components": ["Column", "ReportSummary", "CheckList", "ArtifactList"],
-  "interactive": false
-}

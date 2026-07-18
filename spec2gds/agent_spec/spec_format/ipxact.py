@@ -117,6 +117,7 @@ def normalize_xml(xml_bytes: bytes) -> bytes:
     root = parse_xml(xml_bytes)
 
     def clone(node: etree._Element, is_root: bool = False) -> etree._Element:
+        """Copy safe XML while canonicalizing namespaces and attributes."""
         # V1 rejects foreign elements later, but retain them here so its profile
         # diagnostic remains precise.  The IP-XACT namespace always uses the
         # project-owned prefix regardless of the input document's prefix.

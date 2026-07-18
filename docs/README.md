@@ -15,6 +15,8 @@ not blur together.
   source edits.
 - [V1.4 Local API and Editor](spec_editor_v1.md): production API/editor shell,
   source revision checks, action executions, and proposal review.
+- [Post-Pivot Code Map](post_pivot_code_map.md): retained module boundaries,
+  runtime flow, and maintenance rules after the V1 cutover.
 
 ## Archived ODT-Agent-Spec Docs
 

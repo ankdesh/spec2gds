@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>spec2gds · Architecture Workbench</title>
+    <link rel="stylesheet" href="/editor-assets/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/editor" aria-label="spec2gds editor home">
+        <span class="brand-mark">S2</span>
+        <span><strong>spec2gds</strong><small>Architecture workbench</small></span>
+      </a>
+      <div class="source-controls">
+        <select id="sample-select" aria-label="Checked-in sample">
+          <option value="">Select a visual sample…</option>
+        </select>
+        <input id="package-path" aria-label="Package path" placeholder="/absolute/path/to/architecture.spec" />
+        <button id="open-package" class="primary">Open package</button>
+      </div>
+      <div class="revision" title="Current immutable source revision">
+        <span id="connection-light" class="status-light"></span>
+        <span id="revision-label">No source loaded</span>
+      </div>
+    </header>
+
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="sidebar-context">
+          <p class="eyebrow">Current document</p>
+          <h1 id="document-title">Choose a sample</h1>
+          <p id="document-summary">Open a deterministic V1 package to explore its SpecIR.</p>
+        </div>
+        <nav id="view-nav" aria-label="Editor views">
+          <button data-view="overview" class="active"><span>Overview</span><b id="count-overview">—</b></button>
+          <button data-view="components"><span>Components</span><b id="count-components">0</b></button>
+          <button data-view="designs"><span>Designs</span><b id="count-designs">0</b></button>
+          <button data-view="narrative"><span>Narrative</span><b id="count-narrative">0</b></button>
+          <button data-view="activity"><span>Activity</span><b id="count-activity">0</b></button>
+          <button data-view="diagnostics"><span>Diagnostics</span><b id="count-diagnostics">0</b></button>
+        </nav>
+        <div class="source-model-note">
+          <span>Source model</span>
+          <strong>IP-XACT 1685-2022</strong>
+          <small>All writes are revision-guarded and validated atomically.</small>
+        </div>
+      </aside>
+
+      <main>
+        <div id="notice" class="notice" role="status">Select the bundled V1 demo to begin.</div>
+        <section id="workspace" class="workspace empty"></section>
+      </main>
+    </div>
+
+    <dialog id="action-dialog">
+      <form method="dialog" class="dialog-card">
+        <div class="dialog-heading">
+          <div><p class="eyebrow">Entity-targeted tools</p><h2 id="action-title">Available actions</h2></div>
+          <button class="icon-button" value="cancel" aria-label="Close">×</button>
+        </div>
+        <div id="action-list"></div>
+      </form>
+    </dialog>
+
+    <script type="module" src="/editor-assets/app.js"></script>
+  </body>
+</html>

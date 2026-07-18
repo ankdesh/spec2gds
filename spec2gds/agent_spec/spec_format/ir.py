@@ -355,9 +355,11 @@ class SpecRevision:
         seen: dict[tuple[str, str, str], EntityRef] = {}
 
         def key(reference: EntityRef) -> tuple[str, str, str]:
+            """Build a stable, kind-sensitive traversal key."""
             return (reference.document_id, reference.entity_kind, reference.entity_id)
 
         def visit_component(component: ComponentIR) -> None:
+            """Collect a component, its protocols, and owned internal design."""
             if key(component.ref) in seen:
                 return
             seen[key(component.ref)] = component.ref
@@ -374,6 +376,7 @@ class SpecRevision:
                 visit_design(internal)
 
         def visit_design(design: DesignIR) -> None:
+            """Collect a design and recursively resolve instantiated components."""
             if key(design.ref) in seen:
                 return
             seen[key(design.ref)] = design.ref
@@ -391,6 +394,7 @@ class SpecRevision:
 
 
 def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentIR:
+    """Project one validated component XML document into immutable SpecIR."""
     ports: list[PortIR] = []
     for port in root.xpath("./*[local-name()='model']/*[local-name()='ports']/*[local-name()='port']"):
         style = "wire" if port.xpath("./*[local-name()='wire']") else "transactional"
@@ -411,6 +415,7 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
 
 
 def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:
+    """Project instances and both connection kinds into immutable SpecIR."""
     instances: list[InstanceIR] = []
     for instance in root.xpath("./*[local-name()='componentInstances']/*[local-name()='componentInstance']"):
         component_ref = _first(instance.xpath("./*[local-name()='componentRef']"))
@@ -536,6 +541,7 @@ def _semantic_diagnostics(
     composition_by_component = {mapping.component.entity_id: mapping.internal_design.entity_id for mapping in manifest.component_compositions}
 
     def visit(component_id: str, ancestry: set[str]) -> None:
+        """Detect recursive component ownership through internal designs."""
         if component_id in ancestry:
             diagnostics.append(f"Component composition cycle includes {component_id}.")
             return

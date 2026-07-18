@@ -254,18 +254,6 @@ wheels = [
 ]
 
 [[package]]
-name = "odfdo"
-version = "3.22.8"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "lxml" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/32/f8/e232a4ddd1b6c136d5c6d0455a30b57566dc4f6f64e6c0bb8c561407a7aa/odfdo-3.22.8.tar.gz", hash = "sha256:1f1303f5be52f168b01dbcd3c3551066f403ba43d6e9958800a5d3a5c6eaf91a", size = 301831, upload-time = "2026-05-08T20:25:14.752Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/57/c3/d93afbac04cf0edd8fad14e389c8d23e1e702a447c7010314847bb095e2e/odfdo-3.22.8-py3-none-any.whl", hash = "sha256:c428c8dec425f02a885cf1eec34e622168da26b2379f01bb18c50fbe216ec38b", size = 401484, upload-time = "2026-05-08T20:25:12.978Z" },
-]
-
-[[package]]
 name = "packaging"
 version = "26.2"
 source = { registry = "https://pypi.org/simple" }
@@ -588,12 +576,11 @@ wheels = [
 [[package]]
 name = "spec2gds"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "jsonschema" },
     { name = "lxml" },
-    { name = "odfdo" },
     { name = "pydantic" },
     { name = "pyedaa-ipxact" },
     { name = "pytest" },
@@ -605,7 +592,6 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.116.0" },
     { name = "jsonschema", specifier = ">=4.25.0" },
     { name = "lxml", specifier = ">=6.1.1" },
-    { name = "odfdo", specifier = ">=3.22.8" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyedaa-ipxact", specifier = ">=0.6.5" },
     { name = "pytest", specifier = ">=9.0.3" },

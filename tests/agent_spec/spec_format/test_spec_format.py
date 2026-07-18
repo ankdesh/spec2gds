@@ -14,6 +14,7 @@ from spec2gds.agent_spec.spec_format.samples import build_v1_sample
 
 
 def test_sample_has_required_v1_source_shape() -> None:
+    """Keep the checked-in demo broad enough for meaningful visual review."""
     package = build_v1_sample()
     assert {entry.kind for entry in package.manifest.documents} == {
         "component",
@@ -24,6 +25,23 @@ def test_sample_has_required_v1_source_shape() -> None:
     assert len(package.manifest.entry_designs) == 2
     assert len(package.manifest.component_compositions) == 1
     assert package.manifest.component_compositions[0].internal_design.entity_id == "design_subsystem_internal"
+    blocks = []
+    pending = list(package.narrative.blocks)
+    while pending:
+        block = pending.pop()
+        blocks.append(block)
+        pending.extend(block.children)
+    assert {block.type for block in blocks} >= {
+        "section",
+        "paragraph",
+        "list",
+        "table",
+        "image",
+        "entity_link",
+        "live_view",
+    }
+    assert package.manifest.assets[0].media_type == "image/svg+xml"
+    assert b"V1 SOURCE ARCHITECTURE" in package.files[package.manifest.assets[0].path]
     assert package.diagnostics() == []
 
 

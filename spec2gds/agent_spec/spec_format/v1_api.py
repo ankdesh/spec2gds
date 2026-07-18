@@ -1,4 +1,9 @@
-"""Production V1 local API and small editor surface with no ODT dependencies."""
+"""Production V1 local API and browser editor for deterministic ``.spec`` files.
+
+The module is deliberately the only HTTP composition root.  It translates
+JSON requests into immutable SpecIR reads, validated source transactions, and
+activity-store operations; the browser never receives mutable package objects.
+"""
 
 from __future__ import annotations
 
@@ -43,31 +48,43 @@ from spec2gds.agent_spec.spec_format.transactions import (
 
 
 class OpenDocumentRequest(pydantic.BaseModel):
+    """Select one existing V1 package and its optional artifact sidecar."""
+
     path: str
     sidecar_root: str | None = None
 
 
 class CreateDocumentRequest(pydantic.BaseModel):
+    """Create and activate an empty deterministic V1 package."""
+
     path: str
     document_id: str | None = None
     sidecar_root: str | None = None
 
 
 class TransactionRequest(pydantic.BaseModel):
+    """Optimistic source edit request expressed in the public operation vocabulary."""
+
     expected_source_revision_hash: str
     operations: list[dict[str, typing.Any]]
 
 
 class ActionInputRequest(pydantic.BaseModel):
+    """Normalized action inputs and optional immutable input artifacts."""
+
     inputs: dict[str, typing.Any] = pydantic.Field(default_factory=dict)
     input_artifact_ids: list[str] = pydantic.Field(default_factory=list)
 
 
 class ProposalRequest(pydantic.BaseModel):
+    """Revision guard used while previewing or accepting a proposal."""
+
     expected_source_revision_hash: str
 
 
 class AssetRequest(pydantic.BaseModel):
+    """Base64-encoded source asset plus optimistic revision guard."""
+
     expected_source_revision_hash: str
     asset_id: str
     data_base64: str
@@ -79,6 +96,7 @@ class V1Session:
     """One local document session that keeps source and activity concerns separate."""
 
     def __init__(self, path: str, sidecar_root: str | None = None) -> None:
+        """Load and validate source before exposing the session to any route."""
         self.path = str(Path(path).expanduser().resolve())
         self.package = SpecPackage.load(self.path)
         self.revision = SpecRevision.from_package(self.package)
@@ -88,12 +106,14 @@ class V1Session:
 
     @classmethod
     def create(cls, path: str, document_id: str | None, sidecar_root: str | None = None) -> "V1Session":
+        """Create a package on disk, then reopen it through the normal validator."""
         package = SpecPackage.create(document_id)
         destination = str(Path(path).expanduser().resolve())
         package.save(destination)
         return cls(destination, sidecar_root)
 
     def save(self) -> None:
+        """Persist source and activity using the package's deterministic writer."""
         self.package.save(self.path)
 
     def commit_revision(self, revision: SpecRevision) -> None:
@@ -112,19 +132,32 @@ def create_app() -> typing.Any:
     try:
         import fastapi
         import fastapi.responses
+        import fastapi.staticfiles
     except Exception as exc:  # pragma: no cover - import environment guard.
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
     state: dict[str, V1Session | None] = {"active": None}
+    editor_root = Path(__file__).with_name("editor")
+    sample_root = Path(__file__).with_name("samples") / "generated"
+
+    # StaticFiles is mounted from a package-relative path so launching the API
+    # from another working directory cannot silently break the editor.
+    app.mount(
+        "/editor-assets",
+        fastapi.staticfiles.StaticFiles(directory=editor_root),
+        name="editor-assets",
+    )
 
     def active() -> V1Session:
+        """Return the active single-user session or an actionable HTTP error."""
         session = state["active"]
         if session is None:
             raise fastapi.HTTPException(status_code=400, detail="No V1 .spec package is open.")
         return session
 
     def ref(kind: str, entity_id: str) -> EntityRef:
+        """Build a document-local stable entity reference from route segments."""
         session = active()
         try:
             return EntityRef(document_id=session.revision.document_id, entity_id=entity_id, entity_kind=kind)
@@ -132,6 +165,7 @@ def create_app() -> typing.Any:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     def result_or_error(result: typing.Any) -> dict[str, typing.Any]:
+        """Commit a successful transaction or map diagnostics to HTTP status."""
         if result.succeeded and result.revision is not None:
             active().commit_revision(result.revision)
             return {"committed": True, "snapshot": _snapshot(active())}
@@ -140,10 +174,20 @@ def create_app() -> typing.Any:
 
     @app.get("/health")
     def health() -> dict[str, str]:
+        """Report server liveness and the source-format generation it serves."""
         return {"status": "ok", "format": "spec2gds-v1"}
+
+    @app.get("/samples")
+    def samples() -> dict[str, typing.Any]:
+        """List checked-in V1 packages that can be opened by the visual editor."""
+        entries = []
+        for path in sorted(sample_root.glob("*.spec")):
+            entries.append({"name": path.stem.replace("_", " ").title(), "path": str(path.resolve())})
+        return {"samples": entries}
 
     @app.post("/documents/create")
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
+        """Create, validate, activate, and return a new package snapshot."""
         try:
             state["active"] = V1Session.create(request.path, request.document_id, request.sidecar_root)
             return _snapshot(active())
@@ -152,6 +196,7 @@ def create_app() -> typing.Any:
 
     @app.post("/documents/open")
     def open_document(request: OpenDocumentRequest) -> dict[str, typing.Any]:
+        """Validate and activate an existing package; legacy containers fail closed."""
         try:
             state["active"] = V1Session(request.path, request.sidecar_root)
             return _snapshot(active())
@@ -161,19 +206,23 @@ def create_app() -> typing.Any:
 
     @app.get("/documents/snapshot")
     def document_snapshot() -> dict[str, typing.Any]:
+        """Return the complete editor-facing immutable source projection."""
         return _snapshot(active())
 
     @app.get("/diagnostics")
     def diagnostics() -> dict[str, typing.Any]:
+        """Return source diagnostics separately from artifact-sidecar diagnostics."""
         session = active()
         return {"source": list(session.revision.diagnostics), "artifacts": list(session.activity.artifact_diagnostics())}
 
     @app.get("/components")
     def components() -> dict[str, typing.Any]:
+        """List component SpecIR nodes."""
         return {"components": [_jsonable(item) for item in active().revision.components]}
 
     @app.get("/components/{entity_id}")
     def component(entity_id: str) -> dict[str, typing.Any]:
+        """Resolve one component by stable entity id."""
         try:
             return _jsonable(active().revision.resolve(ref("component", entity_id)))
         except KeyError as exc:
@@ -181,11 +230,13 @@ def create_app() -> typing.Any:
 
     @app.get("/designs")
     def designs() -> dict[str, typing.Any]:
+        """List designs together with their derived read-only topology."""
         session = active()
         return {"designs": [_jsonable(item) for item in session.revision.designs], "topology": [_topology(item) for item in session.revision.designs]}
 
     @app.get("/designs/{entity_id}")
     def design(entity_id: str) -> dict[str, typing.Any]:
+        """Resolve one design and derive its display topology."""
         try:
             item = active().revision.resolve(ref("design", entity_id))
             return {"design": _jsonable(item), "topology": _topology(item)}
@@ -194,22 +245,27 @@ def create_app() -> typing.Any:
 
     @app.get("/entry-designs")
     def entry_designs() -> dict[str, typing.Any]:
+        """List explicitly selected entry designs."""
         return {"entry_designs": [_jsonable(item) for item in active().revision.entry_designs()]}
 
     @app.get("/component-compositions")
     def component_compositions() -> dict[str, typing.Any]:
+        """List component-to-internal-design ownership mappings."""
         return {"component_compositions": [_jsonable(item) for item in active().revision.manifest.component_compositions]}
 
     @app.get("/narrative")
     def narrative() -> dict[str, typing.Any]:
+        """Return the typed narrative AST."""
         return _jsonable(active().revision.narrative)
 
     @app.get("/assets")
     def assets() -> dict[str, typing.Any]:
+        """List source asset metadata without embedding binary content."""
         return {"assets": [_jsonable(item) for item in active().revision.assets]}
 
     @app.get("/assets/{asset_id}/content")
     def asset_content(asset_id: str) -> typing.Any:
+        """Serve one validated source asset using its declared media type."""
         session = active()
         try:
             asset = session.revision.resolve(ref("asset", asset_id))
@@ -220,6 +276,7 @@ def create_app() -> typing.Any:
 
     @app.post("/transactions")
     def transaction(request: TransactionRequest) -> dict[str, typing.Any]:
+        """Decode and atomically apply a revision-guarded edit transaction."""
         try:
             operations = _decode_transaction_operations(active().revision.document_id, request.operations)
         except (KeyError, ValueError, pydantic.ValidationError) as exc:
@@ -228,6 +285,7 @@ def create_app() -> typing.Any:
 
     @app.post("/assets")
     def add_asset(request: AssetRequest) -> dict[str, typing.Any]:
+        """Add a content-addressed source asset through the transaction layer."""
         try:
             data = base64.b64decode(request.data_base64, validate=True)
         except ValueError as exc:
@@ -241,6 +299,7 @@ def create_app() -> typing.Any:
 
     @app.get("/entities/{kind}/{entity_id}/actions")
     def entity_actions(kind: str, entity_id: str) -> dict[str, typing.Any]:
+        """List action definitions compatible with a resolved source entity."""
         target = ref(kind, entity_id)
         try:
             active().revision.resolve(target)
@@ -256,6 +315,7 @@ def create_app() -> typing.Any:
 
     @app.post("/entities/{kind}/{entity_id}/actions/{action_id}/preconditions")
     def action_preconditions(kind: str, entity_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
+        """Validate action inputs and preconditions without executing a command."""
         try:
             action = active().actions.registry.get(action_id)
             snapshot = active().actions.create_snapshot(
@@ -272,6 +332,7 @@ def create_app() -> typing.Any:
 
     @app.post("/entities/{kind}/{entity_id}/actions/{action_id}/executions")
     def action_execution(kind: str, entity_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
+        """Execute one trusted local action against an immutable snapshot."""
         try:
             execution = active().actions.execute(
                 active().revision,
@@ -288,10 +349,12 @@ def create_app() -> typing.Any:
 
     @app.get("/executions")
     def executions() -> dict[str, typing.Any]:
+        """List durable action-execution records for the active package."""
         return {"executions": [_jsonable(item) for item in active().activity.state.executions]}
 
     @app.get("/executions/{execution_id}")
     def execution(execution_id: str) -> dict[str, typing.Any]:
+        """Return one durable action-execution record."""
         item = next((item for item in active().activity.state.executions if item.execution_id == execution_id), None)
         if item is None:
             raise fastapi.HTTPException(status_code=404, detail="Unknown action execution.")
@@ -299,6 +362,7 @@ def create_app() -> typing.Any:
 
     @app.get("/artifacts")
     def artifacts(entity_kind: str | None = None, entity_id: str | None = None) -> dict[str, typing.Any]:
+        """List artifacts, optionally filtered by attached source entity."""
         items = active().activity.state.artifacts
         if entity_kind and entity_id:
             target = ref(entity_kind, entity_id)
@@ -307,17 +371,32 @@ def create_app() -> typing.Any:
 
     @app.get("/artifacts/{artifact_id}/lineage")
     def artifact_lineage(artifact_id: str) -> dict[str, typing.Any]:
+        """Return an artifact followed by its immutable parent lineage."""
         lineage = active().activity.artifact_lineage(artifact_id)
         if not lineage:
             raise fastapi.HTTPException(status_code=404, detail="Unknown artifact.")
         return {"lineage": [_jsonable(item) for item in lineage]}
 
+    @app.get("/artifacts/{artifact_id}/content")
+    def artifact_content(artifact_id: str) -> typing.Any:
+        """Serve verified sidecar bytes for one immutable artifact."""
+        artifact = next((item for item in active().activity.state.artifacts if item.artifact_id == artifact_id), None)
+        if artifact is None:
+            raise fastapi.HTTPException(status_code=404, detail="Unknown artifact.")
+        try:
+            data = active().sidecar.read(artifact)
+        except (FileNotFoundError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        return fastapi.Response(content=data, media_type=artifact.media_type)
+
     @app.get("/proposals")
     def proposals() -> dict[str, typing.Any]:
+        """List review-gated change proposals for the active package."""
         return {"proposals": [_jsonable(item) for item in active().activity.state.proposals]}
 
     @app.post("/proposals/{proposal_id}/preview")
     def preview_proposal(proposal_id: str, request: ProposalRequest) -> dict[str, typing.Any]:
+        """Validate a pending proposal without changing source or review state."""
         if request.expected_source_revision_hash != active().revision.source_revision_hash:
             raise fastapi.HTTPException(status_code=409, detail="Expected source revision hash is stale.")
         result = active().actions.preview_proposal(active().revision, active().activity, proposal_id)
@@ -325,12 +404,14 @@ def create_app() -> typing.Any:
 
     @app.post("/proposals/{proposal_id}/accept")
     def accept_proposal(proposal_id: str, request: ProposalRequest) -> dict[str, typing.Any]:
+        """Accept a current proposal through the normal transaction validator."""
         if request.expected_source_revision_hash != active().revision.source_revision_hash:
             raise fastapi.HTTPException(status_code=409, detail="Expected source revision hash is stale.")
         return result_or_error(active().actions.accept_proposal(active().revision, active().activity, proposal_id))
 
     @app.post("/proposals/{proposal_id}/reject")
     def reject_proposal(proposal_id: str) -> dict[str, typing.Any]:
+        """Record proposal rejection without changing source state."""
         try:
             proposal = active().actions.reject_proposal(active().activity, proposal_id)
             active().save()
@@ -338,9 +419,19 @@ def create_app() -> typing.Any:
         except (KeyError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/editor", response_class=fastapi.responses.HTMLResponse)
+    @app.get("/", include_in_schema=False)
+    def root() -> typing.Any:
+        """Make the visual editor the convenient default local-server page."""
+        return fastapi.responses.RedirectResponse(url="/editor")
+
+    @app.get("/editor", include_in_schema=False, response_class=fastapi.responses.HTMLResponse)
     def editor() -> str:
-        return _EDITOR_HTML
+        """Serve the no-build V1 editor shell bundled with the Python package.
+
+        Reading the small shell directly also keeps the route callable in
+        acceptance tests; linked CSS and JavaScript remain static resources.
+        """
+        return (editor_root / "index.html").read_text(encoding="utf-8")
 
     return app
 
@@ -348,6 +439,7 @@ def create_app() -> typing.Any:
 def _decode_transaction_operations(document_id: str, raw_operations: list[dict[str, typing.Any]]) -> tuple[typing.Any, ...]:
     """Decode the JSON API operation vocabulary to V1.2 typed transactions."""
     def entity(value: typing.Any) -> EntityRef:
+        """Accept compact ``kind:id`` or full public reference objects."""
         if isinstance(value, str):
             kind, entity_id = value.split(":", 1)
             return EntityRef(document_id=document_id, entity_id=entity_id, entity_kind=kind)
@@ -412,6 +504,7 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
 
 
 def _snapshot(session: V1Session) -> dict[str, typing.Any]:
+    """Build the single payload from which every editor view is rendered."""
     revision = session.revision
     return {
         "document_id": revision.document_id,
@@ -427,6 +520,7 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
 
 
 def _topology(design: typing.Any) -> dict[str, typing.Any]:
+    """Derive a compact graph without persisting a second topology model."""
     nodes = [{"id": instance.name, "component_vlnv": instance.component_vlnv} for instance in design.instances]
     edges: list[dict[str, typing.Any]] = []
     for connection in design.connections:
@@ -438,6 +532,7 @@ def _topology(design: typing.Any) -> dict[str, typing.Any]:
 
 
 def _jsonable(value: typing.Any) -> typing.Any:
+    """Recursively convert public Pydantic/dataclass contracts to JSON values."""
     if isinstance(value, pydantic.BaseModel):
         return {key: _jsonable(item) for key, item in value.model_dump(mode="json").items()}
     if dataclasses.is_dataclass(value):
@@ -447,13 +542,3 @@ def _jsonable(value: typing.Any) -> typing.Any:
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     return value
-
-
-_EDITOR_HTML = """<!doctype html><html><head><meta charset='utf-8'><title>spec2gds V1 Editor</title>
-<style>body{font:14px system-ui;margin:0;display:grid;grid-template-columns:190px 1fr}nav{padding:16px;background:#172033;color:#fff}button,input,textarea{box-sizing:border-box;width:100%;margin:6px 0;padding:8px}main{padding:20px;max-width:1000px}pre{white-space:pre-wrap;background:#f4f6f9;padding:12px;max-height:50vh;overflow:auto}textarea{height:170px;font:12px ui-monospace,monospace}.row{display:flex;gap:8px}.row>*{flex:1}</style></head>
-<body><nav><h3>V1 Editor</h3><button onclick="show('components')">Components</button><button onclick="show('designs')">Designs / topology</button><button onclick="show('narrative')">Narrative</button><button onclick="show('executions')">Action executions</button><button onclick="show('artifacts')">Artifacts / reports</button><button onclick="show('diagnostics')">Diagnostics</button></nav>
-<main><h1>spec2gds V1</h1><p>Open a deterministic V1 package, inspect its source graph, and apply a validated entity-targeted transaction.</p>
-<div class='row'><input id='path' placeholder='/absolute/path/to/design.spec'><button onclick='openPackage()'>Open package</button></div>
-<textarea id='ops' placeholder='Transaction operations JSON, for example: [{"type":"upsert_narrative_block","block":{"block_id":"note","type":"paragraph","text":"Architect note"}}]'></textarea><button onclick='applyTransaction()'>Apply transaction</button>
-<pre id='data'>No V1 package is open.</pre></main>
-<script>let snapshot=null;const output=()=>document.querySelector('#data');async function body(r){let j=await r.json();if(!r.ok)throw new Error(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail));return j}async function openPackage(){try{snapshot=await body(await fetch('/documents/open',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({path:document.querySelector('#path').value})}));output().textContent=JSON.stringify(snapshot,null,2)}catch(e){output().textContent=e}}async function show(name){try{output().textContent=JSON.stringify(await body(await fetch('/'+name)),null,2)}catch(e){output().textContent=e}}async function applyTransaction(){try{if(!snapshot)throw new Error('Open a package first.');let ops=JSON.parse(document.querySelector('#ops').value);let result=await body(await fetch('/transactions',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({expected_source_revision_hash:snapshot.source_revision_hash,operations:ops})}));snapshot=result.snapshot;output().textContent=JSON.stringify(result,null,2)}catch(e){output().textContent=e}}</script></body></html>"""
