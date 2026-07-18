@@ -4,7 +4,22 @@ This directory contains durable project documentation. Each document has a
 specific purpose so current architecture, future ideas, and contributor rules do
 not blur together.
 
-## Agent-Spec Docs
+## V1 Active Docs
+
+- [V1 Source Package](spec_format_v1.md): deterministic IP-XACT-centered
+  package foundation and standalone CLI.
+- [V1.2 SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic source
+  snapshots, graph queries, and validated optimistic edit transactions.
+- [V1.3 Actions, Artifacts, and Proposals](spec_actions_v1.md): entity-targeted
+  external actions, sidecar artifacts, activity provenance, and review-gated
+  source edits.
+- [V1.4 Local API and Editor](spec_editor_v1.md): production API/editor shell,
+  source revision checks, action executions, and proposal review.
+
+## Archived ODT-Agent-Spec Docs
+
+The following documents describe the pre-cutover ODT/heading-based prototype.
+They are retained as historical rationale and are not production contracts.
 
 - [Architecture](agent_spec_architecture.md): current components, runtime
   flows, storage layout, and pointers from concepts to code.
@@ -20,10 +35,6 @@ not blur together.
   executor callbacks, reports, artifacts, and A2UI report surfaces.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): protocol fidelity rules for
   embedded IP-XACT payloads, bus interfaces, editor behavior, and benchmarks.
-- [V1 Source Package](spec_format_v1.md): the new deterministic,
-  IP-XACT-centered package foundation and its standalone CLI.
-- [V1.2 SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic source
-  snapshots, graph queries, and validated optimistic edit transactions.
 - [Diagnostics and Sanitization](agent_spec_diagnostics.md): CLI commands for
   inspecting full `.spec` package anatomy and applying conservative structural
   repairs.

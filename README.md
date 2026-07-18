@@ -3,10 +3,9 @@
 `spec2gds` is an umbrella project for specification-driven hardware design
 experiments and tooling.
 
-The active implementation in this repository is `agent-spec`: a local workflow
-for `.spec` hardware specification documents with embedded structured metadata,
-IP-XACT payloads, action runs, generated artifact references, and editor
-support.
+The active implementation is an ODT-free V1 `.spec` workflow: deterministic
+IP-XACT source packages, a typed narrative AST, immutable SpecIR snapshots,
+entity-targeted action executions, sidecar artifacts, and reviewed proposals.
 
 ## Current Components
 
@@ -14,20 +13,14 @@ support.
 spec2gds/agent_spec/
 ```
 
-Key pieces:
+Key V1 pieces:
 
-- `.spec` archive load/save and `spec_data/` preservation
-- semantic document parsing for headings, paragraphs, lists, tables, images,
-  links, and simple text edits
-- section-version and IP-XACT attachment metadata
-- FastAPI editor API plus mounted action, executor, run, and report APIs
-- React/Vite local document editor
-- block graph projection from document headings
-- Pydantic action, run, artifact, and writeback contracts
-- shared read/query service for UI snapshots and executor context
-- declarative SystemC example actions for exercising the action contract
-- package CLI for listing plugins, injecting/extracting payloads, validating,
-  inspecting, and sanitizing `.spec` files
+- deterministic custom ZIP `.spec` archive and IP-XACT 1685-2022 profile
+- typed narrative AST, assets, explicit entry designs, and component composition
+- immutable `SpecRevision` semantic queries and atomic edit transactions
+- entity-targeted local action executions, content-addressed sidecar artifacts,
+  provenance, and reviewed change proposals
+- local V1 API and editor shell at `/editor`
 
 Start with the docs index:
 
@@ -70,14 +63,15 @@ UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" \
 uv run python -m pytest -q
 ```
 
-## Run The Local API
+## Run The Local V1 API
 
 ```bash
 uv run python -m spec2gds.agent_spec.api
 ```
 
-The API entry point starts the editor API and mounts action, executor, run, and
-report endpoints at `/agent-spec`.
+The API entry point starts the ODT-free V1 editor/API. Open
+`http://127.0.0.1:8000/editor` after startup. See
+[`docs/spec_editor_v1.md`](docs/spec_editor_v1.md) for the entity-targeted API.
 
 ## New V1 Source Package Foundation
 
@@ -97,8 +91,14 @@ See [`docs/spec_format_v1.md`](docs/spec_format_v1.md) for the source layout,
 CLI, and current V1.1 boundary, and [`docs/spec_ir_v1.md`](docs/spec_ir_v1.md)
 for the V1.2 immutable SpecIR and atomic edit API. The full ordered
 implementation roadmap is in [`docs/pivot/README.md`](docs/pivot/README.md).
+V1.3's generic external-action, artifact, and reviewed-proposal layer is
+documented in [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md).
 
-## Inspect Or Sanitize A `.spec`
+## Archived Prototype CLI
+
+The commands below belong to the pre-cutover ODT/heading prototype and are
+retained only for historical investigation. They are not part of the production
+V1 API or package format.
 
 Print a detailed diagnostic report:
 
@@ -119,7 +119,7 @@ PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package
 See [`docs/agent_spec_diagnostics.md`](docs/agent_spec_diagnostics.md) for the
 full report contents and sanitization rules.
 
-## Run The Editor UI Test
+## Archived Prototype UI Test
 
 ```bash
 cd spec2gds/agent_spec/document/editor_web

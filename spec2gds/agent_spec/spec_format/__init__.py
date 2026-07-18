@@ -6,6 +6,18 @@ schemas, and profile validation; it does not implement actions or editing UI.
 """
 
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
+from spec2gds.agent_spec.spec_format.actions import (
+    ActionDefinition,
+    ActionExecution,
+    ActionRegistry,
+    ActionService,
+    ActionSnapshot,
+    ActivityStore,
+    ArtifactRef,
+    ArtifactSidecar,
+    ChangeProposal,
+    create_reference_registry,
+)
 from spec2gds.agent_spec.spec_format.ir import (
     AbstractionDefinitionIR,
     BusDefinitionIR,
@@ -32,6 +44,15 @@ __all__ = [
     "ConnectionIR",
     "DesignIR",
     "DocumentEntry",
+    "ActionDefinition",
+    "ActionExecution",
+    "ActionRegistry",
+    "ActionService",
+    "ActionSnapshot",
+    "ActivityStore",
+    "ArtifactRef",
+    "ArtifactSidecar",
+    "ChangeProposal",
     "EditResult",
     "EntityRef",
     "NarrativeBlock",
@@ -45,4 +66,5 @@ __all__ = [
     "SpecEditTransaction",
     "SpecValidationError",
     "build_v1_sample",
+    "create_reference_registry",
 ]

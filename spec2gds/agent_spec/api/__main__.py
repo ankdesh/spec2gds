@@ -1,17 +1,17 @@
-"""Run the local agent-spec document editor API with uvicorn."""
+"""Run the production V1 IP-XACT-centered local editor API with uvicorn."""
 
 import os
 
-import spec2gds.agent_spec.api.document_app as document_app
+from spec2gds.agent_spec.spec_format import v1_api
 
 
 def main() -> None:
-    """Start the API expected by the local React document editor."""
+    """Start the ODT-free V1 local API and its lightweight editor surface."""
     import uvicorn
 
     host = os.environ.get("AGENT_SPEC_HOST", "127.0.0.1")
     port = int(os.environ.get("AGENT_SPEC_PORT", "8000"))
-    uvicorn.run(document_app.create_app(), host=host, port=port)
+    uvicorn.run(v1_api.create_app(), host=host, port=port)
 
 
 if __name__ == "__main__":

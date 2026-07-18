@@ -1,6 +1,5 @@
-"""FastAPI surface for the agent-spec v1 local server."""
+"""FastAPI package; the production entry point serves the ODT-free V1 API."""
 
-import spec2gds.agent_spec.api.app as app
+from spec2gds.agent_spec.spec_format import v1_api
 
-__all__ = ["app"]
-
+__all__ = ["v1_api"]
