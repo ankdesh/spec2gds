@@ -32,10 +32,13 @@ Key pieces:
 Start with the docs index:
 
 - [`docs/README.md`](docs/README.md)
+- [IP-XACT pivot plans](docs/pivot/README.md) for the approved replacement of
+  the ODT-centered `.spec` architecture.
 
 Most-used docs:
 
 - [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
+- [`docs/mvc_architecture_assessment.md`](docs/mvc_architecture_assessment.md)
 - [`docs/agent_spec_document_schema.md`](docs/agent_spec_document_schema.md)
 - [`docs/agent_spec_action_execution.md`](docs/agent_spec_action_execution.md)
 - [`docs/agent_spec_vocabulary.md`](docs/agent_spec_vocabulary.md)
@@ -75,6 +78,24 @@ uv run python -m spec2gds.agent_spec.api
 
 The API entry point starts the editor API and mounts action, executor, run, and
 report endpoints at `/agent-spec`.
+
+## New V1 Source Package Foundation
+
+The replacement ODT-free `.spec` package is available alongside the legacy
+editor/API path while the V1 cutover is implemented. It stores canonical
+IP-XACT 1685-2022 source documents, a typed narrative AST, and assets in a
+deterministic ZIP package. The new package CLI intentionally rejects legacy
+ODT `.spec` containers.
+
+```bash
+uv run python -m spec2gds.agent_spec.spec_format.cli validate \
+  --container spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec
+uv run python -m pytest tests/agent_spec/spec_format -q
+```
+
+See [`docs/spec_format_v1.md`](docs/spec_format_v1.md) for the source layout,
+CLI, and current V1.1 boundary. The full ordered implementation roadmap is in
+[`docs/pivot/README.md`](docs/pivot/README.md).
 
 ## Inspect Or Sanitize A `.spec`
 
