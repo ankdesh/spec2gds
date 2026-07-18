@@ -22,6 +22,8 @@ not blur together.
   embedded IP-XACT payloads, bus interfaces, editor behavior, and benchmarks.
 - [V1 Source Package](spec_format_v1.md): the new deterministic,
   IP-XACT-centered package foundation and its standalone CLI.
+- [V1.2 SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic source
+  snapshots, graph queries, and validated optimistic edit transactions.
 - [Diagnostics and Sanitization](agent_spec_diagnostics.md): CLI commands for
   inspecting full `.spec` package anatomy and applying conservative structural
   repairs.

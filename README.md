@@ -94,8 +94,9 @@ uv run python -m pytest tests/agent_spec/spec_format -q
 ```
 
 See [`docs/spec_format_v1.md`](docs/spec_format_v1.md) for the source layout,
-CLI, and current V1.1 boundary. The full ordered implementation roadmap is in
-[`docs/pivot/README.md`](docs/pivot/README.md).
+CLI, and current V1.1 boundary, and [`docs/spec_ir_v1.md`](docs/spec_ir_v1.md)
+for the V1.2 immutable SpecIR and atomic edit API. The full ordered
+implementation roadmap is in [`docs/pivot/README.md`](docs/pivot/README.md).
 
 ## Inspect Or Sanitize A `.spec`
 

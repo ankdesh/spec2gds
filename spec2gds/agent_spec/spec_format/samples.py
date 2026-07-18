@@ -66,18 +66,104 @@ def build_v1_sample() -> SpecPackage:
             "component_leaf",
             "leaf",
             """
+  <ipxact:busInterfaces>
+    <ipxact:busInterface>
+      <ipxact:name>link</ipxact:name>
+      <ipxact:busType vendor=\"spec2gds.example\" library=\"demo\" name=\"demo_link\" version=\"1.0\"/>
+      <ipxact:abstractionTypes><ipxact:abstractionType>
+        <ipxact:abstractionRef vendor=\"spec2gds.example\" library=\"demo\" name=\"demo_link_wire\" version=\"1.0\"/>
+        <ipxact:portMaps><ipxact:portMap><ipxact:logicalPort><ipxact:name>payload</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>irq</ipxact:name></ipxact:physicalPort></ipxact:portMap></ipxact:portMaps>
+      </ipxact:abstractionType></ipxact:abstractionTypes>
+      <ipxact:initiator/>
+    </ipxact:busInterface>
+  </ipxact:busInterfaces>
   <ipxact:model>
     <ipxact:ports>
       <ipxact:port><ipxact:name>irq</ipxact:name><ipxact:wire><ipxact:direction>out</ipxact:direction></ipxact:wire></ipxact:port>
+      <ipxact:port><ipxact:name>irq_in</ipxact:name><ipxact:wire><ipxact:direction>in</ipxact:direction></ipxact:wire></ipxact:port>
     </ipxact:ports>
   </ipxact:model>""",
         ),
     )
+    sink = package.add_document(
+        "component",
+        _xml(
+            "component",
+            "component_sink",
+            "sink",
+            """
+  <ipxact:busInterfaces>
+    <ipxact:busInterface>
+      <ipxact:name>link</ipxact:name>
+      <ipxact:busType vendor=\"spec2gds.example\" library=\"demo\" name=\"demo_link\" version=\"1.0\"/>
+      <ipxact:abstractionTypes><ipxact:abstractionType>
+        <ipxact:abstractionRef vendor=\"spec2gds.example\" library=\"demo\" name=\"demo_link_wire\" version=\"1.0\"/>
+        <ipxact:portMaps><ipxact:portMap><ipxact:logicalPort><ipxact:name>payload</ipxact:name></ipxact:logicalPort><ipxact:physicalPort><ipxact:name>payload_in</ipxact:name></ipxact:physicalPort></ipxact:portMap></ipxact:portMaps>
+      </ipxact:abstractionType></ipxact:abstractionTypes>
+      <ipxact:target/>
+    </ipxact:busInterface>
+  </ipxact:busInterfaces>
+  <ipxact:model><ipxact:ports><ipxact:port><ipxact:name>payload_in</ipxact:name><ipxact:wire><ipxact:direction>in</ipxact:direction></ipxact:wire></ipxact:port></ipxact:ports></ipxact:model>""",
+        ),
+    )
     composite = package.add_document("component", _xml("component", "component_subsystem", "subsystem"))
-    internal = package.add_document("design", _xml("design", "design_subsystem_internal", "subsystem_internal"))
-    top_a = package.add_document("design", _xml("design", "design_top_a", "top_a"))
-    top_b = package.add_document("design", _xml("design", "design_top_b", "top_b"))
-    del bus, abstraction, leaf  # Present as source entities; the sample stays deliberately unconnected.
+    internal = package.add_document(
+        "design",
+        _xml(
+            "design",
+            "design_subsystem_internal",
+            "subsystem_internal",
+            """
+  <ipxact:componentInstances>
+    <ipxact:componentInstance>
+      <ipxact:instanceName>leaf0</ipxact:instanceName>
+      <ipxact:componentRef vendor=\"spec2gds.example\" library=\"demo\" name=\"leaf\" version=\"1.0\"/>
+    </ipxact:componentInstance>
+    <ipxact:componentInstance>
+      <ipxact:instanceName>sink0</ipxact:instanceName>
+      <ipxact:componentRef vendor=\"spec2gds.example\" library=\"demo\" name=\"sink\" version=\"1.0\"/>
+    </ipxact:componentInstance>
+  </ipxact:componentInstances>
+  <ipxact:interconnections>
+    <ipxact:interconnection>
+      <ipxact:name>link0</ipxact:name>
+      <ipxact:activeInterface componentInstanceRef="leaf0" busRef="link"/>
+      <ipxact:activeInterface componentInstanceRef="sink0" busRef="link"/>
+    </ipxact:interconnection>
+  </ipxact:interconnections>""",
+        ),
+    )
+    top_a = package.add_document(
+        "design",
+        _xml(
+            "design",
+            "design_top_a",
+            "top_a",
+            """
+  <ipxact:componentInstances>
+    <ipxact:componentInstance>
+      <ipxact:instanceName>subsystem0</ipxact:instanceName>
+      <ipxact:componentRef vendor=\"spec2gds.example\" library=\"demo\" name=\"subsystem\" version=\"1.0\"/>
+    </ipxact:componentInstance>
+  </ipxact:componentInstances>""",
+        ),
+    )
+    top_b = package.add_document(
+        "design",
+        _xml(
+            "design",
+            "design_top_b",
+            "top_b",
+            """
+  <ipxact:componentInstances>
+    <ipxact:componentInstance>
+      <ipxact:instanceName>leaf1</ipxact:instanceName>
+      <ipxact:componentRef vendor=\"spec2gds.example\" library=\"demo\" name=\"leaf\" version=\"1.0\"/>
+    </ipxact:componentInstance>
+  </ipxact:componentInstances>""",
+        ),
+    )
+    del bus, abstraction, leaf, sink  # Source entities are connected by the internal design below.
 
     asset = package.add_asset("asset_overview", _PIXEL_PNG, "image/png", "png")
     document_id = package.manifest.document_id

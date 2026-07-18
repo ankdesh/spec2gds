@@ -90,7 +90,7 @@ def validate_vlnv(value: str) -> str:
 class StrictModel(pydantic.BaseModel):
     """Base model that rejects unrecognized persisted fields."""
 
-    model_config = pydantic.ConfigDict(extra="forbid")
+    model_config = pydantic.ConfigDict(extra="forbid", frozen=True)
 
 
 class EntityRef(StrictModel):

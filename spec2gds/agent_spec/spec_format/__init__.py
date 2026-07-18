@@ -6,6 +6,15 @@ schemas, and profile validation; it does not implement actions or editing UI.
 """
 
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
+from spec2gds.agent_spec.spec_format.ir import (
+    AbstractionDefinitionIR,
+    BusDefinitionIR,
+    ComponentIR,
+    ConnectionIR,
+    DesignIR,
+    InstanceIR,
+    SpecRevision,
+)
 from spec2gds.agent_spec.spec_format.models import (
     ComponentComposition,
     DocumentEntry,
@@ -15,15 +24,25 @@ from spec2gds.agent_spec.spec_format.models import (
     SpecManifest,
 )
 from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+from spec2gds.agent_spec.spec_format.transactions import EditResult, SpecEditTransaction
 
 __all__ = [
     "ComponentComposition",
+    "ComponentIR",
+    "ConnectionIR",
+    "DesignIR",
     "DocumentEntry",
+    "EditResult",
     "EntityRef",
     "NarrativeBlock",
     "NarrativeDocument",
+    "InstanceIR",
+    "BusDefinitionIR",
+    "AbstractionDefinitionIR",
+    "SpecRevision",
     "SpecManifest",
     "SpecPackage",
+    "SpecEditTransaction",
     "SpecValidationError",
     "build_v1_sample",
 ]
