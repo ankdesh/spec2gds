@@ -30,6 +30,8 @@ Start with the docs index:
 
 Most-used docs:
 
+- [`docs/agent_spec_architecture.md`](docs/agent_spec_architecture.md)
+- [`docs/development_methodology.md`](docs/development_methodology.md)
 - [`docs/post_pivot_code_map.md`](docs/post_pivot_code_map.md)
 - [`docs/spec_format_v1.md`](docs/spec_format_v1.md)
 - [`docs/spec_ir_v1.md`](docs/spec_ir_v1.md)

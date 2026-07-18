@@ -1,5 +1,9 @@
 # V1.4 — Editor, API, Cutover, and End-to-End Acceptance
 
+> Status: completed. This file is implementation and acceptance history;
+> current architecture and usage are in `docs/agent_spec_architecture.md` and
+> `docs/spec_editor_v1.md`.
+
 ## Goal
 
 Expose the new source model and generic action platform through a purpose-built

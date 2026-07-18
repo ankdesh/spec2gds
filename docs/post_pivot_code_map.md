@@ -1,38 +1,38 @@
 # Post-Pivot V1 Code Map
 
-The production implementation is intentionally concentrated in
-`spec2gds/agent_spec/spec_format/`. No compatibility adapter loads the removed
-ODT/heading prototype.
+This is the short navigation map for the retained implementation. For design
+rationale and runtime flows, read
+[`agent_spec_architecture.md`](agent_spec_architecture.md).
 
-| Module | Responsibility |
+| Path | Ownership |
 | --- | --- |
-| `models.py` | Strict source-package contracts and cross-field invariants. |
-| `archive.py` | Deterministic ZIP I/O, package validation, and source hashing. |
-| `ipxact.py` | IP-XACT 1685-2022 parsing and profile validation. |
-| `ir.py` | Immutable editor/action projection, queries, and dependency closure. |
-| `transactions.py` | Atomic, revision-guarded source edits. |
-| `actions.py` | Action contracts, snapshots, executions, artifacts, and proposals. |
-| `reference_actions.py` | Small trusted subprocess actions used for V1 acceptance. |
-| `v1_api.py` | The single HTTP composition root and session boundary. |
-| `editor/` | A no-build browser client that owns presentation state only. |
-| `samples.py` | Deterministic, visually rich V1 acceptance fixture. |
+| `spec2gds/agent_spec/spec_format/models.py` | Strict persisted source and identity contracts. |
+| `spec2gds/agent_spec/spec_format/archive.py` | Deterministic package I/O and structural validation. |
+| `spec2gds/agent_spec/spec_format/ipxact.py` | Safe IEEE 1685-2022 parsing and V1 profile. |
+| `spec2gds/agent_spec/spec_format/ir.py` | Immutable semantic model, queries, and diagnostics. |
+| `spec2gds/agent_spec/spec_format/transactions.py` | Atomic revision-guarded edits. |
+| `spec2gds/agent_spec/spec_format/actions.py` | Snapshots, execution, artifacts, activity, proposals. |
+| `spec2gds/agent_spec/spec_format/reference_actions.py` | Generic acceptance executors. |
+| `spec2gds/agent_spec/spec_format/v1_api.py` | Local application/API composition root. |
+| `spec2gds/agent_spec/spec_format/editor/` | No-build browser presentation. |
+| `spec2gds/agent_spec/spec_format/samples.py` | Deterministic visual acceptance package. |
+| `spec2gds/agent_spec/spec_format/cli.py` | Package create/validate/inspect/pack/unpack commands. |
+| `spec2gds/agent_spec/api/__main__.py` | `spec2gds-server` and `spec2gds-editor` entry point. |
 
-## Runtime Flow
+## Runtime Sequence
 
-1. `V1Session` validates a package and constructs an immutable `SpecRevision`.
-2. The editor renders the snapshot returned by the API; it never mutates a
-   `SpecPackage` directly.
-3. Source changes become typed `SpecEditTransaction` operations guarded by the
-   current source revision hash.
-4. Actions execute against immutable dependency snapshots. Generated content
-   is stored in a content-addressed sidecar and recorded in package activity.
-5. A proposal changes source only after explicit review and revalidation.
+```text
+load package → validate → immutable SpecRevision
+                         ├─ query → API snapshot → browser rendering
+                         ├─ transaction → validate candidate → save revision
+                         └─ action snapshot → executor → artifact/proposal review
+```
 
-## Maintenance Rules
+## Navigation by Task
 
-- Add source semantics to the models and IR first, then expose them through
-  transactions and the API.
-- Keep derived UI views out of the package; recompute them from SpecIR.
-- Keep action activity out of the source revision hash.
-- Preserve stable entity and narrative block IDs across edits.
-- Extend `build_v1_sample()` whenever a new editor-visible V1 feature lands.
+- Format and schema: [`agent_spec_document_schema.md`](agent_spec_document_schema.md)
+- Semantic reads/writes: [`spec_ir_v1.md`](spec_ir_v1.md)
+- Actions and provenance: [`agent_spec_action_execution.md`](agent_spec_action_execution.md)
+- Server/editor: [`spec_editor_v1.md`](spec_editor_v1.md)
+- Implementation workflow: [`development_methodology.md`](development_methodology.md)
+- Future work: [`agent_spec_roadmap_questions.md`](agent_spec_roadmap_questions.md)

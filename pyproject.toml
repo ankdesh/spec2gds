@@ -1,7 +1,7 @@
 [project]
 name = "spec2gds"
 version = "0.1.0"
-description = "Add your description here"
+description = "Deterministic IP-XACT-centered hardware specification packages, actions, and editor"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

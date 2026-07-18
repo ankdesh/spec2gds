@@ -1,5 +1,8 @@
 # V1.2 — SpecIR, Semantic Queries, and Edit Validation
 
+> Status: completed. This file is implementation and acceptance history; the
+> active contract is in `docs/spec_ir_v1.md`.
+
 ## Goal
 
 Load the V1 source package into an immutable semantic representation called

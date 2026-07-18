@@ -1,75 +1,98 @@
 # Coding Guidelines
 
-These guidelines capture repository-specific expectations for future work.
+These rules apply to the current IP-XACT-centered V1 implementation and future
+capability packs.
 
-## Python Environment
+## Environment and Commands
 
-- Use `uv` for dependency management and command execution.
-- Use the project virtual environment created by `uv`; do not document ad hoc
-  global Python installs.
-- Prefer commands in this form:
-
-```bash
-uv run python -m pytest -q
-```
-
-For restricted environments, keep uv state local to the repository:
+- Use `uv` and the repository virtual environment.
+- Add dependencies through `pyproject.toml` and keep `uv.lock` synchronized.
+- Keep run commands in `README.md` and the owning document current.
 
 ```bash
-UV_CACHE_DIR="$PWD/.uv-cache" \
-UV_PYTHON_INSTALL_DIR="$PWD/.uv-python" \
+uv sync
 uv run python -m pytest -q
+uv run spec2gds-server
 ```
 
-## Documentation
+## Source Authority
 
-- Keep durable project notes in `docs/`.
-- Update `README.md` when setup, run, or usage commands change.
-- Keep architecture docs focused on the current system.
-- Put future plans and open questions in roadmap docs, not in current
-  architecture docs.
-- Keep vocabulary terms aligned with code names and user-facing labels.
+- Treat the manifest, narrative AST, IP-XACT documents, source assets, and
+  accepted annotations as canonical source.
+- Do not persist derived topology, UI cards, or generated downstream content as
+  duplicate source.
+- Keep activity outside the source revision hash.
+- Require reviewed proposals for action-generated source changes.
 
-## Code Style
+## Contracts and Types
 
-- Follow existing package boundaries before adding new abstractions.
-- Use Pydantic models for API and persistence contracts that cross module
+- Target Python 3.12 or newer and annotate all function boundaries.
+- Use frozen strict Pydantic models for persisted/API contracts and frozen
+  dataclasses for immutable internal projections.
+- Reject unknown persisted fields and unsupported protocol content.
+- Use stable IDs and `EntityRef` for identity; use VLNV for IP-XACT-native
+  document references.
+- Keep mutable construction objects behind explicit package/transaction
   boundaries.
-- Use module docstrings to explain each module's role in the `.spec` workflow.
-- Use class/function docstrings for Python contracts, public helpers, and
-  package-boundary behavior.
-- Use short inline comments for invariants, archive/path conventions,
-  compatibility fallbacks, migration behavior, and data-loss guards.
-- Keep comments focused on why code exists or what must remain true; avoid
-  repeating obvious syntax.
-- Prefer explicit errors and diagnostics over silent fallback when saving or
-  mutating `.spec` documents.
-- Preserve user data and custom `spec_data/` package entries unless the caller
-  explicitly asks to delete them.
-- Preserve external protocol semantics. In particular, do not reinterpret
-  IP-XACT `model/ports` as bus interfaces; benchmark and generated IP-XACT
-  payloads should use formal `busInterfaces/busInterface` records with
-  `portMaps`.
 
-## Testing
+## Module Boundaries
 
-- Add focused tests for changes to archive persistence, document parsing,
-  graph projection, action contracts, run/writeback behavior, and editor save
-  flow.
-- Use the existing test layout under `tests/agent_spec/`.
-- Keep generated benchmark artifacts intentional and documented when they are
-  checked in.
-- Benchmarks for protocol payloads should validate against the protocol parser
-  used by the toolchain, not just against project-specific summaries.
+- Core package, protocol, IR, transaction, and action code must not depend on
+  FastAPI or browser code.
+- Route handlers translate transport values into typed core operations.
+- The browser owns presentation state only and sends all writes through the
+  revision-guarded API.
+- Avoid eager imports from package initializers.
+- Extend the current boundaries described in
+  [`agent_spec_code_organization.md`](agent_spec_code_organization.md); do not
+  recreate deleted pre-pivot compatibility layers.
 
-## Documentation Ownership
+## Protocol Fidelity
 
-| Topic | File |
-| --- | --- |
-| Project overview and commands | `README.md` |
-| Current component architecture | `docs/agent_spec_architecture.md` |
-| Action/executor/report contracts | `docs/agent_spec_action_execution.md` |
-| Shared terms | `docs/agent_spec_vocabulary.md` |
-| Action context/executor completion APIs | `docs/agent_spec_action_execution.md` |
-| Roadmap and open questions | `docs/agent_spec_roadmap_questions.md` |
-| Code layout | `docs/agent_spec_code_organization.md` |
+- Validate IP-XACT using the bundled IEEE 1685-2022 schemas and the V1 profile.
+- Keep physical ports under `model/ports` and formal interfaces under
+  `busInterfaces/busInterface`.
+- Never infer a bus interface solely from a port.
+- Parse XML with external entity, DTD, and network access disabled.
+- Preserve deterministic normalization and package paths.
+
+## Writes and Errors
+
+- Apply source edits to a private copy and validate the complete candidate.
+- Require expected source revision hashes at public write boundaries.
+- Return explicit diagnostics; do not silently repair or guess hardware intent.
+- Validate archive paths before filesystem or ZIP access.
+- Verify artifact hashes on both ingest and read.
+- Do not broaden exception handling until failure modes and diagnostics remain
+  distinguishable.
+
+## Documentation and Comments
+
+- Keep durable project knowledge under `docs/`.
+- Give every Python module, class, and function a useful docstring.
+- Comment invariants, security boundaries, determinism requirements, and
+  non-obvious protocol order—not obvious syntax.
+- Update architecture, schema, vocabulary, methodology, and usage docs in the
+  same change that alters those contracts.
+- Mark historical plans as completed history; do not describe removed systems
+  as current.
+
+## Tests and Samples
+
+- Mirror source boundaries under `tests/agent_spec/spec_format/`.
+- Test happy paths and validation failures at the narrowest useful layer.
+- Add end-to-end API coverage for cross-layer behavior.
+- Extend `build_v1_sample()` for every editor-visible capability and regenerate
+  the checked-in package.
+- Require deterministic save/repack bytes and source hashes.
+- Validate real protocol content rather than project-specific summaries.
+
+## Change Completion Checklist
+
+- Persisted and API contracts are typed and documented.
+- Source/activity boundaries and revision behavior remain correct.
+- Invalid input fails without partial mutation.
+- Unit, integration, deterministic sample, and relevant UI acceptance tests
+  pass.
+- README commands and owning docs match executable entry points.
+- `git diff --check` is clean and documentation links resolve.

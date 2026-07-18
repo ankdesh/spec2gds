@@ -1,12 +1,14 @@
-# V1.2 SpecIR and Atomic Edits
+# V1 SpecIR and Atomic Edits
 
-V1.2 adds the source-only in-memory representation for the deterministic V1
-package. `SpecRevision` loads a validated package into immutable semantic
+The completed V1.2 layer is the source-only in-memory representation for the
+deterministic package. `SpecRevision` loads a validated package into immutable semantic
 objects for components, designs, bus definitions, abstraction definitions,
 narrative blocks, assets, and accepted annotations.
 
 It deliberately does not contain action history, reports, generated artifacts,
-or implementation-specific SystemC/RTL state. Those arrive in later plans.
+or implementation-specific SystemC/RTL state. Activity is accessed separately
+through `ActivityStore`; downstream implementation capabilities remain future
+work.
 
 ## Load and Query
 
@@ -78,5 +80,5 @@ Run the V1.1 and V1.2 package tests with:
 uv run python -m pytest tests/agent_spec/spec_format -q
 ```
 
-The detailed intended boundary and exit gate remain in
+The completed design and exit gate are preserved in
 [V1.2 — SpecIR, Semantic Queries, and Edit Validation](pivot/v1_02_spec_ir_and_validation.md).

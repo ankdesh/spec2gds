@@ -1,8 +1,9 @@
-# V1 `.spec` Source Package
+# V1 `.spec` Source Package Contract
 
-V1.1 introduces the replacement source-format foundation described in the
-[IP-XACT pivot plan](pivot/v1_01_spec_package_and_schema.md). It is a custom,
-deterministic ZIP package; it is deliberately not an ODT container.
+The current source format is the completed V1.1 contract described by the
+[package pivot plan](pivot/v1_01_spec_package_and_schema.md). It is a custom,
+deterministic ZIP package used by every active API, editor, transaction, and
+action path.
 
 ## Status and Boundary
 
@@ -24,14 +25,14 @@ pre-pivot ODT packages and does not provide migration or import support.
   ipxact/abstraction-definitions/<vlnv>.xml
   assets/<sha256>.<extension>
   annotations/                                  # optional source inputs
-  activity/                                     # reserved for V1.3
+  activity/v1/actions.json                      # executions and review state
 ```
 
 The package uses the mimetype
 `application/vnd.spec2gds.spec+zip`. Its JSON and XML serialization is
 canonicalized, ZIP metadata is fixed, and non-mimetype entries are sorted, so
-re-saving unchanged source produces the same bytes. `activity/` is reserved
-and excluded from the source hash; V1.1 does not assign it a payload schema.
+re-saving unchanged content produces the same bytes. `activity/` uses the V1
+action-state contract and is excluded from the source hash.
 
 The checked-in representative package is
 [`v1_demo.spec`](../spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec).
@@ -41,7 +42,7 @@ view, and an architecture SVG asset.
 
 ## CLI
 
-Use the module directly while the project CLI surface is being cut over:
+Use the package CLI module:
 
 ```bash
 uv run python -m spec2gds.agent_spec.spec_format.cli create \
@@ -60,12 +61,12 @@ Run the focused foundation tests with:
 uv run python -m pytest tests/agent_spec/spec_format -q
 ```
 
-## V1.1 IP-XACT Boundary
+## Current IP-XACT Boundary
 
 Embedded IP-XACT XML is validated against IEEE 1685-2022 and the narrower V1
 profile. The only document roots are component, design, bus definition, and
-abstraction definition. V1.1 permits source-level component composition and
-explicit entry designs, but excludes implementation views, instantiations,
-design configurations, abstractors, generators, memory/register data,
-structured ports, power intent, and vendor extensions. See the pivot plan for
-the complete allowlist and exit gate.
+abstraction definition. V1 permits manifest-level component composition and
+explicit entry designs, but excludes implementation views, design
+configurations, abstractors, generators, memory/register data, structured
+ports, power intent, and vendor extensions. See
+[`ipxact_protocol.md`](ipxact_protocol.md) for the active protocol contract.

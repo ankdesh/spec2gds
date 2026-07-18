@@ -1,53 +1,130 @@
-# Agent-Spec Action Execution Contract
+# Agent-Spec V1 Action Execution Contract
 
-Agent-spec uses a small action/executor contract for generated hardware work.
-An action is the user-visible capability, an executor performs the external
-work, and a run is one immutable invocation.
-
-## Lifecycle
-
-1. The editor loads all enabled actions for a heading.
-2. The user supplies `ActionSpec.input_schema` fields and checks preconditions.
-3. Trigger creates a run, captures an immutable `InputSnapshot`, and records a
-   `run.executor.dispatched` event. The built-in dispatcher does not start a
-   command.
-4. An executor calls `POST /agent-spec/runs/{run_id}/completion` with its
-   outcome, artifacts, and report data.
-5. The server validates the action report, artifacts, and postconditions. A
-   successful executor result with invalid output is a completed run whose
-   report requires review; an executor-declared failure is a failed run.
-6. The server persists `report.json` and a read-only A2UI message stream at
-   `report.a2ui.jsonl`. The editor opens it in the report drawer.
+Actions are trusted local tools that read immutable source snapshots and return
+reports, generated artifacts, and optional reviewed source proposals. They
+target a component or design by stable `EntityRef`; there is no heading/block
+execution model.
 
 ## Action Definition
 
-`ActionSpec` includes action identity and presentation metadata, `executor_id`,
-an input JSON Schema, a report JSON Schema, a restricted report catalog ID, and
-allowed artifact roles. Inputs are stored in the `inputs` member of an
-immutable snapshot; document hashes, selected versions, and prior artifacts are
-always server-owned.
+An `ActionDefinition` declares:
 
-## API
+- stable `action_id`, semantic `version`, and user-facing `title`;
+- accepted target entity kinds;
+- JSON Schema for normalized inputs and reports;
+- required capabilities and optional preconditions/postconditions;
+- consumed and produced artifact roles;
+- local executor command and timeout;
+- whether change proposals are permitted.
+
+Definitions are registered explicitly in `ActionRegistry`. Duplicate action IDs
+are rejected rather than replaced.
+
+## Execution Sequence
+
+1. Resolve the target from the current immutable `SpecRevision`.
+2. Validate target kind, JSON inputs, selected input artifact roles, and action
+   preconditions.
+3. Compute the target dependency closure and linked narrative blocks.
+4. Capture a deterministic `ActionSnapshot` identified by its source revision,
+   target, action version, closure, normalized inputs, and input artifacts.
+5. Write a language-neutral snapshot bundle to an isolated temporary input
+   directory.
+6. Invoke the trusted command with `--input <dir> --output <dir>` and a bounded
+   timeout.
+7. Validate `completion.json`, report schema, artifact declarations, hashes,
+   sizes, provenance, parent lineage, proposal permission, and postconditions.
+8. Ingest artifact bytes into the content-addressed sidecar and append durable
+   activity records.
+
+Timeouts, non-zero exits, malformed completion data, and failed contracts
+produce a durable failed execution with diagnostics. Partial outputs are not
+accepted.
+
+## Snapshot Bundle
+
+```text
+input/
+├── snapshot.json
+├── source/
+│   ├── manifest.json
+│   ├── document.json
+│   └── ipxact/... selected dependency documents
+├── assets/...
+├── annotations/...
+└── input-artifacts/...
+```
+
+`snapshot.json` records the snapshot ID, source revision hash, target,
+dependency closure, selected source documents, linked narrative, accepted
+annotations, normalized inputs, and input artifact metadata. The executor has
+no writable handle to the live package.
+
+## Completion Manifest
+
+The executor writes `output/completion.json` with:
+
+```json
+{
+  "status": "succeeded",
+  "toolchain_identity": "tool/name@version",
+  "report": {"summary": "Human-readable result"},
+  "artifacts": [],
+  "proposals": []
+}
+```
+
+Every declared artifact names a role, kind, media type, output-relative path,
+and optionally explicit size/hash, source entities, and selected parent
+artifact IDs. Paths must remain below the output directory.
+
+## Provenance
+
+`ArtifactRef` binds immutable bytes to:
+
+- the producing execution and action;
+- the source revision and stable source entities;
+- normalized action inputs and selected input artifacts;
+- parent artifact IDs;
+- toolchain identity, media type, size, and SHA-256 locator.
+
+The sidecar verifies content hashes on both ingest and read. Missing or corrupt
+content appears as artifact diagnostics; it does not invalidate source.
+
+## Change Proposals
+
+Actions never mutate source directly. A permitted action may declare operations
+in a `ChangeProposal` with a base source revision and rationale.
+
+- **Preview** decodes operations and applies them to a private revision copy.
+- **Accept** requires a pending proposal at the current source revision, runs
+  the same transaction validation, records review state, and returns a new
+  revision with earlier activity retained.
+- **Reject** changes only proposal review state.
+
+V1 proposal operations deliberately support the safe narrative writeback
+subset. Broader source changes should be added only with typed operations and
+reviewable diffs.
+
+## HTTP Surface
 
 | Route | Purpose |
 | --- | --- |
-| `GET /agent-spec/actions` | Enabled action definitions. |
-| `GET /agent-spec/blocks/{block_id}/context` | Read-only action context. |
-| `POST /agent-spec/blocks/{block_id}/actions/{action_id}/preconditions` | Evaluate supplied inputs without creating a run. |
-| `POST /agent-spec/blocks/{block_id}/actions/{action_id}/runs` | Recheck, snapshot, and dispatch a run. |
-| `GET /agent-spec/runs/{run_id}` | Run, snapshot, events, report, and A2UI messages. |
-| `POST /agent-spec/runs/{run_id}/completion` | Executor completion callback. |
+| `GET /entities/{kind}/{entity_id}/actions` | List compatible definitions. |
+| `POST /entities/{kind}/{entity_id}/actions/{action_id}/preconditions` | Validate inputs and snapshot readiness. |
+| `POST /entities/{kind}/{entity_id}/actions/{action_id}/executions` | Execute synchronously and record activity. |
+| `GET /executions` | List durable execution records. |
+| `GET /executions/{execution_id}` | Read one execution and report. |
+| `GET /artifacts` | List artifacts, optionally filtered by source entity. |
+| `GET /artifacts/{artifact_id}/lineage` | Traverse immutable parent lineage. |
+| `GET /artifacts/{artifact_id}/content` | Read verified artifact bytes. |
+| `GET /proposals` | List proposal review state. |
+| `POST /proposals/{proposal_id}/preview` | Validate without mutation. |
+| `POST /proposals/{proposal_id}/accept` | Apply through the transaction boundary. |
+| `POST /proposals/{proposal_id}/reject` | Record rejection without source change. |
 
-The query envelope version is `agent-spec.actions.v1`.
+## Reference Actions
 
-## Report Catalog
-
-`agent-spec.report.v1` is read-only. Its current components are `Column`,
-`ReportSummary`, `CheckList`, and `ArtifactList`. Executors submit structured
-report data only; trusted server-side code produces the A2UI surface. External
-command execution, queues, authentication, retries, cancellation, and
-multi-user coordination are intentionally out of scope.
-
-`Delayed report demo` is the one local test action: it waits five seconds in a
-background worker, then completes with a pseudo report so the Runs sidebar and
-A2UI report drawer can be exercised without an external executor.
+The checked-in registry supplies snapshot summary, artifact transform, and
+narrative proposal actions. They are acceptance fixtures for the generic
+platform, not downstream hardware generators.

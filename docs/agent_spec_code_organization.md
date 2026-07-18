@@ -1,75 +1,84 @@
-# Agent-Spec Code Organization
+# Agent-Spec V1 Code Organization
 
-This document explains the current code layout and naming expectations. It
-replaces the old refactor plan that described moving from a previous package
-shape.
-
-## Current Layout
+The active product is intentionally concentrated below
+`spec2gds/agent_spec/spec_format/`.
 
 ```text
 spec2gds/agent_spec/
-  api/        local FastAPI apps
-  document/   semantic document parsing, editor session, relations, UI frontend
-  package/    .spec archive mechanics, CLI, verifier
-  plugins/    modality handlers for payloads such as JSON and IP-XACT
-  storage/    graph projection and .spec metadata persistence
-  actions/    action registry and built-in actions
-  runs/       run coordination and writeback checks
-  samples/    sample document builders and generated fixtures
-  models.py   shared Pydantic contracts
+├── __init__.py                 # import-light namespace boundary
+├── api/
+│   ├── __init__.py
+│   └── __main__.py             # server command entry point
+└── spec_format/
+    ├── models.py               # strict persisted contracts
+    ├── archive.py              # deterministic package I/O
+    ├── ipxact.py               # XSD/profile validation
+    ├── ir.py                   # immutable semantic model
+    ├── transactions.py         # atomic source edits
+    ├── actions.py              # executions/artifacts/proposals
+    ├── reference_actions.py    # trusted acceptance executors
+    ├── v1_api.py               # FastAPI composition root
+    ├── cli.py                  # create/validate/inspect/pack/unpack
+    ├── samples.py              # canonical visual fixture builder
+    ├── samples/generated/
+    │   └── v1_demo.spec
+    └── editor/
+        ├── index.html
+        ├── app.js
+        └── styles.css
 ```
 
-Tests follow the same top-level concept:
+Tests mirror this boundary under `tests/agent_spec/spec_format/`.
 
-```text
-tests/agent_spec/
-  package/
-  test_v1_setup.py
-  test_hw_docs_benchmark.py
-```
+## Where Changes Belong
 
-## Naming Guidelines
+| Change | Primary location | Follow-up |
+| --- | --- | --- |
+| Persisted field or invariant | `models.py` | Archive validation, sample, tests, docs. |
+| ZIP layout or determinism | `archive.py` | CLI tests and format docs. |
+| IP-XACT subset | `ipxact.py` | IR projection, protocol docs, XML fixtures. |
+| Semantic query or validation | `ir.py` | Transaction/action/UI consumers and tests. |
+| Source mutation | `transactions.py` | API decoder, editor behavior, acceptance tests. |
+| Action contract/provenance | `actions.py` | Reference executor, API, activity UI, docs. |
+| HTTP behavior | `v1_api.py` | API acceptance tests and editor docs. |
+| Browser presentation | `editor/` | Visual sample and API acceptance checks. |
+| Editor-visible capability | `samples.py` | Regenerate `v1_demo.spec` deterministically. |
+| Run/setup command | `pyproject.toml` | Root README and editor docs. |
 
-- Use `.spec` for the project document package extension.
-- Use `agent_spec` for Python package/module paths.
-- Use `AgentSpecArchive` for the current archive wrapper unless a real rename is
-  implemented across code and tests.
-- Use "block" for action graph units and "section" for user-facing document
-  discussions when that reads more naturally.
-- Use "artifact" for generated or embedded payloads with metadata.
-- Keep "ODF" or "office-compatible" wording only when discussing the package
-  mechanics in `package/archive.py` or file compatibility.
+## Dependency Rules
 
-## Where New Code Usually Goes
+- `models`, `archive`, `ipxact`, `ir`, and `transactions` stay independent of
+  FastAPI and browser code.
+- `actions` may depend on immutable IR and transactions, never the HTTP layer.
+- `v1_api` composes core services and translates transport data; core modules
+  do not import it.
+- The editor calls HTTP routes and does not encode package or XML mutation.
+- Keep `spec2gds.agent_spec.__init__` free of eager imports so CLI, model, and
+  server use remain independently loadable.
 
-| Need | Location |
-| --- | --- |
-| New API route for editor snapshots, saves, file browsing, or IP-XACT editing | `spec2gds/agent_spec/api/document_app.py` |
-| New API route for blocks, actions, executor callbacks, runs, or reports | `spec2gds/agent_spec/api/app.py` |
-| New document parsing or edit behavior | `spec2gds/agent_spec/document/semantic.py` |
-| New editor save/session behavior | `spec2gds/agent_spec/document/session.py` |
-| New relation metadata | `spec2gds/agent_spec/document/relations.py` |
-| New payload type | `spec2gds/agent_spec/plugins/` |
-| New package-level validation | `spec2gds/agent_spec/package/verifier.py` |
-| New graph persistence behavior | `spec2gds/agent_spec/storage/repository.py` |
-| New built-in action | `spec2gds/agent_spec/actions/builtin.py` |
-| New run/writeback behavior | `spec2gds/agent_spec/runs/runner.py` |
-| New shared contract | `spec2gds/agent_spec/models.py` |
+## Naming
 
-## Documentation Expectations
+- Use **action execution**, not run.
+- Use **entity** for stable source targets and **narrative block** only for AST
+  nodes.
+- Use **source revision hash** for optimistic concurrency.
+- Use **artifact sidecar** for generated byte storage.
+- Match persisted model and API field names unless a UI label is intentionally
+  more readable.
 
-When behavior changes, update the document that owns that purpose:
+## Implementation Method
 
-| Change | Update |
-| --- | --- |
-| Component boundaries or flow | `docs/agent_spec_architecture.md` |
-| Data contract for actions/runs/writebacks | `docs/agent_spec_action_contract.md` |
-| Terms or naming | `docs/agent_spec_vocabulary.md` |
-| Setup commands or test commands | `README.md` |
-| Action context/executor completion APIs | `docs/agent_spec_action_execution.md` |
-| Open design choices | `docs/agent_spec_roadmap_questions.md` |
-| Benchmarks | `docs/agent_spec_benchmarks.md` |
-| Contributor rules | `docs/coding_guidelines.md` |
+1. Start with a typed contract and explicit invariant.
+2. Project it into immutable SpecIR.
+3. Add one atomic edit or read use case.
+4. Expose it through the API only after core tests pass.
+5. Render it from the API projection.
+6. Extend the sample and acceptance test.
+7. Update the owning document listed in [`README.md`](README.md).
 
-Avoid keeping outdated migration plans in active docs. If historical context is
-needed, label it as historical and keep it out of the architecture path.
+## Removed Boundaries
+
+Do not recreate the pre-pivot `document`, `package`, `plugins`, `runs`,
+`storage`, `actions`, `models`, or `query` packages. Historical rationale is in
+Git and archived OpenSpec changes; current capabilities belong in the V1 flow
+above.

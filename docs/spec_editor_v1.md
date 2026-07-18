@@ -1,4 +1,4 @@
-# V1.4 Local API and Editor
+# V1 Local API and Editor
 
 The production local server is the IP-XACT-centered V1 surface. Synchronize the
 environment and start it from the repository root:
@@ -49,8 +49,8 @@ edits through `/transactions` with the last observed source revision hash.
 3. `POST /transactions` accepts an expected source hash plus typed operations,
    such as `upsert_document_xml`, `upsert_instance`, `upsert_connection`,
    `set_internal_design`, `add_entry_design`, or narrative operations.
-4. `GET /entities/{kind}/{id}/actions` lists compatible actions. Execute with
-   `POST /entities/{kind}/{id}/actions/{action_id}/executions`.
+4. `GET /entities/{kind}/{entity_id}/actions` lists compatible actions. Execute
+   with `POST /entities/{kind}/{entity_id}/actions/{action_id}/executions`.
 5. Inspect `GET /executions`, `/artifacts`, and `/proposals`. Preview, accept,
    or reject proposals through their dedicated endpoints.
 
@@ -69,4 +69,6 @@ uv run python -m pytest tests/agent_spec/spec_format/test_v1_api.py -q
 ```
 
 See [V1.4 — Editor, API, Cutover, and End-to-End Acceptance](pivot/v1_04_editor_api_cutover_and_acceptance.md)
-for the full cutover criteria.
+for the completed cutover criteria and
+[`agent_spec_architecture.md`](agent_spec_architecture.md) for the current
+system boundary.

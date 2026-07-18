@@ -1,58 +1,77 @@
-# IP-XACT Protocol Rules
+# IP-XACT 1685-2022 Protocol Rules
 
-This project treats IP-XACT as an external standard, not as a loose internal
-shape. Agent-spec may embed, attach, preview, and edit IP-XACT payloads, but it
-must not redefine IP-XACT semantics for UI convenience.
+IP-XACT is the canonical structural hardware source in V1. Project models and
+UI projections must preserve IEEE 1685-2022 semantics rather than inventing
+fallback interpretations.
 
-## Standard
+## Accepted Document Roots
 
-- Use IEEE 1685 IP-XACT XML for hardware component payloads.
-- Current benchmark XML targets the 1685-2014 namespace:
-  `http://www.accellera.org/XMLSchema/IPXACT/1685-2014`.
-- Validate benchmark and generated IP-XACT payloads with the project IP-XACT
-  plugin, which uses pyEDAA.IPXACT schema validation.
+- `component`
+- `design`
+- `busDefinition`
+- `abstractionDefinition`
 
-## Archive Storage
+Each document requires a four-part VLNV and stable `xml:id`. The manifest kind,
+VLNV, entity ID, path, and hash must agree with normalized XML content.
 
-- Store embedded IP-XACT payloads under `spec_data/ipxact/`.
-- Register embedded payloads with media type `application/xml+ipxact`.
-- Attach an embedded payload to document headings through editor relations,
-  not by changing the meaning of the XML payload.
+## Component Semantics
 
-## Component Ports
+- Physical or transactional ports live under `model/ports`.
+- Formal protocol interfaces live under `busInterfaces/busInterface`.
+- A bus interface references a bus definition and optionally an abstraction
+  definition through their VLNV attributes.
+- Port maps connect logical protocol ports to physical component ports.
+- Interface roles use the schema vocabulary represented by the actual XML.
 
-- Physical component signals belong under `ipxact:model/ipxact:ports`.
-- `model/ports` entries are not bus interfaces.
-- Do not display or persist `model/ports` as a synthetic bus interface.
+Never display every physical port as a bus interface. A formal bus interface
+exists only when `busInterfaces/busInterface` exists in canonical source.
 
-## Bus Interfaces
+## Design Semantics
 
-- Bus interfaces must be represented by formal
-  `ipxact:busInterfaces/ipxact:busInterface` records.
-- A bus interface should include:
-  - `ipxact:name`
-  - `ipxact:busType`
-  - `ipxact:abstractionTypes/ipxact:abstractionType`
-  - `ipxact:abstractionRef`
-  - `ipxact:portMaps`
-  - an interface mode such as `ipxact:slave`
-- Port maps should relate logical bus signal names to physical component port
-  names through `logicalPort/name` and `physicalPort/name`.
+- `componentInstances` reference component VLNVs.
+- `interconnections` connect instance bus interfaces and optional hierarchy
+  interfaces.
+- `adHocConnections` connect internal instance ports and external design
+  boundaries.
+- Instance and connection names are unique within a design.
+- Endpoints must resolve through the referenced component definitions.
 
-## Editor Behavior
+The editor derives topology from this validated data. It does not own another
+graph format.
 
-- The editor summary may be namespace-tolerant and lightweight, but it must
-  preserve protocol meaning.
-- If no formal bus interfaces exist, report a diagnostic instead of inventing
-  one from component ports.
-- Saves and imports should prefer explicit errors or diagnostics over silent
-  fallback behavior.
+## Project-Owned Relationships
 
-## Benchmark Policy
+The V1 manifest adds two explicit relationships outside the narrowed IP-XACT
+document subset:
 
-- PDF and HTML benchmark inputs are ground truth.
-- Converted ODT/XML and generated `.spec` files may be regenerated to keep the
-  benchmark loadable and protocol-correct.
-- Benchmark XML must validate as IP-XACT and expose formal bus interfaces.
-- Tests should fail if a benchmark relies on a project-specific reinterpretation
-  of IP-XACT.
+- entry-design selection;
+- component-to-internal-design ownership.
+
+Both use local stable entity references and participate in semantic validation.
+
+## Validation Pipeline
+
+1. Parse with external entities, DTD loading, and network access disabled.
+2. Remove comments and processing instructions during normalization.
+3. Canonicalize the IP-XACT namespace prefix and attribute order.
+4. Validate against the bundled IEEE 1685-2022 schema set from
+   `pyedaa-ipxact`.
+5. Apply the narrower V1 allowlist/profile.
+6. Project immutable SpecIR and validate cross-document semantics.
+
+## V1 Profile Exclusions
+
+V1 excludes implementation views, design configurations, abstractors,
+generators, memory/register models, structured ports, power intent, vendor
+extensions, and downstream implementation content. These require explicit
+future profile revisions; unknown elements are not silently ignored.
+
+## Fidelity Tests
+
+Protocol tests must validate real IP-XACT XML and semantic endpoint resolution,
+not project-specific JSON summaries. The deterministic V1 sample contains a bus
+definition, abstraction definition, formal bus interfaces, ports, port maps,
+instances, interface connections, and ad-hoc connections.
+
+Historical converted XML in `benchmarks/agent_spec/hw_docs/converted/ipxact/`
+is source corpus material, not automatically accepted V1 fixture data.

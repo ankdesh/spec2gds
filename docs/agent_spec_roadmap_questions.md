@@ -1,82 +1,98 @@
-# Agent-Spec Roadmap And Open Questions
+# Agent-Spec Roadmap and Open Decisions
 
-This document is for future work and unresolved design choices. Current
-architecture and setup details live in:
+V1 is complete: deterministic source packages, SpecIR, atomic edits, generic
+actions, artifact provenance, reviewed proposals, local API, and browser editor
+are implemented and tested. This document tracks decisions beyond that
+boundary; it does not redefine current behavior.
 
-- [`agent_spec_architecture.md`](agent_spec_architecture.md)
-- [`agent_spec_action_execution.md`](agent_spec_action_execution.md)
+The sequenced product roadmap remains in
+[`pivot/future_v2_v3_v4_roadmap.md`](pivot/future_v2_v3_v4_roadmap.md).
 
-## Current Baseline
+## V2: Executable Performance Model
 
-The repository already has a local `.spec` document workflow:
+Planned direction:
 
-- office-compatible `.spec` archive load/save
-- `spec_data/` preservation and package validation
-- semantic document projection for the editor
-- section version and IP-XACT attachment metadata
-- React/Vite local editor shell
-- local FastAPI editor API
-- mounted action/run API
-- graph projection from headings into blocks and block versions
-- declarative example actions
-- run snapshots, run records, events, writebacks, checkpoints, and artifact
-  attachment metadata
-- hardware-document benchmark fixtures
+- introduce an explicit SystemC capability pack;
+- define typed implementation views without placing generated state in SpecIR;
+- preserve action snapshot, provenance, and reviewed writeback rules;
+- record toolchain/environment identity strongly enough for reproducibility.
 
-The next roadmap items should build from that baseline rather than re-planning
-the package split or migration that has already happened.
+Open decisions:
 
-## Near-Term Priorities
+- What is the smallest SystemC input/output contract that remains vendor
+  neutral?
+- Which performance assumptions belong in source annotations versus generated
+  artifacts?
+- What validation proves generated model interfaces match canonical IP-XACT?
 
-1. Stabilize the current local editor/action loop.
-2. Improve diagnostics so users can fix blocking save issues quickly.
-3. Improve action input/report schemas and condition feedback.
-4. Decide the first real hardware executor target.
-5. Add focused tests when changing graph projection, action contracts, package
-   persistence, or editor save behavior.
+## V3: RTL Capability
 
-## Candidate Executor Targets
+Planned direction:
 
-| Candidate | Why it may be useful | Main unknown |
-| --- | --- | --- |
-| SystemC stub generator | Builds directly on the example SystemC actions. | Minimum useful generated model shape. |
-| RTL stub generator | Helps connect specs to implementation skeletons. | Required input schema beyond current prose/IP-XACT. |
-| UVM register model stub | Good fit if IP-XACT register maps become reliable. | Current benchmark XML is schema-clean but still lacks rich register maps. |
-| Validation/report action | Lower risk than generation and useful for users immediately. | Which checks should be project-owned versus plugin-owned. |
+- add synthesizable RTL generation/analysis as another capability pack;
+- make SystemC-to-RTL relationships explicit artifact lineage;
+- require reviewed source proposals for discovered interface or constraint
+  changes.
 
-## Open Design Questions
+Open decisions:
 
-| Topic | Question |
-| --- | --- |
-| Artifact storage | Should sidecar files remain the default, or should artifacts move to a content-addressed store? |
-| Imports | Which source format should be productized first: PDF/HTML benchmark conversion, Markdown, SystemRDL, CSV/register tables, or office documents? |
-| Native schema | What project-owned schema is needed beside IP-XACT for requirements, assumptions, interfaces, and generated reports? |
-| Action inputs | Which input JSON Schema keywords should the popover support next? |
-| Event delivery | Is polling `/agent-spec/events` enough for now, or should the UI use SSE/WebSocket updates? |
-| Source updates | What reviewed workflow is acceptable before an action can update source prose? |
-| Concurrency | Is the current file-hash write guard enough, or do we need document locks and finer conflict reports? |
-| Security | What restrictions are needed before actions can invoke external tools or user-provided scripts? |
-| Naming | Should user-facing text say `agent-spec document`, `.spec document`, or a more domain-specific term? |
+- Which RTL languages and tool identities are first-class?
+- How are generated/manual RTL divergence and back-documentation represented?
+- Which checks form the acceptance boundary before downstream implementation?
 
-## Deferred Work
+## V4: Implementation and GDS
 
-- remote workers, leases, and queues
-- authentication and multi-user editing
-- exact office rendering in the browser
-- rich table editing
-- full IP-XACT schema normalization
-- real EDA tool integration
-- cancellation, retry, pause, and resume
-- PR/CI packaging for frontend browser dependencies
+Planned direction:
 
-## Decision Ledger
+- integrate synthesis, place-and-route, timing, power, and physical reports;
+- keep downstream files in artifact storage rather than source packages;
+- connect implementation evidence to stable source entities and revisions.
 
-| Area | Decision |
-| --- | --- |
-| Active package path | Active code lives under `spec2gds/agent_spec/`. |
-| Active document extension | `.spec`. |
-| Current server mode | Local single-user. |
-| Current action execution | Dispatch record followed by an executor callback. |
-| Current generated artifacts | Executor-supplied metadata attached to `.spec`. |
-| Current report policy | Validate structured executor reports and render a read-only A2UI report. |
-| Current block model | Every heading becomes a block in the action graph. |
+Open decisions:
+
+- What is the project/tool abstraction for proprietary and open-source flows?
+- How are large artifact retention and remote storage addressed?
+- Which physical findings can generate safe reviewed source proposals?
+
+## Cross-Cutting Decisions
+
+### Multi-document and multi-user service
+
+V1 intentionally has one active local session. A future service needs explicit
+document/session identity, locks or merge policy, authorization, and lifecycle
+management before remote exposure.
+
+### Remote or untrusted actions
+
+V1 actions are trusted local subprocesses. Remote execution requires capability
+discovery, authentication, transport integrity, cancellation, streaming events,
+resource policy, and a real security isolation boundary.
+
+### Fine-grained component edit commands
+
+V1 can replace a complete profiled IP-XACT document and has typed operations
+for hierarchy, designs, narrative, and assets. Add component-field commands only
+when form editing needs a stable granular public API.
+
+### Schema evolution
+
+Before V2 source fields land, define format/profile version compatibility,
+migration ownership, and whether old packages are read-only or upgraded by an
+explicit command.
+
+### Artifact retention
+
+Define garbage collection around durable `ArtifactRef` reachability. Never
+delete sidecar content merely because it is not part of the source hash.
+
+## Decision Method
+
+For each roadmap change, record:
+
+1. source-of-truth impact;
+2. persisted contract and version impact;
+3. validation and failure behavior;
+4. action/artifact provenance impact;
+5. UI/API impact;
+6. deterministic sample and acceptance evidence;
+7. migration or explicit incompatibility policy.

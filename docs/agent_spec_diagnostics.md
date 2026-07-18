@@ -1,87 +1,100 @@
-# Agent-Spec Diagnostics and Sanitization
+# Agent-Spec V1 Diagnostics
 
-The editor presents a focused view of a `.spec` document. The diagnostic CLI is
-the lower-level tool for debugging package, metadata, and payload issues that
-are not visible in the UI.
+Diagnostics are explicit evidence that a package, semantic graph, edit, or
+artifact cannot be trusted. V1 rejects invalid source rather than repairing or
+silently interpreting it.
 
-## Inspect A Document
-
-Run:
+## Validate a Package
 
 ```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli inspect \
-  --container benchmarks/agent_spec/hw_docs/generated/apb_timer.spec \
+uv run python -m spec2gds.agent_spec.spec_format.cli validate \
+  --container spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec
+```
+
+Successful output includes `valid: true` and the source hash. Invalid input
+prints an error to stderr and exits with status `2`.
+
+Inspect the manifest and canonical paths with:
+
+```bash
+uv run python -m spec2gds.agent_spec.spec_format.cli inspect \
+  --container spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec \
   --format text
 ```
 
-For scriptable output, omit `--format text`:
+## Diagnostic Layers
 
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli inspect \
-  --container benchmarks/agent_spec/hw_docs/generated/apb_timer.spec
-```
+### Package structure
 
-The JSON report includes:
+Detects unsafe paths, duplicate entries, missing required files, wrong media
+type/order/compression, unexpected top-level content, and manifest/file-set
+mismatches.
 
-- filesystem size and SHA-256 hash
-- ZIP package parts, sizes, compression mode, and mimetype placement
-- manifest registrations and missing `spec_data/` manifest entries
-- custom payload paths, media types, sizes, hashes, and JSON parse previews
-- existing verifier results for embedded payloads and `spec://` links
-- semantic document blocks, headings, links, tables, images, and diagnostics
-- editor relations, section-version groups, and IP-XACT heading attachments
-- IP-XACT component/interface/port-map summaries and protocol diagnostics
-- persisted agent-spec manifest, graph, versions, runs, events, writebacks,
-  artifacts, and checkpoints
+### Persisted models
 
-Use `--output report.json` to save a report for diffing or attaching to an
-issue.
+Detects unknown JSON fields, invalid IDs, unsafe paths, duplicate document or
+block identities, unsupported versions, invalid narrative shapes, and invalid
+manifest relationships.
 
-## Sanitize A Document
+### Content integrity
 
-Sanitization is intentionally conservative. It does not invent bus interfaces,
-rewrite IP-XACT XML, modify document prose, or change action/run semantics.
+Detects missing source documents/assets and SHA-256 mismatches.
 
-It can:
+### IP-XACT
 
-- add missing `xml:id` values to headings
-- add missing manifest registrations for files that already exist under
-  `spec_data/`
-- re-save the package so the office-compatible mimetype ZIP entry is first and
-  uncompressed
+Detects unsafe or malformed XML, XSD errors, root-kind mismatch, missing or
+invalid VLNV/entity identity, and elements outside the V1 profile.
 
-Write a repaired copy:
+### Semantic graph
 
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli sanitize \
-  --container broken.spec \
-  --output repaired.spec
-```
+Detects unresolved instances, ports, interfaces, bus or abstraction types,
+incompatible endpoints, duplicate names, self-connections, component
+composition cycles, internal-design boundary errors, and invalid narrative
+references.
 
-Preview intended actions without writing:
+### Transaction
 
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli sanitize \
-  --container broken.spec \
-  --output repaired.spec \
-  --dry-run
-```
+Detects stale source hashes, unknown operation targets, invalid reorder sets,
+unsafe insertion positions, dangling deletes, and any invalid complete
+candidate revision. Failed transactions never partially commit.
 
-Rewrite the source only when you already have a backup or version-control diff:
+### Action and artifact
 
-```bash
-PYTHONPATH=. UV_CACHE_DIR=.uv-cache uv run python -m spec2gds.agent_spec.package.cli sanitize \
-  --container broken.spec \
-  --in-place
-```
+Detects invalid action inputs, target/precondition mismatch, timeouts, non-zero
+executor exits, malformed completions, report-schema failures, undeclared
+artifact roles, missing outputs, hash/size mismatch, invalid provenance,
+unselected parents, missing sidecar bytes, and sidecar corruption.
 
-## Relationship To Validate
+### Proposal
 
-`validate` answers whether registered payloads and `spec://` links pass the
-current plugin checks.
+Detects stale proposal bases, unsupported proposal operations, already-reviewed
+proposals, and candidate validation failures.
 
-`inspect` answers what is inside the document, even when some of it is invalid.
+## API Behavior
 
-`sanitize` applies safe structural repairs only. Protocol-level fixes, such as
-correcting IP-XACT bus interfaces, should be made in the source XML or
-benchmark builder so the protocol remains intact.
+| Condition | Status |
+| --- | --- |
+| No active document | `400` |
+| Unknown entity/execution/artifact | `404` |
+| Stale expected source revision | `409` |
+| Invalid package, request, transaction, action, artifact, or proposal | `422` |
+
+`GET /diagnostics` separates source diagnostics from artifact-sidecar
+diagnostics. The editor shows both domains and does not hide source health
+behind artifact warnings.
+
+## No Sanitizer
+
+V1 has no automatic package sanitizer. If source is invalid, fix the source or
+recreate it through typed APIs. This preserves deterministic behavior and avoids
+guessing at hardware intent.
+
+## Debugging Sequence
+
+1. Run CLI validation.
+2. Inspect the package manifest and paths.
+3. Open it through the API and inspect `/diagnostics`.
+4. For an edit, compare the expected and current source hashes.
+5. For an action, inspect execution diagnostics and the executor report.
+6. For an artifact, inspect lineage and verify sidecar availability.
+7. Reproduce with the focused test under `tests/agent_spec/spec_format/`.

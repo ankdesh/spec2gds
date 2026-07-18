@@ -1,5 +1,9 @@
 # V1.1 — Canonical Spec Package and Source Schemas
 
+> Status: completed. This file is implementation and acceptance history; active
+> contracts are in `docs/spec_format_v1.md` and
+> `docs/agent_spec_document_schema.md`.
+
 ## Goal
 
 Replace the ODT-centered container with a deterministic, self-contained

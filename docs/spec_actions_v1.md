@@ -1,6 +1,6 @@
-# V1.3 Actions, Artifacts, and Reviewed Proposals
+# V1 Actions, Artifacts, and Reviewed Proposals
 
-V1.3 adds the generic execution platform above V1.2's immutable `SpecRevision`.
+The completed V1.3 layer is the generic execution platform above immutable `SpecRevision`.
 An action targets a component or design through `EntityRef`; it receives a
 read-only dependency snapshot, never a writable live `.spec` package.
 
@@ -73,4 +73,6 @@ uv run python -m pytest tests/agent_spec/spec_format -q
 ```
 
 See [V1.3 — Actions, Artifacts, and Reviewed Change Proposals](pivot/v1_03_actions_artifacts_and_change_proposals.md)
-for the full contract and exit gate.
+for the completed design and exit gate, and
+[`agent_spec_action_execution.md`](agent_spec_action_execution.md) for the
+active operational contract.

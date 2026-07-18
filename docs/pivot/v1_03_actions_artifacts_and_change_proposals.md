@@ -1,5 +1,8 @@
 # V1.3 — Actions, Artifacts, and Reviewed Change Proposals
 
+> Status: completed. This file is implementation and acceptance history; the
+> active contract is in `docs/agent_spec_action_execution.md`.
+
 ## Goal
 
 Provide generic, entity-targeted external actions that consume immutable SpecIR
