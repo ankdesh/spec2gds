@@ -1,0 +1,28 @@
+{
+  "name": "circuit-designer-workspace",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "npm@10",
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev --workspace @spec2gds/circuit-designer-mock",
+    "generate": "node scripts/generate-types.mjs",
+    "generate:check": "node scripts/check-generated.mjs",
+    "test": "node scripts/run-workspace-tests.mjs",
+    "test:e2e": "node scripts/run-playwright.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1",
+    "@types/node": "22.15.3",
+    "json-schema-to-typescript": "15.0.4",
+    "typescript": "5.8.3",
+    "vitest": "3.2.7"
+  }
+}

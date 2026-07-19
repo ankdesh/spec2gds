@@ -1,0 +1,25 @@
+{
+  "name": "@spec2gds/circuit-designer-mock",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@spec2gds/circuit-core": "0.0.0",
+    "@spec2gds/circuit-layout-elk": "0.0.0",
+    "@spec2gds/circuit-react": "0.0.0",
+    "@xyflow/react": "12.8.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.6",
+    "@vitejs/plugin-react": "4.4.1",
+    "vite": "6.4.3"
+  }
+}

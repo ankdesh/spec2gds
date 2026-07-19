@@ -39,6 +39,25 @@ Most-used docs:
 - [`docs/spec_editor_v1.md`](docs/spec_editor_v1.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
+- [`docs/circuit_designer_phase0.md`](docs/circuit_designer_phase0.md) for the
+  independent React + ELK circuit-designer foundation
+
+## Circuit Designer (Phase 0)
+
+Phase 0 adds a read-only, renderer-neutral circuit graph contract and a
+standalone React + ELK.js workspace under `circuit-designer/`. It projects the
+current SpecIR semantics without adding API routes or IP-XACT mutation logic.
+
+```bash
+cd circuit-designer
+npm install
+npm run generate:check
+npm test
+npm run dev
+```
+
+Open `http://127.0.0.1:4173`. The mock app uses deterministic fixtures and can
+run independently of the Python server. Node.js 24 is the supported runtime.
 
 ## Development Setup
 

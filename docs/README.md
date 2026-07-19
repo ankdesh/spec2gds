@@ -24,6 +24,8 @@ product, its development method, and the completed pivot history.
   executors, reports, artifacts, provenance, and proposals.
 - [Local API and Editor](spec_editor_v1.md): run commands, routes, and browser
   interaction model.
+- [Circuit Designer Phase 0](circuit_designer_phase0.md): renderer-neutral
+  contracts, SpecIR projection, ELK layout, and standalone React mock app.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
 
