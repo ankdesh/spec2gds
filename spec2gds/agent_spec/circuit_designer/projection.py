@@ -7,6 +7,7 @@ import typing
 from spec2gds.agent_spec.circuit_designer.contracts import (
     CircuitCapabilities,
     CircuitComponentDefinition,
+    CircuitDesignCatalog,
     CircuitDesignRef,
     CircuitEndpointRef,
     CircuitGraphSnapshot,
@@ -42,6 +43,25 @@ def _component_definition(component: ComponentIR) -> CircuitComponentDefinition:
         label=_label(component.vlnv),
         vlnv=component.vlnv,
         source_ref=SourceRef(source_id=component.ref.entity_id, kind="component"),
+    )
+
+
+def _design_ref(design: DesignIR) -> CircuitDesignRef:
+    return CircuitDesignRef(
+        id=design.ref.entity_id,
+        label=_label(design.vlnv),
+        vlnv=design.vlnv,
+        source_ref=SourceRef(source_id=design.ref.entity_id, kind="design"),
+    )
+
+
+def project_catalog(revision: SpecRevision) -> CircuitDesignCatalog:
+    """List designs from one revision without leaking SpecIR objects."""
+    return CircuitDesignCatalog(
+        document_id=revision.document_id,
+        source_revision_hash=revision.source_revision_hash,
+        designs=tuple(_design_ref(design) for design in revision.designs),
+        entry_design_ids=tuple(design.ref.entity_id for design in revision.entry_designs()),
     )
 
 
@@ -157,12 +177,7 @@ def project_design(revision: SpecRevision, design: DesignIR) -> CircuitGraphSnap
     return CircuitGraphSnapshot(
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
-        design=CircuitDesignRef(
-            id=design.ref.entity_id,
-            label=_label(design.vlnv),
-            vlnv=design.vlnv,
-            source_ref=SourceRef(source_id=design.ref.entity_id, kind="design"),
-        ),
+        design=_design_ref(design),
         capabilities=CircuitCapabilities(),
         components=tuple(_component_definition(component) for component in revision.components),
         nodes=tuple(nodes),

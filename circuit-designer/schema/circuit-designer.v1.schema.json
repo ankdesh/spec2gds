@@ -233,6 +233,50 @@
       "title": "CircuitComponentDefinition",
       "type": "object"
     },
+    "CircuitDesignCatalog": {
+      "additionalProperties": false,
+      "description": "Designs available from one immutable source revision.",
+      "properties": {
+        "designs": {
+          "items": {
+            "$ref": "#/$defs/CircuitDesignRef"
+          },
+          "title": "Designs",
+          "type": "array"
+        },
+        "document_id": {
+          "minLength": 1,
+          "title": "Document Id",
+          "type": "string"
+        },
+        "entry_design_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Entry Design Ids",
+          "type": "array"
+        },
+        "protocol_version": {
+          "const": "circuit-designer.v1",
+          "default": "circuit-designer.v1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "source_revision_hash": {
+          "minLength": 1,
+          "title": "Source Revision Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "document_id",
+        "source_revision_hash",
+        "designs"
+      ],
+      "title": "CircuitDesignCatalog",
+      "type": "object"
+    },
     "CircuitDesignRef": {
       "additionalProperties": false,
       "description": "One design available to the circuit canvas.",
@@ -1542,6 +1586,9 @@
     "batch": {
       "$ref": "#/$defs/CommandBatch"
     },
+    "catalog": {
+      "$ref": "#/$defs/CircuitDesignCatalog"
+    },
     "graph": {
       "$ref": "#/$defs/CircuitGraphSnapshot"
     },
@@ -1557,6 +1604,7 @@
   },
   "required": [
     "graph",
+    "catalog",
     "batch",
     "preview",
     "lease",

@@ -126,6 +126,32 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
         assert opened["source_revision_hash"]
 
 
+def test_circuit_designer_read_api_projects_the_active_specir() -> None:
+    endpoints = _endpoints()
+    sample_path = Path(endpoints["samples"]()["samples"][0]["path"])
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(sample_path)))
+
+    catalog = endpoints["circuit_designer_catalog"]()
+    assert catalog["document_id"] == opened["document_id"]
+    assert catalog["source_revision_hash"] == opened["source_revision_hash"]
+    assert catalog["entry_design_ids"] == ["design_top_a", "design_top_b"]
+
+    graph = endpoints["circuit_designer_graph"]("design_subsystem_internal")
+    assert graph["design"]["id"] == "design_subsystem_internal"
+    assert [node["label"] for node in graph["nodes"]] == ["leaf0", "sink0"]
+    assert graph["capabilities"] == {
+        "edit_topology": False,
+        "edit_layout": False,
+        "replace_component": False,
+        "edit_instance_details": False,
+        "submit_agent_proposal": False,
+    }
+
+    with pytest.raises(fastapi.HTTPException) as missing:
+        endpoints["circuit_designer_graph"]("missing")
+    assert missing.value.status_code == 404
+
+
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:
     app = create_app()
     paths = {route.path for route in app.routes}

@@ -1,5 +1,6 @@
 import type {
   CircuitComponentDefinition,
+  CircuitDesignCatalog,
   CircuitGraphSnapshot,
   CircuitNet,
   CircuitNode,
@@ -207,3 +208,14 @@ export const fixtures = {
   cycle: cycleFixture,
   large: largeFixture,
 };
+
+export function fixtureCatalog(): CircuitDesignCatalog {
+  const designs = Object.entries(fixtures).map(([name, build]) => build().design);
+  return {
+    protocol_version,
+    document_id: "fixture_catalog",
+    source_revision_hash,
+    designs,
+    entry_design_ids: designs.map((design) => design.id),
+  };
+}

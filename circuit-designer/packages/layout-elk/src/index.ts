@@ -1,4 +1,4 @@
-import ELK, { type ElkNode } from "elkjs/lib/elk.bundled.js";
+import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 import type {
   CircuitGraphSnapshot,
   CircuitTerminal,
@@ -21,6 +21,10 @@ export interface LayoutResult {
   layout: DiagramLayout;
   boundary_geometry: Record<string, NodeGeometry>;
   elapsed_ms: number;
+}
+
+export interface ElkLayoutEngine {
+  layout(graph: ElkNode): Promise<ElkNode>;
 }
 
 const round = (value: number) => Math.round(value * 100) / 100;
@@ -86,6 +90,15 @@ export async function layoutCircuitGraph(
   graph: CircuitGraphSnapshot,
   options: LayoutOptions = {},
 ): Promise<LayoutResult> {
+  const { default: ELK } = await import("elkjs/lib/elk.bundled.js");
+  return layoutCircuitGraphWithEngine(graph, new ELK(), options);
+}
+
+export async function layoutCircuitGraphWithEngine(
+  graph: CircuitGraphSnapshot,
+  engine: ElkLayoutEngine,
+  options: LayoutOptions = {},
+): Promise<LayoutResult> {
   const started = performance.now();
   const direction = options.direction ?? "RIGHT";
   const nodeWidth = options.nodeWidth ?? 180;
@@ -115,7 +128,7 @@ export async function layoutCircuitGraph(
       return owners.slice(1).map((target, index) => ({ id: `${net.id}:${index}`, sources: [owners[0]], targets: [target] }));
     }),
   };
-  const laidOut = await new ELK().layout(elkGraph);
+  const laidOut = await engine.layout(elkGraph);
   const nodeGeometry: Record<string, NodeGeometry> = {};
   const boundaryGeometry: Record<string, NodeGeometry> = {};
   for (const child of laidOut.children ?? []) {

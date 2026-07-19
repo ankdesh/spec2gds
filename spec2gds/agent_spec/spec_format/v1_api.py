@@ -15,6 +15,8 @@ import typing
 
 import pydantic
 
+from spec2gds.agent_spec.circuit_designer.projection import project_catalog, project_design
+
 from spec2gds.agent_spec.spec_format.actions import (
     ActionService,
     ActivityStore,
@@ -248,6 +250,21 @@ def create_app() -> typing.Any:
             return {"design": _jsonable(item), "topology": _topology(item)}
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+
+    @app.get("/circuit-designer/catalog")
+    def circuit_designer_catalog() -> dict[str, typing.Any]:
+        """Return the renderer-neutral design catalog for the active revision."""
+        return project_catalog(active().revision).model_dump(mode="json")
+
+    @app.get("/circuit-designer/designs/{entity_id}")
+    def circuit_designer_graph(entity_id: str) -> dict[str, typing.Any]:
+        """Project one active SpecIR design into the shared circuit graph contract."""
+        session = active()
+        try:
+            design_ir = session.revision.resolve(ref("design", entity_id))
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        return project_design(session.revision, design_ir).model_dump(mode="json")
 
     @app.get("/entry-designs")
     def entry_designs() -> dict[str, typing.Any]:

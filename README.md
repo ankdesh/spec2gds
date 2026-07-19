@@ -41,14 +41,21 @@ Most-used docs:
   documentation expectations, and Python docstring/comment conventions
 - [`docs/circuit_designer_phase0.md`](docs/circuit_designer_phase0.md) for the
   independent React + ELK circuit-designer foundation
+- [`docs/circuit_designer_phase1.md`](docs/circuit_designer_phase1.md) for live
+  read-only SpecIR integration
 
-## Circuit Designer (Phase 0)
+## Circuit Designer (Phases 0–1)
 
-Phase 0 adds a read-only, renderer-neutral circuit graph contract and a
-standalone React + ELK.js workspace under `circuit-designer/`. It projects the
-current SpecIR semantics without adding API routes or IP-XACT mutation logic.
+The circuit designer provides a renderer-neutral circuit graph contract, ELK
+layout, a React canvas, and a reusable HTTP client. Phase 1 can visualize any
+design in the active validated `.spec` session while retaining fixture mode for
+independent frontend development.
 
 ```bash
+# Terminal 1
+uv run spec2gds-server
+
+# Terminal 2
 cd circuit-designer
 npm install
 npm run generate:check
@@ -56,8 +63,9 @@ npm test
 npm run dev
 ```
 
-Open `http://127.0.0.1:4173`. The mock app uses deterministic fixtures and can
-run independently of the Python server. Node.js 24 is the supported runtime.
+Open a package at `http://127.0.0.1:8000/editor`, then open
+`http://127.0.0.1:4173` and select **Active SpecIR session**. The frontend can
+still run independently in fixture mode. Node.js 24 is the supported runtime.
 
 ## Development Setup
 

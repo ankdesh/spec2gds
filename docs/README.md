@@ -26,6 +26,8 @@ product, its development method, and the completed pivot history.
   interaction model.
 - [Circuit Designer Phase 0](circuit_designer_phase0.md): renderer-neutral
   contracts, SpecIR projection, ELK layout, and standalone React mock app.
+- [Circuit Designer Phase 1](circuit_designer_phase1.md): live read-only SpecIR
+  catalog/graph API, reusable HTTP client, and server-backed canvas workflow.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
 

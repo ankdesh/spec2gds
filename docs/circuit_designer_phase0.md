@@ -4,6 +4,9 @@ Phase 0 establishes the reusable circuit-diagram boundary and a working,
 read-only UI spike. It deliberately does not add FastAPI routes, persistence,
 edit execution, lock management, or IP-XACT writes.
 
+The live read-only routes and server-backed UI that followed are documented in
+[Circuit Designer Phase 1](circuit_designer_phase1.md).
+
 ## Architecture
 
 The dependency direction is one-way:
@@ -114,7 +117,8 @@ projection; strict runtime validation; ELK automatic layout; 90-degree route
 trees; multi-endpoint rendering; standalone mock inspection; unit, scale, and
 browser smoke tests.
 
-Deferred: FastAPI endpoints, live `.spec` loading in the canvas, topology and
-layout edits, undo/redo, lock enforcement, proposal review UI, source writes,
-semantic validators, hierarchy navigation behavior, persisted view state, and
-crossing minimization quality tuning against real project designs.
+Deferred at the Phase 0 boundary: FastAPI endpoints and live `.spec` loading
+(now delivered by Phase 1), topology and layout edits, undo/redo, lock
+enforcement, proposal review UI, source writes, semantic validators, hierarchy
+navigation behavior, persisted view state, and crossing minimization quality
+tuning against real project designs.

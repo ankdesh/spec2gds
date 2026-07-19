@@ -132,6 +132,11 @@ export type Label = string;
 export type Kind2 = string;
 export type SourceId = string;
 export type Vlnv = string | null;
+export type Designs = CircuitDesignRef[];
+export type DocumentId = string;
+export type EntryDesignIds = string[];
+export type ProtocolVersion = "circuit-designer.v1";
+export type SourceRevisionHash = string;
 export type Breadcrumbs = CircuitDesignRef[];
 export type EditInstanceDetails = boolean;
 export type EditLayout = boolean;
@@ -142,7 +147,7 @@ export type Id2 = string;
 export type Label1 = string;
 export type Vlnv1 = string | null;
 export type Components = CircuitComponentDefinition[];
-export type DocumentId = string;
+export type DocumentId1 = string;
 export type Direction1 = "RIGHT" | "DOWN";
 /**
  * @minItems 2
@@ -161,8 +166,8 @@ export type Id4 = string;
 export type Label3 = string;
 export type TerminalIds1 = string[];
 export type Nodes = CircuitNode[];
-export type ProtocolVersion = "circuit-designer.v1";
-export type SourceRevisionHash = string;
+export type ProtocolVersion1 = "circuit-designer.v1";
+export type SourceRevisionHash1 = string;
 export type AbstractionVlnv = string | null;
 export type BusVlnv = string | null;
 export type DeclaredBounds = string[];
@@ -194,6 +199,7 @@ export type Title = string;
  */
 export interface CircuitDesignerProtocol {
   batch: CommandBatch;
+  catalog: CircuitDesignCatalog;
   graph: CircuitGraphSnapshot;
   lease: EditLease;
   preview: ChangePreview;
@@ -358,20 +364,14 @@ export interface SetLayoutDirectionCommand {
   type?: Type12;
 }
 /**
- * Complete immutable graph payload for one design revision.
+ * Designs available from one immutable source revision.
  */
-export interface CircuitGraphSnapshot {
-  breadcrumbs?: Breadcrumbs;
-  capabilities?: CircuitCapabilities;
-  components: Components;
-  design: CircuitDesignRef;
+export interface CircuitDesignCatalog {
+  designs: Designs;
   document_id: DocumentId;
-  layout?: DiagramLayout | null;
-  nets: Nets;
-  nodes: Nodes;
+  entry_design_ids?: EntryDesignIds;
   protocol_version?: ProtocolVersion;
   source_revision_hash: SourceRevisionHash;
-  terminals: Terminals;
 }
 /**
  * One design available to the circuit canvas.
@@ -388,6 +388,22 @@ export interface CircuitDesignRef {
 export interface SourceRef {
   kind: Kind2;
   source_id: SourceId;
+}
+/**
+ * Complete immutable graph payload for one design revision.
+ */
+export interface CircuitGraphSnapshot {
+  breadcrumbs?: Breadcrumbs;
+  capabilities?: CircuitCapabilities;
+  components: Components;
+  design: CircuitDesignRef;
+  document_id: DocumentId1;
+  layout?: DiagramLayout | null;
+  nets: Nets;
+  nodes: Nodes;
+  protocol_version?: ProtocolVersion1;
+  source_revision_hash: SourceRevisionHash1;
+  terminals: Terminals;
 }
 /**
  * Operations supported by the active backend adapter.

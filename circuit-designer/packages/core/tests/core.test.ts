@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { connectedNodeIds, createCommandBatch, fixtures, validateGraph } from "../src/index";
+import { connectedNodeIds, createCommandBatch, fixtureCatalog, fixtures, validateCatalog, validateGraph } from "../src/index";
 
 describe("generic circuit core", () => {
   it("validates every deterministic fixture", () => {
@@ -13,6 +13,10 @@ describe("generic circuit core", () => {
 
   it("queries connected nodes without source-format knowledge", () => {
     expect(connectedNodeIds(fixtures.hyperedge(), "source_0")).toEqual(["sink_0", "sink_1", "sink_2"]);
+  });
+
+  it("validates a design catalog independently of graph payloads", () => {
+    expect(validateCatalog(fixtureCatalog())).toEqual({ valid: true, errors: [] });
   });
 
   it("builds a revision-guarded command batch", () => {

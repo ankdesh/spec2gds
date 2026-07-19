@@ -16,7 +16,7 @@ from spec2gds.agent_spec.circuit_designer.contracts import (
     SetLayoutDirectionCommand,
     SourceRef,
 )
-from spec2gds.agent_spec.circuit_designer.projection import project_design
+from spec2gds.agent_spec.circuit_designer.projection import project_catalog, project_design
 from spec2gds.agent_spec.circuit_designer.schema import schema_bytes
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.samples import build_v1_sample
@@ -42,6 +42,14 @@ def test_internal_design_projects_instances_terminals_and_multi_endpoint_nets() 
     assert graph.capabilities.edit_topology is False
     assert graph.layout is None
     assert CircuitGraphSnapshot.model_validate_json(graph.model_dump_json()) == graph
+
+
+def test_catalog_projects_all_designs_and_explicit_entries() -> None:
+    catalog = project_catalog(_revision())
+
+    assert len(catalog.designs) == 3
+    assert catalog.entry_design_ids == ("design_top_a", "design_top_b")
+    assert catalog.source_revision_hash.startswith("sha256:")
 
 
 def test_contract_rejects_unknown_endpoint_and_duplicate_net_endpoint() -> None:
@@ -85,7 +93,7 @@ def test_schema_export_is_deterministic_and_contains_public_roots() -> None:
     assert first == second
     parsed = json.loads(first)
     assert parsed["title"] == "CircuitDesignerProtocol"
-    assert {"graph", "batch", "preview", "lease", "proposal"}.issubset(parsed["properties"])
+    assert {"catalog", "graph", "batch", "preview", "lease", "proposal"}.issubset(parsed["properties"])
     assert "CircuitGraphSnapshot" in parsed["$defs"]
     assert CircuitDesignerProtocol.model_json_schema(mode="validation") == CircuitDesignerProtocol.model_json_schema(mode="validation")
     checked_in = Path(__file__).resolve().parents[3] / "circuit-designer" / "schema" / "circuit-designer.v1.schema.json"

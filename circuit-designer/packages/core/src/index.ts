@@ -6,6 +6,7 @@ export * from "./fixtures";
 
 import type {
   CircuitDesignerProtocol,
+  CircuitDesignCatalog,
   CircuitGraphSnapshot,
   CircuitNet,
   CircuitNode,
@@ -23,6 +24,11 @@ const graphValidator: ValidateFunction<CircuitGraphSnapshot> = ajv.compile({
   $ref: "#/$defs/CircuitGraphSnapshot",
   $defs: definitions,
 });
+const catalogValidator: ValidateFunction<CircuitDesignCatalog> = ajv.compile({
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $ref: "#/$defs/CircuitDesignCatalog",
+  $defs: definitions,
+});
 const protocolValidator: ValidateFunction<CircuitDesignerProtocol> = ajv.compile(protocolSchema);
 
 export interface ValidationResult {
@@ -33,6 +39,21 @@ export interface ValidationResult {
 export function validateGraph(value: unknown): ValidationResult {
   const valid = graphValidator(value);
   return { valid, errors: valid ? [] : [...(graphValidator.errors ?? [])] };
+}
+
+export function validateCatalog(value: unknown): ValidationResult {
+  const valid = catalogValidator(value);
+  return { valid, errors: valid ? [] : [...(catalogValidator.errors ?? [])] };
+}
+
+export interface CircuitDesignerReadOptions {
+  signal?: AbortSignal;
+}
+
+/** Renderer-independent read interface shared by UI code and programmatic clients. */
+export interface CircuitDesignerReadApi {
+  getCatalog(options?: CircuitDesignerReadOptions): Promise<CircuitDesignCatalog>;
+  getGraph(designId: string, options?: CircuitDesignerReadOptions): Promise<CircuitGraphSnapshot>;
 }
 
 export function validateProtocol(value: unknown): ValidationResult {

@@ -110,6 +110,16 @@ class CircuitCapabilities(ContractModel):
     submit_agent_proposal: bool = False
 
 
+class CircuitDesignCatalog(ContractModel):
+    """Designs available from one immutable source revision."""
+
+    protocol_version: ProtocolVersion = PROTOCOL_VERSION
+    document_id: str = pydantic.Field(min_length=1)
+    source_revision_hash: str = pydantic.Field(min_length=1)
+    designs: tuple[CircuitDesignRef, ...]
+    entry_design_ids: tuple[str, ...] = ()
+
+
 class Point(ContractModel):
     """Canvas-space point."""
 
@@ -391,6 +401,7 @@ class CircuitDesignerProtocol(ContractModel):
     """Schema bundle used to generate language-neutral client contracts."""
 
     graph: CircuitGraphSnapshot
+    catalog: CircuitDesignCatalog
     batch: CommandBatch
     preview: ChangePreview
     lease: EditLease
