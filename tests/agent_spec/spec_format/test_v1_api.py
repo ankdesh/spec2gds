@@ -29,9 +29,17 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()
     samples = endpoints["samples"]()["samples"]
-    assert len(samples) == 1
+    assert len(samples) == 7
     assert samples[0]["name"] == "V1 Demo"
-    assert Path(samples[0]["path"]).is_file()
+    assert all(Path(sample["path"]).is_file() for sample in samples)
+    assert {sample["name"] for sample in samples[1:]} == {
+        "Hardware · Apb Gpio",
+        "Hardware · Apb I2C Slave",
+        "Hardware · Apb Timer",
+        "Hardware · Cv Hpdcache Csrs",
+        "Hardware · Cv Hpdcache Interface",
+        "Hardware · Cvfpu Readme",
+    }
     editor_html = endpoints["editor"]()
     assert "Architecture workbench" in editor_html
     assert "/editor-assets/app.js" in editor_html
@@ -127,3 +135,29 @@ def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> Non
     source = inspect.getsource(production_entry)
     assert "document_app" not in source
     assert "v1_api" in source
+
+
+def test_server_and_editor_commands_forward_development_options(monkeypatch, capsys) -> None:
+    """Keep the documented public commands wired to the shared app factory."""
+    import uvicorn
+    import spec2gds.agent_spec.api.__main__ as production_entry
+
+    calls: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: calls.append((app, options)))
+
+    production_entry.server_main(["--host", "0.0.0.0", "--port", "8080", "--reload"])
+    production_entry.editor_main(["--port", "8765"])
+
+    assert calls == [
+        (
+            "spec2gds.agent_spec.spec_format.v1_api:create_app",
+            {"factory": True, "host": "0.0.0.0", "port": 8080, "reload": True},
+        ),
+        (
+            "spec2gds.agent_spec.spec_format.v1_api:create_app",
+            {"factory": True, "host": "127.0.0.1", "port": 8765, "reload": False},
+        ),
+    ]
+    output = capsys.readouterr().out
+    assert "spec2gds server: http://0.0.0.0:8080" in output
+    assert "spec2gds editor: http://127.0.0.1:8765/editor" in output

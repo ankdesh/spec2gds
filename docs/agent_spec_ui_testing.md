@@ -8,11 +8,12 @@ bundle.
 
 ```bash
 uv sync
-uv run spec2gds-editor
+uv run spec2gds-editor --reload
 ```
 
 Open `http://127.0.0.1:8000/editor` and select **V1 Demo**. The equivalent
-server-oriented command is `uv run spec2gds-server`.
+server-oriented command is `uv run spec2gds-server`. Both commands start the
+same FastAPI process, so run one or the other, not both.
 
 ## Manual Acceptance Walkthrough
 

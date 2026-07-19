@@ -9,12 +9,15 @@ uv run spec2gds-server
 ```
 
 The browser editor needs no separate frontend build or development server; it
-is served by the API process. Open `http://127.0.0.1:8000/editor`.
+is served by the API process. Open `http://127.0.0.1:8000/editor`. Do not run
+both public commands at once because they bind the same service and port.
 
-For an editor-oriented command, use the equivalent alias:
+For editor development, use the editor-oriented command. It prints the browser
+URL, and `--reload` restarts the process after Python changes. HTML, CSS, and
+JavaScript are served directly and need only a browser refresh:
 
 ```bash
-uv run spec2gds-editor
+uv run spec2gds-editor --reload
 ```
 
 Choose the checked-in **V1 Demo** sample to visually inspect components,
@@ -23,11 +26,14 @@ artifacts, proposals, and diagnostics. The API is the authoritative editing
 surface; source changes are submitted as validated entity-targeted
 transactions.
 
-Override the default local bind address with environment variables:
+Override the default local bind address with command-line options:
 
 ```bash
-AGENT_SPEC_HOST=0.0.0.0 AGENT_SPEC_PORT=8080 uv run spec2gds-server
+uv run spec2gds-server --host 0.0.0.0 --port 8080
 ```
+
+The `AGENT_SPEC_HOST` and `AGENT_SPEC_PORT` environment variables remain
+available as defaults when the matching option is omitted.
 
 The original module command remains available:
 

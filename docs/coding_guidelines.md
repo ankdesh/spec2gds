@@ -13,6 +13,7 @@ capability packs.
 uv sync
 uv run python -m pytest -q
 uv run spec2gds-server
+uv run spec2gds-editor --reload
 ```
 
 ## Source Authority

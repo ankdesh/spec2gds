@@ -1,0 +1,12 @@
+{
+  "dependency_entity_count": 5,
+  "linked_narrative_count": 1,
+  "snapshot_id": "snapshot_1f46eaf693391ab650595bb86e23ff1a881525a923d1986237c77a6816aabbd5",
+  "source_document_count": 5,
+  "source_revision_hash": "sha256:90996db983066e1c6099405c0337abae1c7c157ef0e90aca24e40cd8d6cc5106",
+  "target": {
+    "document_id": "spec_v1_demo",
+    "entity_id": "design_subsystem_internal",
+    "entity_kind": "design"
+  }
+}

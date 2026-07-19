@@ -1,8 +1,9 @@
 # Agent-Spec V1 Samples and Benchmark Material
 
-V1 uses one deterministic `.spec` sample as both a regression fixture and a
-visual acceptance document. Historical hardware-document inputs are preserved
-separately as future import-pipeline material.
+V1 has two complementary benchmark layers: a compact feature-complete visual
+fixture and six packages converted from public hardware specifications. Both
+layers are deterministic, checked in, selectable in the editor, and exercised
+by acceptance tests.
 
 ## Canonical V1 Sample
 
@@ -34,26 +35,41 @@ repacks the archive and requires byte-for-byte equality.
 ## Visual Review
 
 ```bash
-uv run spec2gds-editor
+uv run spec2gds-editor --reload
 ```
 
 Open `http://127.0.0.1:8000/editor`, select **V1 Demo**, and follow
 [`agent_spec_ui_testing.md`](agent_spec_ui_testing.md).
 
-## Archived Source Corpus
+## Real Hardware-Document Benchmark
 
-`benchmarks/agent_spec/hw_docs/` retains original PDF/HTML documents and useful
-IP-XACT conversions from the pre-pivot experiment. It deliberately does not
-contain ODT conversions, generated legacy `.spec` packages, an active manifest,
-or an executable builder.
+The active corpus is under `benchmarks/agent_spec/hw_docs/`. It contains paired
+HTML/PDF sources for APB GPIO, APB I2C slave, APB timer, two CV-HPDcache
+documents, and CVFPU. The converter emits one package per pair into
+`generated/` and records hashes, sizes, source URLs, formal entity counts, and
+narrative block counts in `benchmark_manifest.json`.
 
-The corpus is not a current acceptance benchmark. A future importer may use it
-only after defining explicit conversion quality metrics and emitting the
-current V1 package contract.
+Each package contains:
+
+- the typed narrative derived from authored HTML content;
+- a migrated IEEE 1685-2022 component with explicit ports and interfaces;
+- self-contained bus and abstraction definitions for every referenced VLNV;
+- exact HTML, PDF, and original 2014 XML bytes as registered annotations;
+- stable component/entity links usable by the editor and action layer.
+
+Rebuild and verify:
+
+```bash
+uv run python -m benchmarks.agent_spec.hw_docs.build_benchmark
+uv run python -m pytest tests/agent_spec/spec_format/test_hw_docs_benchmark.py -q
+```
+
+For visual comparison, run the editor and select any **Hardware · ...** entry.
+The package index is available through `GET /samples` alongside **V1 Demo**.
 
 ## Adding Samples
 
-Prefer extending `build_v1_sample()` over accumulating narrow fixture files.
-Add another checked-in package only when it represents a materially different
-profile or scale boundary. Every sample must be deterministic, valid, visually
-meaningful, documented, and exercised by tests.
+Extend `build_v1_sample()` for compact editor-feature coverage. Add real source
+documents to the hardware corpus only when they broaden protocol, narrative,
+or scale coverage. Every package must remain deterministic, self-contained,
+auditable against its original sources, visually meaningful, and tested.

@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-spec2gds-server = "spec2gds.agent_spec.api.__main__:main"
-spec2gds-editor = "spec2gds.agent_spec.api.__main__:main"
+spec2gds-server = "spec2gds.agent_spec.api.__main__:server_main"
+spec2gds-editor = "spec2gds.agent_spec.api.__main__:editor_main"
 
 [tool.uv]
 package = true

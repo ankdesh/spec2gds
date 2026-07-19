@@ -112,7 +112,9 @@ revision.
 
 Run `uv run spec2gds-server` or `uv run spec2gds-editor`. Both start the same
 local FastAPI process; the browser application is served at `/editor`. Host and
-port come from `AGENT_SPEC_HOST` and `AGENT_SPEC_PORT`.
+port can be set with `--host` and `--port`; `AGENT_SPEC_HOST` and
+`AGENT_SPEC_PORT` provide environment defaults. Use `--reload` during Python or
+editor development.
 
 ## Related Documents
 

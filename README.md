@@ -72,30 +72,34 @@ Install/synchronize the environment once:
 uv sync
 ```
 
-Start the API server:
+Start the API server and bundled UI:
 
 ```bash
 uv run spec2gds-server
 ```
 
-The no-build UI editor is served by that same process. Open:
+The no-build UI editor is served by that same process; do not start a second
+frontend service. Open:
 
 ```text
 http://127.0.0.1:8000/editor
 ```
 
-`spec2gds-editor` is an equivalent convenience command when the editor is your
-primary intent:
+For UI-focused work, use the editor-oriented command. It starts the same API
+and prints the editor URL:
 
 ```bash
-uv run spec2gds-editor
+uv run spec2gds-editor --reload
 ```
 
-To bind another address or port:
+Both commands accept `--host`, `--port`, and `--reload` options:
 
 ```bash
-AGENT_SPEC_HOST=0.0.0.0 AGENT_SPEC_PORT=8080 uv run spec2gds-server
+uv run spec2gds-server --host 0.0.0.0 --port 8080 --reload
 ```
+
+`AGENT_SPEC_HOST` and `AGENT_SPEC_PORT` remain supported as environment
+defaults.
 
 The module form remains supported:
 
@@ -125,7 +129,7 @@ implementation roadmap is in [`docs/pivot/README.md`](docs/pivot/README.md).
 V1.3's generic external-action, artifact, and reviewed-proposal layer is
 documented in [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md).
 
-## Visual Verification Sample
+## Visual Verification Samples
 
 The checked-in V1 demo contains leaf and composite components, an internal
 design, two reusable entry designs, a narrative table and architecture image,
@@ -133,12 +137,22 @@ an entity link, and a live topology view. Start the API, open `/editor`, and
 choose **V1 Demo** from the sample selector. The browser reads the validated
 SpecIR snapshot and sends every edit or action back through the V1 API.
 
+The same selector exposes six **Hardware · ...** packages converted from real
+APB, HPDcache, and CVFPU HTML/PDF specifications. They exercise larger
+narratives, tables, formal ports, and bus-interface mappings.
+
 Rebuild the deterministic sample after changing its builder:
 
 ```bash
 uv run python -c "from pathlib import Path; from spec2gds.agent_spec.spec_format.samples import write_v1_sample; write_v1_sample(Path('spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec'))"
 ```
 
-Original PDF/HTML and converted IP-XACT benchmark inputs remain under
-[`benchmarks/agent_spec/hw_docs/`](benchmarks/agent_spec/hw_docs/) as future
-import-pipeline source material; they are not active V1 `.spec` fixtures.
+Rebuild the real-document benchmark after changing its converter:
+
+```bash
+uv run python -m benchmarks.agent_spec.hw_docs.build_benchmark
+```
+
+The original PDF/HTML, source IP-XACT, deterministic V1 packages, and benchmark
+manifest live under
+[`benchmarks/agent_spec/hw_docs/`](benchmarks/agent_spec/hw_docs/).

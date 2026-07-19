@@ -140,6 +140,9 @@ def create_app() -> typing.Any:
     state: dict[str, V1Session | None] = {"active": None}
     editor_root = Path(__file__).with_name("editor")
     sample_root = Path(__file__).with_name("samples") / "generated"
+    # A source checkout also exposes the larger real-document corpus.  Keep
+    # this optional so installed wheels still work without repository data.
+    benchmark_root = Path(__file__).resolve().parents[3] / "benchmarks" / "agent_spec" / "hw_docs" / "generated"
 
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
@@ -181,8 +184,11 @@ def create_app() -> typing.Any:
     def samples() -> dict[str, typing.Any]:
         """List checked-in V1 packages that can be opened by the visual editor."""
         entries = []
-        for path in sorted(sample_root.glob("*.spec")):
-            entries.append({"name": path.stem.replace("_", " ").title(), "path": str(path.resolve())})
+        roots = ((sample_root, ""), (benchmark_root, "Hardware · "))
+        for root, label_prefix in roots:
+            for path in sorted(root.glob("*.spec")):
+                name = path.stem.replace("_", " ").title()
+                entries.append({"name": f"{label_prefix}{name}", "path": str(path.resolve())})
         return {"samples": entries}
 
     @app.post("/documents/create")
