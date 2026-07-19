@@ -10,6 +10,8 @@ export type Commands = [
     | UpdateInstanceCommand
     | DuplicateInstancesCommand
     | DeleteInstanceCommand
+    | AddTerminalCommand
+    | DeleteTerminalCommand
     | CreateNetCommand
     | RenameNetCommand
     | AddNetEndpointCommand
@@ -25,6 +27,8 @@ export type Commands = [
     | UpdateInstanceCommand
     | DuplicateInstancesCommand
     | DeleteInstanceCommand
+    | AddTerminalCommand
+    | DeleteTerminalCommand
     | CreateNetCommand
     | RenameNetCommand
     | AddNetEndpointCommand
@@ -69,67 +73,80 @@ export type NodeId2 = string;
 export type Type3 = "delete_instance";
 export type CommandId4 = string;
 export type DesignId4 = string;
-export type Kind = "interface" | "ad_hoc";
+export type Direction = ("in" | "out" | "inout") | null;
+export type Kind = "port" | "interface";
 export type Name2 = string;
+export type NodeId3 = string;
+export type TerminalId = string;
+export type Type4 = "add_terminal";
+export type Cascade1 = boolean;
+export type CommandId5 = string;
+export type DesignId5 = string;
+export type TerminalId1 = string;
+export type Type5 = "delete_terminal";
+export type CommandId6 = string;
+export type DesignId6 = string;
+export type Kind1 = "interface" | "ad_hoc";
+export type Name3 = string;
 export type NetId = string;
 /**
  * @minItems 2
  */
 export type TerminalIds = [string, string, ...string[]];
-export type Type4 = "create_net";
-export type CommandId5 = string;
-export type DesignId5 = string;
-export type Name3 = string;
-export type NetId1 = string;
-export type Type5 = "rename_net";
-export type CommandId6 = string;
-export type DesignId6 = string;
-export type NetId2 = string;
-export type TerminalId = string;
-export type Type6 = "add_net_endpoint";
+export type Type6 = "create_net";
 export type CommandId7 = string;
 export type DesignId7 = string;
-export type NetId3 = string;
-export type TerminalId1 = string;
-export type Type7 = "remove_net_endpoint";
+export type Name4 = string;
+export type NetId1 = string;
+export type Type7 = "rename_net";
 export type CommandId8 = string;
 export type DesignId8 = string;
-export type NetId4 = string;
-export type Type8 = "delete_net";
+export type NetId2 = string;
+export type TerminalId2 = string;
+export type Type8 = "add_net_endpoint";
 export type CommandId9 = string;
 export type DesignId9 = string;
+export type NetId3 = string;
+export type TerminalId3 = string;
+export type Type9 = "remove_net_endpoint";
+export type CommandId10 = string;
+export type DesignId10 = string;
+export type NetId4 = string;
+export type Type10 = "delete_net";
+export type CommandId11 = string;
+export type DesignId11 = string;
 export type Height = number;
 export type Pinned = boolean;
 export type Width = number;
 export type X1 = number;
 export type Y1 = number;
-export type NodeId3 = string;
-export type Type9 = "set_node_geometry";
-export type CommandId10 = string;
-export type DesignId10 = string;
+export type NodeId4 = string;
+export type Type11 = "set_node_geometry";
+export type CommandId12 = string;
+export type DesignId12 = string;
 export type Order = number;
 export type Side = "NORTH" | "EAST" | "SOUTH" | "WEST";
-export type TerminalId2 = string;
-export type Type10 = "set_terminal_placement";
-export type CommandId11 = string;
-export type DesignId11 = string;
+export type TerminalId4 = string;
+export type Type12 = "set_terminal_placement";
+export type CommandId13 = string;
+export type DesignId13 = string;
 export type NetId5 = string;
 export type FromVertex = string;
 export type ToVertex = string;
 export type Segments = RouteSegment[];
 export type Id = string;
-export type Kind1 = "endpoint" | "bend" | "junction";
-export type TerminalId3 = string | null;
+export type Kind2 = "endpoint" | "bend" | "junction";
+export type TerminalId5 = string | null;
 export type Vertices = RouteVertex[];
-export type Type11 = "set_net_route";
-export type CommandId12 = string;
-export type DesignId12 = string;
-export type Direction = "RIGHT" | "DOWN";
-export type Type12 = "set_layout_direction";
+export type Type13 = "set_net_route";
+export type CommandId14 = string;
+export type DesignId14 = string;
+export type Direction1 = "RIGHT" | "DOWN";
+export type Type14 = "set_layout_direction";
 export type ExpectedSourceRevisionHash = string;
 export type Id1 = string;
 export type Label = string;
-export type Kind2 = string;
+export type Kind3 = string;
 export type SourceId = string;
 export type Vlnv = string | null;
 export type Designs = CircuitDesignRef[];
@@ -152,14 +169,14 @@ export type Label1 = string;
 export type Vlnv1 = string | null;
 export type Components = CircuitComponentDefinition[];
 export type DocumentId1 = string;
-export type Direction1 = "RIGHT" | "DOWN";
+export type Direction2 = "RIGHT" | "DOWN";
 /**
  * @minItems 2
  */
 export type Endpoints = [CircuitEndpointRef, CircuitEndpointRef, ...CircuitEndpointRef[]];
-export type TerminalId4 = string;
+export type TerminalId6 = string;
 export type Id3 = string;
-export type Kind3 = "interface" | "ad_hoc";
+export type Kind4 = "interface" | "ad_hoc";
 export type Label2 = string;
 export type Nets = CircuitNet[];
 export type ComponentId3 = string;
@@ -175,12 +192,12 @@ export type SourceRevisionHash1 = string;
 export type AbstractionVlnv = string | null;
 export type BusVlnv = string | null;
 export type DeclaredBounds = string[];
-export type Direction2 = string | null;
+export type Direction3 = string | null;
 export type Id5 = string;
-export type Kind4 = "interface" | "port" | "boundary_interface" | "boundary_port";
+export type Kind5 = "interface" | "port" | "boundary_interface" | "boundary_port";
 export type Label4 = string;
 export type MappedPortIds = string[];
-export type NodeId4 = string | null;
+export type NodeId5 = string | null;
 export type Role = string | null;
 export type Terminals = CircuitTerminal[];
 export type ExpiresAt = string;
@@ -188,7 +205,7 @@ export type LeaseId = string;
 export type OwnerId = string;
 export type OwnerKind = "human" | "agent";
 export type Code = string;
-export type CommandId13 = string | null;
+export type CommandId15 = string | null;
 export type ElementId = string | null;
 export type Message = string;
 export type Severity = "info" | "warning" | "error";
@@ -257,48 +274,71 @@ export interface DeleteInstanceCommand {
   node_id: NodeId2;
   type?: Type3;
 }
-export interface CreateNetCommand {
+/**
+ * Create a minimally described port or interface on one instance.
+ */
+export interface AddTerminalCommand {
   command_id: CommandId4;
   design_id: DesignId4;
-  kind: Kind;
+  direction?: Direction;
+  kind?: Kind;
   name: Name2;
-  net_id: NetId;
-  terminal_ids: TerminalIds;
+  node_id: NodeId3;
+  terminal_id: TerminalId;
   type?: Type4;
 }
-export interface RenameNetCommand {
+/**
+ * Remove a terminal and optionally clean up its connected nets.
+ */
+export interface DeleteTerminalCommand {
+  cascade?: Cascade1;
   command_id: CommandId5;
   design_id: DesignId5;
-  name: Name3;
-  net_id: NetId1;
+  terminal_id: TerminalId1;
   type?: Type5;
 }
-export interface AddNetEndpointCommand {
+export interface CreateNetCommand {
   command_id: CommandId6;
   design_id: DesignId6;
-  net_id: NetId2;
-  terminal_id: TerminalId;
+  kind: Kind1;
+  name: Name3;
+  net_id: NetId;
+  terminal_ids: TerminalIds;
   type?: Type6;
 }
-export interface RemoveNetEndpointCommand {
+export interface RenameNetCommand {
   command_id: CommandId7;
   design_id: DesignId7;
-  net_id: NetId3;
-  terminal_id: TerminalId1;
+  name: Name4;
+  net_id: NetId1;
   type?: Type7;
 }
-export interface DeleteNetCommand {
+export interface AddNetEndpointCommand {
   command_id: CommandId8;
   design_id: DesignId8;
-  net_id: NetId4;
+  net_id: NetId2;
+  terminal_id: TerminalId2;
   type?: Type8;
 }
-export interface SetNodeGeometryCommand {
+export interface RemoveNetEndpointCommand {
   command_id: CommandId9;
   design_id: DesignId9;
-  geometry: NodeGeometry;
-  node_id: NodeId3;
+  net_id: NetId3;
+  terminal_id: TerminalId3;
   type?: Type9;
+}
+export interface DeleteNetCommand {
+  command_id: CommandId10;
+  design_id: DesignId10;
+  net_id: NetId4;
+  type?: Type10;
+}
+export interface SetNodeGeometryCommand {
+  command_id: CommandId11;
+  design_id: DesignId11;
+  geometry: NodeGeometry;
+  node_id: NodeId4;
+  type?: Type11;
 }
 /**
  * Persistable node placement independent of a renderer.
@@ -311,11 +351,11 @@ export interface NodeGeometry {
   y: Y1;
 }
 export interface SetTerminalPlacementCommand {
-  command_id: CommandId10;
-  design_id: DesignId10;
+  command_id: CommandId12;
+  design_id: DesignId12;
   placement: TerminalPlacement;
-  terminal_id: TerminalId2;
-  type?: Type10;
+  terminal_id: TerminalId4;
+  type?: Type12;
 }
 /**
  * Optional semantic-terminal placement override.
@@ -325,11 +365,11 @@ export interface TerminalPlacement {
   side: Side;
 }
 export interface SetNetRouteCommand {
-  command_id: CommandId11;
-  design_id: DesignId11;
+  command_id: CommandId13;
+  design_id: DesignId13;
   net_id: NetId5;
   route: NetRoute | null;
-  type?: Type11;
+  type?: Type13;
 }
 /**
  * Renderer-neutral route tree for a possibly multi-endpoint net.
@@ -350,9 +390,9 @@ export interface RouteSegment {
  */
 export interface RouteVertex {
   id: Id;
-  kind: Kind1;
+  kind: Kind2;
   point: Point1;
-  terminal_id?: TerminalId3;
+  terminal_id?: TerminalId5;
 }
 /**
  * Canvas-space point.
@@ -362,10 +402,10 @@ export interface Point1 {
   y: Y;
 }
 export interface SetLayoutDirectionCommand {
-  command_id: CommandId12;
-  design_id: DesignId12;
-  direction: Direction;
-  type?: Type12;
+  command_id: CommandId14;
+  design_id: DesignId14;
+  direction: Direction1;
+  type?: Type14;
 }
 /**
  * Designs available from one immutable source revision.
@@ -391,7 +431,7 @@ export interface CircuitDesignRef {
  * Opaque adapter-owned locator for one source-backed graph element.
  */
 export interface SourceRef {
-  kind: Kind2;
+  kind: Kind3;
   source_id: SourceId;
 }
 /**
@@ -441,7 +481,7 @@ export interface CircuitComponentDefinition {
  * One canonical renderer-neutral layout for a design.
  */
 export interface DiagramLayout {
-  direction?: Direction1;
+  direction?: Direction2;
   net_routes?: NetRoutes;
   node_geometry?: NodeGeometry1;
   terminal_placements?: TerminalPlacements;
@@ -461,7 +501,7 @@ export interface TerminalPlacements {
 export interface CircuitNet {
   endpoints: Endpoints;
   id: Id3;
-  kind: Kind3;
+  kind: Kind4;
   label: Label2;
   source_ref: SourceRef;
 }
@@ -469,7 +509,7 @@ export interface CircuitNet {
  * Reference from a net to one terminal.
  */
 export interface CircuitEndpointRef {
-  terminal_id: TerminalId4;
+  terminal_id: TerminalId6;
 }
 /**
  * One component instance in the selected design.
@@ -495,12 +535,12 @@ export interface CircuitTerminal {
   abstraction_vlnv?: AbstractionVlnv;
   bus_vlnv?: BusVlnv;
   declared_bounds?: DeclaredBounds;
-  direction?: Direction2;
+  direction?: Direction3;
   id: Id5;
-  kind: Kind4;
+  kind: Kind5;
   label: Label4;
   mapped_port_ids?: MappedPortIds;
-  node_id?: NodeId4;
+  node_id?: NodeId5;
   role?: Role;
   source_ref: SourceRef;
 }
@@ -526,7 +566,7 @@ export interface ChangePreview {
  */
 export interface ValidationDiagnostic {
   code: Code;
-  command_id?: CommandId13;
+  command_id?: CommandId15;
   element_id?: ElementId;
   message: Message;
   severity: Severity;

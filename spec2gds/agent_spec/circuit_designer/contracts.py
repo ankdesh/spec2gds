@@ -286,6 +286,25 @@ class DeleteInstanceCommand(CommandBase):
     cascade: bool = True
 
 
+class AddTerminalCommand(CommandBase):
+    """Create a minimally described port or interface on one instance."""
+
+    type: typing.Literal["add_terminal"] = "add_terminal"
+    terminal_id: str = pydantic.Field(min_length=1)
+    node_id: str = pydantic.Field(min_length=1)
+    name: str = pydantic.Field(min_length=1)
+    kind: typing.Literal["port", "interface"] = "port"
+    direction: typing.Literal["in", "out", "inout"] | None = None
+
+
+class DeleteTerminalCommand(CommandBase):
+    """Remove a terminal and optionally clean up its connected nets."""
+
+    type: typing.Literal["delete_terminal"] = "delete_terminal"
+    terminal_id: str = pydantic.Field(min_length=1)
+    cascade: bool = True
+
+
 class CreateNetCommand(CommandBase):
     type: typing.Literal["create_net"] = "create_net"
     net_id: str = pydantic.Field(min_length=1)
@@ -347,6 +366,8 @@ DesignerCommand = typing.Annotated[
         UpdateInstanceCommand,
         DuplicateInstancesCommand,
         DeleteInstanceCommand,
+        AddTerminalCommand,
+        DeleteTerminalCommand,
         CreateNetCommand,
         RenameNetCommand,
         AddNetEndpointCommand,

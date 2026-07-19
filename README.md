@@ -43,21 +43,19 @@ Most-used docs:
   independent React + ELK circuit-designer foundation
 - [`docs/circuit_designer_phase1.md`](docs/circuit_designer_phase1.md) for live
   read-only SpecIR integration
+- [`docs/circuit_designer_standalone.md`](docs/circuit_designer_standalone.md)
+  for the independent local app and its SpecIR isolation boundary
 - [`docs/circuit_designer_complete.md`](docs/circuit_designer_complete.md) for
-  the completed editing, agent-collaboration, and deployment phases
+  the shared editing contracts and optional SpecIR adapter
 
 ## Circuit Designer
 
-The circuit designer provides a renderer-neutral circuit graph contract, ELK
-layout, a React canvas, and a reusable HTTP client. Phase 1 can visualize any
-design in the active validated `.spec` session while retaining fixture mode for
-independent frontend development.
+The circuit designer is a separate React + ELK workspace with its own examples
+and an in-browser implementation of the common circuit API. Its default app has
+no Python, FastAPI, SpecIR, IP-XACT, or `.spec` package dependency and does not
+alter the spec editor interface.
 
 ```bash
-# Terminal 1
-uv run spec2gds-server
-
-# Terminal 2
 cd circuit-designer
 npm install
 npm run generate:check
@@ -65,22 +63,23 @@ npm test
 npm run dev
 ```
 
-Open a package at `http://127.0.0.1:8000/editor`, then open
-`http://127.0.0.1:4173` and select **Active SpecIR session**. The frontend can
-still run independently in fixture mode. Node.js 24 is the supported runtime.
+Open `http://127.0.0.1:4180`. The standalone lab supports bundled example
+circuits, minimal component/port/net creation, grid-snapped local topology and
+layout edits, undo/redo, reset, and JSON export.
+Node.js 24 is the supported runtime.
 
-For the integrated production-style workflow, build the canvas once before
-starting FastAPI:
+The optional SpecIR integration harness remains separate and is started only
+when explicitly requested:
 
 ```bash
-cd circuit-designer
-npm run build
-cd ..
 uv run spec2gds-server
+cd circuit-designer
+npm run dev:specir
 ```
 
-Open `http://127.0.0.1:8000/circuit-designer-ui/`. The same command API is
-available to programmatic and agent clients under `/circuit-designer`.
+Open `http://127.0.0.1:4173` and select **Active SpecIR session**. The optional
+programmatic adapter is available under `/circuit-designer`; it is not linked
+from or mounted into the spec editor.
 
 ## Development Setup
 

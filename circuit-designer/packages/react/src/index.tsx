@@ -1,7 +1,8 @@
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import {
   Background,
   BackgroundVariant,
+  ConnectionMode,
   Controls,
   Handle,
   Position,
@@ -28,6 +29,10 @@ export interface CircuitDesignerCanvasProps {
   onSelect?: (selection: { kind: "node" | "net"; id: string } | null) => void;
   editable?: boolean;
   onNodeGeometryChange?: (nodeId: string, geometry: NodeGeometry) => void;
+  onConnectTerminals?: (sourceTerminalId: string, targetTerminalId: string) => void;
+  gridSize?: number;
+  allowViewportNavigation?: boolean;
+  fitViewOnInit?: boolean;
 }
 
 type CircuitNodeData = {
@@ -52,10 +57,41 @@ function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
         const side = placement?.side ?? "SOUTH";
         const offset = 22 + (placement?.order ?? 0) * 15;
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
-        return <Handle key={terminal.id} id={terminal.id} type="source" position={positions[side]} style={style} title={terminal.label} />;
+        return <Fragment key={terminal.id}>
+          <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{terminal.label}</span>
+          <Handle id={terminalHandleId(terminal.id, "source")} type="source" position={positions[side]} style={style} title={terminal.label} />
+          <Handle id={terminalHandleId(terminal.id, "target")} type="target" position={positions[side]} style={style} title={terminal.label} />
+        </Fragment>;
       })}
     </div>
   );
+}
+
+export function terminalHandleId(terminalId: string, type: "source" | "target"): string {
+  return `${terminalId}:${type}`;
+}
+
+export function terminalIdFromHandle(handleId: string | null | undefined): string | undefined {
+  return handleId?.replace(/:(source|target)$/, "");
+}
+
+export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Record<string, NetRoute>): CircuitFlowEdge[] {
+  return graph.nets.flatMap((net) => {
+    const route = netRoutes[net.id];
+    if (!route || net.endpoints.length < 2) return [];
+    const sourceTerminalId = net.endpoints[0].terminal_id;
+    const targetTerminalId = net.endpoints[1].terminal_id;
+    return [{
+      id: net.id,
+      type: "circuit",
+      source: graph.terminals.find((terminal) => terminal.id === sourceTerminalId)?.node_id ?? `boundary:${sourceTerminalId}`,
+      target: graph.terminals.find((terminal) => terminal.id === targetTerminalId)?.node_id ?? `boundary:${targetTerminalId}`,
+      sourceHandle: terminalHandleId(sourceTerminalId, "source"),
+      targetHandle: terminalHandleId(targetTerminalId, "target"),
+      data: { route, label: net.label, kind: net.kind },
+      selectable: true,
+    }];
+  });
 }
 
 function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
@@ -75,7 +111,7 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange }: CircuitDesignerCanvasProps) {
+export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true }: CircuitDesignerCanvasProps) {
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
@@ -89,16 +125,17 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
     }
     return result;
   }, [graph]);
-  const nodes: CircuitFlowNode[] = graph.nodes.map((node) => {
+  const nodes: CircuitFlowNode[] = graph.nodes.flatMap((node) => {
     const geometry = nodeGeometry[node.id];
-    return {
+    if (!geometry) return [];
+    return [{
       id: node.id,
       type: "circuit",
       position: { x: geometry.x, y: geometry.y },
       style: { width: geometry.width, height: geometry.height },
       data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements },
       draggable: editable,
-    };
+    }];
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
     const geometry = boundaryGeometry[terminal.id];
@@ -115,14 +152,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       draggable: false,
     });
   }
-  const edges: CircuitFlowEdge[] = graph.nets.map((net) => ({
-    id: net.id,
-    type: "circuit",
-    source: graph.terminals.find((terminal) => terminal.id === net.endpoints[0].terminal_id)?.node_id ?? `boundary:${net.endpoints[0].terminal_id}`,
-    target: graph.terminals.find((terminal) => terminal.id === net.endpoints[1].terminal_id)?.node_id ?? `boundary:${net.endpoints[1].terminal_id}`,
-    data: { route: netRoutes[net.id], label: net.label, kind: net.kind },
-    selectable: true,
-  }));
+  const edges = buildCircuitFlowEdges(graph, netRoutes);
   return (
     <div className="cd-canvas" data-testid="circuit-canvas">
       <ReactFlow<CircuitFlowNode, CircuitFlowEdge>
@@ -130,20 +160,35 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         edges={edges}
         nodeTypes={{ circuit: CircuitNodeView }}
         edgeTypes={{ circuit: CircuitEdgeView }}
-        fitView
+        fitView={fitViewOnInit}
+        defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         minZoom={0.08}
         maxZoom={2.5}
         nodesDraggable={editable}
-        nodesConnectable={false}
+        nodesConnectable={editable && Boolean(onConnectTerminals)}
+        connectionMode={ConnectionMode.Loose}
+        snapToGrid
+        snapGrid={[gridSize, gridSize]}
+        panOnDrag={allowViewportNavigation}
+        zoomOnScroll={allowViewportNavigation}
+        zoomOnPinch={allowViewportNavigation}
+        zoomOnDoubleClick={allowViewportNavigation}
+        autoPanOnNodeDrag={false}
+        autoPanOnConnect={false}
         onPaneClick={() => onSelect?.(null)}
         onNodeClick={(_, node) => onSelect?.({ kind: "node", id: node.id.replace(/^boundary:/, "") })}
         onEdgeClick={(_, edge) => onSelect?.({ kind: "net", id: edge.id })}
+        onConnect={(connection) => {
+          const sourceTerminalId = terminalIdFromHandle(connection.sourceHandle);
+          const targetTerminalId = terminalIdFromHandle(connection.targetHandle);
+          if (sourceTerminalId && targetTerminalId && sourceTerminalId !== targetTerminalId) onConnectTerminals?.(sourceTerminalId, targetTerminalId);
+        }}
         onNodeDragStop={(_, node) => {
           const original = nodeGeometry[node.id];
           if (!original) return;
           onNodeGeometryChange?.(node.id, {
-            x: node.position.x,
-            y: node.position.y,
+            x: Math.round(node.position.x / gridSize) * gridSize,
+            y: Math.round(node.position.y / gridSize) * gridSize,
             width: original.width,
             height: original.height,
             pinned: true,

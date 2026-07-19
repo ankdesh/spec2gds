@@ -47,7 +47,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     editor_html = endpoints["editor"]()
     assert "Architecture workbench" in editor_html
     assert "/editor-assets/app.js" in editor_html
-    assert "/circuit-designer-ui/" in editor_html
+    assert "/circuit-designer-ui/" not in editor_html
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "acceptance.spec"
         created = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="api_acceptance"))

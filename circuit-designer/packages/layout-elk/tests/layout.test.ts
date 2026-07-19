@@ -11,11 +11,27 @@ describe("ELK layout adapter", () => {
       const result = await layoutCircuitGraph(graph);
       expect(Object.keys(result.layout.node_geometry)).toHaveLength(graph.nodes.length);
       expect(Object.keys(result.layout.net_routes)).toHaveLength(graph.nets.length);
+      for (const geometry of Object.values(result.layout.node_geometry)) {
+        expect(geometry.x % 20).toBe(0);
+        expect(geometry.y % 20).toBe(0);
+      }
       for (const route of Object.values(result.layout.net_routes)) {
         for (const segment of route.segments) {
           const start = route.vertices.find((vertex) => vertex.id === segment.from_vertex)!.point;
           const end = route.vertices.find((vertex) => vertex.id === segment.to_vertex)!.point;
           expect(start.x === end.x || start.y === end.y).toBe(true);
+        }
+        for (const endpoint of route.vertices.filter((vertex) => vertex.kind === "endpoint")) {
+          const adjacentSegment = route.segments.find((segment) => segment.from_vertex === endpoint.id || segment.to_vertex === endpoint.id)!;
+          const adjacentId = adjacentSegment.from_vertex === endpoint.id ? adjacentSegment.to_vertex : adjacentSegment.from_vertex;
+          const adjacent = route.vertices.find((vertex) => vertex.id === adjacentId)!;
+          const placement = result.layout.terminal_placements[endpoint.terminal_id!];
+          if (placement.side === "EAST") expect(adjacent.point.x).toBeGreaterThan(endpoint.point.x);
+          if (placement.side === "WEST") expect(adjacent.point.x).toBeLessThan(endpoint.point.x);
+          if (placement.side === "NORTH") expect(adjacent.point.y).toBeLessThan(endpoint.point.y);
+          if (placement.side === "SOUTH") expect(adjacent.point.y).toBeGreaterThan(endpoint.point.y);
+          if (placement.side === "EAST" || placement.side === "WEST") expect(adjacent.point.y).toBe(endpoint.point.y);
+          else expect(adjacent.point.x).toBe(endpoint.point.x);
         }
       }
     });
@@ -36,7 +52,7 @@ describe("ELK layout adapter", () => {
       net_routes: {},
     };
     const result = await layoutCircuitGraph(graph);
-    expect(result.layout.node_geometry?.producer_0).toMatchObject({ x: 25, y: 35, pinned: true });
+    expect(result.layout.node_geometry?.producer_0).toMatchObject({ x: 20, y: 40, pinned: true });
     expect(result.layout.net_routes?.data.vertices.some((vertex) => vertex.id.startsWith("route:"))).toBe(true);
   });
 });

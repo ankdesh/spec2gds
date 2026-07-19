@@ -15,6 +15,7 @@ export interface LayoutOptions {
   nodeWidth?: number;
   nodeHeight?: number;
   spacing?: number;
+  gridSize?: number;
 }
 
 export interface LayoutResult {
@@ -47,6 +48,13 @@ function terminalPoint(
   return { x: round(geometry.x + Math.min(inset, geometry.width - 10)), y: round(geometry.y + geometry.height) };
 }
 
+function terminalStubPoint(point: Point, placement: TerminalPlacement, distance = 24): Point {
+  if (placement.side === "EAST") return { x: round(point.x + distance), y: point.y };
+  if (placement.side === "WEST") return { x: round(point.x - distance), y: point.y };
+  if (placement.side === "NORTH") return { x: point.x, y: round(point.y - distance) };
+  return { x: point.x, y: round(point.y + distance) };
+}
+
 function routeNet(
   terminalIds: string[],
   terminals: Map<string, CircuitTerminal>,
@@ -58,21 +66,26 @@ function routeNet(
   const endpoints = terminalIds.map((id) => {
     const terminal = terminals.get(id)!;
     const geometry = terminal.node_id ? nodeGeometry[terminal.node_id] : boundaryGeometry[id];
-    return { id, point: terminalPoint(terminal, geometry, placements[id]) };
+    const placement = placements[id];
+    const point = terminalPoint(terminal, geometry, placement);
+    return { id, point, stub: terminalStubPoint(point, placement) };
   });
   const axis = direction === "RIGHT"
-    ? round((Math.min(...endpoints.map((item) => item.point.x)) + Math.max(...endpoints.map((item) => item.point.x))) / 2)
-    : round((Math.min(...endpoints.map((item) => item.point.y)) + Math.max(...endpoints.map((item) => item.point.y))) / 2);
+    ? round((Math.min(...endpoints.map((item) => item.stub.x)) + Math.max(...endpoints.map((item) => item.stub.x))) / 2)
+    : round((Math.min(...endpoints.map((item) => item.stub.y)) + Math.max(...endpoints.map((item) => item.stub.y))) / 2);
   const vertices: RouteVertex[] = [];
   const segments: NetRoute["segments"] = [];
   const trunkIds: string[] = [];
   for (const [index, endpoint] of endpoints.entries()) {
     const endpointId = `endpoint:${index}`;
+    const stubId = `stub:${index}`;
     const trunkId = `trunk:${index}`;
-    const trunkPoint = direction === "RIGHT" ? { x: axis, y: endpoint.point.y } : { x: endpoint.point.x, y: axis };
+    const trunkPoint = direction === "RIGHT" ? { x: axis, y: endpoint.stub.y } : { x: endpoint.stub.x, y: axis };
     vertices.push({ id: endpointId, kind: "endpoint", point: endpoint.point, terminal_id: endpoint.id });
+    vertices.push({ id: stubId, kind: "bend", point: endpoint.stub });
     vertices.push({ id: trunkId, kind: endpoints.length > 2 ? "junction" : "bend", point: trunkPoint });
-    segments.push({ from_vertex: endpointId, to_vertex: trunkId });
+    segments.push({ from_vertex: endpointId, to_vertex: stubId });
+    if (endpoint.stub.x !== trunkPoint.x || endpoint.stub.y !== trunkPoint.y) segments.push({ from_vertex: stubId, to_vertex: trunkId });
     trunkIds.push(trunkId);
   }
   const ordered = trunkIds
@@ -102,7 +115,9 @@ function routeNetFromElk(
   const endpointIds = new Map<string, string>();
   const pointFor = (terminalId: string) => {
     const terminal = terminals.get(terminalId)!;
-    return terminalPoint(terminal, terminal.node_id ? nodeGeometry[terminal.node_id] : boundaryGeometry[terminalId], placements[terminalId]);
+    const placement = placements[terminalId];
+    const point = terminalPoint(terminal, terminal.node_id ? nodeGeometry[terminal.node_id] : boundaryGeometry[terminalId], placement);
+    return { point, stub: terminalStubPoint(point, placement) };
   };
   const ensure = (point: Point, terminalId?: string) => {
     if (terminalId && endpointIds.has(terminalId)) return endpointIds.get(terminalId)!;
@@ -126,18 +141,30 @@ function routeNetFromElk(
     connect(fromId, bend); connect(bend, toId);
   };
   const sourceTerminal = terminalIds[0];
-  const sourcePoint = pointFor(sourceTerminal);
-  const sourceId = ensure(sourcePoint, sourceTerminal);
+  const branches = new Map<string, { point: Point; endpointId: string; stub: Point; stubId: string }>();
+  const branch = (terminalId: string) => {
+    const existing = branches.get(terminalId);
+    if (existing) return existing;
+    const { point, stub } = pointFor(terminalId);
+    const endpointId = ensure(point, terminalId);
+    const stubId = `stub:${branches.size}`;
+    vertices.push({ id: stubId, kind: "bend", point: stub });
+    byCoordinate.set(`${stub.x}:${stub.y}`, stubId);
+    connect(endpointId, stubId);
+    const value = { point, endpointId, stub, stubId };
+    branches.set(terminalId, value);
+    return value;
+  };
+  const source = branch(sourceTerminal);
   elkEdges.forEach((edge, index) => {
     const targetTerminal = terminalIds[index + 1];
-    const targetPoint = pointFor(targetTerminal);
-    const targetId = ensure(targetPoint, targetTerminal);
+    const target = branch(targetTerminal);
     const section = edge.sections![0];
     const elkPoints = [section.startPoint, ...(section.bendPoints ?? []), section.endPoint].map((point) => ({ x: round(point.x), y: round(point.y) }));
     const ids = elkPoints.map((point) => ensure(point));
-    bridge(sourceId, sourcePoint, ids[0], elkPoints[0]);
+    bridge(source.stubId, source.stub, ids[0], elkPoints[0]);
     for (let pointIndex = 1; pointIndex < ids.length; pointIndex += 1) connect(ids[pointIndex - 1], ids[pointIndex]);
-    bridge(ids.at(-1)!, elkPoints.at(-1)!, targetId, targetPoint);
+    bridge(ids.at(-1)!, elkPoints.at(-1)!, target.stubId, target.stub);
   });
   const degree = new Map<string, number>();
   for (const segment of segments) {
@@ -165,6 +192,8 @@ export async function layoutCircuitGraphWithEngine(
   const nodeWidth = options.nodeWidth ?? 180;
   const nodeHeight = options.nodeHeight ?? 84;
   const spacing = options.spacing ?? 72;
+  const gridSize = options.gridSize ?? 20;
+  const snap = (value: number) => round(Math.round(value / gridSize) * gridSize);
   const terminals = new Map(graph.terminals.map((terminal) => [terminal.id, terminal]));
   const boundaryTerminals = graph.terminals.filter((terminal) => !terminal.node_id);
   const owner = (terminalId: string) => terminals.get(terminalId)?.node_id ?? `boundary:${terminalId}`;
@@ -194,13 +223,15 @@ export async function layoutCircuitGraphWithEngine(
   const boundaryGeometry: Record<string, NodeGeometry> = {};
   for (const child of laidOut.children ?? []) {
     const geometry = {
-      x: round(child.x ?? 0), y: round(child.y ?? 0),
+      x: snap(child.x ?? 0), y: snap(child.y ?? 0),
       width: round(child.width ?? nodeWidth), height: round(child.height ?? nodeHeight), pinned: false,
     };
     if (child.id.startsWith("boundary:")) boundaryGeometry[child.id.slice("boundary:".length)] = geometry;
     else nodeGeometry[child.id] = geometry;
   }
-  Object.assign(nodeGeometry, graph.layout?.node_geometry ?? {});
+  for (const [nodeId, geometry] of Object.entries(graph.layout?.node_geometry ?? {})) {
+    nodeGeometry[nodeId] = { ...geometry, x: snap(geometry.x), y: snap(geometry.y) };
+  }
   const terminalPlacements: Record<string, TerminalPlacement> = {};
   const orderByOwnerSide = new Map<string, number>();
   for (const terminal of [...graph.terminals].sort((a, b) => a.id.localeCompare(b.id))) {

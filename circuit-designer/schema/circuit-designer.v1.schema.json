@@ -84,6 +84,78 @@
       "title": "AddNetEndpointCommand",
       "type": "object"
     },
+    "AddTerminalCommand": {
+      "additionalProperties": false,
+      "description": "Create a minimally described port or interface on one instance.",
+      "properties": {
+        "command_id": {
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "design_id": {
+          "minLength": 1,
+          "title": "Design Id",
+          "type": "string"
+        },
+        "direction": {
+          "anyOf": [
+            {
+              "enum": [
+                "in",
+                "out",
+                "inout"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Direction"
+        },
+        "kind": {
+          "default": "port",
+          "enum": [
+            "port",
+            "interface"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "node_id": {
+          "minLength": 1,
+          "title": "Node Id",
+          "type": "string"
+        },
+        "terminal_id": {
+          "minLength": 1,
+          "title": "Terminal Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "add_terminal",
+          "default": "add_terminal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "design_id",
+        "terminal_id",
+        "node_id",
+        "name"
+      ],
+      "title": "AddTerminalCommand",
+      "type": "object"
+    },
     "AgentProposal": {
       "additionalProperties": false,
       "description": "Persistable, whole-batch agent change proposal.",
@@ -717,9 +789,11 @@
               "mapping": {
                 "add_instance": "#/$defs/AddInstanceCommand",
                 "add_net_endpoint": "#/$defs/AddNetEndpointCommand",
+                "add_terminal": "#/$defs/AddTerminalCommand",
                 "create_net": "#/$defs/CreateNetCommand",
                 "delete_instance": "#/$defs/DeleteInstanceCommand",
                 "delete_net": "#/$defs/DeleteNetCommand",
+                "delete_terminal": "#/$defs/DeleteTerminalCommand",
                 "duplicate_instances": "#/$defs/DuplicateInstancesCommand",
                 "remove_net_endpoint": "#/$defs/RemoveNetEndpointCommand",
                 "rename_net": "#/$defs/RenameNetCommand",
@@ -743,6 +817,12 @@
               },
               {
                 "$ref": "#/$defs/DeleteInstanceCommand"
+              },
+              {
+                "$ref": "#/$defs/AddTerminalCommand"
+              },
+              {
+                "$ref": "#/$defs/DeleteTerminalCommand"
               },
               {
                 "$ref": "#/$defs/CreateNetCommand"
@@ -917,6 +997,45 @@
         "net_id"
       ],
       "title": "DeleteNetCommand",
+      "type": "object"
+    },
+    "DeleteTerminalCommand": {
+      "additionalProperties": false,
+      "description": "Remove a terminal and optionally clean up its connected nets.",
+      "properties": {
+        "cascade": {
+          "default": true,
+          "title": "Cascade",
+          "type": "boolean"
+        },
+        "command_id": {
+          "minLength": 1,
+          "title": "Command Id",
+          "type": "string"
+        },
+        "design_id": {
+          "minLength": 1,
+          "title": "Design Id",
+          "type": "string"
+        },
+        "terminal_id": {
+          "minLength": 1,
+          "title": "Terminal Id",
+          "type": "string"
+        },
+        "type": {
+          "const": "delete_terminal",
+          "default": "delete_terminal",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "design_id",
+        "terminal_id"
+      ],
+      "title": "DeleteTerminalCommand",
       "type": "object"
     },
     "DiagramLayout": {

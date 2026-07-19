@@ -8,6 +8,7 @@ import pydantic
 import pytest
 
 from spec2gds.agent_spec.circuit_designer.contracts import (
+    AddTerminalCommand,
     CircuitDesignerProtocol,
     CircuitEndpointRef,
     CircuitGraphSnapshot,
@@ -87,6 +88,13 @@ def test_command_union_round_trips_by_discriminator() -> None:
     parsed = CommandBatch.model_validate_json(batch.model_dump_json())
     assert parsed.commands[0].type == "set_layout_direction"
     assert parsed == batch
+
+    terminal_batch = CommandBatch(
+        batch_id="batch_terminal",
+        expected_source_revision_hash="local:0",
+        commands=(AddTerminalCommand(command_id="add_port", design_id="design_1", node_id="node_1", terminal_id="port_1", name="data", direction="out"),),
+    )
+    assert CommandBatch.model_validate_json(terminal_batch.model_dump_json()).commands[0].type == "add_terminal"
 
 
 def test_schema_export_is_deterministic_and_contains_public_roots() -> None:

@@ -89,7 +89,7 @@ npm install
 npm run generate:check
 npm test
 npm run build
-npm run dev
+npm run dev:specir
 ```
 
 For the browser smoke test, install Chromium once and run Playwright:

@@ -81,12 +81,12 @@ for electrical semantics.
 
 ## Phase 5: delivery and hardening
 
-The UI polls immutable revision identity and refreshes when another workflow
-commits the active package. The Vite development server proxies to FastAPI,
-while a production build can be served by FastAPI at
-`/circuit-designer-ui/`.
+The optional SpecIR integration harness polls immutable revision identity and
+refreshes when another workflow commits the active package. The production
+spec editor no longer mounts the circuit UI; the independent application and
+its examples are described in `circuit_designer_standalone.md`.
 
-Build and run the integrated application:
+Build and run the standalone application:
 
 ```bash
 cd circuit-designer
@@ -94,13 +94,12 @@ npm install
 npm run generate:check
 npm test
 npm run build
-cd ..
-uv run spec2gds-server
+npm run dev
 ```
 
-Open the existing editor to select a package, then use
-`http://127.0.0.1:8000/circuit-designer-ui/`. For frontend development, use
-`npm run dev` and `http://127.0.0.1:4173` instead.
+Use `http://127.0.0.1:4180`. To diagnose the optional source adapter, start
+FastAPI separately and run `npm run dev:specir`; that harness uses port 4173
+without changing the spec editor interface.
 
 ## HTTP API
 

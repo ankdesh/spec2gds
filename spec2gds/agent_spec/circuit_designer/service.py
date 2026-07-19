@@ -12,6 +12,7 @@ import typing
 from spec2gds.agent_spec.circuit_designer.contracts import (
     AddInstanceCommand,
     AddNetEndpointCommand,
+    AddTerminalCommand,
     AgentProposal,
     ChangePreview,
     CircuitCapabilities,
@@ -19,6 +20,7 @@ from spec2gds.agent_spec.circuit_designer.contracts import (
     CreateNetCommand,
     DeleteInstanceCommand,
     DeleteNetCommand,
+    DeleteTerminalCommand,
     DiagramLayout,
     DuplicateInstancesCommand,
     EditLease,
@@ -236,6 +238,8 @@ class CircuitDesignerSession:
             _design(revision, design_id)
             for command in batch.commands:
                 active_command_id = command.command_id
+                if isinstance(command, (AddTerminalCommand, DeleteTerminalCommand)):
+                    raise ValueError("The active IP-XACT profile does not yet persist circuit-canvas terminal creation or deletion.")
                 if isinstance(command, (SetNodeGeometryCommand, SetTerminalPlacementCommand, SetNetRouteCommand, SetLayoutDirectionCommand)):
                     layouts[design_id] = _apply_layout(command, self.graph(design_id, revision, layouts), layouts.get(design_id))
                     continue

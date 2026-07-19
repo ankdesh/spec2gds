@@ -30,6 +30,8 @@ product, its development method, and the completed pivot history.
   catalog/graph API, reusable HTTP client, and server-backed canvas workflow.
 - [Circuit Designer Complete Roadmap](circuit_designer_complete.md): mutation,
   locking, history, agent proposals, hierarchy, hosting, and final workflows.
+- [Standalone Circuit Designer](circuit_designer_standalone.md): independent
+  examples, local command engine, and the SpecIR isolation boundary.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
 

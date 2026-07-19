@@ -168,7 +168,6 @@ def create_app() -> typing.Any:
     # A source checkout also exposes the larger real-document corpus.  Keep
     # this optional so installed wheels still work without repository data.
     benchmark_root = Path(__file__).resolve().parents[3] / "benchmarks" / "agent_spec" / "hw_docs" / "generated"
-    circuit_ui_root = Path(__file__).resolve().parents[3] / "circuit-designer" / "apps" / "mock" / "dist"
 
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
@@ -177,22 +176,6 @@ def create_app() -> typing.Any:
         fastapi.staticfiles.StaticFiles(directory=editor_root),
         name="editor-assets",
     )
-    if circuit_ui_root.is_dir():
-        app.mount(
-            "/circuit-designer-ui",
-            fastapi.staticfiles.StaticFiles(directory=circuit_ui_root, html=True),
-            name="circuit-designer-ui",
-        )
-    else:
-        app.add_api_route(
-            "/circuit-designer-ui/",
-            lambda: fastapi.responses.HTMLResponse(
-                "<h1>Circuit Designer build required</h1><p>Run <code>cd circuit-designer &amp;&amp; npm install &amp;&amp; npm run build</code>, then restart the server.</p>"
-            ),
-            methods=["GET"],
-            include_in_schema=False,
-        )
-
     def active() -> V1Session:
         """Return the active single-user session or an actionable HTTP error."""
         session = state["active"]

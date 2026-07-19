@@ -12,7 +12,9 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "dev": "npm run dev --workspace @spec2gds/circuit-designer-mock",
+    "dev": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
+    "dev:standalone": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
+    "dev:specir": "npm run dev --workspace @spec2gds/circuit-designer-mock",
     "generate": "node scripts/generate-types.mjs",
     "generate:check": "node scripts/check-generated.mjs",
     "test": "node scripts/run-workspace-tests.mjs",

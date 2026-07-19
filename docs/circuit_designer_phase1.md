@@ -60,7 +60,7 @@ In another terminal, start the circuit designer:
 ```bash
 cd circuit-designer
 npm install
-npm run dev
+npm run dev:specir
 ```
 
 Open `http://127.0.0.1:4173` and change **Source** to **Active SpecIR
