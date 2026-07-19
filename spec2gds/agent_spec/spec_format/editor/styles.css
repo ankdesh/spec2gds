@@ -26,12 +26,13 @@ code { font: 0.77rem ui-monospace, SFMono-Regular, Menlo, monospace; color: #516
 .brand strong, .brand small { display: block; }
 .brand strong { font-size: .98rem; letter-spacing: -.02em; }
 .brand small { color: var(--muted); font-size: .72rem; margin-top: 1px; }
-.source-controls { display: grid; grid-template-columns: 210px minmax(240px, 1fr) auto; gap: 8px; }
+.source-controls { display: grid; grid-template-columns: 210px minmax(240px, 1fr) auto auto; gap: 8px; }
 input, select, textarea { width: 100%; border: 1px solid #ccd6ce; border-radius: 8px; padding: 9px 11px; background: #fff; color: var(--ink); outline: none; }
 input:focus, select:focus, textarea:focus { border-color: #77a28d; box-shadow: 0 0 0 3px rgba(119, 162, 141, .15); }
 .primary, .secondary, .icon-button { border-radius: 8px; padding: 9px 13px; font-weight: 700; }
 .primary { border: 1px solid var(--forest); background: var(--forest); color: #fff; }
 .primary:hover { background: #173a2e; }
+.circuit-link { display: inline-flex; align-items: center; text-decoration: none; }
 .secondary { border: 1px solid #bac9c0; background: #fff; color: var(--forest); }
 .revision { justify-self: end; display: flex; align-items: center; gap: 7px; color: var(--muted); font: .75rem ui-monospace, monospace; }
 .status-light { width: 7px; height: 7px; border-radius: 50%; background: #aeb8b2; box-shadow: 0 0 0 4px #edf0ed; }
@@ -181,5 +182,5 @@ dialog::backdrop { background: rgba(20, 35, 29, .45); backdrop-filter: blur(3px)
 @media (max-width: 1150px) {
   .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .activity-columns { grid-template-columns: 1fr; }
-  .source-controls { grid-template-columns: 170px 1fr auto; }
+  .source-controls { grid-template-columns: 170px 1fr auto auto; }
 }

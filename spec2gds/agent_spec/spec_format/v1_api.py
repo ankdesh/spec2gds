@@ -15,7 +15,9 @@ import typing
 
 import pydantic
 
-from spec2gds.agent_spec.circuit_designer.projection import project_catalog, project_design
+from spec2gds.agent_spec.circuit_designer.projection import project_catalog
+from spec2gds.agent_spec.circuit_designer.contracts import AgentProposal, CommandBatch
+from spec2gds.agent_spec.circuit_designer.service import CircuitDesignerConflict, CircuitDesignerSession
 
 from spec2gds.agent_spec.spec_format.actions import (
     ActionService,
@@ -94,6 +96,27 @@ class AssetRequest(pydantic.BaseModel):
     extension: str
 
 
+class CircuitLeaseRequest(pydantic.BaseModel):
+    owner_id: str
+    owner_kind: typing.Literal["human", "agent"]
+    ttl_seconds: int = 300
+
+
+class CircuitApplyRequest(pydantic.BaseModel):
+    batch: CommandBatch
+    lease_id: str
+
+
+class CircuitHistoryRequest(pydantic.BaseModel):
+    lease_id: str
+    design_id: str
+
+
+class CircuitProposalDecisionRequest(pydantic.BaseModel):
+    decision: typing.Literal["accepted", "rejected"]
+    lease_id: str | None = None
+
+
 class V1Session:
     """One local document session that keeps source and activity concerns separate."""
 
@@ -139,12 +162,13 @@ def create_app() -> typing.Any:
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
-    state: dict[str, V1Session | None] = {"active": None}
+    state: dict[str, typing.Any] = {"active": None, "circuit": None}
     editor_root = Path(__file__).with_name("editor")
     sample_root = Path(__file__).with_name("samples") / "generated"
     # A source checkout also exposes the larger real-document corpus.  Keep
     # this optional so installed wheels still work without repository data.
     benchmark_root = Path(__file__).resolve().parents[3] / "benchmarks" / "agent_spec" / "hw_docs" / "generated"
+    circuit_ui_root = Path(__file__).resolve().parents[3] / "circuit-designer" / "apps" / "mock" / "dist"
 
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
@@ -153,6 +177,21 @@ def create_app() -> typing.Any:
         fastapi.staticfiles.StaticFiles(directory=editor_root),
         name="editor-assets",
     )
+    if circuit_ui_root.is_dir():
+        app.mount(
+            "/circuit-designer-ui",
+            fastapi.staticfiles.StaticFiles(directory=circuit_ui_root, html=True),
+            name="circuit-designer-ui",
+        )
+    else:
+        app.add_api_route(
+            "/circuit-designer-ui/",
+            lambda: fastapi.responses.HTMLResponse(
+                "<h1>Circuit Designer build required</h1><p>Run <code>cd circuit-designer &amp;&amp; npm install &amp;&amp; npm run build</code>, then restart the server.</p>"
+            ),
+            methods=["GET"],
+            include_in_schema=False,
+        )
 
     def active() -> V1Session:
         """Return the active single-user session or an actionable HTTP error."""
@@ -160,6 +199,20 @@ def create_app() -> typing.Any:
         if session is None:
             raise fastapi.HTTPException(status_code=400, detail="No V1 .spec package is open.")
         return session
+
+    def circuit() -> CircuitDesignerSession:
+        session = active()
+        service = state["circuit"]
+        if service is None or service.session is not session:
+            service = CircuitDesignerSession(session)
+            state["circuit"] = service
+        return typing.cast(CircuitDesignerSession, service)
+
+    def circuit_conflict(action: typing.Callable[[], typing.Any]) -> typing.Any:
+        try:
+            return action()
+        except CircuitDesignerConflict as exc:
+            raise fastapi.HTTPException(status_code=409, detail=str(exc)) from exc
 
     def ref(kind: str, entity_id: str) -> EntityRef:
         """Build a document-local stable entity reference from route segments."""
@@ -198,6 +251,7 @@ def create_app() -> typing.Any:
         """Create, validate, activate, and return a new package snapshot."""
         try:
             state["active"] = V1Session.create(request.path, request.document_id, request.sidecar_root)
+            state["circuit"] = None
             return _snapshot(active())
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
@@ -207,6 +261,7 @@ def create_app() -> typing.Any:
         """Validate and activate an existing package; legacy containers fail closed."""
         try:
             state["active"] = V1Session(request.path, request.sidecar_root)
+            state["circuit"] = None
             return _snapshot(active())
         except (OSError, ValueError, SpecValidationError) as exc:
             # In particular, legacy ODT containers fail with an explicit V1 package diagnostic.
@@ -259,12 +314,65 @@ def create_app() -> typing.Any:
     @app.get("/circuit-designer/designs/{entity_id}")
     def circuit_designer_graph(entity_id: str) -> dict[str, typing.Any]:
         """Project one active SpecIR design into the shared circuit graph contract."""
-        session = active()
         try:
-            design_ir = session.revision.resolve(ref("design", entity_id))
+            return circuit().graph(entity_id).model_dump(mode="json")
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
-        return project_design(session.revision, design_ir).model_dump(mode="json")
+
+    @app.get("/circuit-designer/lease")
+    def circuit_designer_lease() -> dict[str, typing.Any]:
+        lease = circuit().active_lease()
+        return {"lease": lease.model_dump(mode="json") if lease else None}
+
+    @app.post("/circuit-designer/lease")
+    def acquire_circuit_designer_lease(request: CircuitLeaseRequest) -> dict[str, typing.Any]:
+        lease = circuit_conflict(lambda: circuit().acquire_lease(request.owner_id, request.owner_kind, request.ttl_seconds))
+        return lease.model_dump(mode="json")
+
+    @app.delete("/circuit-designer/lease/{lease_id}")
+    def release_circuit_designer_lease(lease_id: str) -> dict[str, bool]:
+        circuit_conflict(lambda: circuit().release_lease(lease_id))
+        return {"released": True}
+
+    @app.post("/circuit-designer/commands/preview")
+    def preview_circuit_designer_commands(batch: CommandBatch) -> dict[str, typing.Any]:
+        return circuit().preview(batch).model_dump(mode="json")
+
+    @app.post("/circuit-designer/commands/apply")
+    def apply_circuit_designer_commands(request: CircuitApplyRequest) -> dict[str, typing.Any]:
+        result = circuit_conflict(lambda: circuit().apply(request.batch, request.lease_id))
+        return result.model_dump(mode="json")
+
+    @app.get("/circuit-designer/history")
+    def circuit_designer_history() -> dict[str, bool]:
+        return circuit().history_status()
+
+    @app.post("/circuit-designer/history/undo")
+    def undo_circuit_designer(request: CircuitHistoryRequest) -> dict[str, typing.Any]:
+        graph = circuit_conflict(lambda: circuit().undo(request.lease_id, request.design_id))
+        return {"graph": graph.model_dump(mode="json"), **circuit().history_status()}
+
+    @app.post("/circuit-designer/history/redo")
+    def redo_circuit_designer(request: CircuitHistoryRequest) -> dict[str, typing.Any]:
+        graph = circuit_conflict(lambda: circuit().redo(request.lease_id, request.design_id))
+        return {"graph": graph.model_dump(mode="json"), **circuit().history_status()}
+
+    @app.get("/circuit-designer/proposals")
+    def circuit_designer_proposals() -> dict[str, typing.Any]:
+        return {"proposals": [item.model_dump(mode="json") for item in circuit().proposals.values()]}
+
+    @app.post("/circuit-designer/proposals")
+    def submit_circuit_designer_proposal(proposal: AgentProposal) -> dict[str, typing.Any]:
+        stored = circuit_conflict(lambda: circuit().submit_proposal(proposal))
+        return stored.model_dump(mode="json")
+
+    @app.post("/circuit-designer/proposals/{proposal_id}/decision")
+    def decide_circuit_designer_proposal(proposal_id: str, request: CircuitProposalDecisionRequest) -> dict[str, typing.Any]:
+        try:
+            proposal = circuit_conflict(lambda: circuit().decide_proposal(proposal_id, request.decision, request.lease_id))
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=proposal_id) from exc
+        return proposal.model_dump(mode="json")
 
     @app.get("/entry-designs")
     def entry_designs() -> dict[str, typing.Any]:

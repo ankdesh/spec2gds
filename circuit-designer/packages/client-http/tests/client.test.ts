@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { fixtureCatalog, mixedFixture } from "@spec2gds/circuit-core";
+import { fixtureCatalog, mixedFixture, type CommandBatch } from "@spec2gds/circuit-core";
 import { HttpCircuitDesignerReadApi } from "../src/index";
 
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
@@ -30,5 +30,20 @@ describe("HTTP circuit designer client", () => {
       status: 400,
       message: "No V1 .spec package is open.",
     });
+  });
+
+  test("uses the same revision-guarded batch for preview and apply", async () => {
+    const graph = mixedFixture();
+    const batch: CommandBatch = {
+      batch_id: "batch_1",
+      expected_source_revision_hash: graph.source_revision_hash,
+      commands: [{ type: "set_layout_direction", command_id: "direction_1", design_id: graph.design.id, direction: "DOWN" }],
+    };
+    const preview = { batch, diagnostics: [], candidate: graph };
+    const fetch = vi.fn().mockResolvedValue(response(preview));
+    const client = new HttpCircuitDesignerReadApi({ fetch });
+
+    expect((await client.apply(batch, "lease_1")).candidate?.design.id).toBe("mixed");
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ batch, lease_id: "lease_1" });
   });
 });

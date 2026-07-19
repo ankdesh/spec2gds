@@ -28,6 +28,8 @@ product, its development method, and the completed pivot history.
   contracts, SpecIR projection, ELK layout, and standalone React mock app.
 - [Circuit Designer Phase 1](circuit_designer_phase1.md): live read-only SpecIR
   catalog/graph API, reusable HTTP client, and server-backed canvas workflow.
+- [Circuit Designer Complete Roadmap](circuit_designer_complete.md): mutation,
+  locking, history, agent proposals, hierarchy, hosting, and final workflows.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
 

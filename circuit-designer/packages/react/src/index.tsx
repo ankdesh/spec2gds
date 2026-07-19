@@ -26,6 +26,8 @@ export interface CircuitDesignerCanvasProps {
   layout: DiagramLayout;
   boundaryGeometry?: Record<string, NodeGeometry>;
   onSelect?: (selection: { kind: "node" | "net"; id: string } | null) => void;
+  editable?: boolean;
+  onNodeGeometryChange?: (nodeId: string, geometry: NodeGeometry) => void;
 }
 
 type CircuitNodeData = {
@@ -73,7 +75,7 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect }: CircuitDesignerCanvasProps) {
+export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange }: CircuitDesignerCanvasProps) {
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
@@ -95,7 +97,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       position: { x: geometry.x, y: geometry.y },
       style: { width: geometry.width, height: geometry.height },
       data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements },
-      draggable: false,
+      draggable: editable,
     };
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
@@ -131,11 +133,22 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         fitView
         minZoom={0.08}
         maxZoom={2.5}
-        nodesDraggable={false}
+        nodesDraggable={editable}
         nodesConnectable={false}
         onPaneClick={() => onSelect?.(null)}
         onNodeClick={(_, node) => onSelect?.({ kind: "node", id: node.id.replace(/^boundary:/, "") })}
         onEdgeClick={(_, edge) => onSelect?.({ kind: "net", id: edge.id })}
+        onNodeDragStop={(_, node) => {
+          const original = nodeGeometry[node.id];
+          if (!original) return;
+          onNodeGeometryChange?.(node.id, {
+            x: node.position.x,
+            y: node.position.y,
+            width: original.width,
+            height: original.height,
+            pinned: true,
+          });
+        }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         <Controls showInteractive={false} />

@@ -49,6 +49,8 @@ def test_catalog_projects_all_designs_and_explicit_entries() -> None:
 
     assert len(catalog.designs) == 3
     assert catalog.entry_design_ids == ("design_top_a", "design_top_b")
+    assert catalog.hierarchy_links[0].internal_design_id == "design_subsystem_internal"
+    assert catalog.hierarchy_links[0].parent_design_ids == ("design_top_a",)
     assert catalog.source_revision_hash.startswith("sha256:")
 
 

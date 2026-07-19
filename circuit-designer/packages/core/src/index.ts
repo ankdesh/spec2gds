@@ -5,6 +5,8 @@ export * from "./types.generated";
 export * from "./fixtures";
 
 import type {
+  AgentProposal,
+  ChangePreview,
   CircuitDesignerProtocol,
   CircuitDesignCatalog,
   CircuitGraphSnapshot,
@@ -13,6 +15,7 @@ import type {
   CircuitTerminal,
   CommandBatch,
   Commands,
+  EditLease,
 } from "./types.generated";
 
 export type DesignerCommand = Commands[number];
@@ -56,9 +59,49 @@ export interface CircuitDesignerReadApi {
   getGraph(designId: string, options?: CircuitDesignerReadOptions): Promise<CircuitGraphSnapshot>;
 }
 
+export interface CircuitHistoryStatus {
+  can_undo: boolean;
+  can_redo: boolean;
+}
+
+export interface CircuitHistoryResult extends CircuitHistoryStatus {
+  graph: CircuitGraphSnapshot;
+}
+
+export interface CircuitDesignerApi extends CircuitDesignerReadApi {
+  getLease(options?: CircuitDesignerReadOptions): Promise<EditLease | null>;
+  acquireLease(ownerId: string, ownerKind: "human" | "agent", ttlSeconds?: number): Promise<EditLease>;
+  releaseLease(leaseId: string): Promise<void>;
+  preview(batch: CommandBatch): Promise<ChangePreview>;
+  apply(batch: CommandBatch, leaseId: string): Promise<ChangePreview>;
+  getHistory(): Promise<CircuitHistoryStatus>;
+  undo(leaseId: string, designId: string): Promise<CircuitHistoryResult>;
+  redo(leaseId: string, designId: string): Promise<CircuitHistoryResult>;
+  listProposals(): Promise<AgentProposal[]>;
+  submitProposal(proposal: AgentProposal): Promise<AgentProposal>;
+  decideProposal(proposalId: string, decision: "accepted" | "rejected", leaseId?: string): Promise<AgentProposal>;
+}
+
 export function validateProtocol(value: unknown): ValidationResult {
   const valid = protocolValidator(value);
   return { valid, errors: valid ? [] : [...(protocolValidator.errors ?? [])] };
+}
+
+const definitionValidators = new Map<string, ValidateFunction>();
+
+export function validateContractDefinition(name: string, value: unknown): ValidationResult {
+  let validator = definitionValidators.get(name);
+  if (!validator) {
+    if (!(name in definitions)) return { valid: false, errors: [] };
+    validator = ajv.compile({
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      $ref: `#/$defs/${name}`,
+      $defs: definitions,
+    });
+    definitionValidators.set(name, validator);
+  }
+  const valid = validator(value);
+  return { valid, errors: valid ? [] : [...(validator.errors ?? [])] };
 }
 
 export interface GraphIndex {

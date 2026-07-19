@@ -257,6 +257,14 @@
           "title": "Entry Design Ids",
           "type": "array"
         },
+        "hierarchy_links": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/CircuitHierarchyLink"
+          },
+          "title": "Hierarchy Links",
+          "type": "array"
+        },
         "protocol_version": {
           "const": "circuit-designer.v1",
           "default": "circuit-designer.v1",
@@ -422,6 +430,36 @@
         "nets"
       ],
       "title": "CircuitGraphSnapshot",
+      "type": "object"
+    },
+    "CircuitHierarchyLink": {
+      "additionalProperties": false,
+      "description": "Reusable component composition and designs that instantiate it.",
+      "properties": {
+        "component_id": {
+          "minLength": 1,
+          "title": "Component Id",
+          "type": "string"
+        },
+        "internal_design_id": {
+          "minLength": 1,
+          "title": "Internal Design Id",
+          "type": "string"
+        },
+        "parent_design_ids": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Parent Design Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "component_id",
+        "internal_design_id"
+      ],
+      "title": "CircuitHierarchyLink",
       "type": "object"
     },
     "CircuitNet": {

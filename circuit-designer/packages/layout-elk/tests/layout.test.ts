@@ -26,4 +26,17 @@ describe("ELK layout adapter", () => {
     expect(Object.keys(result.layout.node_geometry)).toHaveLength(200);
     expect(Object.keys(result.layout.net_routes)).toHaveLength(398);
   }, 20_000);
+
+  test("uses ELK edge sections and preserves pinned geometry overrides", async () => {
+    const graph = fixtures.simple();
+    graph.layout = {
+      direction: "RIGHT",
+      node_geometry: { producer_0: { x: 25, y: 35, width: 180, height: 84, pinned: true } },
+      terminal_placements: {},
+      net_routes: {},
+    };
+    const result = await layoutCircuitGraph(graph);
+    expect(result.layout.node_geometry?.producer_0).toMatchObject({ x: 25, y: 35, pinned: true });
+    expect(result.layout.net_routes?.data.vertices.some((vertex) => vertex.id.startsWith("route:"))).toBe(true);
+  });
 });

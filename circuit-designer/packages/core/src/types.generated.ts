@@ -135,6 +135,10 @@ export type Vlnv = string | null;
 export type Designs = CircuitDesignRef[];
 export type DocumentId = string;
 export type EntryDesignIds = string[];
+export type ComponentId2 = string;
+export type InternalDesignId = string;
+export type ParentDesignIds = string[];
+export type HierarchyLinks = CircuitHierarchyLink[];
 export type ProtocolVersion = "circuit-designer.v1";
 export type SourceRevisionHash = string;
 export type Breadcrumbs = CircuitDesignRef[];
@@ -158,7 +162,7 @@ export type Id3 = string;
 export type Kind3 = "interface" | "ad_hoc";
 export type Label2 = string;
 export type Nets = CircuitNet[];
-export type ComponentId2 = string;
+export type ComponentId3 = string;
 export type ComponentVlnv = string | null;
 export type Description1 = string | null;
 export type DisplayName1 = string | null;
@@ -370,6 +374,7 @@ export interface CircuitDesignCatalog {
   designs: Designs;
   document_id: DocumentId;
   entry_design_ids?: EntryDesignIds;
+  hierarchy_links?: HierarchyLinks;
   protocol_version?: ProtocolVersion;
   source_revision_hash: SourceRevisionHash;
 }
@@ -388,6 +393,14 @@ export interface CircuitDesignRef {
 export interface SourceRef {
   kind: Kind2;
   source_id: SourceId;
+}
+/**
+ * Reusable component composition and designs that instantiate it.
+ */
+export interface CircuitHierarchyLink {
+  component_id: ComponentId2;
+  internal_design_id: InternalDesignId;
+  parent_design_ids?: ParentDesignIds;
 }
 /**
  * Complete immutable graph payload for one design revision.
@@ -462,7 +475,7 @@ export interface CircuitEndpointRef {
  * One component instance in the selected design.
  */
 export interface CircuitNode {
-  component_id: ComponentId2;
+  component_id: ComponentId3;
   component_vlnv?: ComponentVlnv;
   configuration_values?: ConfigurationValues1;
   description?: Description1;

@@ -11,9 +11,11 @@ from spec2gds.agent_spec.circuit_designer.contracts import (
     CircuitDesignRef,
     CircuitEndpointRef,
     CircuitGraphSnapshot,
+    CircuitHierarchyLink,
     CircuitNet,
     CircuitNode,
     CircuitTerminal,
+    DiagramLayout,
     SourceRef,
 )
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, DesignIR, SpecRevision
@@ -57,15 +59,34 @@ def _design_ref(design: DesignIR) -> CircuitDesignRef:
 
 def project_catalog(revision: SpecRevision) -> CircuitDesignCatalog:
     """List designs from one revision without leaking SpecIR objects."""
+    component_by_id = {component.ref.entity_id: component for component in revision.components}
+    links = []
+    for mapping in revision.manifest.component_compositions:
+        component = component_by_id.get(mapping.component.entity_id)
+        if component is None:
+            continue
+        parents = tuple(
+            design.ref.entity_id
+            for design in revision.designs
+            if any(instance.component_vlnv == component.vlnv for instance in design.instances)
+        )
+        links.append(CircuitHierarchyLink(component_id=mapping.component.entity_id, internal_design_id=mapping.internal_design.entity_id, parent_design_ids=parents))
     return CircuitDesignCatalog(
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
         designs=tuple(_design_ref(design) for design in revision.designs),
         entry_design_ids=tuple(design.ref.entity_id for design in revision.entry_designs()),
+        hierarchy_links=tuple(links),
     )
 
 
-def project_design(revision: SpecRevision, design: DesignIR) -> CircuitGraphSnapshot:
+def project_design(
+    revision: SpecRevision,
+    design: DesignIR,
+    *,
+    capabilities: CircuitCapabilities | None = None,
+    layout: DiagramLayout | None = None,
+) -> CircuitGraphSnapshot:
     """Project one validated design without creating another source-of-truth graph."""
     component_by_vlnv = {component.vlnv: component for component in revision.components}
     terminals: list[CircuitTerminal] = []
@@ -178,9 +199,10 @@ def project_design(revision: SpecRevision, design: DesignIR) -> CircuitGraphSnap
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
         design=_design_ref(design),
-        capabilities=CircuitCapabilities(),
+        capabilities=capabilities or CircuitCapabilities(),
         components=tuple(_component_definition(component) for component in revision.components),
         nodes=tuple(nodes),
         terminals=tuple([*terminals, *boundary_terminals.values()]),
         nets=tuple(nets),
+        layout=layout,
     )

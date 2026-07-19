@@ -110,6 +110,14 @@ class CircuitCapabilities(ContractModel):
     submit_agent_proposal: bool = False
 
 
+class CircuitHierarchyLink(ContractModel):
+    """Reusable component composition and designs that instantiate it."""
+
+    component_id: str = pydantic.Field(min_length=1)
+    internal_design_id: str = pydantic.Field(min_length=1)
+    parent_design_ids: tuple[str, ...] = ()
+
+
 class CircuitDesignCatalog(ContractModel):
     """Designs available from one immutable source revision."""
 
@@ -118,6 +126,7 @@ class CircuitDesignCatalog(ContractModel):
     source_revision_hash: str = pydantic.Field(min_length=1)
     designs: tuple[CircuitDesignRef, ...]
     entry_design_ids: tuple[str, ...] = ()
+    hierarchy_links: tuple[CircuitHierarchyLink, ...] = ()
 
 
 class Point(ContractModel):

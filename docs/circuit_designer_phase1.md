@@ -92,8 +92,10 @@ per-design graph queries, runtime response validation, cancellation, live
 source/design selection, loading/error/refresh behavior, and continued fixture
 operation.
 
-Deferred: topology or property mutation, persisted manual layout, undo/redo,
-human/agent edit leases, command preview/execution, proposal review, hierarchy
-drill-down behavior, automatic session notifications, FastAPI hosting of the
-compiled React assets, and IP-XACT writes. Those require a separate mutation
-phase with explicit revision and locking semantics.
+Deferred at the Phase 1 boundary: topology or property mutation, persisted
+manual layout, undo/redo, human/agent edit leases, command preview/execution,
+proposal review, hierarchy drill-down behavior, automatic session
+notifications, FastAPI hosting of the compiled React assets, and IP-XACT
+writes. These are delivered by the subsequent phases documented in
+[Circuit Designer Complete Roadmap](circuit_designer_complete.md), within the
+project's deliberately limited IP-XACT profile.

@@ -43,8 +43,10 @@ Most-used docs:
   independent React + ELK circuit-designer foundation
 - [`docs/circuit_designer_phase1.md`](docs/circuit_designer_phase1.md) for live
   read-only SpecIR integration
+- [`docs/circuit_designer_complete.md`](docs/circuit_designer_complete.md) for
+  the completed editing, agent-collaboration, and deployment phases
 
-## Circuit Designer (Phases 0–1)
+## Circuit Designer
 
 The circuit designer provides a renderer-neutral circuit graph contract, ELK
 layout, a React canvas, and a reusable HTTP client. Phase 1 can visualize any
@@ -66,6 +68,19 @@ npm run dev
 Open a package at `http://127.0.0.1:8000/editor`, then open
 `http://127.0.0.1:4173` and select **Active SpecIR session**. The frontend can
 still run independently in fixture mode. Node.js 24 is the supported runtime.
+
+For the integrated production-style workflow, build the canvas once before
+starting FastAPI:
+
+```bash
+cd circuit-designer
+npm run build
+cd ..
+uv run spec2gds-server
+```
+
+Open `http://127.0.0.1:8000/circuit-designer-ui/`. The same command API is
+available to programmatic and agent clients under `/circuit-designer`.
 
 ## Development Setup
 
