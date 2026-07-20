@@ -71,6 +71,13 @@ normal to the terminal side—left for inputs, right for outputs, and down for
 bidirectional ports—before the route joins its orthogonal trunk. This prevents
 a net from initially running along or overlapping the component edge.
 
+ELK is used for component ordering and placement, not as the final electrical
+net router. ELK emits separate edge sections for the pairwise edges used during
+layering; merging those sections into a multi-endpoint circuit net produces
+hairpins, reverse segments, and visually duplicated trunks. The circuit router
+therefore builds one deterministic route tree per semantic net after ELK has
+placed the blocks. Fanout endpoints share one trunk and explicit junctions.
+
 The shared command protocol includes `add_terminal` and `delete_terminal`.
 They are implemented by the local adapter. The current SpecIR adapter returns
 an explicit unsupported-profile diagnostic rather than pretending to persist

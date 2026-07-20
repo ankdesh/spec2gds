@@ -41,7 +41,7 @@ function terminalPoint(
   geometry: NodeGeometry,
   placement: TerminalPlacement,
 ): Point {
-  const inset = 18 + placement.order * 14;
+  const inset = 62 + placement.order * 18;
   if (placement.side === "EAST") return { x: round(geometry.x + geometry.width), y: round(geometry.y + Math.min(inset, geometry.height - 10)) };
   if (placement.side === "WEST") return { x: round(geometry.x), y: round(geometry.y + Math.min(inset, geometry.height - 10)) };
   if (placement.side === "NORTH") return { x: round(geometry.x + Math.min(inset, geometry.width - 10)), y: round(geometry.y) };
@@ -196,6 +196,14 @@ export async function layoutCircuitGraphWithEngine(
   const snap = (value: number) => round(Math.round(value / gridSize) * gridSize);
   const terminals = new Map(graph.terminals.map((terminal) => [terminal.id, terminal]));
   const boundaryTerminals = graph.terminals.filter((terminal) => !terminal.node_id);
+  const nodeHeightFor = (nodeId: string) => {
+    const sideCounts = new Map<string, number>();
+    for (const terminal of graph.terminals.filter((item) => item.node_id === nodeId)) {
+      const side = terminalSide(terminal);
+      sideCounts.set(side, (sideCounts.get(side) ?? 0) + 1);
+    }
+    return Math.max(nodeHeight, 78 + Math.max(0, ...sideCounts.values()) * 18);
+  };
   const owner = (terminalId: string) => terminals.get(terminalId)?.node_id ?? `boundary:${terminalId}`;
   const elkGraph: ElkNode = {
     id: "root",
@@ -209,7 +217,7 @@ export async function layoutCircuitGraphWithEngine(
       "elk.randomSeed": "1",
     },
     children: [
-      ...[...graph.nodes].sort((a, b) => a.id.localeCompare(b.id)).map((node) => ({ id: node.id, width: nodeWidth, height: nodeHeight })),
+      ...[...graph.nodes].sort((a, b) => a.id.localeCompare(b.id)).map((node) => ({ id: node.id, width: nodeWidth, height: nodeHeightFor(node.id) })),
       ...boundaryTerminals.map((terminal) => ({ id: `boundary:${terminal.id}`, width: 18, height: 36 })),
     ],
     edges: [...graph.nets].sort((a, b) => a.id.localeCompare(b.id)).flatMap((net) => {
@@ -244,9 +252,11 @@ export async function layoutCircuitGraphWithEngine(
   const netRoutes: Record<string, NetRoute> = {};
   for (const net of graph.nets) {
     const ids = net.endpoints.map((endpoint) => endpoint.terminal_id);
-    const routedEdges = (laidOut.edges ?? []).filter((edge) => edge.id.startsWith(`${net.id}:`));
-    netRoutes[net.id] = routeNetFromElk(ids, routedEdges, terminals, nodeGeometry, boundaryGeometry, terminalPlacements)
-      ?? routeNet(ids, terminals, nodeGeometry, boundaryGeometry, terminalPlacements, direction);
+    // ELK remains responsible for node ordering and obstacle-aware placement.
+    // Electrical nets use one deterministic route tree instead of merging
+    // several ELK two-node edge sections, which creates hairpins and duplicate
+    // parallel trunks for fanout nets.
+    netRoutes[net.id] = routeNet(ids, terminals, nodeGeometry, boundaryGeometry, terminalPlacements, direction);
   }
   return {
     layout: {

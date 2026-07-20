@@ -55,7 +55,7 @@ function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
-        const offset = 22 + (placement?.order ?? 0) * 15;
+        const offset = 62 + (placement?.order ?? 0) * 18;
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
         return <Fragment key={terminal.id}>
           <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{terminal.label}</span>

@@ -43,7 +43,7 @@ describe("ELK layout adapter", () => {
     expect(Object.keys(result.layout.net_routes)).toHaveLength(398);
   }, 20_000);
 
-  test("uses ELK edge sections and preserves pinned geometry overrides", async () => {
+  test("uses circuit route trees and preserves pinned geometry overrides", async () => {
     const graph = fixtures.simple();
     graph.layout = {
       direction: "RIGHT",
@@ -53,6 +53,19 @@ describe("ELK layout adapter", () => {
     };
     const result = await layoutCircuitGraph(graph);
     expect(result.layout.node_geometry?.producer_0).toMatchObject({ x: 20, y: 40, pinned: true });
-    expect(result.layout.net_routes?.data.vertices.some((vertex) => vertex.id.startsWith("route:"))).toBe(true);
+    expect(result.layout.net_routes?.data.vertices.some((vertex) => vertex.id.startsWith("stub:"))).toBe(true);
+    expect(result.layout.net_routes?.data.vertices.some((vertex) => vertex.id.startsWith("route:"))).toBe(false);
+  });
+
+  test("routes fanout as one shared trunk without duplicate ELK branches", async () => {
+    const result = await layoutCircuitGraph(fixtures.hyperedge());
+    const route = result.layout.net_routes?.broadcast;
+    expect(route).toBeDefined();
+    const trunks = route!.vertices.filter((vertex) => vertex.id.startsWith("trunk:"));
+    expect(trunks).toHaveLength(4);
+    expect(new Set(trunks.map((vertex) => vertex.point.x))).toHaveLength(1);
+    expect(route!.vertices.some((vertex) => vertex.id.startsWith("route:"))).toBe(false);
+    const segmentKeys = route!.segments.map((segment) => [segment.from_vertex, segment.to_vertex].sort().join("|"));
+    expect(new Set(segmentKeys).size).toBe(segmentKeys.length);
   });
 });
