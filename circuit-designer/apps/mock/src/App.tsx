@@ -11,8 +11,7 @@ import {
   type NodeGeometry,
 } from "@spec2gds/circuit-core";
 import { HttpCircuitDesignerReadApi } from "@spec2gds/circuit-client-http";
-import type { LayoutResult } from "@spec2gds/circuit-layout-elk";
-import { layoutCircuitGraphInWorker } from "@spec2gds/circuit-layout-elk/browser";
+import { layoutCircuitGraph, type LayoutResult } from "@spec2gds/circuit-layout";
 import { CircuitDesignerCanvas } from "@spec2gds/circuit-react";
 
 type FixtureName = keyof typeof fixtures;
@@ -100,7 +99,7 @@ export function App() {
     if (!graph) { setLayoutResult(undefined); return; }
     let active = true;
     setLayoutResult(undefined); setSelection(null); setLayoutError(undefined);
-    layoutCircuitGraphInWorker(graph).then((result) => active && setLayoutResult(result)).catch((reason: unknown) => active && setLayoutError(String(reason)));
+    layoutCircuitGraph(graph).then((result) => active && setLayoutResult(result)).catch((reason: unknown) => active && setLayoutError(String(reason)));
     return () => { active = false; };
   }, [graph]);
   const selected = selection?.kind === "node" ? graph?.nodes.find((item) => item.id === selection.id) : graph?.nets.find((item) => item.id === selection?.id);
@@ -216,7 +215,7 @@ export function App() {
           {!layoutResult && !loadError && !layoutError && <div className="loading">{graph ? "Computing orthogonal layout…" : "Loading circuit graph…"}</div>}
           {(loadError || layoutError) && <div className="error"><strong>{graph ? "Circuit operation failed" : "Unable to load circuit"}</strong><span>{loadError ?? layoutError}</span>{dataSource === "server" && loadError && !graph && <small>Open a .spec package in the spec2gds editor, then refresh.</small>}{graph && <button onClick={() => { setLoadError(undefined); setLayoutError(undefined); }}>Dismiss</button>}</div>}
           {graph && layoutResult && <CircuitDesignerCanvas graph={graph} layout={layoutResult.layout} boundaryGeometry={layoutResult.boundary_geometry} onSelect={setSelection} editable={Boolean(ownsLease && dataSource === "server")} onNodeGeometryChange={saveNodeGeometry} />}
-          {layoutResult && <div className="layout-time" data-testid="layout-time">ELK {layoutResult.elapsed_ms} ms</div>}
+          {layoutResult && <div className="layout-time" data-testid="layout-time">Grid router {layoutResult.elapsed_ms} ms</div>}
         </div>
         <aside className="inspector" data-testid="inspector">
           <h2>Inspector</h2>

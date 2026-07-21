@@ -14,8 +14,14 @@ from spec2gds.agent_spec.circuit_designer.contracts import (
     CircuitGraphSnapshot,
     CircuitNet,
     CommandBatch,
+    NetRoute,
+    Point,
+    RouteSegment,
+    RouteVertex,
     SetLayoutDirectionCommand,
+    SetTerminalPlacementCommand,
     SourceRef,
+    TerminalPlacement,
 )
 from spec2gds.agent_spec.circuit_designer.projection import project_catalog, project_design
 from spec2gds.agent_spec.circuit_designer.schema import schema_bytes
@@ -95,6 +101,51 @@ def test_command_union_round_trips_by_discriminator() -> None:
         commands=(AddTerminalCommand(command_id="add_port", design_id="design_1", node_id="node_1", terminal_id="port_1", name="data", direction="out"),),
     )
     assert CommandBatch.model_validate_json(terminal_batch.model_dump_json()).commands[0].type == "add_terminal"
+
+
+def test_manual_route_constraints_and_automatic_port_placement_round_trip() -> None:
+    route = NetRoute(
+        vertices=(
+            RouteVertex(id="a", kind="endpoint", terminal_id="a", point=Point(x=0, y=0)),
+            RouteVertex(id="b", kind="endpoint", terminal_id="b", point=Point(x=100, y=0)),
+        ),
+        segments=(RouteSegment(id="trunk", from_vertex="a", to_vertex="b", locked=True),),
+    )
+    assert NetRoute.model_validate_json(route.model_dump_json()).segments[0].locked is True
+    placement = TerminalPlacement(side="NORTH", order=2, locked=True)
+    assert placement.locked is True
+    automatic = SetTerminalPlacementCommand(command_id="auto", design_id="design", terminal_id="port", placement=None)
+    assert automatic.placement is None
+
+
+@pytest.mark.parametrize(
+    ("vertices", "segments", "message"),
+    [
+        (
+            (
+                RouteVertex(id="a", kind="endpoint", terminal_id="a", point=Point(x=0, y=0)),
+                RouteVertex(id="b", kind="endpoint", terminal_id="b", point=Point(x=20, y=20)),
+            ),
+            (RouteSegment(id="diagonal", from_vertex="a", to_vertex="b"),),
+            "orthogonal",
+        ),
+        (
+            (
+                RouteVertex(id="a", kind="endpoint", terminal_id="a", point=Point(x=0, y=0)),
+                RouteVertex(id="j", kind="junction", point=Point(x=20, y=0)),
+                RouteVertex(id="b", kind="endpoint", terminal_id="b", point=Point(x=40, y=0)),
+            ),
+            (
+                RouteSegment(id="one", from_vertex="a", to_vertex="j"),
+                RouteSegment(id="two", from_vertex="j", to_vertex="b"),
+            ),
+            "degree three",
+        ),
+    ],
+)
+def test_route_contract_rejects_misleading_or_non_orthogonal_topology(vertices, segments, message) -> None:
+    with pytest.raises(pydantic.ValidationError, match=message):
+        NetRoute(vertices=vertices, segments=segments)
 
 
 def test_schema_export_is_deterministic_and_contains_public_roots() -> None:

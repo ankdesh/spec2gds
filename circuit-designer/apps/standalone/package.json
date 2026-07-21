@@ -11,7 +11,7 @@
   "dependencies": {
     "@spec2gds/circuit-client-local": "0.0.0",
     "@spec2gds/circuit-core": "0.0.0",
-    "@spec2gds/circuit-layout-elk": "0.0.0",
+    "@spec2gds/circuit-layout": "0.0.0",
     "@spec2gds/circuit-react": "0.0.0",
     "@xyflow/react": "12.8.4",
     "react": "18.3.1",

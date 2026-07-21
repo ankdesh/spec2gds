@@ -1,3 +1,4 @@
+import { validateNetRoute } from "@spec2gds/circuit-core";
 import type {
   AgentProposal,
   ChangePreview,
@@ -168,6 +169,11 @@ export class LocalCircuitDesignerApi implements CircuitDesignerApi {
         diagnostics.push(this.diagnostic("invalid_command", reason instanceof Error ? reason.message : String(reason), command.command_id));
       }
     }
+    if (!diagnostics.length) {
+      for (const [netId, route] of Object.entries(candidate.layout?.net_routes ?? {})) {
+        diagnostics.push(...validateNetRoute(candidate, netId, route));
+      }
+    }
     return { batch: clone(batch), diagnostics, candidate: diagnostics.length ? null : candidate };
   }
 
@@ -266,12 +272,14 @@ export class LocalCircuitDesignerApi implements CircuitDesignerApi {
     if (type === "add_net_endpoint") {
       const net = this.net(graph, command.net_id); this.requireTerminals(graph, [command.terminal_id]);
       if (!net.endpoints.some((item) => item.terminal_id === command.terminal_id)) net.endpoints.push({ terminal_id: command.terminal_id });
+      if (graph.layout?.net_routes) delete graph.layout.net_routes[command.net_id];
       return;
     }
     if (type === "remove_net_endpoint") {
       const net = this.net(graph, command.net_id);
       if (net.endpoints.length <= 2) throw new Error("A net must retain at least two endpoints.");
       net.endpoints = net.endpoints.filter((item) => item.terminal_id !== command.terminal_id) as typeof net.endpoints;
+      if (graph.layout?.net_routes) delete graph.layout.net_routes[command.net_id];
       return;
     }
     if (type === "delete_net") {
@@ -281,14 +289,29 @@ export class LocalCircuitDesignerApi implements CircuitDesignerApi {
     }
     if (type === "set_node_geometry") {
       if (!graph.nodes.some((item) => item.id === command.node_id)) throw new Error(`Unknown node: ${command.node_id}`);
-      graph.layout ??= {}; graph.layout.node_geometry ??= {}; graph.layout.node_geometry[command.node_id] = clone(command.geometry); return;
+      graph.layout ??= {}; graph.layout.node_geometry ??= {}; graph.layout.node_geometry[command.node_id] = clone(command.geometry);
+      const terminalIds = new Set(graph.terminals.filter((terminal) => terminal.node_id === command.node_id).map((terminal) => terminal.id));
+      for (const net of graph.nets.filter((item) => item.endpoints.some((endpoint) => terminalIds.has(endpoint.terminal_id)))) {
+        if (graph.layout.net_routes) delete graph.layout.net_routes[net.id];
+      }
+      return;
     }
     if (type === "set_terminal_placement") {
-      this.requireTerminals(graph, [command.terminal_id]); graph.layout ??= {}; graph.layout.terminal_placements ??= {}; graph.layout.terminal_placements[command.terminal_id] = clone(command.placement); return;
+      this.requireTerminals(graph, [command.terminal_id]); graph.layout ??= {}; graph.layout.terminal_placements ??= {};
+      if (command.placement) graph.layout.terminal_placements[command.terminal_id] = clone(command.placement);
+      else delete graph.layout.terminal_placements[command.terminal_id];
+      for (const net of graph.nets.filter((item) => item.endpoints.some((endpoint) => endpoint.terminal_id === command.terminal_id))) {
+        if (graph.layout.net_routes) delete graph.layout.net_routes[net.id];
+      }
+      return;
     }
     if (type === "set_net_route") {
       this.net(graph, command.net_id); graph.layout ??= {}; graph.layout.net_routes ??= {};
-      if (command.route) graph.layout.net_routes[command.net_id] = clone(command.route); else delete graph.layout.net_routes[command.net_id];
+      if (command.route) {
+        const routeDiagnostics = validateNetRoute(graph, command.net_id, command.route);
+        if (routeDiagnostics.length) throw new Error(routeDiagnostics.map((item) => item.message).join(" "));
+        graph.layout.net_routes[command.net_id] = clone(command.route);
+      } else delete graph.layout.net_routes[command.net_id];
       return;
     }
     if (type === "set_layout_direction") { graph.layout ??= {}; graph.layout.direction = command.direction; return; }

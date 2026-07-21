@@ -2,12 +2,12 @@
 
 ## Purpose
 
-The standalone application isolates the React/ELK circuit stack from SpecIR and
+The standalone application isolates the React circuit stack from SpecIR and
 the spec editor. It is the default environment for developing and diagnosing
 canvas, routing, selection, and mutation behavior.
 
 If a problem reproduces here, it belongs to the circuit contract, local command
-engine, ELK adapter, React canvas, or workbench UI. If it occurs only in the
+engine, grid layout/router, React canvas, or workbench UI. If it occurs only in the
 optional SpecIR harness, investigate the HTTP projection and Python source
 adapter instead.
 
@@ -17,7 +17,7 @@ adapter instead.
 apps/standalone
   -> packages/client-local
   -> packages/core
-  -> packages/layout-elk
+  -> packages/layout
   -> packages/react
 
 No dependency on:
@@ -40,12 +40,13 @@ npm run dev
 
 Open `http://127.0.0.1:4180`.
 
-The independent app contains four examples:
+The independent app contains five examples:
 
 - processor subsystem with interface and interrupt nets;
 - producer/consumer datapath;
 - multi-endpoint broadcast fanout;
-- cyclic feedback pipeline.
+- cyclic feedback pipeline;
+- two independent nets that cross without forming an electrical junction.
 
 Edits remain in the current browser tab. Use **Export JSON** to save the
 renderer-neutral graph or **Reset** to restore the selected example.
@@ -64,19 +65,67 @@ objects:
 
 Component origins snap to the visible 20-pixel grid. Creating or dragging a
 component does not automatically pan or zoom the canvas. Existing geometry is
-pinned before topology changes so ELK cannot rearrange already placed blocks.
+pinned before topology changes so it remains stable.
 
-Every automatically routed terminal has a 24-pixel outward stub. The stub is
+Every automatically routed terminal has a 20-pixel outward stub. The stub is
 normal to the terminal side—left for inputs, right for outputs, and down for
 bidirectional ports—before the route joins its orthogonal trunk. This prevents
 a net from initially running along or overlapping the component edge.
 
-ELK is used for component ordering and placement, not as the final electrical
-net router. ELK emits separate edge sections for the pairwise edges used during
-layering; merging those sections into a multi-endpoint circuit net produces
-hairpins, reverse segments, and visually duplicated trunks. The circuit router
-therefore builds one deterministic route tree per semantic net after ELK has
-placed the blocks. Fanout endpoints share one trunk and explicit junctions.
+There is no third-party graph-layout engine or layout worker. Initial placement
+uses a small deterministic connectivity-layered grid placer. Final routing is
+owned by one rectilinear router that sees the whole design at once. Component
+rectangles and locked routes are obstacles; unlocked nets are routed together
+with bend, proximity, overlap, and crossing costs. The router first searches
+for a crossing-free path and uses a congestion-penalized fallback only when a
+design is too dense to provide a free channel.
+
+This separation is deliberate: block placement is optional convenience data,
+while route quality depends on the block and port positions the user has fixed.
+The normal workflow is to place or drag blocks, arrange ports, lock intentional
+route corridors, and then choose **Reroute unlocked nets**.
+
+## Canvas modes
+
+The toolbar makes canvas intent explicit so gestures cannot accidentally move
+both a circuit object and the viewport:
+
+- **Select** selects and grid-drags components. Existing routes remain stable
+  during the gesture; unlocked connected routes are recomputed atomically on drop.
+- **Connect** exposes terminal handles for creating nets. Component dragging,
+  route editing, and viewport navigation are disabled.
+- **Route** edits saved orthogonal route geometry. Drag a segment perpendicular
+  to its direction, drag a bend or junction, double-click a segment to insert a
+  bend, double-click a bend to remove it, and Shift-click a route object to
+  toggle its lock.
+- **Pan** pans and zooms the viewport without changing circuit geometry. Hold
+  Space to use this mode temporarily and press Escape to return to Select.
+
+Route edits snap to the same 20-pixel grid as components. Endpoint stubs remain
+normal to their component sides, zero-length and diagonal segments are rejected,
+and route trees are validated against the net's semantic endpoint set. A dot is
+drawn only for a degree-three-or-greater electrical junction. Geometric
+crossings between independent nets do not receive a junction dot.
+
+## Placement and routing controls
+
+The selected component can be pinned or unpinned. For each selected terminal,
+the inspector can choose NORTH, EAST, SOUTH, or WEST, change its order on that
+side, lock the placement, or restore automatic placement. The component is
+resized when necessary and affected nets are rerouted atomically.
+
+**Reroute unlocked nets** changes only route geometry; component placement is kept
+fixed and locked route segments/vertices are preserved. The selected-net tools
+can optimize, reset, lock/unlock all geometry, or reset an individual route
+branch. A selected block can optimize only its connected nets, while the layout
+panel can optimize every net. **Arrange unpinned blocks** is intentionally
+separate: the deterministic grid placer may move unpinned components, preserves
+pinned component geometry, and then creates fresh orthogonal routes.
+
+The persisted model keeps semantic connectivity (`nets` and terminal endpoint
+IDs) separate from optional presentation geometry (`net_routes`). Stable route
+vertex/segment IDs and lock flags are part of the common command contract, so
+human UI operations and programmatic/agent operations use the same API.
 
 The shared command protocol includes `add_terminal` and `delete_terminal`.
 They are implemented by the local adapter. The current SpecIR adapter returns

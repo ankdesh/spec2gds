@@ -34,7 +34,7 @@ interface CircuitDesignerReadApi {
 }
 ```
 
-`@spec2gds/circuit-client-http` implements this interface without React or ELK
+`@spec2gds/circuit-client-http` implements this interface without React or layout
 dependencies. It supports cancellation, URL-safe design IDs, runtime JSON
 Schema validation, and structured HTTP errors. A future agent integration can
 use the same interface as the UI rather than reaching into React state.

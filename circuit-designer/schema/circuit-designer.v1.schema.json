@@ -1326,6 +1326,23 @@
           "title": "From Vertex",
           "type": "string"
         },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
+        },
         "to_vertex": {
           "minLength": 1,
           "title": "To Vertex",
@@ -1356,6 +1373,11 @@
           ],
           "title": "Kind",
           "type": "string"
+        },
+        "locked": {
+          "default": false,
+          "title": "Locked",
+          "type": "boolean"
         },
         "point": {
           "$ref": "#/$defs/Point"
@@ -1512,7 +1534,14 @@
           "type": "string"
         },
         "placement": {
-          "$ref": "#/$defs/TerminalPlacement"
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerminalPlacement"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "terminal_id": {
           "minLength": 1,
@@ -1561,6 +1590,11 @@
       "additionalProperties": false,
       "description": "Optional semantic-terminal placement override.",
       "properties": {
+        "locked": {
+          "default": true,
+          "title": "Locked",
+          "type": "boolean"
+        },
         "order": {
           "minimum": 0,
           "title": "Order",

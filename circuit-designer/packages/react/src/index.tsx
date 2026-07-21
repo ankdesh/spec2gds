@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -7,6 +7,7 @@ import {
   Handle,
   Position,
   ReactFlow,
+  useReactFlow,
   type Edge,
   type EdgeProps,
   type Node,
@@ -21,6 +22,37 @@ import type {
   NodeGeometry,
   TerminalPlacement,
 } from "@spec2gds/circuit-core";
+import {
+  ensureRouteIds,
+  insertRouteBend,
+  moveRouteSegment,
+  moveRouteVertex,
+  removeRouteBend,
+  toggleRouteSegmentLock,
+  toggleRouteVertexLock,
+} from "@spec2gds/circuit-core";
+
+export type CircuitCanvasMode = "select" | "connect" | "route" | "pan";
+
+export interface CircuitInteractionPolicy {
+  nodesDraggable: boolean;
+  nodesConnectable: boolean;
+  elementsSelectable: boolean;
+  routeEditable: boolean;
+  panOnDrag: boolean;
+  zoomEnabled: boolean;
+}
+
+export function interactionPolicy(mode: CircuitCanvasMode, editable: boolean): CircuitInteractionPolicy {
+  return {
+    nodesDraggable: editable && mode === "select",
+    nodesConnectable: editable && mode === "connect",
+    elementsSelectable: mode !== "pan",
+    routeEditable: editable && mode === "route",
+    panOnDrag: mode === "pan",
+    zoomEnabled: mode === "pan",
+  };
+}
 
 export interface CircuitDesignerCanvasProps {
   graph: CircuitGraphSnapshot;
@@ -33,6 +65,8 @@ export interface CircuitDesignerCanvasProps {
   gridSize?: number;
   allowViewportNavigation?: boolean;
   fitViewOnInit?: boolean;
+  mode?: CircuitCanvasMode;
+  onNetRouteChange?: (netId: string, route: NetRoute) => void;
 }
 
 type CircuitNodeData = {
@@ -42,7 +76,14 @@ type CircuitNodeData = {
 };
 
 type CircuitFlowNode = Node<CircuitNodeData, "circuit">;
-type CircuitEdgeData = { route: NetRoute; label: string; kind: string };
+type CircuitEdgeData = {
+  route: NetRoute;
+  label: string;
+  kind: string;
+  routeEditable: boolean;
+  gridSize: number;
+  onRouteChange?: (route: NetRoute) => void;
+};
 type CircuitFlowEdge = Edge<CircuitEdgeData, "circuit">;
 
 const positions = { NORTH: Position.Top, EAST: Position.Right, SOUTH: Position.Bottom, WEST: Position.Left };
@@ -55,7 +96,7 @@ function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
-        const offset = 62 + (placement?.order ?? 0) * 18;
+        const offset = 60 + (placement?.order ?? 0) * 20;
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
         return <Fragment key={terminal.id}>
           <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{terminal.label}</span>
@@ -75,7 +116,13 @@ export function terminalIdFromHandle(handleId: string | null | undefined): strin
   return handleId?.replace(/:(source|target)$/, "");
 }
 
-export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Record<string, NetRoute>): CircuitFlowEdge[] {
+export interface BuildCircuitFlowEdgeOptions {
+  routeEditable?: boolean;
+  gridSize?: number;
+  onNetRouteChange?: (netId: string, route: NetRoute) => void;
+}
+
+export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Record<string, NetRoute>, options: BuildCircuitFlowEdgeOptions = {}): CircuitFlowEdge[] {
   return graph.nets.flatMap((net) => {
     const route = netRoutes[net.id];
     if (!route || net.endpoints.length < 2) return [];
@@ -88,7 +135,12 @@ export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Re
       target: graph.terminals.find((terminal) => terminal.id === targetTerminalId)?.node_id ?? `boundary:${targetTerminalId}`,
       sourceHandle: terminalHandleId(sourceTerminalId, "source"),
       targetHandle: terminalHandleId(targetTerminalId, "target"),
-      data: { route, label: net.label, kind: net.kind },
+      data: {
+        route: ensureRouteIds(route), label: net.label, kind: net.kind,
+        routeEditable: options.routeEditable ?? false,
+        gridSize: options.gridSize ?? 20,
+        onRouteChange: options.onNetRouteChange ? (nextRoute) => options.onNetRouteChange?.(net.id, nextRoute) : undefined,
+      },
       selectable: true,
     }];
   });
@@ -96,22 +148,109 @@ export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Re
 
 function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
   if (!data) return null;
-  const vertices = new Map(data.route.vertices.map((vertex) => [vertex.id, vertex]));
+  const { screenToFlowPosition } = useReactFlow();
+  const [draft, setDraft] = useState(() => ensureRouteIds(data.route));
+  const draftRef = useRef(draft);
+  const drag = useRef<{ kind: "segment" | "vertex"; id: string; pointerId: number; startRoute: NetRoute }>();
+  useEffect(() => {
+    const next = ensureRouteIds(data.route);
+    setDraft(next); draftRef.current = next;
+  }, [data.route]);
+  const updateDraft = (next: NetRoute) => { draftRef.current = next; setDraft(next); };
+  const vertices = new Map(draft.vertices.map((vertex) => [vertex.id, vertex]));
+  const degrees = new Map(draft.vertices.map((vertex) => [vertex.id, 0]));
+  for (const segment of draft.segments) {
+    degrees.set(segment.from_vertex, (degrees.get(segment.from_vertex) ?? 0) + 1);
+    degrees.set(segment.to_vertex, (degrees.get(segment.to_vertex) ?? 0) + 1);
+  }
+  const flowPoint = (event: { clientX: number; clientY: number }) => screenToFlowPosition({ x: event.clientX, y: event.clientY });
+  const startDrag = (event: ReactPointerEvent<SVGElement>, kind: "segment" | "vertex", id: string, locked = false) => {
+    if (!data.routeEditable || locked) return;
+    event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { kind, id, pointerId: event.pointerId, startRoute: draftRef.current };
+  };
+  const moveDrag = (event: ReactPointerEvent<SVGElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    const point = flowPoint(event);
+    const next = drag.current.kind === "segment"
+      ? moveRouteSegment(drag.current.startRoute, drag.current.id, (() => {
+          const segment = drag.current!.startRoute.segments.find((item) => item.id === drag.current?.id)!;
+          const start = drag.current!.startRoute.vertices.find((vertex) => vertex.id === segment.from_vertex)!;
+          const end = drag.current!.startRoute.vertices.find((vertex) => vertex.id === segment.to_vertex)!;
+          return start.point.y === end.point.y ? point.y : point.x;
+        })(), data.gridSize)
+      : moveRouteVertex(drag.current.startRoute, drag.current.id, point, data.gridSize);
+    updateDraft(next);
+  };
+  const endDrag = (event: ReactPointerEvent<SVGElement>) => {
+    if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    event.stopPropagation(); drag.current = undefined;
+    data.onRouteChange?.(draftRef.current);
+  };
   return (
     <g className={selected ? "cd-net cd-net--selected" : "cd-net"}>
-      {data.route.segments.map((segment, index) => {
+      {draft.segments.map((segment, index) => {
         const start = vertices.get(segment.from_vertex)!.point;
         const end = vertices.get(segment.to_vertex)!.point;
-        return <path key={index} d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`} className="cd-net__segment" />;
+        const movable = !segment.locked
+          && vertices.get(segment.from_vertex)?.kind !== "endpoint"
+          && vertices.get(segment.to_vertex)?.kind !== "endpoint";
+        const id = segment.id ?? `segment:${index}`;
+        return <Fragment key={id}>
+          <path d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`} className={segment.locked ? "cd-net__segment cd-net__segment--locked" : "cd-net__segment"} />
+          {data.routeEditable && <path
+            d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`}
+            className="cd-net__hit-segment"
+            data-segment-id={id}
+            data-movable={movable}
+            onPointerDown={(event) => startDrag(event, "segment", id, segment.locked)}
+            onPointerMove={moveDrag}
+            onPointerUp={endDrag}
+            onDoubleClick={(event) => {
+              event.stopPropagation();
+              const next = insertRouteBend(draftRef.current, id, flowPoint(event), data.gridSize);
+              updateDraft(next); data.onRouteChange?.(next);
+            }}
+            onClick={(event) => {
+              if (!event.shiftKey) return;
+              event.stopPropagation();
+              const next = toggleRouteSegmentLock(draftRef.current, id);
+              updateDraft(next); data.onRouteChange?.(next);
+            }}
+          />}
+        </Fragment>;
       })}
-      {data.route.vertices.filter((vertex) => vertex.kind === "junction").map((vertex) => (
+      {draft.vertices.filter((vertex) => vertex.kind === "junction" && (degrees.get(vertex.id) ?? 0) >= 3).map((vertex) => (
         <circle key={vertex.id} cx={vertex.point.x} cy={vertex.point.y} r="3.5" className="cd-net__junction" />
+      ))}
+      {data.routeEditable && draft.vertices.filter((vertex) => vertex.kind !== "endpoint").map((vertex) => (
+        <circle
+          key={`handle:${vertex.id}`}
+          cx={vertex.point.x} cy={vertex.point.y} r="5"
+          className={vertex.locked ? "cd-net__route-handle cd-net__route-handle--locked" : "cd-net__route-handle"}
+          data-vertex-id={vertex.id}
+          onPointerDown={(event) => startDrag(event, "vertex", vertex.id, vertex.locked)}
+          onPointerMove={moveDrag}
+          onPointerUp={endDrag}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
+            const next = removeRouteBend(draftRef.current, vertex.id);
+            updateDraft(next); data.onRouteChange?.(next);
+          }}
+          onClick={(event) => {
+            if (!event.shiftKey) return;
+            event.stopPropagation();
+            const next = toggleRouteVertexLock(draftRef.current, vertex.id);
+            updateDraft(next); data.onRouteChange?.(next);
+          }}
+        />
       ))}
     </g>
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true }: CircuitDesignerCanvasProps) {
+export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange }: CircuitDesignerCanvasProps) {
+  const policy = interactionPolicy(mode, editable);
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
@@ -134,7 +273,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       position: { x: geometry.x, y: geometry.y },
       style: { width: geometry.width, height: geometry.height },
       data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements },
-      draggable: editable,
+      draggable: policy.nodesDraggable,
     }];
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
@@ -152,7 +291,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       draggable: false,
     });
   }
-  const edges = buildCircuitFlowEdges(graph, netRoutes);
+  const edges = buildCircuitFlowEdges(graph, netRoutes, { routeEditable: policy.routeEditable, gridSize, onNetRouteChange });
   return (
     <div className="cd-canvas" data-testid="circuit-canvas">
       <ReactFlow<CircuitFlowNode, CircuitFlowEdge>
@@ -164,15 +303,16 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         minZoom={0.08}
         maxZoom={2.5}
-        nodesDraggable={editable}
-        nodesConnectable={editable && Boolean(onConnectTerminals)}
+        nodesDraggable={policy.nodesDraggable}
+        nodesConnectable={policy.nodesConnectable && Boolean(onConnectTerminals)}
+        elementsSelectable={policy.elementsSelectable}
         connectionMode={ConnectionMode.Loose}
         snapToGrid
         snapGrid={[gridSize, gridSize]}
-        panOnDrag={allowViewportNavigation}
-        zoomOnScroll={allowViewportNavigation}
-        zoomOnPinch={allowViewportNavigation}
-        zoomOnDoubleClick={allowViewportNavigation}
+        panOnDrag={allowViewportNavigation && policy.panOnDrag}
+        zoomOnScroll={allowViewportNavigation && policy.zoomEnabled}
+        zoomOnPinch={allowViewportNavigation && policy.zoomEnabled}
+        zoomOnDoubleClick={allowViewportNavigation && policy.zoomEnabled}
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         onPaneClick={() => onSelect?.(null)}

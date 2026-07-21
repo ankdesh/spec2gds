@@ -183,6 +183,52 @@ export function cycleFixture(): CircuitGraphSnapshot {
   );
 }
 
+export function crossingFixture(): CircuitGraphSnapshot {
+  const left = port("left_0", "east", "out");
+  const right = port("right_0", "west", "in");
+  const top = port("top_0", "south", "inout");
+  const bottom = port("bottom_0", "north", "inout");
+  const result = graph(
+    "crossing",
+    [component("left"), component("right"), component("top"), component("bottom")],
+    [node("left_0", "left", [left]), node("right_0", "right", [right]), node("top_0", "top", [top]), node("bottom_0", "bottom", [bottom])],
+    [left, right, top, bottom],
+    [net("horizontal", "ad_hoc", [left.id, right.id]), net("vertical", "ad_hoc", [top.id, bottom.id])],
+  );
+  result.layout = {
+    direction: "RIGHT",
+    node_geometry: {
+      left_0: { x: 0, y: 80, width: 180, height: 120, pinned: true },
+      right_0: { x: 400, y: 80, width: 180, height: 120, pinned: true },
+      top_0: { x: 240, y: 0, width: 180, height: 80, pinned: true },
+      bottom_0: { x: 240, y: 220, width: 180, height: 80, pinned: true },
+    },
+    terminal_placements: {
+      [left.id]: { side: "EAST", order: 0, locked: true },
+      [right.id]: { side: "WEST", order: 0, locked: true },
+      [top.id]: { side: "SOUTH", order: 0, locked: true },
+      [bottom.id]: { side: "NORTH", order: 0, locked: true },
+    },
+    net_routes: {
+      horizontal: {
+        vertices: [
+          { id: "h-left", kind: "endpoint", terminal_id: left.id, point: { x: 180, y: 140 } },
+          { id: "h-right", kind: "endpoint", terminal_id: right.id, point: { x: 400, y: 140 } },
+        ],
+        segments: [{ id: "h-crossing", from_vertex: "h-left", to_vertex: "h-right" }],
+      },
+      vertical: {
+        vertices: [
+          { id: "v-top", kind: "endpoint", terminal_id: top.id, point: { x: 300, y: 80 } },
+          { id: "v-bottom", kind: "endpoint", terminal_id: bottom.id, point: { x: 300, y: 220 } },
+        ],
+        segments: [{ id: "v-crossing", from_vertex: "v-top", to_vertex: "v-bottom" }],
+      },
+    },
+  };
+  return result;
+}
+
 export function largeFixture(instanceCount = 200): CircuitGraphSnapshot {
   const terminals: CircuitTerminal[] = [];
   const nodes: CircuitNode[] = [];

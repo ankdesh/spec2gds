@@ -1,5 +1,5 @@
 import type { CircuitGraphSnapshot } from "@spec2gds/circuit-core";
-import type { LayoutResult } from "@spec2gds/circuit-layout-elk";
+import type { LayoutResult } from "@spec2gds/circuit-layout";
 
 export interface KeyedLayoutResult {
   graphKey: string;

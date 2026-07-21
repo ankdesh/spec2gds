@@ -66,4 +66,61 @@ describe("standalone circuit API", () => {
     expect(result.candidate?.terminals.some((item) => item.id === "local_node:port:data")).toBe(true);
     expect(validateGraph(result.candidate).valid).toBe(true);
   });
+
+  test("round-trips locked route constraints through apply, export, and undo", async () => {
+    const { api, lease } = await editor();
+    const graph = await api.getGraph("mixed");
+    const route = {
+      vertices: [
+        { id: "irq-source", kind: "endpoint" as const, terminal_id: "peripheral_0:port:irq", point: { x: 0, y: 0 } },
+        { id: "irq-target", kind: "endpoint" as const, terminal_id: "cpu_0:port:irq", point: { x: 100, y: 0 } },
+      ],
+      segments: [{ id: "irq-trunk", from_vertex: "irq-source", to_vertex: "irq-target", locked: true }],
+    };
+    const result = await api.apply({
+      batch_id: "manual_route",
+      expected_source_revision_hash: graph.source_revision_hash,
+      commands: [{ type: "set_net_route", command_id: "route", design_id: "mixed", net_id: "irq", route }],
+    }, lease.lease_id);
+    expect(result.diagnostics).toEqual([]);
+    expect(api.exportGraph().layout?.net_routes?.irq.segments[0]).toMatchObject({ id: "irq-trunk", locked: true });
+    expect((await api.undo(lease.lease_id, "mixed")).graph.layout?.net_routes?.irq).toBeUndefined();
+  });
+
+  test("rejects malformed non-orthogonal routes during preview and apply", async () => {
+    const { api, lease } = await editor();
+    const graph = await api.getGraph("mixed");
+    const batch: CommandBatch = {
+      batch_id: "diagonal",
+      expected_source_revision_hash: graph.source_revision_hash,
+      commands: [{
+        type: "set_net_route", command_id: "diagonal", design_id: "mixed", net_id: "irq",
+        route: {
+          vertices: [
+            { id: "a", kind: "endpoint", terminal_id: "peripheral_0:port:irq", point: { x: 0, y: 0 } },
+            { id: "b", kind: "endpoint", terminal_id: "cpu_0:port:irq", point: { x: 20, y: 20 } },
+          ],
+          segments: [{ id: "bad", from_vertex: "a", to_vertex: "b" }],
+        },
+      }],
+    };
+    expect((await api.preview(batch)).diagnostics[0].message).toContain("not orthogonal");
+    expect((await api.apply(batch, lease.lease_id)).candidate).toBeNull();
+  });
+
+  test("locks and restores automatic terminal placement through the common command API", async () => {
+    const { api, lease } = await editor();
+    let graph = await api.getGraph("mixed");
+    const placed = await api.apply({
+      batch_id: "place_port", expected_source_revision_hash: graph.source_revision_hash,
+      commands: [{ type: "set_terminal_placement", command_id: "place", design_id: "mixed", terminal_id: "cpu_0:port:irq", placement: { side: "NORTH", order: 2, locked: true } }],
+    }, lease.lease_id);
+    expect(placed.candidate?.layout?.terminal_placements?.["cpu_0:port:irq"]).toEqual({ side: "NORTH", order: 2, locked: true });
+    graph = placed.candidate!;
+    const automatic = await api.apply({
+      batch_id: "automatic_port", expected_source_revision_hash: graph.source_revision_hash,
+      commands: [{ type: "set_terminal_placement", command_id: "automatic", design_id: "mixed", terminal_id: "cpu_0:port:irq", placement: null }],
+    }, lease.lease_id);
+    expect(automatic.candidate?.layout?.terminal_placements?.["cpu_0:port:irq"]).toBeUndefined();
+  });
 });

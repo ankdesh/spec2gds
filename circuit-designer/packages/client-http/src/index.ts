@@ -32,7 +32,7 @@ export interface HttpCircuitDesignerOptions {
   fetch?: CircuitFetch;
 }
 
-/** HTTP implementation of the common read API; it contains no React or ELK concerns. */
+/** HTTP implementation of the common read API; it contains no React or layout concerns. */
 export class HttpCircuitDesignerReadApi implements CircuitDesignerApi {
   readonly baseUrl: string;
   readonly fetch: CircuitFetch;

@@ -19,7 +19,7 @@ SpecIR -> Python projection -> versioned JSON contract
                                   |
                      +------------+-------------+
                      v                          v
-                ELK adapter              React renderer
+             grid layout/router          React renderer
                      +------------+-------------+
                                   v
                          standalone mock app
@@ -39,8 +39,9 @@ of truth rather than a parallel handwritten model.
 - `@spec2gds/circuit-core`: generated contracts, runtime AJV validation,
   indexing/query helpers, command-batch construction, and deterministic
   fixtures.
-- `@spec2gds/circuit-layout-elk`: stable ELK layered placement plus a neutral
-  orthogonal route-tree result. A browser entry runs ELK in a Web Worker.
+- `@spec2gds/circuit-layout`: deterministic connectivity-layered grid placement
+  plus global obstacle-aware orthogonal routing. It has no worker or external
+  layout-engine dependency.
 - `@spec2gds/circuit-react`: React Flow canvas with hardware-spec component
   blocks, semantic terminals, orthogonal segments, junction dots, selection,
   zoom, and pan.
@@ -51,7 +52,7 @@ of truth rather than a parallel handwritten model.
 
 `CircuitGraphSnapshot` carries stable IDs, opaque source references,
 capabilities, component definitions, instances, semantic terminals, nets, and
-optional layout. It has no React Flow or ELK types.
+optional layout. It has no React Flow or layout-engine types.
 
 `DiagramLayout` stores node rectangles, terminal side/order, and each net as a
 route tree of endpoint, bend, and junction vertices connected by strictly
@@ -113,7 +114,7 @@ run Vitest or the build with `TMPDIR=/tmp`.
 ## Phase 0 acceptance boundary
 
 Accepted here: deterministic schema/type generation; current SpecIR read
-projection; strict runtime validation; ELK automatic layout; 90-degree route
+projection; strict runtime validation; deterministic automatic layout; 90-degree route
 trees; multi-endpoint rendering; standalone mock inspection; unit, scale, and
 browser smoke tests.
 

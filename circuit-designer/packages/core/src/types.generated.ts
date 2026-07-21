@@ -124,6 +124,7 @@ export type NodeId4 = string;
 export type Type11 = "set_node_geometry";
 export type CommandId12 = string;
 export type DesignId12 = string;
+export type Locked = boolean;
 export type Order = number;
 export type Side = "NORTH" | "EAST" | "SOUTH" | "WEST";
 export type TerminalId4 = string;
@@ -132,10 +133,13 @@ export type CommandId13 = string;
 export type DesignId13 = string;
 export type NetId5 = string;
 export type FromVertex = string;
+export type Id = string | null;
+export type Locked1 = boolean;
 export type ToVertex = string;
 export type Segments = RouteSegment[];
-export type Id = string;
+export type Id1 = string;
 export type Kind2 = "endpoint" | "bend" | "junction";
+export type Locked2 = boolean;
 export type TerminalId5 = string | null;
 export type Vertices = RouteVertex[];
 export type Type13 = "set_net_route";
@@ -144,7 +148,7 @@ export type DesignId14 = string;
 export type Direction1 = "RIGHT" | "DOWN";
 export type Type14 = "set_layout_direction";
 export type ExpectedSourceRevisionHash = string;
-export type Id1 = string;
+export type Id2 = string;
 export type Label = string;
 export type Kind3 = string;
 export type SourceId = string;
@@ -164,7 +168,7 @@ export type EditLayout = boolean;
 export type EditTopology = boolean;
 export type ReplaceComponent = boolean;
 export type SubmitAgentProposal = boolean;
-export type Id2 = string;
+export type Id3 = string;
 export type Label1 = string;
 export type Vlnv1 = string | null;
 export type Components = CircuitComponentDefinition[];
@@ -175,7 +179,7 @@ export type Direction2 = "RIGHT" | "DOWN";
  */
 export type Endpoints = [CircuitEndpointRef, CircuitEndpointRef, ...CircuitEndpointRef[]];
 export type TerminalId6 = string;
-export type Id3 = string;
+export type Id4 = string;
 export type Kind4 = "interface" | "ad_hoc";
 export type Label2 = string;
 export type Nets = CircuitNet[];
@@ -183,7 +187,7 @@ export type ComponentId3 = string;
 export type ComponentVlnv = string | null;
 export type Description1 = string | null;
 export type DisplayName1 = string | null;
-export type Id4 = string;
+export type Id5 = string;
 export type Label3 = string;
 export type TerminalIds1 = string[];
 export type Nodes = CircuitNode[];
@@ -193,7 +197,7 @@ export type AbstractionVlnv = string | null;
 export type BusVlnv = string | null;
 export type DeclaredBounds = string[];
 export type Direction3 = string | null;
-export type Id5 = string;
+export type Id6 = string;
 export type Kind5 = "interface" | "port" | "boundary_interface" | "boundary_port";
 export type Label4 = string;
 export type MappedPortIds = string[];
@@ -353,7 +357,7 @@ export interface NodeGeometry {
 export interface SetTerminalPlacementCommand {
   command_id: CommandId12;
   design_id: DesignId12;
-  placement: TerminalPlacement;
+  placement: TerminalPlacement | null;
   terminal_id: TerminalId4;
   type?: Type12;
 }
@@ -361,6 +365,7 @@ export interface SetTerminalPlacementCommand {
  * Optional semantic-terminal placement override.
  */
 export interface TerminalPlacement {
+  locked?: Locked;
   order: Order;
   side: Side;
 }
@@ -383,14 +388,17 @@ export interface NetRoute {
  */
 export interface RouteSegment {
   from_vertex: FromVertex;
+  id?: Id;
+  locked?: Locked1;
   to_vertex: ToVertex;
 }
 /**
  * Endpoint, bend, or electrical junction in an orthogonal route tree.
  */
 export interface RouteVertex {
-  id: Id;
+  id: Id1;
   kind: Kind2;
+  locked?: Locked2;
   point: Point1;
   terminal_id?: TerminalId5;
 }
@@ -422,7 +430,7 @@ export interface CircuitDesignCatalog {
  * One design available to the circuit canvas.
  */
 export interface CircuitDesignRef {
-  id: Id1;
+  id: Id2;
   label: Label;
   source_ref: SourceRef;
   vlnv?: Vlnv;
@@ -472,7 +480,7 @@ export interface CircuitCapabilities {
  * Reusable component definition exposed by the active adapter.
  */
 export interface CircuitComponentDefinition {
-  id: Id2;
+  id: Id3;
   label: Label1;
   source_ref: SourceRef;
   vlnv?: Vlnv1;
@@ -500,7 +508,7 @@ export interface TerminalPlacements {
  */
 export interface CircuitNet {
   endpoints: Endpoints;
-  id: Id3;
+  id: Id4;
   kind: Kind4;
   label: Label2;
   source_ref: SourceRef;
@@ -520,7 +528,7 @@ export interface CircuitNode {
   configuration_values?: ConfigurationValues1;
   description?: Description1;
   display_name?: DisplayName1;
-  id: Id4;
+  id: Id5;
   label: Label3;
   source_ref: SourceRef;
   terminal_ids?: TerminalIds1;
@@ -536,7 +544,7 @@ export interface CircuitTerminal {
   bus_vlnv?: BusVlnv;
   declared_bounds?: DeclaredBounds;
   direction?: Direction3;
-  id: Id5;
+  id: Id6;
   kind: Kind5;
   label: Label4;
   mapped_port_ids?: MappedPortIds;

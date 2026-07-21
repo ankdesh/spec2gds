@@ -455,12 +455,25 @@ def _apply_layout(command: typing.Any, graph: typing.Any, layout: DiagramLayout 
         if command.node_id not in {node.id for node in graph.nodes}:
             raise KeyError(f"Unknown node: {command.node_id}")
         values = dict(current.node_geometry); values[command.node_id] = command.geometry
-        return current.model_copy(update={"node_geometry": values})
+        terminal_ids = {terminal.id for terminal in graph.terminals if terminal.node_id == command.node_id}
+        routes = dict(current.net_routes)
+        for net in graph.nets:
+            if any(endpoint.terminal_id in terminal_ids for endpoint in net.endpoints):
+                routes.pop(net.id, None)
+        return current.model_copy(update={"node_geometry": values, "net_routes": routes})
     if isinstance(command, SetTerminalPlacementCommand):
         if command.terminal_id not in {terminal.id for terminal in graph.terminals}:
             raise KeyError(f"Unknown terminal: {command.terminal_id}")
-        values = dict(current.terminal_placements); values[command.terminal_id] = command.placement
-        return current.model_copy(update={"terminal_placements": values})
+        values = dict(current.terminal_placements)
+        if command.placement is None:
+            values.pop(command.terminal_id, None)
+        else:
+            values[command.terminal_id] = command.placement
+        routes = dict(current.net_routes)
+        for net in graph.nets:
+            if any(endpoint.terminal_id == command.terminal_id for endpoint in net.endpoints):
+                routes.pop(net.id, None)
+        return current.model_copy(update={"terminal_placements": values, "net_routes": routes})
     if isinstance(command, SetNetRouteCommand):
         if command.net_id not in {net.id for net in graph.nets}:
             raise KeyError(f"Unknown net: {command.net_id}")

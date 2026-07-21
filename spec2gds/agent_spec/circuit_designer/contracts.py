@@ -151,6 +151,7 @@ class TerminalPlacement(ContractModel):
 
     side: typing.Literal["NORTH", "EAST", "SOUTH", "WEST"]
     order: int = pydantic.Field(ge=0)
+    locked: bool = True
 
 
 class RouteVertex(ContractModel):
@@ -160,6 +161,7 @@ class RouteVertex(ContractModel):
     kind: typing.Literal["endpoint", "bend", "junction"]
     point: Point
     terminal_id: str | None = None
+    locked: bool = False
 
     @pydantic.model_validator(mode="after")
     def _endpoint_requires_terminal(self) -> "RouteVertex":
@@ -171,8 +173,10 @@ class RouteVertex(ContractModel):
 class RouteSegment(ContractModel):
     """One edge between vertices in an orthogonal route tree."""
 
+    id: str | None = None
     from_vertex: str = pydantic.Field(min_length=1)
     to_vertex: str = pydantic.Field(min_length=1)
+    locked: bool = False
 
 
 class NetRoute(ContractModel):
@@ -186,13 +190,45 @@ class NetRoute(ContractModel):
         by_id = {vertex.id: vertex for vertex in self.vertices}
         if len(by_id) != len(self.vertices):
             raise ValueError("Route vertex ids must be unique.")
+        segment_ids = [segment.id for segment in self.segments if segment.id is not None]
+        if len(segment_ids) != len(set(segment_ids)):
+            raise ValueError("Defined route segment ids must be unique.")
+        segment_keys: set[tuple[str, str]] = set()
+        adjacency = {vertex_id: set() for vertex_id in by_id}
         for segment in self.segments:
             if segment.from_vertex not in by_id or segment.to_vertex not in by_id:
                 raise ValueError("Route segments must reference known vertices.")
+            if segment.from_vertex == segment.to_vertex:
+                raise ValueError("Route segments cannot connect a vertex to itself.")
+            key = tuple(sorted((segment.from_vertex, segment.to_vertex)))
+            if key in segment_keys:
+                raise ValueError("A route cannot contain duplicate segments.")
+            segment_keys.add(key)
+            adjacency[segment.from_vertex].add(segment.to_vertex)
+            adjacency[segment.to_vertex].add(segment.from_vertex)
             start = by_id[segment.from_vertex].point
             end = by_id[segment.to_vertex].point
             if start.x != end.x and start.y != end.y:
                 raise ValueError("Circuit route segments must be orthogonal.")
+            if start.x == end.x and start.y == end.y:
+                raise ValueError("Circuit route segments must have non-zero length.")
+        if self.vertices:
+            visited: set[str] = set()
+            stack = [self.vertices[0].id]
+            while stack:
+                vertex_id = stack.pop()
+                if vertex_id in visited:
+                    continue
+                visited.add(vertex_id)
+                stack.extend(adjacency[vertex_id] - visited)
+            if visited != set(by_id):
+                raise ValueError("A circuit route tree must be connected.")
+            if len(self.segments) != len(self.vertices) - 1:
+                raise ValueError("A circuit route must be an acyclic tree.")
+        for vertex in self.vertices:
+            degree = len(adjacency[vertex.id])
+            if vertex.kind == "junction" and degree < 3:
+                raise ValueError("A junction route vertex must have electrical degree three or greater.")
         return self
 
 
@@ -346,7 +382,7 @@ class SetNodeGeometryCommand(CommandBase):
 class SetTerminalPlacementCommand(CommandBase):
     type: typing.Literal["set_terminal_placement"] = "set_terminal_placement"
     terminal_id: str = pydantic.Field(min_length=1)
-    placement: TerminalPlacement
+    placement: TerminalPlacement | None
 
 
 class SetNetRouteCommand(CommandBase):

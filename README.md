@@ -40,7 +40,7 @@ Most-used docs:
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
 - [`docs/circuit_designer_phase0.md`](docs/circuit_designer_phase0.md) for the
-  independent React + ELK circuit-designer foundation
+  independent React circuit-designer foundation
 - [`docs/circuit_designer_phase1.md`](docs/circuit_designer_phase1.md) for live
   read-only SpecIR integration
 - [`docs/circuit_designer_standalone.md`](docs/circuit_designer_standalone.md)
@@ -50,7 +50,7 @@ Most-used docs:
 
 ## Circuit Designer
 
-The circuit designer is a separate React + ELK workspace with its own examples
+The circuit designer is a separate React workspace with its own examples
 and an in-browser implementation of the common circuit API. Its default app has
 no Python, FastAPI, SpecIR, IP-XACT, or `.spec` package dependency and does not
 alter the spec editor interface.
@@ -65,7 +65,9 @@ npm run dev
 
 Open `http://127.0.0.1:4180`. The standalone lab supports bundled example
 circuits, minimal component/port/net creation, grid-snapped local topology and
-layout edits, undo/redo, reset, and JSON export.
+layout edits, explicit select/connect/route/pan modes, manual orthogonal route
+editing and locks, port side/order controls, deterministic grid placement,
+obstacle-aware rerouting, undo/redo, reset, and JSON export.
 Node.js 24 is the supported runtime.
 
 The optional SpecIR integration harness remains separate and is started only

@@ -25,7 +25,7 @@ product, its development method, and the completed pivot history.
 - [Local API and Editor](spec_editor_v1.md): run commands, routes, and browser
   interaction model.
 - [Circuit Designer Phase 0](circuit_designer_phase0.md): renderer-neutral
-  contracts, SpecIR projection, ELK layout, and standalone React mock app.
+  contracts, SpecIR projection, deterministic layout, and standalone React mock app.
 - [Circuit Designer Phase 1](circuit_designer_phase1.md): live read-only SpecIR
   catalog/graph API, reusable HTTP client, and server-backed canvas workflow.
 - [Circuit Designer Complete Roadmap](circuit_designer_complete.md): mutation,

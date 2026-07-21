@@ -1,5 +1,6 @@
 import {
   cycleFixture,
+  crossingFixture,
   hyperedgeFixture,
   mixedFixture,
   simpleFixture,
@@ -41,6 +42,11 @@ export const standaloneExamples = {
     title: "Feedback pipeline",
     summary: "A cyclic three-stage pipeline for testing orthogonal feedback routing.",
     build: () => identify(cycleFixture(), "feedback_pipeline", "Feedback pipeline"),
+  },
+  crossing: {
+    title: "Disconnected crossing",
+    summary: "Two geometric net crossings with no shared electrical junction.",
+    build: () => identify(crossingFixture(), "disconnected_crossing", "Disconnected crossing"),
   },
 } satisfies Record<string, StandaloneExample>;
 

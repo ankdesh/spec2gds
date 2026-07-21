@@ -9,8 +9,15 @@ from spec2gds.agent_spec.circuit_designer.contracts import (
     CommandBatch,
     CreateNetCommand,
     DeleteNetCommand,
+    NetRoute,
     NodeGeometry,
+    Point,
+    RouteSegment,
+    RouteVertex,
+    SetNetRouteCommand,
     SetNodeGeometryCommand,
+    SetTerminalPlacementCommand,
+    TerminalPlacement,
     RenameNetCommand,
     RemoveNetEndpointCommand,
 )
@@ -54,6 +61,79 @@ def test_layout_commands_require_a_lease_persist_and_support_history(tmp_path: P
     assert undone.layout is None
     redone = service.redo(lease.lease_id, "design_subsystem_internal")
     assert redone.layout.node_geometry["instance:leaf0"].x == 40
+
+
+def test_layout_changes_invalidate_attached_routes_until_batch_restores_them(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    lease = service.acquire_lease("browser", "human")
+    design_id = "design_subsystem_internal"
+    net_id = "net:interface:link0"
+    route = NetRoute(
+        vertices=(
+            RouteVertex(id="a", kind="endpoint", terminal_id="instance:leaf0:interface:link", point=Point(x=100, y=80)),
+            RouteVertex(id="b", kind="endpoint", terminal_id="instance:sink0:interface:link", point=Point(x=300, y=80)),
+        ),
+        segments=(RouteSegment(id="segment:a:b", from_vertex="a", to_vertex="b", locked=True),),
+    )
+
+    def apply(commands, batch_id):
+        result = service.apply(CommandBatch(
+            batch_id=batch_id,
+            expected_source_revision_hash=service.session.revision.source_revision_hash,
+            commands=commands,
+        ), lease.lease_id)
+        assert result.candidate is not None, result.diagnostics
+        return result.candidate.layout
+
+    layout = apply((SetNetRouteCommand(command_id="route", design_id=design_id, net_id=net_id, route=route),), "route")
+    assert layout.net_routes[net_id].segments[0].locked is True
+
+    layout = apply((SetNodeGeometryCommand(
+        command_id="move",
+        design_id=design_id,
+        node_id="instance:leaf0",
+        geometry=NodeGeometry(x=40, y=60, width=180, height=84),
+    ),), "move")
+    assert net_id not in layout.net_routes
+
+    layout = apply((
+        SetNodeGeometryCommand(
+            command_id="move_again",
+            design_id=design_id,
+            node_id="instance:leaf0",
+            geometry=NodeGeometry(x=80, y=60, width=180, height=84),
+        ),
+        SetNetRouteCommand(command_id="restore", design_id=design_id, net_id=net_id, route=route),
+    ), "move_and_restore")
+    assert layout.net_routes[net_id] == route
+
+
+def test_terminal_placement_can_be_locked_and_restored_to_automatic(tmp_path: Path) -> None:
+    service = _service(tmp_path)
+    lease = service.acquire_lease("browser", "human")
+    design_id = "design_subsystem_internal"
+    terminal_id = "instance:leaf0:interface:link"
+
+    def apply(placement, command_id):
+        result = service.apply(CommandBatch(
+            batch_id=f"batch_{command_id}",
+            expected_source_revision_hash=service.session.revision.source_revision_hash,
+            commands=(SetTerminalPlacementCommand(
+                command_id=command_id,
+                design_id=design_id,
+                terminal_id=terminal_id,
+                placement=placement,
+            ),),
+        ), lease.lease_id)
+        assert result.candidate is not None, result.diagnostics
+        return result.candidate.layout
+
+    layout = apply(TerminalPlacement(side="NORTH", order=1, locked=True), "place")
+    assert layout.terminal_placements[terminal_id].side == "NORTH"
+    assert layout.terminal_placements[terminal_id].locked is True
+
+    layout = apply(None, "automatic")
+    assert terminal_id not in layout.terminal_placements
 
 
 def test_topology_batch_commits_through_specir_and_undoes(tmp_path: Path) -> None:

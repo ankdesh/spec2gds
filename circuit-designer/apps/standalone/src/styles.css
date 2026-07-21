@@ -38,7 +38,12 @@ select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; back
 .segmented button:first-child { border-radius: 3px 0 0 3px; }
 .segmented button:last-child { margin-left: -1px; border-radius: 0 3px 3px 0; }
 .segmented button.active { z-index: 1; border-color: #1d5f61; background: #dcece7; color: #164f50; }
+.layout-actions { display: grid; grid-template-columns: 1fr; gap: 5px; margin-top: 7px; }
 .stage { position: relative; min-width: 0; min-height: 0; }
+.mode-toolbar { position: absolute; top: 12px; left: 12px; z-index: 8; display: flex; overflow: hidden; border: 1px solid #9aa9a6; border-radius: 4px; background: rgb(255 254 249 / 94%); box-shadow: 0 4px 12px rgb(23 43 48 / 10%); }
+.mode-toolbar button { border: 0; border-right: 1px solid #c8cfcc; background: transparent; padding: 7px 10px; color: #4f6569; font-size: 10px; text-transform: capitalize; }
+.mode-toolbar button:last-child { border-right: 0; }
+.mode-toolbar button.active { background: #1d5f61; color: #fff; }
 .loading { position: absolute; inset: 0; display: grid; place-content: center; color: #647278; font: 11px ui-monospace; }
 .layout-time { position: absolute; right: 12px; bottom: 12px; z-index: 5; border: 1px solid #b9c1bf; border-radius: 3px; background: rgb(255 254 249 / 90%); padding: 6px 8px; color: #57686d; font: 9px ui-monospace; }
 .empty-inspector { margin-top: 42px; text-align: center; }
@@ -52,6 +57,14 @@ select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; back
 .port-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid #e1e1db; padding: 5px 0; font-size: 11px; }
 .port-row span,.port-row small { display: block; }.port-row small { margin-top: 2px; color: #788589; font: 8px ui-monospace; text-transform: uppercase; }
 .port-row button { padding: 2px 6px; }
+.port-card { margin-bottom: 9px; border: 1px solid #d8dad4; border-radius: 3px; background: #fff; padding: 7px; }
+.port-card select { margin: 6px 0; padding: 5px 6px; font-size: 9px; }
+.port-actions { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 3px; }
+.port-actions button { margin: 0; padding: 4px 3px; font-size: 8px; }
+.port-actions button.active { border-color: #1d5f61; background: #dcece7; color: #164f50; }
+.route-editor { margin: 18px 0; border-top: 1px solid #d9dad4; border-bottom: 1px solid #d9dad4; padding: 14px 0; }
+.route-editor h3 { margin: 0 0 8px; color: #65767a; font: 700 9px ui-monospace; letter-spacing: .12em; text-transform: uppercase; }
+.route-editor .branch-button { display: block; width: 100%; margin: 5px 0 0; overflow: hidden; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
 .draw-hint { color: #6b787c; font-size: 10px; line-height: 1.45; }
 details { margin-top: 22px; border-top: 1px solid #d9dad4; padding-top: 14px; }
 summary { cursor: pointer; color: #65757a; font-size: 10px; }

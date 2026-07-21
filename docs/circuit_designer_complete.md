@@ -58,10 +58,10 @@ replacement, net rename/delete, undo, and redo controls. The complete command
 surface—including endpoint manipulation and explicit route changes—is also
 available through the programmatic client.
 
-ELK's supported browser worker is used for layout. Persisted overrides are
-merged onto fresh automatic layout, and ELK orthogonal edge sections are
-converted into the renderer-neutral route tree. The deterministic fallback is
-used only when ELK does not return route sections.
+The layout package uses deterministic connectivity-layered grid placement and
+a global rectilinear router. Persisted overrides are merged onto fresh automatic
+placement. Blocks and locked routes are obstacles when unlocked nets are routed,
+and no browser layout worker is required.
 
 ## Phase 4: agent collaboration and hierarchy
 
@@ -127,7 +127,7 @@ POST   /circuit-designer/proposals/{proposal_id}/decision
 ```
 
 The TypeScript `CircuitDesignerApi` mirrors this surface and remains free of
-React, ELK, FastAPI, SpecIR, and IP-XACT types.
+React, layout-engine, FastAPI, SpecIR, and IP-XACT types.
 
 ## Intentional product boundary
 

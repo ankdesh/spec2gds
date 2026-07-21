@@ -9,6 +9,10 @@
 .cd-node__port-label--south { bottom: 5px; transform: translateX(-50%); }
 .react-flow__handle { width: 7px; height: 7px; border: 1px solid #fffdf7; border-radius: 1px; background: #156b70; }
 .cd-net__segment { fill: none; stroke: #304b55; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+.cd-net__segment--locked { stroke: #204b6a; stroke-dasharray: 7 3; stroke-width: 2; }
+.cd-net__hit-segment { fill: none; stroke: transparent; stroke-width: 14; cursor: move; pointer-events: stroke; vector-effect: non-scaling-stroke; }
 .cd-net--selected .cd-net__segment { stroke: #dc6b2f; stroke-width: 2.6; }
 .cd-net__junction { fill: #304b55; }
+.cd-net__route-handle { fill: #fffdf7; stroke: #dc6b2f; stroke-width: 1.8; cursor: move; pointer-events: all; vector-effect: non-scaling-stroke; }
+.cd-net__route-handle--locked { fill: #204b6a; stroke: #fff; cursor: not-allowed; }
 .react-flow__node.selected .cd-node { border-color: #dc6b2f; box-shadow: 0 0 0 2px rgb(220 107 47 / 22%); }
