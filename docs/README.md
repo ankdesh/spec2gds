@@ -24,6 +24,8 @@ product, its development method, and the completed pivot history.
   executors, reports, artifacts, provenance, and proposals.
 - [Local API and Editor](spec_editor_v1.md): run commands, routes, and browser
   interaction model.
+- [A2UI Stage 1 Editor](spec_editor_a2ui_stage1.md): unified read-only document
+  projection, semantic catalog, React boundary, and Stage 2 seam.
 - [Circuit Designer Phase 0](circuit_designer_phase0.md): renderer-neutral
   contracts, SpecIR projection, deterministic layout, and standalone React mock app.
 - [Circuit Designer Phase 1](circuit_designer_phase1.md): live read-only SpecIR

@@ -10,7 +10,7 @@ contracts.
 V1 is a local, single-user hardware specification workbench. It provides a
 deterministic `.spec` source package, immutable semantic queries, validated
 source edits, entity-targeted local actions, artifact provenance, reviewed
-change proposals, a FastAPI service, and a no-build browser editor.
+change proposals, a FastAPI service, and a prebuilt React/A2UI browser editor.
 
 V1 does not generate SystemC, RTL, or GDS. It does not import the retired ODT
 format, run remote executors, or support concurrent users.
@@ -23,6 +23,8 @@ flowchart LR
   API --> Session["V1Session\nactive local document"]
   Session --> Package["SpecPackage\ndeterministic source archive"]
   Session --> Revision["SpecRevision\nimmutable semantic view"]
+  Revision --> Projection["DocumentProjection\nA2UI v0.9 messages"]
+  Projection --> Browser
   API --> Transactions["SpecEditTransaction\nrevision-guarded writes"]
   Transactions --> Revision
   API --> Actions["ActionService\nsnapshot execution"]
@@ -57,8 +59,10 @@ source revision.
 | Semantic reads | `spec_format/ir.py` | Immutable components, designs, connections, queries, dependency closure. |
 | Source writes | `spec_format/transactions.py` | Atomic optimistic transactions and semantic revalidation. |
 | Execution | `spec_format/actions.py` | Action contracts, snapshots, subprocess execution, artifacts, proposals. |
-| HTTP/application | `spec_format/v1_api.py` | Single-user session, request translation, status mapping, editor snapshots. |
-| Presentation | `spec_format/editor/` | Browser navigation and rendering from API projections. |
+| Document projection | `spec_format/document.py` | Renderer-neutral hierarchy, fixed tables, presence metadata, and A2UI v0.9 compilation. |
+| HTTP/application | `spec_format/v1_api.py` | Single-user session, request translation, status mapping, snapshots, and A2UI endpoint. |
+| Presentation | `circuit-designer/apps/editor/`, `packages/document-*` | Native React shell and semantic A2UI document catalog. |
+| Packaged assets | `spec_format/editor_dist/` | Prebuilt browser files served by FastAPI. |
 | Acceptance fixture | `spec_format/samples.py` | Deterministic sample covering every editor-visible relationship. |
 
 ## Read Flow
@@ -69,8 +73,10 @@ source revision.
    cross-document validation.
 3. `V1Session` holds the validated package, revision, activity store, sidecar,
    and action service for the one active local document.
-4. `/documents/snapshot` returns the complete editor projection. Focused routes
-   expose the same model for programmatic consumers.
+4. `/documents/snapshot` returns the immutable semantic snapshot, while
+   `/documents/a2ui` returns the renderer-neutral document compiled to the
+   semantic A2UI catalog. Focused routes expose the same source model for
+   programmatic consumers.
 
 ## Write Flow
 

@@ -24,7 +24,8 @@ code adapt that core for a local user.
 | Write use cases | `transactions.py` | Strong: atomic, optimistic, full revalidation. |
 | Execution use cases | `actions.py` | Strong: snapshots and reviewed writeback preserve source authority. |
 | Application composition | `v1_api.py` | Appropriate for V1; deliberately single-process and single-session. |
-| Presentation | `editor/` | Strong for a no-build V1 UI; it owns only presentation state. |
+| Document presentation contract | `document.py` | Strong: renderer-neutral projection and deterministic A2UI compilation. |
+| Presentation | `circuit-designer/apps/editor/`, `packages/document-*` | Strong: semantic A2UI components and a thin native React shell own only presentation state. |
 
 ## What Is Working Well
 
@@ -48,8 +49,8 @@ separation between model state and operational evidence.
 
 ### Thin browser client
 
-The editor derives cards, metrics, and topology from the server snapshot. It
-does not persist a parallel client-side hardware graph.
+The editor renders the server's A2UI document projection and activity routes.
+It does not persist a parallel client-side hardware graph or parse IP-XACT.
 
 ## Current Tradeoffs
 

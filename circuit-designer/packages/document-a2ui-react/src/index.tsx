@@ -1,0 +1,402 @@
+import React, { Fragment, useMemo } from "react";
+import { A2uiSurface, createComponentImplementation } from "@a2ui/react/v0_9";
+import {
+  Catalog,
+  CommonSchemas,
+  MessageProcessor,
+  type A2uiMessage,
+} from "@a2ui/web_core/v0_9";
+import { z } from "zod";
+
+import type {
+  A2UIDocumentBatch,
+  DocumentCell,
+  DocumentSectionData,
+  DocumentTable,
+  EntityRef,
+  NarrativeBlock as NarrativeBlockData,
+  TocEntry,
+} from "@spec2gds/document-core";
+
+export const SPEC_DOCUMENT_CATALOG_ID = "urn:spec2gds:a2ui:document:v1";
+export const SPEC_ENTITY_ACTION_EVENT = "spec2gds:entity-action";
+
+const SpecDocumentApi = {
+  name: "SpecDocument",
+  schema: z.object({
+    title: z.string(),
+    summary: z.string(),
+    documentId: z.string(),
+    sourceRevisionHash: z.string(),
+    toc: z.array(z.object({
+      section_id: z.string(),
+      title: z.string(),
+      level: z.number(),
+    })),
+    children: CommonSchemas.ChildList,
+  }),
+};
+
+const SpecSectionApi = {
+  name: "SpecSection",
+  schema: z.object({
+    section: z.custom<DocumentSectionData>(),
+    children: CommonSchemas.ChildList,
+  }),
+};
+
+const SpecTableApi = {
+  name: "SpecTable",
+  schema: z.object({ table: z.custom<DocumentTable>() }),
+};
+
+const NarrativeBlockApi = {
+  name: "NarrativeBlock",
+  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+};
+
+const EntityLinkApi = {
+  name: "EntityLink",
+  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+};
+
+const LiveViewApi = {
+  name: "LiveView",
+  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+};
+
+function renderChildren(
+  children: unknown,
+  buildChild: (id: string, basePath?: string) => React.ReactNode,
+): React.ReactNode {
+  if (!Array.isArray(children)) return null;
+  return children.map((child, index) => {
+    if (typeof child === "string") {
+      return <Fragment key={`${child}-${index}`}>{buildChild(child)}</Fragment>;
+    }
+    if (child && typeof child === "object" && "id" in child) {
+      const value = child as { id: string; basePath?: string };
+      return <Fragment key={`${value.id}-${index}`}>{buildChild(value.id, value.basePath)}</Fragment>;
+    }
+    return null;
+  });
+}
+
+function shortHash(value: string): string {
+  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
+}
+
+const SpecDocument = createComponentImplementation(
+  SpecDocumentApi,
+  ({ props, buildChild }) => (
+    <div className="spec-document">
+      <aside className="spec-toc" aria-label="Document contents">
+        <div className="spec-toc__sticky">
+          <p className="spec-kicker">Contents</p>
+          <nav>
+            {(props.toc as TocEntry[]).map((entry) => (
+              <a
+                className={`spec-toc__link spec-toc__link--level-${entry.level}`}
+                href={`#${entry.section_id}`}
+                key={entry.section_id}
+              >
+                {entry.title}
+              </a>
+            ))}
+          </nav>
+          <dl className="spec-toc__meta">
+            <div><dt>Document</dt><dd>{props.documentId}</dd></div>
+            <div title={props.sourceRevisionHash}>
+              <dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd>
+            </div>
+          </dl>
+        </div>
+      </aside>
+      <article className="spec-paper">
+        <header className="spec-cover">
+          <p className="spec-kicker">Unified hardware specification</p>
+          <h1>{props.title}</h1>
+          <p>{props.summary}</p>
+        </header>
+        {renderChildren(props.children, buildChild)}
+      </article>
+    </div>
+  ),
+);
+
+function dispatchEntityAction(entityRef: EntityRef): void {
+  window.dispatchEvent(new CustomEvent(SPEC_ENTITY_ACTION_EVENT, {
+    detail: { entityRef },
+  }));
+}
+
+function FactList({ section }: { section: DocumentSectionData }) {
+  const facts = section.facts.filter((fact) => fact.value);
+  if (!facts.length) return null;
+  return (
+    <dl className="spec-facts">
+      {facts.map((fact) => (
+        <div key={`${fact.label}-${fact.schema_path}`} title={fact.schema_path}>
+          <dt>{fact.label}</dt>
+          <dd>
+            {fact.reference_anchor
+              ? <a href={`#${fact.reference_anchor}`}>{fact.value}</a>
+              : fact.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+const SpecSection = createComponentImplementation(
+  SpecSectionApi,
+  ({ props, buildChild }) => {
+    const section = props.section as DocumentSectionData;
+    const Heading = (section.level === 1 ? "h2" : "h3") as "h2" | "h3";
+    return (
+      <section
+        className={`spec-section spec-section--level-${section.level}`}
+        id={section.section_id}
+      >
+        <header className="spec-section__header">
+          <div>
+            {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
+            <Heading>{section.title}</Heading>
+          </div>
+          {section.entity_ref && (
+            <button
+              className="spec-action-button"
+              type="button"
+              onClick={() => dispatchEntityAction(section.entity_ref as EntityRef)}
+            >
+              Actions
+            </button>
+          )}
+        </header>
+        <FactList section={section} />
+        {renderChildren(props.children, buildChild)}
+      </section>
+    );
+  },
+);
+
+function CellValue({ cell }: { cell: DocumentCell }) {
+  if (cell.presence === "absent") {
+    return <span className="spec-cell--absent" aria-label="Not present in source">—</span>;
+  }
+  const text = typeof cell.value === "boolean"
+    ? (cell.value ? "Yes" : "No")
+    : String(cell.value ?? "");
+  const content = cell.reference_anchor
+    ? <a href={`#${cell.reference_anchor}`}>{text}</a>
+    : text;
+  return (
+    <>
+      {content}
+      {cell.presence === "defaulted" && (
+        <span className="spec-default-badge" title="Value supplied by the IP-XACT profile default">
+          default
+        </span>
+      )}
+    </>
+  );
+}
+
+const SpecTable = createComponentImplementation(
+  SpecTableApi,
+  ({ props }) => {
+    const table = props.table as DocumentTable;
+    return (
+      <section className="spec-table-block" aria-labelledby={`${table.table_id}-title`}>
+        <div className="spec-table-block__heading">
+          <h4 id={`${table.table_id}-title`}>{table.title}</h4>
+          <span>{table.rows.length} {table.rows.length === 1 ? "entry" : "entries"}</span>
+        </div>
+        <div className="spec-table-scroll">
+          <table>
+            <thead>
+              <tr>
+                {table.columns.map((column) => (
+                  <th key={column.key} scope="col" title={column.schema_path}>
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {table.rows.map((row) => (
+                <tr key={row.row_id}>
+                  {table.columns.map((column) => {
+                    const cell = row.cells[column.key];
+                    return (
+                      <td key={column.key} title={cell?.schema_path || column.schema_path}>
+                        {cell ? <CellValue cell={cell} /> : <span className="spec-cell--absent">—</span>}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    );
+  },
+);
+
+function safeHref(value: string): string | undefined {
+  if (value.startsWith("#") || value.startsWith("/assets/")) return value;
+  try {
+    const parsed = new URL(value, window.location.origin);
+    return ["http:", "https:"].includes(parsed.protocol) ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function renderInlines(block: NarrativeBlockData): React.ReactNode {
+  if (!block.inlines.length) return block.text;
+  return block.inlines.map((inline, index) => {
+    const key = `${block.block_id}-inline-${index}`;
+    if (inline.type === "emphasis") return <em key={key}>{inline.text}</em>;
+    if (inline.type === "strong") return <strong key={key}>{inline.text}</strong>;
+    if (inline.type === "code") return <code key={key}>{inline.text}</code>;
+    if (inline.type === "link") {
+      const href = inline.entity_ref
+        ? `#${inline.entity_ref.entity_kind.replaceAll("_", "-")}-${inline.entity_ref.entity_id}`
+        : safeHref(inline.href);
+      return href
+        ? <a href={href} key={key}>{inline.text}</a>
+        : <span key={key}>{inline.text}</span>;
+    }
+    return <Fragment key={key}>{inline.text}</Fragment>;
+  });
+}
+
+function NarrativeNode({ block }: { block: NarrativeBlockData }): React.ReactNode {
+  if (block.type === "section") {
+    return (
+      <section className="spec-narrative__section">
+        <h4>{block.text}</h4>
+        {block.children.map((child) => <NarrativeNode block={child} key={child.block_id} />)}
+      </section>
+    );
+  }
+  if (block.type === "list") {
+    const ListTag = block.ordered ? "ol" : "ul";
+    return (
+      <ListTag>
+        {block.children.map((child) => <li key={child.block_id}><NarrativeNode block={child} /></li>)}
+      </ListTag>
+    );
+  }
+  if (block.type === "table") {
+    return (
+      <div className="spec-table-scroll">
+        <table className="spec-narrative__table">
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={`${block.block_id}-${rowIndex}`}>
+                {row.map((cell, cellIndex) => <td key={cellIndex}>{cell}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (block.type === "image") {
+    return (
+      <figure>
+        <img src={`/assets/${encodeURIComponent(block.asset_id)}/content`} alt={block.alt_text} />
+        {block.caption && <figcaption>{block.caption}</figcaption>}
+      </figure>
+    );
+  }
+  return <p>{renderInlines(block)}</p>;
+}
+
+const NarrativeBlock = createComponentImplementation(
+  NarrativeBlockApi,
+  ({ props }) => (
+    <div className="spec-narrative">
+      <NarrativeNode block={props.block as NarrativeBlockData} />
+    </div>
+  ),
+);
+
+const EntityLink = createComponentImplementation(
+  EntityLinkApi,
+  ({ props }) => {
+    const block = props.block as NarrativeBlockData;
+    return (
+      <div className="spec-callout spec-callout--link">
+        <span className="spec-callout__icon" aria-hidden="true">↗</span>
+        <div>
+          <strong>{block.text || "Related specification entities"}</strong>
+          <div className="spec-link-row">
+            {block.entity_refs.map((ref) => (
+              <a
+                href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
+                key={`${ref.entity_kind}-${ref.entity_id}`}
+              >
+                {ref.entity_kind.replaceAll("_", " ")} · {ref.entity_id}
+              </a>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  },
+);
+
+const LiveView = createComponentImplementation(
+  LiveViewApi,
+  ({ props }) => {
+    const block = props.block as NarrativeBlockData;
+    return (
+      <div className="spec-callout spec-callout--live">
+        <span className="spec-live-dot" aria-hidden="true" />
+        <div>
+          <strong>{block.text || "Live design view"}</strong>
+          <p>Renderer: <code>{block.renderer_id || "default"}</code></p>
+          {block.entity_refs.map((ref) => (
+            <a
+              href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
+              key={`${ref.entity_kind}-${ref.entity_id}`}
+            >
+              Open {ref.entity_kind.replaceAll("_", " ")}
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  },
+);
+
+export const specDocumentCatalog = new Catalog(
+  SPEC_DOCUMENT_CATALOG_ID,
+  [SpecDocument, SpecSection, SpecTable, NarrativeBlock, EntityLink, LiveView],
+);
+
+export function createDocumentMessageProcessor(batch: A2UIDocumentBatch) {
+  if (batch.catalog_id !== SPEC_DOCUMENT_CATALOG_ID) {
+    throw new Error(`Unsupported A2UI catalog: ${batch.catalog_id}`);
+  }
+  if (batch.protocol_version !== "v0.9") {
+    throw new Error(`Unsupported A2UI protocol: ${batch.protocol_version}`);
+  }
+  const processor = new MessageProcessor([specDocumentCatalog]);
+  processor.processMessages(batch.messages as A2uiMessage[]);
+  return processor;
+}
+
+export function A2UIDocumentSurface({ batch }: { batch: A2UIDocumentBatch }) {
+  const processor = useMemo(() => createDocumentMessageProcessor(batch), [batch]);
+  const surface = processor.model.surfacesMap.get(batch.surface_id);
+  if (!surface) {
+    return <div className="spec-render-error" role="alert">The A2UI document surface was not created.</div>;
+  }
+  return <A2uiSurface surface={surface} />;
+}

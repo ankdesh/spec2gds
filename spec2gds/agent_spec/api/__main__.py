@@ -21,7 +21,7 @@ def _parser(command: str) -> argparse.ArgumentParser:
     """Build the shared server/editor argument parser."""
     parser = argparse.ArgumentParser(
         prog=f"spec2gds-{command}",
-        description="Run the V1 API and its bundled no-build browser editor.",
+        description="Run the V1 API and its bundled React/A2UI browser editor.",
     )
     parser.add_argument(
         "--host",

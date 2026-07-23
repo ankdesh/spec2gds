@@ -20,7 +20,7 @@ Key V1 pieces:
 - immutable `SpecRevision` semantic queries and atomic edit transactions
 - entity-targeted local action executions, content-addressed sidecar artifacts,
   provenance, and reviewed change proposals
-- local V1 API and editor shell at `/editor`
+- local V1 API and React/A2UI document editor at `/editor`
 
 Start with the docs index:
 
@@ -37,6 +37,7 @@ Most-used docs:
 - [`docs/spec_ir_v1.md`](docs/spec_ir_v1.md)
 - [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md)
 - [`docs/spec_editor_v1.md`](docs/spec_editor_v1.md)
+- [`docs/spec_editor_a2ui_stage1.md`](docs/spec_editor_a2ui_stage1.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
 - [`docs/circuit_designer_phase0.md`](docs/circuit_designer_phase0.md) for the
@@ -121,8 +122,8 @@ Start the API server and bundled UI:
 uv run spec2gds-server
 ```
 
-The no-build UI editor is served by that same process; do not start a second
-frontend service. Open:
+The packaged, prebuilt React/A2UI editor is served by that same process; do not
+start a second frontend service for normal use. Open:
 
 ```text
 http://127.0.0.1:8000/editor
@@ -153,6 +154,19 @@ uv run python -m spec2gds.agent_spec.api
 See [`docs/spec_editor_v1.md`](docs/spec_editor_v1.md) for endpoints and the
 editor/API interaction model.
 
+For frontend development, use Node.js 24 and run the Vite app beside the API:
+
+```bash
+uv run spec2gds-server --reload
+cd circuit-designer
+npm install
+npm run dev:editor
+```
+
+Open `http://127.0.0.1:4190`. Before committing frontend changes, rebuild the
+Python-packaged assets with `npm run build:editor`. The Vite app proxies `/api`
+to the local FastAPI server; its production bundle calls same-origin routes.
+
 ## V1 Source Package
 
 The active `.spec` package stores canonical IP-XACT 1685-2022 source
@@ -178,7 +192,8 @@ The checked-in V1 demo contains leaf and composite components, an internal
 design, two reusable entry designs, a narrative table and architecture image,
 an entity link, and a live topology view. Start the API, open `/editor`, and
 choose **V1 Demo** from the sample selector. The browser reads the validated
-SpecIR snapshot and sends every edit or action back through the V1 API.
+SpecIR projection as an A2UI v0.9 document. Stage 1 keeps document cells
+read-only; actions and proposal review still use the V1 API.
 
 The same selector exposes six **Hardware · ...** packages converted from real
 APB, HPDcache, and CVFPU HTML/PDF specifications. They exercise larger

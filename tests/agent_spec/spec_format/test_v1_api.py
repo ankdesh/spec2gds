@@ -1,9 +1,9 @@
 """V1.4 API/editor acceptance checks without the legacy ODT production path."""
 
-from pathlib import Path
+import inspect
 import tempfile
 import zipfile
-import inspect
+from pathlib import Path
 
 import fastapi
 import pytest
@@ -45,14 +45,14 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         "Hardware · Cvfpu Readme",
     }
     editor_html = endpoints["editor"]()
-    assert "Architecture workbench" in editor_html
-    assert "/editor-assets/app.js" in editor_html
+    assert "A2UI Document Editor" in editor_html
+    assert "/editor-assets/assets/index-" in editor_html
     assert "/circuit-designer-ui/" not in editor_html
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "acceptance.spec"
         created = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="api_acceptance"))
         assert created["source_revision_hash"]
-        assert endpoints["editor"]().count("Components") == 1
+        assert endpoints["editor"]().count('id="root"') == 1
 
         sample = build_v1_sample()
         document_id = created["document_id"]
@@ -82,6 +82,10 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         assert response["committed"]
         assert len(snapshot["components"]) == 3
         assert len(snapshot["entry_designs"]) == 2
+        a2ui = endpoints["document_a2ui"]()
+        assert a2ui["protocol_version"] == "v0.9"
+        assert a2ui["catalog_id"] == "urn:spec2gds:a2ui:document:v1"
+        assert a2ui["source_revision_hash"] == snapshot["source_revision_hash"]
 
         design_id = snapshot["entry_designs"][0]["ref"]["entity_id"]
         action = endpoints["action_execution"]("design", design_id, "reference.snapshot_summary", ActionInputRequest())

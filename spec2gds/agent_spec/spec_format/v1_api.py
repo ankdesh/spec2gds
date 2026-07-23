@@ -26,6 +26,7 @@ from spec2gds.agent_spec.spec_format.actions import (
     create_reference_registry,
 )
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
+from spec2gds.agent_spec.spec_format.document import build_a2ui_batch, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, InterfaceEndpointIR, PortEndpointIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
 from spec2gds.agent_spec.spec_format.transactions import (
@@ -163,7 +164,7 @@ def create_app() -> typing.Any:
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
     state: dict[str, typing.Any] = {"active": None, "circuit": None}
-    editor_root = Path(__file__).with_name("editor")
+    editor_root = Path(__file__).with_name("editor_dist")
     sample_root = Path(__file__).with_name("samples") / "generated"
     # A source checkout also exposes the larger real-document corpus.  Keep
     # this optional so installed wheels still work without repository data.
@@ -254,6 +255,12 @@ def create_app() -> typing.Any:
     def document_snapshot() -> dict[str, typing.Any]:
         """Return the complete editor-facing immutable source projection."""
         return _snapshot(active())
+
+    @app.get("/documents/a2ui")
+    def document_a2ui() -> dict[str, typing.Any]:
+        """Return a deterministic A2UI v0.9 batch for the unified document."""
+        projection = build_document_projection(active().revision)
+        return build_a2ui_batch(projection).model_dump(mode="json")
 
     @app.get("/diagnostics")
     def diagnostics() -> dict[str, typing.Any]:
@@ -540,11 +547,7 @@ def create_app() -> typing.Any:
 
     @app.get("/editor", include_in_schema=False, response_class=fastapi.responses.HTMLResponse)
     def editor() -> str:
-        """Serve the no-build V1 editor shell bundled with the Python package.
-
-        Reading the small shell directly also keeps the route callable in
-        acceptance tests; linked CSS and JavaScript remain static resources.
-        """
+        """Serve the prebuilt React/A2UI editor bundled with the Python package."""
         return (editor_root / "index.html").read_text(encoding="utf-8")
 
     return app
@@ -621,10 +624,13 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
     """Build the single payload from which every editor view is rendered."""
     revision = session.revision
     return {
+        "schema_version": "spec2gds.snapshot.v1",
         "document_id": revision.document_id,
         "source_revision_hash": revision.source_revision_hash,
         "components": [_jsonable(item) for item in revision.components],
         "designs": [_jsonable(item) for item in revision.designs],
+        "bus_definitions": [_jsonable(item) for item in revision.bus_definitions],
+        "abstraction_definitions": [_jsonable(item) for item in revision.abstraction_definitions],
         "entry_designs": [_jsonable(item) for item in revision.entry_designs()],
         "component_compositions": [_jsonable(item) for item in revision.manifest.component_compositions],
         "narrative": _jsonable(revision.narrative),

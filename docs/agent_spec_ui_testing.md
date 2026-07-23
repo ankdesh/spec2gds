@@ -1,8 +1,9 @@
 # Agent-Spec V1 UI Testing
 
-The V1 editor is a no-build HTML/CSS/JavaScript client served by the FastAPI
-process. There is no Node dependency, frontend development server, or generated
-bundle.
+The V1 editor is a prebuilt React/A2UI v0.9 client served by the FastAPI
+process. End users need no Node process. Frontend development uses the shared
+`circuit-designer/` npm workspace and emits a generated bundle into the Python
+package.
 
 ## Start the Editor
 
@@ -18,18 +19,21 @@ same FastAPI process, so run one or the other, not both.
 ## Manual Acceptance Walkthrough
 
 1. Confirm the sample picker lists `V1 Demo` and opens without diagnostics.
-2. On **Overview**, verify three components, three designs, two entry designs,
-   one composite component, and the source revision badge.
-3. On **Components**, inspect leaf/composite status, ports, bus interfaces, and
-   entity-targeted action controls.
-4. On **Designs**, verify entry badges and derived instance/connection topology.
-5. On **Narrative**, verify section, paragraphs, list, table, SVG image, entity
-   link, and live topology view.
-6. Add an architect note and confirm the source revision changes.
-7. Run `reference.snapshot_summary`; verify a successful execution, report,
+2. In **Document**, verify the contents navigation and the Overview, Designs,
+   Components, Protocols, and optional Cross-cutting Notes hierarchy.
+3. Inspect fixed-column ports, interfaces, port maps, instances, connections,
+   bus-property, and abstraction-port tables. Hover headings/cells to see their
+   IP-XACT schema paths.
+4. Verify absent values show an em dash and profile-supplied values show a
+   `default` badge.
+5. Verify narrative sections, paragraphs, lists, tables, images, entity links,
+   and live-view references appear beside their linked entities.
+6. Open an entity's **Actions** control and run
+   `reference.snapshot_summary`; verify a successful execution, report,
    artifact, and downloadable content.
-8. Run `reference.narrative_proposal`; preview and accept or reject the pending
+7. Run `reference.narrative_proposal`; accept or reject the pending
    proposal.
+8. On **Activity**, confirm executions, artifacts, and proposals persist.
 9. On **Diagnostics**, confirm source and artifact health are reported
    independently.
 10. Stop and restart the server, reopen the package, and verify source and
@@ -48,6 +52,10 @@ and covers create/open, snapshot editing, action execution, artifact lineage,
 proposal preview/acceptance, persistence, stale-write rejection, legacy-format
 rejection, editor HTML, and bundled sample discovery.
 
+`tests/agent_spec/spec_format/test_document_projection.py` verifies the stable
+document hierarchy, fixed profile table kinds, schema-path metadata,
+explicit/defaulted/absent cell states, and the A2UI adjacency-list batch.
+
 `tests/agent_spec/spec_format/test_spec_format.py` verifies that the visual
 sample includes every supported narrative type, a real SVG asset, explicit
 entry designs, composition, deterministic bytes, and no diagnostics.
@@ -60,18 +68,25 @@ With the server running:
 curl -fsS http://127.0.0.1:8000/health
 curl -fsS http://127.0.0.1:8000/samples
 curl -fsS http://127.0.0.1:8000/editor
-curl -fsS http://127.0.0.1:8000/editor-assets/app.js >/dev/null
+curl -fsS http://127.0.0.1:8000/documents/a2ui
+```
+
+Rebuild and type-check frontend assets with Node.js 24:
+
+```bash
+cd circuit-designer
+npm run build:editor
 ```
 
 ## UI Design Constraint
 
 The browser owns only transient presentation state: selected view, active
-snapshot, source path, and cached activity lists. Every source mutation and
+snapshot, source path, and cached activity lists. The A2UI surface is a
+presentation adapter over SpecIR, not a second data model. Every mutation and
 action goes through the API. Tests should fail if the UI begins persisting an
 independent hardware graph or bypassing revision checks.
 
 ## Future Browser Automation
 
-If browser automation is reintroduced, keep it optional and point it at the
-same FastAPI-served editor. Cover the manual walkthrough as one end-to-end
-scenario and avoid creating a second frontend build pipeline solely for tests.
+Browser automation should point at the same FastAPI-served production bundle.
+Cover the manual walkthrough as one end-to-end scenario.

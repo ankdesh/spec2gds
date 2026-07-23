@@ -13,8 +13,12 @@ rationale and runtime flows, read
 | `spec2gds/agent_spec/spec_format/transactions.py` | Atomic revision-guarded edits. |
 | `spec2gds/agent_spec/spec_format/actions.py` | Snapshots, execution, artifacts, activity, proposals. |
 | `spec2gds/agent_spec/spec_format/reference_actions.py` | Generic acceptance executors. |
+| `spec2gds/agent_spec/spec_format/document.py` | Unified document projection and A2UI v0.9 compiler. |
 | `spec2gds/agent_spec/spec_format/v1_api.py` | Local application/API composition root. |
-| `spec2gds/agent_spec/spec_format/editor/` | No-build browser presentation. |
+| `circuit-designer/packages/document-core/` | Renderer-independent editor HTTP and document contracts. |
+| `circuit-designer/packages/document-a2ui-react/` | Semantic React A2UI document catalog. |
+| `circuit-designer/apps/editor/` | Native React editor shell and Vite composition root. |
+| `spec2gds/agent_spec/spec_format/editor_dist/` | Prebuilt editor assets served by FastAPI. |
 | `spec2gds/agent_spec/spec_format/samples.py` | Deterministic visual acceptance package. |
 | `spec2gds/agent_spec/spec_format/cli.py` | Package create/validate/inspect/pack/unpack commands. |
 | `spec2gds/agent_spec/api/__main__.py` | `spec2gds-server` and `spec2gds-editor` entry point. |
@@ -23,7 +27,7 @@ rationale and runtime flows, read
 
 ```text
 load package → validate → immutable SpecRevision
-                         ├─ query → API snapshot → browser rendering
+                         ├─ document projection → A2UI batch → browser rendering
                          ├─ transaction → validate candidate → save revision
                          └─ action snapshot → executor → artifact/proposal review
 ```

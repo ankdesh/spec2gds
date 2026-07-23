@@ -1,5 +1,5 @@
 {
-  "name": "circuit-designer-workspace",
+  "name": "spec2gds-ui-workspace",
   "private": true,
   "version": "0.0.0",
   "packageManager": "npm@10",
@@ -13,10 +13,12 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
+    "dev:editor": "npm run dev --workspace @spec2gds/spec-editor",
     "dev:standalone": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
     "dev:specir": "npm run dev --workspace @spec2gds/circuit-designer-mock",
     "generate": "node scripts/generate-types.mjs",
     "generate:check": "node scripts/check-generated.mjs",
+    "build:editor": "npm run build --workspace @spec2gds/spec-editor",
     "test": "node scripts/run-workspace-tests.mjs",
     "test:e2e": "node scripts/run-playwright.mjs"
   },
