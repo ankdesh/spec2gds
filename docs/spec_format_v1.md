@@ -10,7 +10,10 @@ action path.
 The implementation is available at `spec2gds.agent_spec.spec_format` and is
 the sole production source model. Package I/O, immutable SpecIR, transactions,
 actions, the local API, and the browser editor all use it. The V1 CLI rejects
-pre-pivot ODT packages and does not provide migration or import support.
+pre-pivot ODT packages. The separate
+[`spec2gds-import-document`](document_import.md) utility imports source
+documents into new V1 packages; it does not treat an old ODT-backed `.spec`
+container as a current package.
 
 ## Source Layout
 
@@ -53,6 +56,14 @@ uv run python -m spec2gds.agent_spec.spec_format.cli unpack \
   --container demo.spec --output demo-unpacked
 uv run python -m spec2gds.agent_spec.spec_format.cli pack \
   --input demo-unpacked --output demo-repacked.spec
+```
+
+Importing external PDF, Word, or OpenDocument files is intentionally a separate
+command:
+
+```bash
+uv sync --extra document-import
+uv run spec2gds-import-document source.pdf --output source.spec
 ```
 
 Run the focused foundation tests with:

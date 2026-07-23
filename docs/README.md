@@ -16,6 +16,9 @@ product, its development method, and the completed pivot history.
 
 - [Document Schema and Interfaces](agent_spec_document_schema.md): package,
   manifest, narrative, assets, activity, and validation layers.
+- [Document Import Utility](document_import.md): Docling PDF/Word/ODT parsing,
+  narrative projection, source provenance, and optional OpenAI table-to-IP-XACT
+  extraction.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): IEEE 1685-2022 semantics and V1
   profile.
 - [SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic reads and

@@ -17,6 +17,8 @@ Key V1 pieces:
 
 - deterministic custom ZIP `.spec` archive and IP-XACT 1685-2022 profile
 - typed narrative AST, assets, explicit entry designs, and component composition
+- Docling-based PDF, DOC/DOCX, and ODT import with optional table-to-IP-XACT
+  extraction through the OpenAI Responses API
 - immutable `SpecRevision` semantic queries and atomic edit transactions
 - entity-targeted local action executions, content-addressed sidecar artifacts,
   provenance, and reviewed change proposals
@@ -92,6 +94,12 @@ Install dependencies:
 
 ```bash
 uv sync
+```
+
+Install the optional document-import stack:
+
+```bash
+uv sync --extra document-import
 ```
 
 Run tests:
@@ -185,6 +193,37 @@ for the V1.2 immutable SpecIR and atomic edit API. The full ordered
 implementation roadmap is in [`docs/pivot/README.md`](docs/pivot/README.md).
 V1.3's generic external-action, artifact, and reviewed-proposal layer is
 documented in [`docs/spec_actions_v1.md`](docs/spec_actions_v1.md).
+
+## Import PDF, Word, and OpenDocument Specifications
+
+Install the import extra once, then run the dedicated utility:
+
+```bash
+uv sync --extra document-import
+uv run spec2gds-import-document path/to/peripheral.odt
+uv run spec2gds-import-document path/to/peripheral.docx -o peripheral.spec
+uv run spec2gds-import-document path/to/peripheral.pdf -o peripheral.spec
+```
+
+The offline path converts Docling text, headings, lists, tables, and images into
+the typed narrative document and retains the original file below
+`annotations/document_import/`. To additionally turn explicitly supported
+hardware table values into validated IP-XACT ports and bus interfaces:
+
+```bash
+export OPENAI_API_KEY="..."
+uv run spec2gds-import-document path/to/peripheral.pdf \
+  --openai \
+  --vendor example.org \
+  --library peripherals \
+  --component-name timer
+```
+
+The default API model is `gpt-5.6-sol` and can be changed with `--model`.
+Legacy binary `.doc` files require LibreOffice on the host. PDF processing
+downloads Docling model artifacts on first use. See
+[`docs/document_import.md`](docs/document_import.md) for the conversion
+contract, hooks, options, provenance behavior, and limitations.
 
 ## Visual Verification Samples
 

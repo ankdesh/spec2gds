@@ -14,12 +14,31 @@ dependencies = [
     "uvicorn[standard]>=0.35.0",
 ]
 
+[project.optional-dependencies]
+document-import = [
+    "docling>=2.114.0",
+    "docling-slim[format-opendocument]>=2.114.0",
+    "openai>=2.46.0",
+    "torch>=2.2.0",
+    "torchvision>=0.17.0",
+]
+
 [project.scripts]
 spec2gds-server = "spec2gds.agent_spec.api.__main__:server_main"
 spec2gds-editor = "spec2gds.agent_spec.api.__main__:editor_main"
+spec2gds-import-document = "spec2gds.agent_spec.importers.cli:main"
 
 [tool.uv]
 package = true
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
 
 [build-system]
 requires = ["hatchling"]
