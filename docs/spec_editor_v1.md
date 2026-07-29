@@ -23,8 +23,12 @@ uv run spec2gds-editor --reload
 
 Choose the checked-in **V1 Demo** sample to visually inspect components,
 design reuse, typed narrative content, action executions, artifacts, proposals,
-and diagnostics. Stage 1 presents source data as a unified read-only document.
-The API remains the authoritative surface for actions and proposal review.
+and diagnostics. In a source checkout, the package selector also discovers the
+generated hardware-document and simple-SystemC benchmark packages. Rebuild a
+benchmark and refresh the editor page to update the selector.
+
+Stage 1 presents source data as a unified read-only document. The API remains
+the authoritative surface for actions and proposal review.
 
 For frontend source changes, run the Vite development app in a second terminal:
 

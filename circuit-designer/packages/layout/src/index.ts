@@ -1,16 +1,19 @@
 import type {
-  CircuitGraphSnapshot,
-  CircuitTerminal,
-  DiagramLayout,
+  CircuitDocument,
+  CircuitGraphView as CircuitGraphSnapshot,
+  CircuitTerminalView as CircuitTerminal,
+  DiagramLayoutView as DiagramLayout,
   NetRoute,
   NodeGeometry,
   Point,
   TerminalPlacement,
 } from "@spec2gds/circuit-core";
-import { reanchorRouteEndpoints, simplifyRoute, type EndpointAnchor } from "@spec2gds/circuit-core";
+import { clone, projectDocument, reanchorRouteEndpoints, simplifyRoute, type EndpointAnchor } from "@spec2gds/circuit-core";
 import { routeOrthogonalNets, type RouteObstacle, type RouteRequest } from "./router";
 
 export * from "./router";
+export * from "./worker-protocol";
+export * from "./worker-client";
 
 export interface LayoutOptions {
   direction?: "RIGHT" | "DOWN";
@@ -25,6 +28,10 @@ export interface LayoutResult {
   layout: DiagramLayout;
   boundary_geometry: Record<string, NodeGeometry>;
   elapsed_ms: number;
+}
+
+export interface CircuitDocumentLayoutResult extends LayoutResult {
+  document: CircuitDocument;
 }
 
 const round = (value: number) => Math.round(value * 100) / 100;
@@ -190,13 +197,10 @@ function placeNodes(
   const preserve = options.preserveNodeGeometry;
   for (const [nodeId, geometry] of Object.entries(graph.layout?.node_geometry ?? {})) {
     if (preserve === "none" || (preserve === "pinned" && !geometry.pinned)) continue;
-    const dimensions = nodeDimensions(graph, placements, nodeId, options.nodeWidth, options.nodeHeight);
     result[nodeId] = {
       ...geometry,
       x: snap(geometry.x, options.gridSize),
       y: snap(geometry.y, options.gridSize),
-      width: Math.max(geometry.width, dimensions.width),
-      height: Math.max(geometry.height, dimensions.height),
     };
   }
   return result;
@@ -377,4 +381,18 @@ export async function layoutCircuitGraph(graph: CircuitGraphSnapshot, options: L
     boundary_geometry: boundaryGeometry,
     elapsed_ms: round(performance.now() - started),
   };
+}
+
+/** Layout a canonical document through its flattened renderer projection. */
+export async function layoutCircuitDocument(
+  document: CircuitDocument,
+  options: LayoutOptions = {},
+): Promise<CircuitDocumentLayoutResult> {
+  const result = await layoutCircuitGraph(projectDocument(document, "layout"), options);
+  const updated = clone(document);
+  updated.layout.direction = result.layout.direction;
+  updated.layout.instance_geometry = result.layout.node_geometry;
+  updated.layout.terminal_placements = result.layout.terminal_placements;
+  updated.layout.net_routes = result.layout.net_routes;
+  return { ...result, document: updated };
 }

@@ -1,126 +1,104 @@
-import { describe, expect, test } from "vitest";
-import { mixedFixture, validateGraph, type CommandBatch } from "@spec2gds/circuit-core";
-import { LocalCircuitDesignerApi } from "../src/index";
+import { describe, expect, it } from "vitest";
+import {
+  simpleDocumentFixture,
+  type CircuitOperationBatch,
+  type CircuitProposal,
+} from "@spec2gds/circuit-core";
+import { MemoryCircuitDesignerBackend } from "../src/index";
 
-async function editor() {
-  const api = new LocalCircuitDesignerApi(mixedFixture());
-  const lease = await api.acquireLease("test-ui", "human");
-  return { api, lease };
-}
-
-describe("standalone circuit API", () => {
-  test("has no server dependency and enables local editing", async () => {
-    const api = new LocalCircuitDesignerApi(mixedFixture());
-    const graph = await api.getGraph("mixed");
-    expect(graph.capabilities?.edit_topology).toBe(true);
-    expect((await api.getCatalog()).designs).toHaveLength(1);
-  });
-
-  test("applies revision-guarded commands and supports undo", async () => {
-    const { api, lease } = await editor();
-    const graph = await api.getGraph("mixed");
-    const batch: CommandBatch = {
-      batch_id: "rename",
-      expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{ type: "rename_net", command_id: "rename", design_id: "mixed", net_id: "irq", name: "interrupt" }],
-    };
-    const applied = await api.apply(batch, lease.lease_id);
-    expect(applied.candidate?.nets.find((net) => net.id === "irq")?.label).toBe("interrupt");
-    expect((await api.getHistory()).can_undo).toBe(true);
-    expect((await api.undo(lease.lease_id, "mixed")).graph.nets.find((net) => net.id === "irq")?.label).toBe("irq");
-  });
-
-  test("rejects stale revisions without changing the graph", async () => {
-    const { api, lease } = await editor();
-    const result = await api.apply({
-      batch_id: "stale",
-      expected_source_revision_hash: "stale:0",
-      commands: [{ type: "set_layout_direction", command_id: "direction", design_id: "mixed", direction: "DOWN" }],
-    }, lease.lease_id);
-    expect(result.candidate).toBeUndefined();
-    expect(result.diagnostics[0].code).toBe("revision_conflict");
-    expect((await api.getGraph("mixed")).layout?.direction).not.toBe("DOWN");
-  });
-
-  test("keeps exclusive local human and agent leases", async () => {
-    const api = new LocalCircuitDesignerApi(mixedFixture());
-    await api.acquireLease("human", "human");
-    await expect(api.acquireLease("assistant", "agent")).rejects.toMatchObject({ status: 409 });
-  });
-
-  test("creates a minimal component, port, and interconnect through commands", async () => {
-    const { api, lease } = await editor();
-    const graph = await api.getGraph("mixed");
-    const result = await api.apply({
-      batch_id: "draw_minimal_circuit",
-      expected_source_revision_hash: graph.source_revision_hash,
-      commands: [
-        { type: "add_instance", command_id: "component", design_id: "mixed", node_id: "local_node", component_id: "local_component", name: "scratch" },
-        { type: "add_terminal", command_id: "port", design_id: "mixed", node_id: "local_node", terminal_id: "local_node:port:data", name: "data", kind: "port", direction: "in" },
-        { type: "create_net", command_id: "net", design_id: "mixed", net_id: "local_net", name: "scratch_data", kind: "ad_hoc", terminal_ids: ["peripheral_0:port:irq", "local_node:port:data"] },
-      ],
-    }, lease.lease_id);
-
-    expect(result.diagnostics).toEqual([]);
-    expect(result.candidate?.components.some((item) => item.id === "local_component")).toBe(true);
-    expect(result.candidate?.terminals.some((item) => item.id === "local_node:port:data")).toBe(true);
-    expect(validateGraph(result.candidate).valid).toBe(true);
-  });
-
-  test("round-trips locked route constraints through apply, export, and undo", async () => {
-    const { api, lease } = await editor();
-    const graph = await api.getGraph("mixed");
-    const route = {
-      vertices: [
-        { id: "irq-source", kind: "endpoint" as const, terminal_id: "peripheral_0:port:irq", point: { x: 0, y: 0 } },
-        { id: "irq-target", kind: "endpoint" as const, terminal_id: "cpu_0:port:irq", point: { x: 100, y: 0 } },
-      ],
-      segments: [{ id: "irq-trunk", from_vertex: "irq-source", to_vertex: "irq-target", locked: true }],
-    };
-    const result = await api.apply({
-      batch_id: "manual_route",
-      expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{ type: "set_net_route", command_id: "route", design_id: "mixed", net_id: "irq", route }],
-    }, lease.lease_id);
-    expect(result.diagnostics).toEqual([]);
-    expect(api.exportGraph().layout?.net_routes?.irq.segments[0]).toMatchObject({ id: "irq-trunk", locked: true });
-    expect((await api.undo(lease.lease_id, "mixed")).graph.layout?.net_routes?.irq).toBeUndefined();
-  });
-
-  test("rejects malformed non-orthogonal routes during preview and apply", async () => {
-    const { api, lease } = await editor();
-    const graph = await api.getGraph("mixed");
-    const batch: CommandBatch = {
-      batch_id: "diagonal",
-      expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{
-        type: "set_net_route", command_id: "diagonal", design_id: "mixed", net_id: "irq",
-        route: {
-          vertices: [
-            { id: "a", kind: "endpoint", terminal_id: "peripheral_0:port:irq", point: { x: 0, y: 0 } },
-            { id: "b", kind: "endpoint", terminal_id: "cpu_0:port:irq", point: { x: 20, y: 20 } },
-          ],
-          segments: [{ id: "bad", from_vertex: "a", to_vertex: "b" }],
+describe("memory circuit backend", () => {
+  it("commits atomically, guards revisions, and replays request ids", async () => {
+    const backend = new MemoryCircuitDesignerBackend({ documents: [simpleDocumentFixture()] });
+    const snapshot = await backend.get("fixture_simple");
+    const batch: CircuitOperationBatch = {
+      request_id: "rename_1",
+      expected_revision: snapshot.revision,
+      operations: [{
+        operation_id: "rename_instance",
+        type: "update_instance",
+        instance: {
+          ...snapshot.document.design.instances[0],
+          label: "Renamed producer",
         },
       }],
     };
-    expect((await api.preview(batch)).diagnostics[0].message).toContain("not orthogonal");
-    expect((await api.apply(batch, lease.lease_id)).candidate).toBeNull();
+    const committed = await backend.commit("fixture_simple", batch);
+    expect(committed.status).toBe("accepted");
+    expect(committed.snapshot?.revision).toBe("2");
+    expect((await backend.commit("fixture_simple", batch)).snapshot?.revision).toBe("2");
+    expect((await backend.preview("fixture_simple", { ...batch, request_id: "other" })).status).toBe("conflict");
   });
 
-  test("locks and restores automatic terminal placement through the common command API", async () => {
-    const { api, lease } = await editor();
-    let graph = await api.getGraph("mixed");
-    const placed = await api.apply({
-      batch_id: "place_port", expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{ type: "set_terminal_placement", command_id: "place", design_id: "mixed", terminal_id: "cpu_0:port:irq", placement: { side: "NORTH", order: 2, locked: true } }],
-    }, lease.lease_id);
-    expect(placed.candidate?.layout?.terminal_placements?.["cpu_0:port:irq"]).toEqual({ side: "NORTH", order: 2, locked: true });
-    graph = placed.candidate!;
-    const automatic = await api.apply({
-      batch_id: "automatic_port", expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{ type: "set_terminal_placement", command_id: "automatic", design_id: "mixed", terminal_id: "cpu_0:port:irq", placement: null }],
-    }, lease.lease_id);
-    expect(automatic.candidate?.layout?.terminal_placements?.["cpu_0:port:irq"]).toBeUndefined();
+  it("allows a draft owner to save and rejects other commits while locked", async () => {
+    const backend = new MemoryCircuitDesignerBackend({ documents: [simpleDocumentFixture()] });
+    const lease = await backend.acquireLease("fixture_simple", "canvas");
+    const snapshot = await backend.get("fixture_simple");
+    const batch: CircuitOperationBatch = {
+      request_id: "move_1",
+      expected_revision: snapshot.revision,
+      operations: [{
+        operation_id: "move",
+        type: "set_instance_geometry",
+        instance_id: "producer_0",
+        geometry: { x: 40, y: 80, width: 180, height: 100 },
+      }],
+    };
+    expect((await backend.commit("fixture_simple", batch)).status).toBe("locked");
+    expect((await backend.commit("fixture_simple", batch, lease.lease_id)).status).toBe("accepted");
+    await backend.releaseLease("fixture_simple", lease.lease_id);
+  });
+
+  it("marks proposals stale and deletes them after a decision", async () => {
+    const backend = new MemoryCircuitDesignerBackend({ documents: [simpleDocumentFixture()] });
+    const snapshot = await backend.get("fixture_simple");
+    const proposal: CircuitProposal = {
+      proposal_id: "proposal_1",
+      document_id: "fixture_simple",
+      base_revision: snapshot.revision,
+      title: "Move producer",
+      summary: "Move the producer.",
+      status: "pending",
+      batch: {
+        request_id: "proposal_batch_1",
+        expected_revision: snapshot.revision,
+        operations: [{
+          operation_id: "proposal_move",
+          type: "set_instance_geometry",
+          instance_id: "producer_0",
+          geometry: { x: 100, y: 100, width: 180, height: 100 },
+        }],
+      },
+      diagnostics: [],
+      diff: { added: [], removed: [], changed: [], connections_changed: [] },
+      created_at: new Date(0).toISOString(),
+    };
+    await backend.submitProposal(proposal);
+    expect(await backend.listProposals("fixture_simple")).toHaveLength(1);
+    expect((await backend.decideProposal("fixture_simple", "proposal_1", "accept"))?.status).toBe("accepted");
+    expect(await backend.listProposals("fixture_simple")).toHaveLength(0);
+  });
+
+  it("exports portable JSON and deterministic SVG", async () => {
+    const backend = new MemoryCircuitDesignerBackend({ documents: [simpleDocumentFixture()] });
+    const json = await backend.export("fixture_simple", { format: "json" });
+    const svg = await backend.export("fixture_simple", { format: "svg" });
+    expect(String(json.data)).toContain('"protocol_version": "circuit-designer.v1"');
+    expect(String(svg.data)).toContain("<svg");
+    expect(String(svg.data)).toContain('data-instance-id="producer_0"');
+  });
+
+  it("expires and reacquires whole-document leases", async () => {
+    let current = new Date("2026-01-01T00:00:00.000Z");
+    const backend = new MemoryCircuitDesignerBackend({
+      documents: [simpleDocumentFixture()],
+      now: () => current,
+    });
+    const first = await backend.acquireLease("fixture_simple", "first", 1);
+    expect((await backend.getLease("fixture_simple"))?.lease_id).toBe(first.lease_id);
+    current = new Date("2026-01-01T00:00:02.000Z");
+    expect(await backend.getLease("fixture_simple")).toBeNull();
+    const second = await backend.acquireLease("fixture_simple", "second", 1);
+    expect(second.owner_id).toBe("second");
+    expect(second.lease_id).not.toBe(first.lease_id);
   });
 });

@@ -19,6 +19,9 @@ product, its development method, and the completed pivot history.
 - [Document Import Utility](document_import.md): Docling PDF/Word/ODT parsing,
   narrative projection, source provenance, and optional OpenAI table-to-IP-XACT
   extraction.
+- [Simple SystemC ODT Import Benchmark](simple_spec_systemc_benchmark.md):
+  reproducible conversion and integrity checks for four ODT hardware
+  specifications.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): IEEE 1685-2022 semantics and V1
   profile.
 - [SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic reads and
@@ -29,14 +32,14 @@ product, its development method, and the completed pivot history.
   interaction model.
 - [A2UI Stage 1 Editor](spec_editor_a2ui_stage1.md): unified read-only document
   projection, semantic catalog, React boundary, and Stage 2 seam.
-- [Circuit Designer Phase 0](circuit_designer_phase0.md): renderer-neutral
-  contracts, SpecIR projection, deterministic layout, and standalone React mock app.
-- [Circuit Designer Phase 1](circuit_designer_phase1.md): live read-only SpecIR
-  catalog/graph API, reusable HTTP client, and server-backed canvas workflow.
-- [Circuit Designer Complete Roadmap](circuit_designer_complete.md): mutation,
-  locking, history, agent proposals, hierarchy, hosting, and final workflows.
-- [Standalone Circuit Designer](circuit_designer_standalone.md): independent
-  examples, local command engine, and the SpecIR isolation boundary.
+- [Circuit Designer v1 Protocol](circuit_designer_protocol_v1.md): canonical
+  document, construction, operations, drafts, diagnostics, and transport outcomes.
+- [Circuit Designer v1 Providers](circuit_designer_provider_v1.md): independent
+  hierarchy and callback-provider boundary.
+- [Circuit Designer v1 Tools](circuit_designer_tools_v1.md): structured agent
+  queries, previews, exports, and immutable proposals.
+- [Run Circuit Designer v1](circuit_designer_run_v1.md): browser and
+  Node/SQLite reference-service commands.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
 
@@ -57,3 +60,5 @@ product, its development method, and the completed pivot history.
 The four V1 pivot plans are retained as completed decision/acceptance history.
 References to removed ODT or heading-based behavior inside those plans describe
 the migration target that was eliminated, not current runtime behavior.
+Earlier Circuit Designer phase documents are retained under `docs/archive/` as
+historical context and are not active contracts.

@@ -1,0 +1,99 @@
+{
+  "enrichment": {
+    "model": "gpt-5.6-sol",
+    "openai": true
+  },
+  "format": "spec2gds-simple-spec-systemc-import-v1",
+  "generator": "spec2gds-import-document",
+  "package_count": 4,
+  "packages": [
+    {
+      "benchmark_id": "fifo_backpressure_hw_spec",
+      "document_id": "spec_import_fifo_backpressure_hw_spec",
+      "formal_counts": {
+        "bus_interfaces": 0,
+        "ipxact_documents": 1,
+        "ports": 9
+      },
+      "narrative_counts": {
+        "blocks": 27,
+        "images": 4,
+        "tables": 4
+      },
+      "openai_model": "gpt-5.6-sol",
+      "output": "fifo_backpressure_hw_spec.spec",
+      "package_bytes": 1143717,
+      "package_sha256": "cb772afccec9ba299877b27166ee780d69ab1c040162ed88a94fec4140b770e1",
+      "source": "fifo_backpressure_hw_spec.odt",
+      "source_bytes": 681321,
+      "source_revision_hash": "sha256:a9e666185e73f5a39e0ecf85f156f641972b860ec3c56c3bc974eccc321351ae",
+      "source_sha256": "6f754146d89794402b1f994ad0488b1f317e1448bf134d9a4ba755d764115158"
+    },
+    {
+      "benchmark_id": "pipelined_alu_hw_spec",
+      "document_id": "spec_import_pipelined_alu_hw_spec",
+      "formal_counts": {
+        "bus_interfaces": 0,
+        "ipxact_documents": 1,
+        "ports": 9
+      },
+      "narrative_counts": {
+        "blocks": 33,
+        "images": 4,
+        "tables": 4
+      },
+      "openai_model": "gpt-5.6-sol",
+      "output": "pipelined_alu_hw_spec.spec",
+      "package_bytes": 1092508,
+      "package_sha256": "b98a5b77d2b56eb2762be9b496d2645455f5ed55614b1cb8dfcc72ad402cbc9b",
+      "source": "pipelined_alu_hw_spec.odt",
+      "source_bytes": 654291,
+      "source_revision_hash": "sha256:addb51a6cda8077aaf69803d247483860b0d78cb8644d1c97b427e583171c47c",
+      "source_sha256": "269ab9f143d36aa4e7bdc36bebb9a8a23322d1cae1cc718f115992dc7af13007"
+    },
+    {
+      "benchmark_id": "simple_pipeline_hw_spec",
+      "document_id": "spec_import_simple_pipeline_hw_spec",
+      "formal_counts": {
+        "bus_interfaces": 0,
+        "ipxact_documents": 1,
+        "ports": 2
+      },
+      "narrative_counts": {
+        "blocks": 32,
+        "images": 4,
+        "tables": 4
+      },
+      "openai_model": "gpt-5.6-sol",
+      "output": "simple_pipeline_hw_spec.spec",
+      "package_bytes": 919048,
+      "package_sha256": "82cbd3caffd7cb1ab54b829bea51b5962a91ef56eb559f7b8c164350672e252c",
+      "source": "simple_pipeline_hw_spec.odt",
+      "source_bytes": 556659,
+      "source_revision_hash": "sha256:dc9a3cba2a8753fce38ff87f51b6b49f80f66f78469754cfb7cb1fb1e954e065",
+      "source_sha256": "54151db3cc9612a178dd484935bf1bb8523e316020e8b7cefad7098d3eddf916"
+    },
+    {
+      "benchmark_id": "switch_arbitration_hw_spec",
+      "document_id": "spec_import_switch_arbitration_hw_spec",
+      "formal_counts": {
+        "bus_interfaces": 0,
+        "ipxact_documents": 1,
+        "ports": 7
+      },
+      "narrative_counts": {
+        "blocks": 27,
+        "images": 4,
+        "tables": 4
+      },
+      "openai_model": "gpt-5.6-sol",
+      "output": "switch_arbitration_hw_spec.spec",
+      "package_bytes": 1000643,
+      "package_sha256": "ee330dbc566d14f22f10ffa9573ec80a2e3157505ba06cc785dd8f2d962cde12",
+      "source": "switch_arbitration_hw_spec.odt",
+      "source_bytes": 607710,
+      "source_revision_hash": "sha256:c72c7d6161cc773ba9c1999810d900d0c6af356727158f6cb1b6d17d97721ce1",
+      "source_sha256": "25b13903348db70bf16daae7d4713f7eb92a8e0f2fa977dc0e2b307b1afa9840"
+    }
+  ]
+}

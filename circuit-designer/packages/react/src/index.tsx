@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   Background,
   BackgroundVariant,
@@ -14,10 +14,10 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import type {
-  CircuitGraphSnapshot,
-  CircuitNode,
-  CircuitTerminal,
-  DiagramLayout,
+  CircuitGraphView as CircuitGraphSnapshot,
+  CircuitNodeView as CircuitNode,
+  CircuitTerminalView as CircuitTerminal,
+  DiagramLayoutView as DiagramLayout,
   NetRoute,
   NodeGeometry,
   TerminalPlacement,
@@ -67,12 +67,14 @@ export interface CircuitDesignerCanvasProps {
   fitViewOnInit?: boolean;
   mode?: CircuitCanvasMode;
   onNetRouteChange?: (netId: string, route: NetRoute) => void;
+  rendererRegistry?: CircuitCanvasRendererRegistry;
 }
 
 type CircuitNodeData = {
   circuitNode: CircuitNode;
   terminals: CircuitTerminal[];
   placements: Record<string, TerminalPlacement>;
+  rendererRegistry?: CircuitCanvasRendererRegistry;
 };
 
 type CircuitFlowNode = Node<CircuitNodeData, "circuit">;
@@ -88,11 +90,37 @@ type CircuitFlowEdge = Edge<CircuitEdgeData, "circuit">;
 
 const positions = { NORTH: Position.Top, EAST: Position.Right, SOUTH: Position.Bottom, WEST: Position.Left };
 
+export interface CircuitCanvasRendererProps {
+  node: CircuitNode;
+}
+
+export class CircuitCanvasRendererRegistry {
+  private readonly renderers = new Map<string, (props: CircuitCanvasRendererProps) => ReactNode>();
+
+  register(key: string, renderer: (props: CircuitCanvasRendererProps) => ReactNode): void {
+    this.renderers.set(key, renderer);
+  }
+
+  renderer(key: string): ((props: CircuitCanvasRendererProps) => ReactNode) | undefined {
+    return this.renderers.get(key);
+  }
+}
+
+export const defaultCircuitCanvasRenderers = new CircuitCanvasRendererRegistry();
+for (const key of ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer", "mux", "register", "constant", "splitter", "combiner"]) {
+  defaultCircuitCanvasRenderers.register(key, ({ node }) => <span className={`cd-node__symbol cd-node__symbol--${key}`}>{node.label}</span>);
+}
+
 function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
+  const rendererKey = data.circuitNode.component_vlnv ?? "generic";
+  const customRenderer = data.rendererRegistry?.renderer(rendererKey)
+    ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
   return (
     <div className="cd-node">
       <div className="cd-node__eyebrow">{data.circuitNode.component_vlnv ?? data.circuitNode.component_id}</div>
-      <div className="cd-node__title">{data.circuitNode.display_name ?? data.circuitNode.label}</div>
+      <div className="cd-node__title">{customRenderer
+        ? customRenderer({ node: data.circuitNode })
+        : data.circuitNode.display_name ?? data.circuitNode.label}</div>
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
@@ -249,7 +277,7 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange }: CircuitDesignerCanvasProps) {
+export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange, rendererRegistry }: CircuitDesignerCanvasProps) {
   const policy = interactionPolicy(mode, editable);
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
@@ -272,7 +300,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       type: "circuit",
       position: { x: geometry.x, y: geometry.y },
       style: { width: geometry.width, height: geometry.height },
-      data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements },
+      data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements, rendererRegistry },
       draggable: policy.nodesDraggable,
     }];
   });
@@ -285,8 +313,8 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       position: { x: geometry.x, y: geometry.y },
       style: { width: geometry.width, height: geometry.height },
       data: {
-        circuitNode: { id: terminal.id, label: terminal.label, component_id: "boundary", terminal_ids: [terminal.id], configuration_values: {}, source_ref: terminal.source_ref },
-        terminals: [terminal], placements: terminalPlacements,
+        circuitNode: { id: terminal.id, label: terminal.label, component_id: "boundary", terminal_ids: [terminal.id], configuration_values: {} },
+        terminals: [terminal], placements: terminalPlacements, rendererRegistry,
       },
       draggable: false,
     });

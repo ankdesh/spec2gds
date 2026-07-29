@@ -1,1806 +1,975 @@
 {
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spec2gds.dev/schemas/circuit-designer.v1.schema.json",
+  "title": "CircuitDesignerProtocol",
+  "description": "Independent, renderer-neutral Circuit Designer v1 contracts.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "document": { "$ref": "#/$defs/CircuitDocument" },
+    "snapshot": { "$ref": "#/$defs/CircuitSnapshot" },
+    "construction": { "$ref": "#/$defs/CircuitConstruction" },
+    "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
+    "result": { "$ref": "#/$defs/CircuitChangeResult" },
+    "proposal": { "$ref": "#/$defs/CircuitProposal" },
+    "lease": { "$ref": "#/$defs/EditLease" },
+    "provider": { "$ref": "#/$defs/ResolvedComponentDesign" },
+    "summary": { "$ref": "#/$defs/DocumentSummary" },
+    "provider_commit_request": { "$ref": "#/$defs/ProviderCommitRequest" },
+    "provider_commit_result": { "$ref": "#/$defs/ProviderCommitResult" },
+    "event": { "$ref": "#/$defs/ServiceEvent" },
+    "error": { "$ref": "#/$defs/ServiceError" }
+  },
   "$defs": {
-    "AddInstanceCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "component_id": {
-          "minLength": 1,
-          "title": "Component Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "node_id": {
-          "minLength": 1,
-          "title": "Node Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "add_instance",
-          "default": "add_instance",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "node_id",
-        "name",
-        "component_id"
-      ],
-      "title": "AddInstanceCommand",
-      "type": "object"
+    "Slug": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
     },
-    "AddNetEndpointCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "add_net_endpoint",
-          "default": "add_net_endpoint",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id",
-        "terminal_id"
-      ],
-      "title": "AddNetEndpointCommand",
-      "type": "object"
+    "NonEmptyString": { "type": "string", "minLength": 1 },
+    "JsonScalar": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" },
+        { "type": "null" }
+      ]
     },
-    "AddTerminalCommand": {
-      "additionalProperties": false,
-      "description": "Create a minimally described port or interface on one instance.",
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "direction": {
-          "anyOf": [
-            {
-              "enum": [
-                "in",
-                "out",
-                "inout"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Direction"
-        },
-        "kind": {
-          "default": "port",
-          "enum": [
-            "port",
-            "interface"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "node_id": {
-          "minLength": 1,
-          "title": "Node Id",
-          "type": "string"
-        },
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "add_terminal",
-          "default": "add_terminal",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "terminal_id",
-        "node_id",
-        "name"
-      ],
-      "title": "AddTerminalCommand",
-      "type": "object"
-    },
-    "AgentProposal": {
-      "additionalProperties": false,
-      "description": "Persistable, whole-batch agent change proposal.",
-      "properties": {
-        "batch": {
-          "$ref": "#/$defs/CommandBatch"
-        },
-        "diagnostics": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/ValidationDiagnostic"
-          },
-          "title": "Diagnostics",
-          "type": "array"
-        },
-        "proposal_id": {
-          "minLength": 1,
-          "title": "Proposal Id",
-          "type": "string"
-        },
-        "status": {
-          "default": "pending",
-          "enum": [
-            "pending",
-            "accepted",
-            "rejected",
-            "stale"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "title": {
-          "minLength": 1,
-          "title": "Title",
-          "type": "string"
-        }
-      },
-      "required": [
-        "proposal_id",
-        "title",
-        "batch"
-      ],
-      "title": "AgentProposal",
-      "type": "object"
-    },
-    "ChangePreview": {
-      "additionalProperties": false,
-      "description": "Non-persisted result of validating one command batch.",
-      "properties": {
-        "batch": {
-          "$ref": "#/$defs/CommandBatch"
-        },
-        "candidate": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/CircuitGraphSnapshot"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "diagnostics": {
-          "items": {
-            "$ref": "#/$defs/ValidationDiagnostic"
-          },
-          "title": "Diagnostics",
-          "type": "array"
-        }
-      },
-      "required": [
-        "batch",
-        "diagnostics"
-      ],
-      "title": "ChangePreview",
-      "type": "object"
-    },
-    "CircuitCapabilities": {
-      "additionalProperties": false,
-      "description": "Operations supported by the active backend adapter.",
-      "properties": {
-        "edit_instance_details": {
-          "default": false,
-          "title": "Edit Instance Details",
-          "type": "boolean"
-        },
-        "edit_layout": {
-          "default": false,
-          "title": "Edit Layout",
-          "type": "boolean"
-        },
-        "edit_topology": {
-          "default": false,
-          "title": "Edit Topology",
-          "type": "boolean"
-        },
-        "replace_component": {
-          "default": false,
-          "title": "Replace Component",
-          "type": "boolean"
-        },
-        "submit_agent_proposal": {
-          "default": false,
-          "title": "Submit Agent Proposal",
-          "type": "boolean"
-        }
-      },
-      "title": "CircuitCapabilities",
-      "type": "object"
-    },
-    "CircuitComponentDefinition": {
-      "additionalProperties": false,
-      "description": "Reusable component definition exposed by the active adapter.",
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "label": {
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "source_ref": {
-          "$ref": "#/$defs/SourceRef"
-        },
-        "vlnv": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Vlnv"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "source_ref"
-      ],
-      "title": "CircuitComponentDefinition",
-      "type": "object"
-    },
-    "CircuitDesignCatalog": {
-      "additionalProperties": false,
-      "description": "Designs available from one immutable source revision.",
-      "properties": {
-        "designs": {
-          "items": {
-            "$ref": "#/$defs/CircuitDesignRef"
-          },
-          "title": "Designs",
-          "type": "array"
-        },
-        "document_id": {
-          "minLength": 1,
-          "title": "Document Id",
-          "type": "string"
-        },
-        "entry_design_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "title": "Entry Design Ids",
-          "type": "array"
-        },
-        "hierarchy_links": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/CircuitHierarchyLink"
-          },
-          "title": "Hierarchy Links",
-          "type": "array"
-        },
-        "protocol_version": {
-          "const": "circuit-designer.v1",
-          "default": "circuit-designer.v1",
-          "title": "Protocol Version",
-          "type": "string"
-        },
-        "source_revision_hash": {
-          "minLength": 1,
-          "title": "Source Revision Hash",
-          "type": "string"
-        }
-      },
-      "required": [
-        "document_id",
-        "source_revision_hash",
-        "designs"
-      ],
-      "title": "CircuitDesignCatalog",
-      "type": "object"
-    },
-    "CircuitDesignRef": {
-      "additionalProperties": false,
-      "description": "One design available to the circuit canvas.",
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "label": {
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "source_ref": {
-          "$ref": "#/$defs/SourceRef"
-        },
-        "vlnv": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Vlnv"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "source_ref"
-      ],
-      "title": "CircuitDesignRef",
-      "type": "object"
-    },
-    "CircuitEndpointRef": {
-      "additionalProperties": false,
-      "description": "Reference from a net to one terminal.",
-      "properties": {
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "terminal_id"
-      ],
-      "title": "CircuitEndpointRef",
-      "type": "object"
-    },
-    "CircuitGraphSnapshot": {
-      "additionalProperties": false,
-      "description": "Complete immutable graph payload for one design revision.",
-      "properties": {
-        "breadcrumbs": {
-          "default": [],
-          "items": {
-            "$ref": "#/$defs/CircuitDesignRef"
-          },
-          "title": "Breadcrumbs",
-          "type": "array"
-        },
-        "capabilities": {
-          "$ref": "#/$defs/CircuitCapabilities",
-          "default": {
-            "edit_instance_details": false,
-            "edit_layout": false,
-            "edit_topology": false,
-            "replace_component": false,
-            "submit_agent_proposal": false
-          }
-        },
-        "components": {
-          "items": {
-            "$ref": "#/$defs/CircuitComponentDefinition"
-          },
-          "title": "Components",
-          "type": "array"
-        },
-        "design": {
-          "$ref": "#/$defs/CircuitDesignRef"
-        },
-        "document_id": {
-          "minLength": 1,
-          "title": "Document Id",
-          "type": "string"
-        },
-        "layout": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/DiagramLayout"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
-        "nets": {
-          "items": {
-            "$ref": "#/$defs/CircuitNet"
-          },
-          "title": "Nets",
-          "type": "array"
-        },
-        "nodes": {
-          "items": {
-            "$ref": "#/$defs/CircuitNode"
-          },
-          "title": "Nodes",
-          "type": "array"
-        },
-        "protocol_version": {
-          "const": "circuit-designer.v1",
-          "default": "circuit-designer.v1",
-          "title": "Protocol Version",
-          "type": "string"
-        },
-        "source_revision_hash": {
-          "minLength": 1,
-          "title": "Source Revision Hash",
-          "type": "string"
-        },
-        "terminals": {
-          "items": {
-            "$ref": "#/$defs/CircuitTerminal"
-          },
-          "title": "Terminals",
-          "type": "array"
-        }
-      },
-      "required": [
-        "document_id",
-        "source_revision_hash",
-        "design",
-        "components",
-        "nodes",
-        "terminals",
-        "nets"
-      ],
-      "title": "CircuitGraphSnapshot",
-      "type": "object"
-    },
-    "CircuitHierarchyLink": {
-      "additionalProperties": false,
-      "description": "Reusable component composition and designs that instantiate it.",
-      "properties": {
-        "component_id": {
-          "minLength": 1,
-          "title": "Component Id",
-          "type": "string"
-        },
-        "internal_design_id": {
-          "minLength": 1,
-          "title": "Internal Design Id",
-          "type": "string"
-        },
-        "parent_design_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "title": "Parent Design Ids",
-          "type": "array"
-        }
-      },
-      "required": [
-        "component_id",
-        "internal_design_id"
-      ],
-      "title": "CircuitHierarchyLink",
-      "type": "object"
-    },
-    "CircuitNet": {
-      "additionalProperties": false,
-      "description": "One interface or ad-hoc multi-endpoint connection.",
-      "properties": {
-        "endpoints": {
-          "items": {
-            "$ref": "#/$defs/CircuitEndpointRef"
-          },
-          "minItems": 2,
-          "title": "Endpoints",
-          "type": "array"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "interface",
-            "ad_hoc"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "source_ref": {
-          "$ref": "#/$defs/SourceRef"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "kind",
-        "endpoints",
-        "source_ref"
-      ],
-      "title": "CircuitNet",
-      "type": "object"
-    },
-    "CircuitNode": {
-      "additionalProperties": false,
-      "description": "One component instance in the selected design.",
-      "properties": {
-        "component_id": {
-          "minLength": 1,
-          "title": "Component Id",
-          "type": "string"
-        },
-        "component_vlnv": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Component Vlnv"
-        },
-        "configuration_values": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "title": "Configuration Values",
-          "type": "object"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Description"
-        },
-        "display_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Display Name"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "label": {
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "source_ref": {
-          "$ref": "#/$defs/SourceRef"
-        },
-        "terminal_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "title": "Terminal Ids",
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "component_id",
-        "source_ref"
-      ],
-      "title": "CircuitNode",
-      "type": "object"
-    },
-    "CircuitTerminal": {
-      "additionalProperties": false,
-      "description": "Interface, physical port, or design-boundary connection point.",
-      "properties": {
-        "abstraction_vlnv": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Abstraction Vlnv"
-        },
-        "bus_vlnv": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Bus Vlnv"
-        },
-        "declared_bounds": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "title": "Declared Bounds",
-          "type": "array"
-        },
-        "direction": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Direction"
-        },
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "interface",
-            "port",
-            "boundary_interface",
-            "boundary_port"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "label": {
-          "minLength": 1,
-          "title": "Label",
-          "type": "string"
-        },
-        "mapped_port_ids": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "title": "Mapped Port Ids",
-          "type": "array"
-        },
-        "node_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Node Id"
-        },
-        "role": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Role"
-        },
-        "source_ref": {
-          "$ref": "#/$defs/SourceRef"
-        }
-      },
-      "required": [
-        "id",
-        "label",
-        "kind",
-        "source_ref"
-      ],
-      "title": "CircuitTerminal",
-      "type": "object"
-    },
-    "CommandBatch": {
-      "additionalProperties": false,
-      "description": "Ordered, revision-guarded set of proposed commands.",
-      "properties": {
-        "batch_id": {
-          "minLength": 1,
-          "title": "Batch Id",
-          "type": "string"
-        },
-        "commands": {
-          "items": {
-            "discriminator": {
-              "mapping": {
-                "add_instance": "#/$defs/AddInstanceCommand",
-                "add_net_endpoint": "#/$defs/AddNetEndpointCommand",
-                "add_terminal": "#/$defs/AddTerminalCommand",
-                "create_net": "#/$defs/CreateNetCommand",
-                "delete_instance": "#/$defs/DeleteInstanceCommand",
-                "delete_net": "#/$defs/DeleteNetCommand",
-                "delete_terminal": "#/$defs/DeleteTerminalCommand",
-                "duplicate_instances": "#/$defs/DuplicateInstancesCommand",
-                "remove_net_endpoint": "#/$defs/RemoveNetEndpointCommand",
-                "rename_net": "#/$defs/RenameNetCommand",
-                "set_layout_direction": "#/$defs/SetLayoutDirectionCommand",
-                "set_net_route": "#/$defs/SetNetRouteCommand",
-                "set_node_geometry": "#/$defs/SetNodeGeometryCommand",
-                "set_terminal_placement": "#/$defs/SetTerminalPlacementCommand",
-                "update_instance": "#/$defs/UpdateInstanceCommand"
-              },
-              "propertyName": "type"
-            },
-            "oneOf": [
-              {
-                "$ref": "#/$defs/AddInstanceCommand"
-              },
-              {
-                "$ref": "#/$defs/UpdateInstanceCommand"
-              },
-              {
-                "$ref": "#/$defs/DuplicateInstancesCommand"
-              },
-              {
-                "$ref": "#/$defs/DeleteInstanceCommand"
-              },
-              {
-                "$ref": "#/$defs/AddTerminalCommand"
-              },
-              {
-                "$ref": "#/$defs/DeleteTerminalCommand"
-              },
-              {
-                "$ref": "#/$defs/CreateNetCommand"
-              },
-              {
-                "$ref": "#/$defs/RenameNetCommand"
-              },
-              {
-                "$ref": "#/$defs/AddNetEndpointCommand"
-              },
-              {
-                "$ref": "#/$defs/RemoveNetEndpointCommand"
-              },
-              {
-                "$ref": "#/$defs/DeleteNetCommand"
-              },
-              {
-                "$ref": "#/$defs/SetNodeGeometryCommand"
-              },
-              {
-                "$ref": "#/$defs/SetTerminalPlacementCommand"
-              },
-              {
-                "$ref": "#/$defs/SetNetRouteCommand"
-              },
-              {
-                "$ref": "#/$defs/SetLayoutDirectionCommand"
-              }
-            ]
-          },
-          "minItems": 1,
-          "title": "Commands",
-          "type": "array"
-        },
-        "expected_source_revision_hash": {
-          "minLength": 1,
-          "title": "Expected Source Revision Hash",
-          "type": "string"
-        }
-      },
-      "required": [
-        "batch_id",
-        "expected_source_revision_hash",
-        "commands"
-      ],
-      "title": "CommandBatch",
-      "type": "object"
-    },
-    "CreateNetCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "interface",
-            "ad_hoc"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "terminal_ids": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 2,
-          "title": "Terminal Ids",
-          "type": "array"
-        },
-        "type": {
-          "const": "create_net",
-          "default": "create_net",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id",
-        "name",
-        "kind",
-        "terminal_ids"
-      ],
-      "title": "CreateNetCommand",
-      "type": "object"
-    },
-    "DeleteInstanceCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "cascade": {
-          "default": true,
-          "title": "Cascade",
-          "type": "boolean"
-        },
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "node_id": {
-          "minLength": 1,
-          "title": "Node Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "delete_instance",
-          "default": "delete_instance",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "node_id"
-      ],
-      "title": "DeleteInstanceCommand",
-      "type": "object"
-    },
-    "DeleteNetCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "delete_net",
-          "default": "delete_net",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id"
-      ],
-      "title": "DeleteNetCommand",
-      "type": "object"
-    },
-    "DeleteTerminalCommand": {
-      "additionalProperties": false,
-      "description": "Remove a terminal and optionally clean up its connected nets.",
-      "properties": {
-        "cascade": {
-          "default": true,
-          "title": "Cascade",
-          "type": "boolean"
-        },
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "delete_terminal",
-          "default": "delete_terminal",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "terminal_id"
-      ],
-      "title": "DeleteTerminalCommand",
-      "type": "object"
-    },
-    "DiagramLayout": {
-      "additionalProperties": false,
-      "description": "One canonical renderer-neutral layout for a design.",
-      "properties": {
-        "direction": {
-          "default": "RIGHT",
-          "enum": [
-            "RIGHT",
-            "DOWN"
-          ],
-          "title": "Direction",
-          "type": "string"
-        },
-        "net_routes": {
-          "additionalProperties": {
-            "$ref": "#/$defs/NetRoute"
-          },
-          "title": "Net Routes",
-          "type": "object"
-        },
-        "node_geometry": {
-          "additionalProperties": {
-            "$ref": "#/$defs/NodeGeometry"
-          },
-          "title": "Node Geometry",
-          "type": "object"
-        },
-        "terminal_placements": {
-          "additionalProperties": {
-            "$ref": "#/$defs/TerminalPlacement"
-          },
-          "title": "Terminal Placements",
-          "type": "object"
-        }
-      },
-      "title": "DiagramLayout",
-      "type": "object"
-    },
-    "DuplicateInstancesCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "node_ids": {
-          "items": {
-            "type": "string"
-          },
-          "minItems": 1,
-          "title": "Node Ids",
-          "type": "array"
-        },
-        "offset": {
-          "$ref": "#/$defs/Point",
-          "default": {
-            "x": 24.0,
-            "y": 24.0
-          }
-        },
-        "type": {
-          "const": "duplicate_instances",
-          "default": "duplicate_instances",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "node_ids"
-      ],
-      "title": "DuplicateInstancesCommand",
-      "type": "object"
-    },
-    "EditLease": {
-      "additionalProperties": false,
-      "description": "Exclusive edit ownership advertised by the application layer.",
-      "properties": {
-        "expires_at": {
-          "minLength": 1,
-          "title": "Expires At",
-          "type": "string"
-        },
-        "lease_id": {
-          "minLength": 1,
-          "title": "Lease Id",
-          "type": "string"
-        },
-        "owner_id": {
-          "minLength": 1,
-          "title": "Owner Id",
-          "type": "string"
-        },
-        "owner_kind": {
-          "enum": [
-            "human",
-            "agent"
-          ],
-          "title": "Owner Kind",
-          "type": "string"
-        }
-      },
-      "required": [
-        "lease_id",
-        "owner_id",
-        "owner_kind",
-        "expires_at"
-      ],
-      "title": "EditLease",
-      "type": "object"
-    },
-    "NetRoute": {
-      "additionalProperties": false,
-      "description": "Renderer-neutral route tree for a possibly multi-endpoint net.",
-      "properties": {
-        "segments": {
-          "items": {
-            "$ref": "#/$defs/RouteSegment"
-          },
-          "title": "Segments",
-          "type": "array"
-        },
-        "vertices": {
-          "items": {
-            "$ref": "#/$defs/RouteVertex"
-          },
-          "title": "Vertices",
-          "type": "array"
-        }
-      },
-      "required": [
-        "vertices",
-        "segments"
-      ],
-      "title": "NetRoute",
-      "type": "object"
-    },
-    "NodeGeometry": {
-      "additionalProperties": false,
-      "description": "Persistable node placement independent of a renderer.",
-      "properties": {
-        "height": {
-          "exclusiveMinimum": 0,
-          "title": "Height",
-          "type": "number"
-        },
-        "pinned": {
-          "default": true,
-          "title": "Pinned",
-          "type": "boolean"
-        },
-        "width": {
-          "exclusiveMinimum": 0,
-          "title": "Width",
-          "type": "number"
-        },
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "x",
-        "y",
-        "width",
-        "height"
-      ],
-      "title": "NodeGeometry",
-      "type": "object"
+    "ParameterValue": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "number" },
+        { "type": "boolean" }
+      ]
     },
     "Point": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "Canvas-space point.",
+      "required": ["x", "y"],
       "properties": {
-        "x": {
-          "title": "X",
-          "type": "number"
-        },
-        "y": {
-          "title": "Y",
-          "type": "number"
-        }
-      },
-      "required": [
-        "x",
-        "y"
-      ],
-      "title": "Point",
-      "type": "object"
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
     },
-    "RemoveNetEndpointCommand": {
+    "NodeGeometry": {
+      "type": "object",
       "additionalProperties": false,
+      "required": ["x", "y", "width", "height"],
       "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "remove_net_endpoint",
-          "default": "remove_net_endpoint",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id",
-        "terminal_id"
-      ],
-      "title": "RemoveNetEndpointCommand",
-      "type": "object"
-    },
-    "RenameNetCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "name": {
-          "minLength": 1,
-          "title": "Name",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "rename_net",
-          "default": "rename_net",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id",
-        "name"
-      ],
-      "title": "RenameNetCommand",
-      "type": "object"
-    },
-    "RouteSegment": {
-      "additionalProperties": false,
-      "description": "One edge between vertices in an orthogonal route tree.",
-      "properties": {
-        "from_vertex": {
-          "minLength": 1,
-          "title": "From Vertex",
-          "type": "string"
-        },
-        "id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Id"
-        },
-        "locked": {
-          "default": false,
-          "title": "Locked",
-          "type": "boolean"
-        },
-        "to_vertex": {
-          "minLength": 1,
-          "title": "To Vertex",
-          "type": "string"
-        }
-      },
-      "required": [
-        "from_vertex",
-        "to_vertex"
-      ],
-      "title": "RouteSegment",
-      "type": "object"
-    },
-    "RouteVertex": {
-      "additionalProperties": false,
-      "description": "Endpoint, bend, or electrical junction in an orthogonal route tree.",
-      "properties": {
-        "id": {
-          "minLength": 1,
-          "title": "Id",
-          "type": "string"
-        },
-        "kind": {
-          "enum": [
-            "endpoint",
-            "bend",
-            "junction"
-          ],
-          "title": "Kind",
-          "type": "string"
-        },
-        "locked": {
-          "default": false,
-          "title": "Locked",
-          "type": "boolean"
-        },
-        "point": {
-          "$ref": "#/$defs/Point"
-        },
-        "terminal_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Terminal Id"
-        }
-      },
-      "required": [
-        "id",
-        "kind",
-        "point"
-      ],
-      "title": "RouteVertex",
-      "type": "object"
-    },
-    "SetLayoutDirectionCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "direction": {
-          "enum": [
-            "RIGHT",
-            "DOWN"
-          ],
-          "title": "Direction",
-          "type": "string"
-        },
-        "type": {
-          "const": "set_layout_direction",
-          "default": "set_layout_direction",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "direction"
-      ],
-      "title": "SetLayoutDirectionCommand",
-      "type": "object"
-    },
-    "SetNetRouteCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "net_id": {
-          "minLength": 1,
-          "title": "Net Id",
-          "type": "string"
-        },
-        "route": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/NetRoute"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "type": {
-          "const": "set_net_route",
-          "default": "set_net_route",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "net_id",
-        "route"
-      ],
-      "title": "SetNetRouteCommand",
-      "type": "object"
-    },
-    "SetNodeGeometryCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "geometry": {
-          "$ref": "#/$defs/NodeGeometry"
-        },
-        "node_id": {
-          "minLength": 1,
-          "title": "Node Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "set_node_geometry",
-          "default": "set_node_geometry",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "node_id",
-        "geometry"
-      ],
-      "title": "SetNodeGeometryCommand",
-      "type": "object"
-    },
-    "SetTerminalPlacementCommand": {
-      "additionalProperties": false,
-      "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "placement": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/TerminalPlacement"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "terminal_id": {
-          "minLength": 1,
-          "title": "Terminal Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "set_terminal_placement",
-          "default": "set_terminal_placement",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "terminal_id",
-        "placement"
-      ],
-      "title": "SetTerminalPlacementCommand",
-      "type": "object"
-    },
-    "SourceRef": {
-      "additionalProperties": false,
-      "description": "Opaque adapter-owned locator for one source-backed graph element.",
-      "properties": {
-        "kind": {
-          "minLength": 1,
-          "title": "Kind",
-          "type": "string"
-        },
-        "source_id": {
-          "minLength": 1,
-          "title": "Source Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "source_id",
-        "kind"
-      ],
-      "title": "SourceRef",
-      "type": "object"
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "width": { "type": "number", "exclusiveMinimum": 0 },
+        "height": { "type": "number", "exclusiveMinimum": 0 },
+        "pinned": { "type": "boolean", "default": true }
+      }
     },
     "TerminalPlacement": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "Optional semantic-terminal placement override.",
+      "required": ["side", "order"],
       "properties": {
-        "locked": {
-          "default": true,
-          "title": "Locked",
-          "type": "boolean"
-        },
-        "order": {
-          "minimum": 0,
-          "title": "Order",
-          "type": "integer"
-        },
-        "side": {
-          "enum": [
-            "NORTH",
-            "EAST",
-            "SOUTH",
-            "WEST"
-          ],
-          "title": "Side",
-          "type": "string"
-        }
-      },
-      "required": [
-        "side",
-        "order"
-      ],
-      "title": "TerminalPlacement",
-      "type": "object"
+        "side": { "enum": ["NORTH", "EAST", "SOUTH", "WEST"] },
+        "order": { "type": "integer", "minimum": 0 },
+        "locked": { "type": "boolean", "default": true }
+      }
     },
-    "UpdateInstanceCommand": {
+    "RouteVertex": {
+      "type": "object",
       "additionalProperties": false,
+      "required": ["id", "kind", "point"],
       "properties": {
-        "command_id": {
-          "minLength": 1,
-          "title": "Command Id",
-          "type": "string"
-        },
-        "component_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Component Id"
-        },
-        "configuration_values": {
-          "anyOf": [
-            {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Configuration Values"
-        },
-        "description": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Description"
-        },
-        "design_id": {
-          "minLength": 1,
-          "title": "Design Id",
-          "type": "string"
-        },
-        "display_name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Display Name"
-        },
-        "name": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Name"
-        },
-        "node_id": {
-          "minLength": 1,
-          "title": "Node Id",
-          "type": "string"
-        },
-        "type": {
-          "const": "update_instance",
-          "default": "update_instance",
-          "title": "Type",
-          "type": "string"
-        }
-      },
-      "required": [
-        "command_id",
-        "design_id",
-        "node_id"
-      ],
-      "title": "UpdateInstanceCommand",
-      "type": "object"
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "enum": ["endpoint", "bend", "junction"] },
+        "point": { "$ref": "#/$defs/Point" },
+        "terminal_id": { "type": ["string", "null"] },
+        "locked": { "type": "boolean", "default": false }
+      }
     },
-    "ValidationDiagnostic": {
+    "RouteSegment": {
+      "type": "object",
       "additionalProperties": false,
-      "description": "Machine-addressable validation finding.",
+      "required": ["from_vertex", "to_vertex"],
       "properties": {
-        "code": {
-          "minLength": 1,
-          "title": "Code",
-          "type": "string"
+        "id": { "type": ["string", "null"] },
+        "from_vertex": { "$ref": "#/$defs/NonEmptyString" },
+        "to_vertex": { "$ref": "#/$defs/NonEmptyString" },
+        "locked": { "type": "boolean", "default": false }
+      }
+    },
+    "NetRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vertices", "segments"],
+      "properties": {
+        "vertices": { "type": "array", "items": { "$ref": "#/$defs/RouteVertex" } },
+        "segments": { "type": "array", "items": { "$ref": "#/$defs/RouteSegment" } }
+      }
+    },
+    "LabelGeometry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "anchor": { "enum": ["start", "middle", "end"], "default": "middle" }
+      }
+    },
+    "CircuitLayout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["grid_size", "direction", "instance_geometry", "terminal_placements", "net_routes", "label_geometry"],
+      "properties": {
+        "grid_size": { "type": "number", "exclusiveMinimum": 0, "default": 20 },
+        "direction": { "enum": ["RIGHT", "DOWN"], "default": "RIGHT" },
+        "instance_geometry": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/NodeGeometry" }
         },
-        "command_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Command Id"
+        "terminal_placements": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/TerminalPlacement" }
         },
-        "element_id": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Element Id"
+        "net_routes": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/NetRoute" }
         },
-        "message": {
-          "minLength": 1,
-          "title": "Message",
-          "type": "string"
-        },
-        "severity": {
-          "enum": [
-            "info",
-            "warning",
-            "error"
-          ],
-          "title": "Severity",
-          "type": "string"
+        "label_geometry": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/LabelGeometry" }
         }
+      }
+    },
+    "StringParameterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "default"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "const": "string" },
+        "default": { "type": "string" }
+      }
+    },
+    "NumberParameterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "default"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "const": "number" },
+        "default": { "type": "number" },
+        "minimum": { "type": "number" },
+        "maximum": { "type": "number" }
+      }
+    },
+    "BooleanParameterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "default"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "const": "boolean" },
+        "default": { "type": "boolean" }
+      }
+    },
+    "EnumParameterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "type", "default", "values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "const": "enum" },
+        "default": { "type": "string" },
+        "values": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "ParameterDefinition": {
+      "oneOf": [
+        { "$ref": "#/$defs/StringParameterDefinition" },
+        { "$ref": "#/$defs/NumberParameterDefinition" },
+        { "$ref": "#/$defs/BooleanParameterDefinition" },
+        { "$ref": "#/$defs/EnumParameterDefinition" }
+      ]
+    },
+    "TerminalDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "direction", "width"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "direction": { "enum": ["input", "output"] },
+        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "category": { "enum": ["port", "interface"] }
+      }
+    },
+    "ComponentAppearance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["renderer_key", "properties"],
+      "properties": {
+        "renderer_key": { "$ref": "#/$defs/NonEmptyString" },
+        "properties": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/JsonScalar" }
+        }
+      }
+    },
+    "ComponentDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "origin", "editable", "terminals", "parameters", "appearance"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "origin": { "enum": ["local", "builtin", "provider"] },
+        "editable": { "type": "boolean" },
+        "terminals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TerminalDefinition" }
+        },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ParameterDefinition" }
+        },
+        "appearance": { "$ref": "#/$defs/ComponentAppearance" }
+      }
+    },
+    "BoundaryTerminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "direction", "width"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "direction": { "enum": ["input", "output"] },
+        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "category": { "enum": ["port", "interface"] }
+      }
+    },
+    "CircuitInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "component_id", "parameter_values"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "component_id": { "$ref": "#/$defs/Slug" },
+        "parameter_values": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+        }
+      }
+    },
+    "EndpointSlice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lsb", "width"],
+      "properties": {
+        "lsb": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "InstanceNetEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "instance_id", "terminal_id"],
+      "properties": {
+        "kind": { "const": "instance" },
+        "instance_id": { "$ref": "#/$defs/Slug" },
+        "terminal_id": { "$ref": "#/$defs/Slug" },
+        "slice": { "$ref": "#/$defs/EndpointSlice" }
+      }
+    },
+    "BoundaryNetEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "terminal_id"],
+      "properties": {
+        "kind": { "const": "boundary" },
+        "terminal_id": { "$ref": "#/$defs/Slug" },
+        "slice": { "$ref": "#/$defs/EndpointSlice" }
+      }
+    },
+    "NetEndpoint": {
+      "oneOf": [
+        { "$ref": "#/$defs/InstanceNetEndpoint" },
+        { "$ref": "#/$defs/BoundaryNetEndpoint" }
+      ]
+    },
+    "CircuitNet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "endpoints"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "type": "string" },
+        "endpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NetEndpoint" }
+        }
+      }
+    },
+    "CircuitDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "boundary_terminals", "instances", "nets"],
+      "properties": {
+        "id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "boundary_terminals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/BoundaryTerminal" }
+        },
+        "instances": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CircuitInstance" }
+        },
+        "nets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/CircuitNet" }
+        }
+      }
+    },
+    "CircuitDocument": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol_version", "document_id", "label", "components", "design", "layout"],
+      "properties": {
+        "protocol_version": { "const": "circuit-designer.v1" },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ComponentDefinition" }
+        },
+        "design": { "$ref": "#/$defs/CircuitDesign" },
+        "layout": { "$ref": "#/$defs/CircuitLayout" }
+      }
+    },
+    "CircuitSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "document"],
+      "properties": {
+        "revision": { "$ref": "#/$defs/NonEmptyString" },
+        "document": { "$ref": "#/$defs/CircuitDocument" }
+      }
+    },
+    "ConstructionComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/Slug" },
+        "name": { "$ref": "#/$defs/NonEmptyString" },
+        "template": { "type": "string" },
+        "template_parameters": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+        },
+        "terminals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/TerminalDefinition" }
+        },
+        "parameters": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ParameterDefinition" }
+        },
+        "renderer_key": { "type": "string" }
+      }
+    },
+    "ConstructionInstance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "component"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/Slug" },
+        "name": { "$ref": "#/$defs/NonEmptyString" },
+        "component": { "$ref": "#/$defs/NonEmptyString" },
+        "parameter_values": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+        },
+        "position": { "$ref": "#/$defs/Point" }
+      }
+    },
+    "ConstructionBoundaryTerminal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "direction"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/Slug" },
+        "name": { "$ref": "#/$defs/NonEmptyString" },
+        "direction": { "enum": ["input", "output"] },
+        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "category": { "enum": ["port", "interface"] }
+      }
+    },
+    "ConstructionNet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["endpoints"],
+      "properties": {
+        "alias": { "$ref": "#/$defs/Slug" },
+        "name": { "type": "string" },
+        "endpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        }
+      }
+    },
+    "CircuitConstruction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "document_id", "label", "design_id", "design_label", "components", "instances", "boundary_terminals", "nets"],
+      "properties": {
+        "mode": { "enum": ["create", "replace"] },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "design_id": { "$ref": "#/$defs/Slug" },
+        "design_label": { "$ref": "#/$defs/NonEmptyString" },
+        "expected_revision": { "type": "string" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConstructionComponent" }
+        },
+        "instances": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConstructionInstance" }
+        },
+        "boundary_terminals": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConstructionBoundaryTerminal" }
+        },
+        "nets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ConstructionNet" }
+        },
+        "layout": { "$ref": "#/$defs/CircuitLayout" }
+      }
+    },
+    "OperationBase": {
+      "type": "object",
+      "required": ["operation_id", "type"],
+      "properties": {
+        "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "type": "string" }
+      }
+    },
+    "AddComponentOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "component"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "add_component" },
+            "component": { "$ref": "#/$defs/ComponentDefinition" }
+          }
+        }
+      ]
+    },
+    "UpdateComponentOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "component"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "update_component" },
+            "component": { "$ref": "#/$defs/ComponentDefinition" },
+            "cascade": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "RemoveComponentOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "component_id"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "remove_component" },
+            "component_id": { "$ref": "#/$defs/Slug" },
+            "cascade": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "AddInstanceOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "instance"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "add_instance" },
+            "instance": { "$ref": "#/$defs/CircuitInstance" }
+          }
+        }
+      ]
+    },
+    "UpdateInstanceOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "instance"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "update_instance" },
+            "instance": { "$ref": "#/$defs/CircuitInstance" }
+          }
+        }
+      ]
+    },
+    "RemoveInstanceOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "instance_id"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "remove_instance" },
+            "instance_id": { "$ref": "#/$defs/Slug" },
+            "cascade": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "AddBoundaryTerminalOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "terminal"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "add_boundary_terminal" },
+            "terminal": { "$ref": "#/$defs/BoundaryTerminal" }
+          }
+        }
+      ]
+    },
+    "UpdateBoundaryTerminalOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "terminal"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "update_boundary_terminal" },
+            "terminal": { "$ref": "#/$defs/BoundaryTerminal" },
+            "cascade": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "RemoveBoundaryTerminalOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "terminal_id"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "remove_boundary_terminal" },
+            "terminal_id": { "$ref": "#/$defs/Slug" },
+            "cascade": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "CreateNetOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "create_net" },
+            "net": { "$ref": "#/$defs/CircuitNet" }
+          }
+        }
+      ]
+    },
+    "UpdateNetOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "update_net" },
+            "net": { "$ref": "#/$defs/CircuitNet" }
+          }
+        }
+      ]
+    },
+    "DeleteNetOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net_id"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "delete_net" },
+            "net_id": { "$ref": "#/$defs/Slug" }
+          }
+        }
+      ]
+    },
+    "ConnectEndpointOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net_id", "endpoint"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "connect_endpoint" },
+            "net_id": { "$ref": "#/$defs/Slug" },
+            "endpoint": { "$ref": "#/$defs/NetEndpoint" }
+          }
+        }
+      ]
+    },
+    "DisconnectEndpointOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net_id", "endpoint"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "disconnect_endpoint" },
+            "net_id": { "$ref": "#/$defs/Slug" },
+            "endpoint": { "$ref": "#/$defs/NetEndpoint" }
+          }
+        }
+      ]
+    },
+    "SetInstanceGeometryOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "instance_id", "geometry"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "set_instance_geometry" },
+            "instance_id": { "$ref": "#/$defs/Slug" },
+            "geometry": { "$ref": "#/$defs/NodeGeometry" }
+          }
+        }
+      ]
+    },
+    "SetTerminalPlacementOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "terminal_key"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "set_terminal_placement" },
+            "terminal_key": { "$ref": "#/$defs/NonEmptyString" },
+            "placement": {
+              "oneOf": [
+                { "$ref": "#/$defs/TerminalPlacement" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SetNetRouteOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "net_id"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "set_net_route" },
+            "net_id": { "$ref": "#/$defs/Slug" },
+            "route": {
+              "oneOf": [
+                { "$ref": "#/$defs/NetRoute" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SetLabelGeometryOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type", "element_key"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "set_label_geometry" },
+            "element_key": { "$ref": "#/$defs/NonEmptyString" },
+            "geometry": {
+              "oneOf": [
+                { "$ref": "#/$defs/LabelGeometry" },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "SetLayoutSettingsOperation": {
+      "allOf": [
+        { "$ref": "#/$defs/OperationBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operation_id", "type"],
+          "properties": {
+            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
+            "type": { "const": "set_layout_settings" },
+            "grid_size": { "type": "number", "exclusiveMinimum": 0 },
+            "direction": { "enum": ["RIGHT", "DOWN"] }
+          }
+        }
+      ]
+    },
+    "CircuitOperation": {
+      "oneOf": [
+        { "$ref": "#/$defs/AddComponentOperation" },
+        { "$ref": "#/$defs/UpdateComponentOperation" },
+        { "$ref": "#/$defs/RemoveComponentOperation" },
+        { "$ref": "#/$defs/AddInstanceOperation" },
+        { "$ref": "#/$defs/UpdateInstanceOperation" },
+        { "$ref": "#/$defs/RemoveInstanceOperation" },
+        { "$ref": "#/$defs/AddBoundaryTerminalOperation" },
+        { "$ref": "#/$defs/UpdateBoundaryTerminalOperation" },
+        { "$ref": "#/$defs/RemoveBoundaryTerminalOperation" },
+        { "$ref": "#/$defs/CreateNetOperation" },
+        { "$ref": "#/$defs/UpdateNetOperation" },
+        { "$ref": "#/$defs/DeleteNetOperation" },
+        { "$ref": "#/$defs/ConnectEndpointOperation" },
+        { "$ref": "#/$defs/DisconnectEndpointOperation" },
+        { "$ref": "#/$defs/SetInstanceGeometryOperation" },
+        { "$ref": "#/$defs/SetTerminalPlacementOperation" },
+        { "$ref": "#/$defs/SetNetRouteOperation" },
+        { "$ref": "#/$defs/SetLabelGeometryOperation" },
+        { "$ref": "#/$defs/SetLayoutSettingsOperation" }
+      ]
+    },
+    "CircuitOperationBatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["request_id", "expected_revision", "operations"],
+      "properties": {
+        "request_id": { "$ref": "#/$defs/NonEmptyString" },
+        "expected_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/CircuitOperation" }
+        }
+      }
+    },
+    "Diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["severity", "code", "message"],
+      "properties": {
+        "severity": { "enum": ["info", "warning", "error"] },
+        "code": { "$ref": "#/$defs/NonEmptyString" },
+        "message": { "$ref": "#/$defs/NonEmptyString" },
+        "element_key": { "type": "string" },
+        "operation_id": { "type": "string" },
+        "path": { "type": "string" }
+      }
+    },
+    "ElementChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": { "enum": ["component", "instance", "boundary_terminal", "net", "layout"] },
+        "id": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "CircuitDiff": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["added", "removed", "changed", "connections_changed"],
+      "properties": {
+        "added": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
+        "removed": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
+        "changed": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
+        "connections_changed": { "type": "array", "items": { "$ref": "#/$defs/Slug" } }
+      }
+    },
+    "CircuitChangeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "diagnostics", "diff", "alias_map"],
+      "properties": {
+        "status": { "enum": ["accepted", "rejected", "conflict", "locked", "provider_failed"] },
+        "snapshot": { "$ref": "#/$defs/CircuitSnapshot" },
+        "candidate": { "$ref": "#/$defs/CircuitDocument" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } },
+        "diff": { "$ref": "#/$defs/CircuitDiff" },
+        "alias_map": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        }
+      }
+    },
+    "EditLease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lease_id", "document_id", "owner_id", "expires_at"],
+      "properties": {
+        "lease_id": { "$ref": "#/$defs/NonEmptyString" },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "owner_id": { "$ref": "#/$defs/NonEmptyString" },
+        "expires_at": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "CircuitProposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "document_id", "base_revision", "title", "summary", "status", "diagnostics", "diff", "created_at"],
+      "properties": {
+        "proposal_id": { "$ref": "#/$defs/NonEmptyString" },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "base_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "title": { "$ref": "#/$defs/NonEmptyString" },
+        "summary": { "$ref": "#/$defs/NonEmptyString" },
+        "rationale": { "type": "string" },
+        "status": { "enum": ["pending", "stale"] },
+        "construction": { "$ref": "#/$defs/CircuitConstruction" },
+        "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } },
+        "diff": { "$ref": "#/$defs/CircuitDiff" },
+        "created_at": { "$ref": "#/$defs/NonEmptyString" }
       },
-      "required": [
-        "severity",
-        "code",
-        "message"
-      ],
-      "title": "ValidationDiagnostic",
-      "type": "object"
+      "oneOf": [
+        { "required": ["construction"] },
+        { "required": ["batch"] }
+      ]
+    },
+    "DocumentSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["document_id", "label", "design_id", "component_count", "instance_count", "net_count", "warning_count"],
+      "properties": {
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "design_id": { "$ref": "#/$defs/Slug" },
+        "component_count": { "type": "integer", "minimum": 0 },
+        "instance_count": { "type": "integer", "minimum": 0 },
+        "net_count": { "type": "integer", "minimum": 0 },
+        "warning_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "ResolvedComponentDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "status": { "enum": ["available", "unavailable"] },
+        "document": { "$ref": "#/$defs/CircuitDocument" },
+        "provider_revision": { "type": "string" },
+        "writable": { "type": "boolean" },
+        "message": { "type": "string" }
+      }
+    },
+    "ProviderCommitRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["component", "base_provider_revision", "batch", "document", "diagnostics"],
+      "properties": {
+        "component": { "$ref": "#/$defs/ComponentDefinition" },
+        "base_provider_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
+        "document": { "$ref": "#/$defs/CircuitDocument" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+      }
+    },
+    "ProviderCommitResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["accepted", "provider_revision", "diagnostics"],
+      "properties": {
+        "accepted": { "type": "boolean" },
+        "provider_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "document": { "$ref": "#/$defs/CircuitDocument" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+      }
+    },
+    "ServiceEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "kind", "document_id", "timestamp"],
+      "properties": {
+        "event_id": { "$ref": "#/$defs/NonEmptyString" },
+        "kind": { "enum": ["document.changed", "lock.changed", "proposal.changed", "provider.requested"] },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "revision": { "type": "string" },
+        "timestamp": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "ServiceError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "$ref": "#/$defs/NonEmptyString" },
+        "message": { "$ref": "#/$defs/NonEmptyString" },
+        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+      }
     }
-  },
-  "additionalProperties": false,
-  "description": "Schema bundle used to generate language-neutral client contracts.",
-  "properties": {
-    "batch": {
-      "$ref": "#/$defs/CommandBatch"
-    },
-    "catalog": {
-      "$ref": "#/$defs/CircuitDesignCatalog"
-    },
-    "graph": {
-      "$ref": "#/$defs/CircuitGraphSnapshot"
-    },
-    "lease": {
-      "$ref": "#/$defs/EditLease"
-    },
-    "preview": {
-      "$ref": "#/$defs/ChangePreview"
-    },
-    "proposal": {
-      "$ref": "#/$defs/AgentProposal"
-    }
-  },
-  "required": [
-    "graph",
-    "catalog",
-    "batch",
-    "preview",
-    "lease",
-    "proposal"
-  ],
-  "title": "CircuitDesignerProtocol",
-  "type": "object"
+  }
 }

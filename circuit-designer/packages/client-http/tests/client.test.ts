@@ -1,49 +1,60 @@
 import { describe, expect, test, vi } from "vitest";
-import { fixtureCatalog, mixedFixture, type CommandBatch } from "@spec2gds/circuit-core";
-import { HttpCircuitDesignerReadApi } from "../src/index";
+import {
+  simpleDocumentFixture,
+  type CircuitChangeResult,
+  type CircuitOperationBatch,
+} from "@spec2gds/circuit-core";
+import { HttpCircuitDesignerBackend } from "../src/index";
 
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
-  status,
-  headers: { "Content-Type": "application/json" },
-});
+const response = (body: unknown, status = 200) => new Response(
+  body === undefined ? undefined : JSON.stringify(body),
+  { status, headers: { "Content-Type": "application/json" } },
+);
 
 describe("HTTP circuit designer client", () => {
-  test("loads and validates catalogs and graphs", async () => {
-    const fetch = vi.fn()
-      .mockResolvedValueOnce(response(fixtureCatalog()))
-      .mockResolvedValueOnce(response(mixedFixture()));
-    const client = new HttpCircuitDesignerReadApi({ baseUrl: "http://example.test/circuit", fetch });
-
-    expect((await client.getCatalog()).designs).toHaveLength(6);
-    expect((await client.getGraph("mixed")).design.id).toBe("mixed");
-    expect(fetch.mock.calls[1][0]).toBe("http://example.test/circuit/designs/mixed");
+  test("loads and validates a canonical snapshot", async () => {
+    const fetch = vi.fn().mockResolvedValue(response({ revision: "1", document: simpleDocumentFixture() }));
+    const client = new HttpCircuitDesignerBackend({ baseUrl: "http://example.test/circuit/v1", fetch });
+    expect((await client.get("fixture_simple")).document.design.id).toBe("simple");
+    expect(fetch.mock.calls[0][0]).toBe("http://example.test/circuit/v1/documents/fixture_simple");
   });
 
   test("rejects invalid transport data", async () => {
-    const client = new HttpCircuitDesignerReadApi({ fetch: vi.fn().mockResolvedValue(response({ designs: [] })) });
-    await expect(client.getCatalog()).rejects.toMatchObject({ status: 502 });
+    const client = new HttpCircuitDesignerBackend({ fetch: vi.fn().mockResolvedValue(response({ revision: "1" })) });
+    await expect(client.get("fixture_simple")).rejects.toMatchObject({ status: 502 });
   });
 
-  test("preserves HTTP status and server detail", async () => {
-    const client = new HttpCircuitDesignerReadApi({ fetch: vi.fn().mockResolvedValue(response({ detail: "No V1 .spec package is open." }, 400)) });
-    await expect(client.getCatalog()).rejects.toMatchObject({
-      status: 400,
-      message: "No V1 .spec package is open.",
+  test("preserves standard error status and envelope message", async () => {
+    const client = new HttpCircuitDesignerBackend({
+      fetch: vi.fn().mockResolvedValue(response({ code: "not_found", message: "No circuit document." }, 404)),
+    });
+    await expect(client.get("fixture_simple")).rejects.toMatchObject({
+      status: 404,
+      message: "No circuit document.",
     });
   });
 
-  test("uses the same revision-guarded batch for preview and apply", async () => {
-    const graph = mixedFixture();
-    const batch: CommandBatch = {
-      batch_id: "batch_1",
-      expected_source_revision_hash: graph.source_revision_hash,
-      commands: [{ type: "set_layout_direction", command_id: "direction_1", design_id: graph.design.id, direction: "DOWN" }],
+  test("uses the same revision-guarded batch for preview and commit", async () => {
+    const batch: CircuitOperationBatch = {
+      request_id: "batch_1",
+      expected_revision: "1",
+      operations: [{
+        operation_id: "direction_1",
+        type: "set_layout_settings",
+        direction: "DOWN",
+      }],
     };
-    const preview = { batch, diagnostics: [], candidate: graph };
-    const fetch = vi.fn().mockResolvedValue(response(preview));
-    const client = new HttpCircuitDesignerReadApi({ fetch });
+    const result: CircuitChangeResult = {
+      status: "accepted",
+      candidate: { ...simpleDocumentFixture(), layout: { ...simpleDocumentFixture().layout, direction: "DOWN" } },
+      diagnostics: [],
+      diff: { added: [], removed: [], changed: [{ kind: "layout", id: "simple" }], connections_changed: [] },
+      alias_map: {},
+    };
+    const fetch = vi.fn().mockResolvedValue(response(result));
+    const client = new HttpCircuitDesignerBackend({ fetch });
 
-    expect((await client.apply(batch, "lease_1")).candidate?.design.id).toBe("mixed");
+    expect((await client.commit("fixture_simple", batch, "lease_1")).status).toBe("accepted");
     expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ batch, lease_id: "lease_1" });
   });
 });

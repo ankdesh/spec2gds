@@ -16,12 +16,8 @@ from spec2gds.agent_spec.spec_format.v1_api import (
     OpenDocumentRequest,
     ProposalRequest,
     TransactionRequest,
-    CircuitApplyRequest,
-    CircuitHistoryRequest,
-    CircuitLeaseRequest,
     create_app,
 )
-from spec2gds.agent_spec.circuit_designer.contracts import CommandBatch, NodeGeometry, SetNodeGeometryCommand
 
 
 def _endpoints() -> dict[str, object]:
@@ -33,7 +29,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()
     samples = endpoints["samples"]()["samples"]
-    assert len(samples) == 7
+    assert len(samples) == 11
     assert samples[0]["name"] == "V1 Demo"
     assert all(Path(sample["path"]).is_file() for sample in samples)
     assert {sample["name"] for sample in samples[1:]} == {
@@ -43,6 +39,10 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         "Hardware · Cv Hpdcache Csrs",
         "Hardware · Cv Hpdcache Interface",
         "Hardware · Cvfpu Readme",
+        "SystemC · Fifo Backpressure Hw Spec",
+        "SystemC · Pipelined Alu Hw Spec",
+        "SystemC · Simple Pipeline Hw Spec",
+        "SystemC · Switch Arbitration Hw Spec",
     }
     editor_html = endpoints["editor"]()
     assert "A2UI Document Editor" in editor_html
@@ -133,62 +133,6 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
         assert rejected.value.status_code == 422
         assert "legacy ODT" in str(rejected.value.detail)
         assert opened["source_revision_hash"]
-
-
-def test_circuit_designer_read_api_projects_the_active_specir() -> None:
-    endpoints = _endpoints()
-    sample_path = Path(endpoints["samples"]()["samples"][0]["path"])
-    opened = endpoints["open_document"](OpenDocumentRequest(path=str(sample_path)))
-
-    catalog = endpoints["circuit_designer_catalog"]()
-    assert catalog["document_id"] == opened["document_id"]
-    assert catalog["source_revision_hash"] == opened["source_revision_hash"]
-    assert catalog["entry_design_ids"] == ["design_top_a", "design_top_b"]
-
-    graph = endpoints["circuit_designer_graph"]("design_subsystem_internal")
-    assert graph["design"]["id"] == "design_subsystem_internal"
-    assert [node["label"] for node in graph["nodes"]] == ["leaf0", "sink0"]
-    assert graph["capabilities"] == {
-        "edit_topology": True,
-        "edit_layout": True,
-        "replace_component": True,
-        "edit_instance_details": False,
-        "submit_agent_proposal": True,
-    }
-
-    with pytest.raises(fastapi.HTTPException) as missing:
-        endpoints["circuit_designer_graph"]("missing")
-    assert missing.value.status_code == 404
-
-
-def test_circuit_designer_edit_routes_lock_apply_and_undo(tmp_path: Path) -> None:
-    endpoints = _endpoints()
-    package_path = tmp_path / "editable.spec"
-    write_v1_sample(package_path)
-    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
-    lease = endpoints["acquire_circuit_designer_lease"](CircuitLeaseRequest(owner_id="browser", owner_kind="human"))
-    batch = CommandBatch(
-        batch_id="api_layout",
-        expected_source_revision_hash=opened["source_revision_hash"],
-        commands=(SetNodeGeometryCommand(
-            command_id="move_leaf",
-            design_id="design_subsystem_internal",
-            node_id="instance:leaf0",
-            geometry=NodeGeometry(x=12, y=24, width=180, height=84),
-        ),),
-    )
-
-    preview = endpoints["preview_circuit_designer_commands"](batch)
-    assert preview["candidate"]["layout"]["node_geometry"]["instance:leaf0"]["x"] == 12
-    applied = endpoints["apply_circuit_designer_commands"](CircuitApplyRequest(batch=batch, lease_id=lease["lease_id"]))
-    assert applied["candidate"]["capabilities"]["edit_layout"] is True
-    assert endpoints["circuit_designer_history"]() == {"can_undo": True, "can_redo": False}
-
-    undone = endpoints["undo_circuit_designer"](CircuitHistoryRequest(lease_id=lease["lease_id"], design_id="design_subsystem_internal"))
-    assert undone["can_redo"] is True
-    with pytest.raises(fastapi.HTTPException) as locked:
-        endpoints["acquire_circuit_designer_lease"](CircuitLeaseRequest(owner_id="agent", owner_kind="agent"))
-    assert locked.value.status_code == 409
 
 
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:

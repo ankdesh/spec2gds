@@ -1,267 +1,251 @@
 import type {
-  CircuitComponentDefinition,
-  CircuitDesignCatalog,
-  CircuitGraphSnapshot,
+  CircuitDocument,
+  CircuitInstance,
   CircuitNet,
-  CircuitNode,
-  CircuitTerminal,
+  ComponentDefinition,
+  TerminalDefinition,
 } from "./types.generated";
+import { emptyLayout, projectDocument, type CircuitGraphView } from "./model";
 
-const protocol_version = "circuit-designer.v1" as const;
-const source_revision_hash = `sha256:${"0".repeat(64)}`;
-
-const source = (source_id: string, kind: string) => ({ source_id, kind });
-
-function component(id: string): CircuitComponentDefinition {
-  return { id, label: id, vlnv: `example:fixture:${id}:1.0`, source_ref: source(id, "component") };
-}
-
-function port(node: string, name: string, direction: "in" | "out" | "inout"): CircuitTerminal {
-  return {
-    id: `${node}:port:${name}`,
-    node_id: node,
-    label: name,
-    kind: "port",
-    direction,
-    mapped_port_ids: [],
-    declared_bounds: [],
-    source_ref: source(`${node}:${name}`, "port"),
-  };
-}
-
-function iface(node: string, name: string, role: "initiator" | "target"): CircuitTerminal {
-  return {
-    id: `${node}:interface:${name}`,
-    node_id: node,
-    label: name,
-    kind: "interface",
-    role,
-    bus_vlnv: "example:fixture:bus:1.0",
-    abstraction_vlnv: "example:fixture:bus_wire:1.0",
-    mapped_port_ids: [],
-    declared_bounds: [],
-    source_ref: source(`${node}:${name}`, "interface"),
-  };
-}
-
-function node(id: string, component_id: string, terminals: CircuitTerminal[]): CircuitNode {
-  return {
-    id,
-    label: id,
-    component_id,
-    component_vlnv: `example:fixture:${component_id}:1.0`,
-    terminal_ids: terminals.map((terminal) => terminal.id),
-    configuration_values: {},
-    source_ref: source(id, "instance"),
-  };
-}
-
-function net(id: string, kind: "interface" | "ad_hoc", terminalIds: string[]): CircuitNet {
-  return {
-    id,
-    label: id,
-    kind,
-    endpoints: terminalIds.map((terminal_id) => ({ terminal_id })) as CircuitNet["endpoints"],
-    source_ref: source(id, "connection"),
-  };
-}
-
-function graph(
+function terminal(
   id: string,
-  components: CircuitComponentDefinition[],
-  nodes: CircuitNode[],
-  terminals: CircuitTerminal[],
-  nets: CircuitNet[],
-): CircuitGraphSnapshot {
+  direction: "input" | "output",
+  category: "port" | "interface" = "port",
+  width = 1,
+): TerminalDefinition {
+  return { id, label: id, direction, width, category };
+}
+
+function component(id: string, terminals: TerminalDefinition[]): ComponentDefinition {
   return {
-    protocol_version,
-    document_id: `fixture_${id}`,
-    source_revision_hash,
-    design: { id, label: id, vlnv: `example:fixture:${id}:1.0`, source_ref: source(id, "design") },
-    breadcrumbs: [],
-    capabilities: {
-      edit_topology: false,
-      edit_layout: false,
-      replace_component: false,
-      edit_instance_details: false,
-      submit_agent_proposal: false,
-    },
-    components,
-    nodes,
+    id,
+    label: id,
+    origin: "local",
+    editable: true,
     terminals,
-    nets,
+    parameters: [],
+    appearance: { renderer_key: "generic", properties: {} },
   };
 }
 
-export function simpleFixture(): CircuitGraphSnapshot {
-  const producerPort = port("producer_0", "data", "out");
-  const consumerPort = port("consumer_0", "data", "in");
-  return graph(
+function instance(id: string, component_id: string): CircuitInstance {
+  return { id, label: id, component_id, parameter_values: {} };
+}
+
+function endpoint(instance_id: string, terminal_id: string): CircuitNet["endpoints"][number] {
+  return { kind: "instance", instance_id, terminal_id };
+}
+
+function document(
+  id: string,
+  components: ComponentDefinition[],
+  instances: CircuitInstance[],
+  nets: CircuitNet[],
+): CircuitDocument {
+  return {
+    protocol_version: "circuit-designer.v1",
+    document_id: `fixture_${id}`,
+    label: id,
+    components,
+    design: {
+      id,
+      label: id,
+      boundary_terminals: [],
+      instances,
+      nets,
+    },
+    layout: emptyLayout(),
+  };
+}
+
+export function simpleDocumentFixture(): CircuitDocument {
+  return document(
     "simple",
-    [component("producer"), component("consumer")],
-    [node("producer_0", "producer", [producerPort]), node("consumer_0", "consumer", [consumerPort])],
-    [producerPort, consumerPort],
-    [net("data", "ad_hoc", [producerPort.id, consumerPort.id])],
+    [component("producer", [terminal("data", "output")]), component("consumer", [terminal("data", "input")])],
+    [instance("producer_0", "producer"), instance("consumer_0", "consumer")],
+    [{ id: "data", label: "data", endpoints: [endpoint("producer_0", "data"), endpoint("consumer_0", "data")] }],
   );
 }
 
-export function mixedFixture(): CircuitGraphSnapshot {
-  const initiator = iface("cpu_0", "bus", "initiator");
-  const irqIn = port("cpu_0", "irq", "in");
-  const target = iface("peripheral_0", "bus", "target");
-  const irqOut = port("peripheral_0", "irq", "out");
-  return graph(
+export function mixedDocumentFixture(): CircuitDocument {
+  return document(
     "mixed",
-    [component("cpu"), component("peripheral")],
-    [node("cpu_0", "cpu", [irqIn, initiator]), node("peripheral_0", "peripheral", [target, irqOut])],
-    [irqIn, initiator, target, irqOut],
-    [net("system_bus", "interface", [initiator.id, target.id]), net("irq", "ad_hoc", [irqOut.id, irqIn.id])],
+    [
+      component("cpu", [terminal("irq", "input"), terminal("bus", "output", "interface", 32)]),
+      component("peripheral", [terminal("bus", "input", "interface", 32), terminal("irq", "output")]),
+    ],
+    [instance("cpu_0", "cpu"), instance("peripheral_0", "peripheral")],
+    [
+      { id: "system_bus", label: "system bus", endpoints: [endpoint("cpu_0", "bus"), endpoint("peripheral_0", "bus")] },
+      { id: "irq", label: "irq", endpoints: [endpoint("peripheral_0", "irq"), endpoint("cpu_0", "irq")] },
+    ],
   );
 }
 
-export function hyperedgeFixture(): CircuitGraphSnapshot {
-  const output = port("source_0", "broadcast", "out");
-  const inputs = [0, 1, 2].map((index) => port(`sink_${index}`, "broadcast", "in"));
-  return graph(
+export function hyperedgeDocumentFixture(): CircuitDocument {
+  return document(
     "hyperedge",
-    [component("source"), component("sink")],
-    [node("source_0", "source", [output]), ...inputs.map((terminal, index) => node(`sink_${index}`, "sink", [terminal]))],
-    [output, ...inputs],
-    [net("broadcast", "ad_hoc", [output.id, ...inputs.map((terminal) => terminal.id)])],
+    [component("source", [terminal("broadcast", "output")]), component("sink", [terminal("broadcast", "input")])],
+    [instance("source_0", "source"), ...[0, 1, 2].map((index) => instance(`sink_${index}`, "sink"))],
+    [{
+      id: "broadcast",
+      label: "broadcast",
+      endpoints: [
+        endpoint("source_0", "broadcast"),
+        endpoint("sink_0", "broadcast"),
+        endpoint("sink_1", "broadcast"),
+        endpoint("sink_2", "broadcast"),
+      ],
+    }],
   );
 }
 
-export function hierarchyFixture(): CircuitGraphSnapshot {
-  const input = port("pipeline_0", "request", "in");
-  const output = port("pipeline_0", "response", "out");
-  const boundaryIn: CircuitTerminal = {
-    id: "boundary:port:request",
-    label: "request",
-    kind: "boundary_port",
-    direction: "in",
-    mapped_port_ids: [],
-    declared_bounds: [],
-    source_ref: source("boundary:request", "boundary_port"),
-  };
-  const boundaryOut: CircuitTerminal = {
-    id: "boundary:port:response",
-    label: "response",
-    kind: "boundary_port",
-    direction: "out",
-    mapped_port_ids: [],
-    declared_bounds: [],
-    source_ref: source("boundary:response", "boundary_port"),
-  };
-  const result = graph(
+export function hierarchyDocumentFixture(): CircuitDocument {
+  const result = document(
     "hierarchy",
-    [component("pipeline")],
-    [node("pipeline_0", "pipeline", [input, output])],
-    [boundaryIn, input, output, boundaryOut],
-    [net("request", "ad_hoc", [boundaryIn.id, input.id]), net("response", "ad_hoc", [output.id, boundaryOut.id])],
+    [component("pipeline", [terminal("request", "input"), terminal("response", "output")])],
+    [instance("pipeline_0", "pipeline")],
+    [
+      {
+        id: "request",
+        label: "request",
+        endpoints: [
+          { kind: "boundary", terminal_id: "request" },
+          endpoint("pipeline_0", "request"),
+        ],
+      },
+      {
+        id: "response",
+        label: "response",
+        endpoints: [
+          endpoint("pipeline_0", "response"),
+          { kind: "boundary", terminal_id: "response" },
+        ],
+      },
+    ],
   );
-  result.breadcrumbs = [
-    { id: "top", label: "top", vlnv: "example:fixture:top:1.0", source_ref: source("top", "design") },
+  result.design.boundary_terminals = [
+    { id: "request", label: "request", direction: "input", width: 1, category: "port" },
+    { id: "response", label: "response", direction: "output", width: 1, category: "port" },
   ];
   return result;
 }
 
-export function cycleFixture(): CircuitGraphSnapshot {
-  const terminals: CircuitTerminal[] = [];
-  const nodes: CircuitNode[] = [];
-  for (let index = 0; index < 3; index += 1) {
-    const input = port(`stage_${index}`, "in", "in");
-    const output = port(`stage_${index}`, "out", "out");
-    terminals.push(input, output);
-    nodes.push(node(`stage_${index}`, "stage", [input, output]));
-  }
-  return graph(
+export function cycleDocumentFixture(): CircuitDocument {
+  return document(
     "cycle",
-    [component("stage")],
-    nodes,
-    terminals,
-    [0, 1, 2].map((index) => net(`feedback_${index}`, "ad_hoc", [`stage_${index}:port:out`, `stage_${(index + 1) % 3}:port:in`])),
+    [component("stage", [terminal("input", "input"), terminal("output", "output")])],
+    [0, 1, 2].map((index) => instance(`stage_${index}`, "stage")),
+    [0, 1, 2].map((index) => ({
+      id: `feedback_${index}`,
+      label: `feedback ${index}`,
+      endpoints: [
+        endpoint(`stage_${index}`, "output"),
+        endpoint(`stage_${(index + 1) % 3}`, "input"),
+      ],
+    })),
   );
 }
 
-export function crossingFixture(): CircuitGraphSnapshot {
-  const left = port("left_0", "east", "out");
-  const right = port("right_0", "west", "in");
-  const top = port("top_0", "south", "inout");
-  const bottom = port("bottom_0", "north", "inout");
-  const result = graph(
+export function crossingDocumentFixture(): CircuitDocument {
+  const result = document(
     "crossing",
-    [component("left"), component("right"), component("top"), component("bottom")],
-    [node("left_0", "left", [left]), node("right_0", "right", [right]), node("top_0", "top", [top]), node("bottom_0", "bottom", [bottom])],
-    [left, right, top, bottom],
-    [net("horizontal", "ad_hoc", [left.id, right.id]), net("vertical", "ad_hoc", [top.id, bottom.id])],
+    [
+      component("left", [terminal("east", "output")]),
+      component("right", [terminal("west", "input")]),
+      component("top", [terminal("south", "output")]),
+      component("bottom", [terminal("north", "input")]),
+    ],
+    [instance("left_0", "left"), instance("right_0", "right"), instance("top_0", "top"), instance("bottom_0", "bottom")],
+    [
+      { id: "horizontal", label: "horizontal", endpoints: [endpoint("left_0", "east"), endpoint("right_0", "west")] },
+      { id: "vertical", label: "vertical", endpoints: [endpoint("top_0", "south"), endpoint("bottom_0", "north")] },
+    ],
   );
-  result.layout = {
-    direction: "RIGHT",
-    node_geometry: {
-      left_0: { x: 0, y: 80, width: 180, height: 120, pinned: true },
-      right_0: { x: 400, y: 80, width: 180, height: 120, pinned: true },
-      top_0: { x: 240, y: 0, width: 180, height: 80, pinned: true },
-      bottom_0: { x: 240, y: 220, width: 180, height: 80, pinned: true },
+  result.layout.instance_geometry = {
+    left_0: { x: 0, y: 80, width: 180, height: 120, pinned: true },
+    right_0: { x: 400, y: 80, width: 180, height: 120, pinned: true },
+    top_0: { x: 240, y: 0, width: 180, height: 80, pinned: true },
+    bottom_0: { x: 240, y: 220, width: 180, height: 80, pinned: true },
+  };
+  result.layout.terminal_placements = {
+    "left_0:east": { side: "EAST", order: 0, locked: true },
+    "right_0:west": { side: "WEST", order: 0, locked: true },
+    "top_0:south": { side: "SOUTH", order: 0, locked: true },
+    "bottom_0:north": { side: "NORTH", order: 0, locked: true },
+  };
+  result.layout.net_routes = {
+    horizontal: {
+      vertices: [
+        { id: "h-left", kind: "endpoint", terminal_id: "left_0:east", point: { x: 180, y: 140 } },
+        { id: "h-right", kind: "endpoint", terminal_id: "right_0:west", point: { x: 400, y: 140 } },
+      ],
+      segments: [{ id: "h-crossing", from_vertex: "h-left", to_vertex: "h-right" }],
     },
-    terminal_placements: {
-      [left.id]: { side: "EAST", order: 0, locked: true },
-      [right.id]: { side: "WEST", order: 0, locked: true },
-      [top.id]: { side: "SOUTH", order: 0, locked: true },
-      [bottom.id]: { side: "NORTH", order: 0, locked: true },
-    },
-    net_routes: {
-      horizontal: {
-        vertices: [
-          { id: "h-left", kind: "endpoint", terminal_id: left.id, point: { x: 180, y: 140 } },
-          { id: "h-right", kind: "endpoint", terminal_id: right.id, point: { x: 400, y: 140 } },
-        ],
-        segments: [{ id: "h-crossing", from_vertex: "h-left", to_vertex: "h-right" }],
-      },
-      vertical: {
-        vertices: [
-          { id: "v-top", kind: "endpoint", terminal_id: top.id, point: { x: 300, y: 80 } },
-          { id: "v-bottom", kind: "endpoint", terminal_id: bottom.id, point: { x: 300, y: 220 } },
-        ],
-        segments: [{ id: "v-crossing", from_vertex: "v-top", to_vertex: "v-bottom" }],
-      },
+    vertical: {
+      vertices: [
+        { id: "v-top", kind: "endpoint", terminal_id: "top_0:south", point: { x: 300, y: 80 } },
+        { id: "v-bottom", kind: "endpoint", terminal_id: "bottom_0:north", point: { x: 300, y: 220 } },
+      ],
+      segments: [{ id: "v-crossing", from_vertex: "v-top", to_vertex: "v-bottom" }],
     },
   };
   return result;
 }
 
-export function largeFixture(instanceCount = 200): CircuitGraphSnapshot {
-  const terminals: CircuitTerminal[] = [];
-  const nodes: CircuitNode[] = [];
-  for (let index = 0; index < instanceCount; index += 1) {
-    const input = port(`block_${index}`, "in", "in");
-    const output = port(`block_${index}`, "out", "out");
-    terminals.push(input, output);
-    nodes.push(node(`block_${index}`, "block", [input, output]));
-  }
+export function largeDocumentFixture(instanceCount = 200): CircuitDocument {
+  const block = component("block", [
+    terminal("chain_in", "input"),
+    terminal("chain_out", "output"),
+    terminal("skip_in", "input"),
+    terminal("skip_out", "output"),
+  ]);
+  const instances = Array.from({ length: instanceCount }, (_, index) => instance(`block_${index}`, "block"));
   const nets: CircuitNet[] = [];
   for (let index = 0; index < instanceCount - 1; index += 1) {
-    nets.push(net(`chain_${index}`, "ad_hoc", [`block_${index}:port:out`, `block_${index + 1}:port:in`]));
-    nets.push(net(`skip_${index}`, "ad_hoc", [`block_${index}:port:out`, `block_${(index + 7) % instanceCount}:port:in`]));
+    nets.push({
+      id: `chain_${index}`,
+      label: `chain ${index}`,
+      endpoints: [endpoint(`block_${index}`, "chain_out"), endpoint(`block_${index + 1}`, "chain_in")],
+    });
   }
-  return graph("large", [component("block")], nodes, terminals, nets);
+  for (let index = 0; index < instanceCount - 7; index += 1) {
+    nets.push({
+      id: `skip_${index}`,
+      label: `skip ${index}`,
+      endpoints: [endpoint(`block_${index}`, "skip_out"), endpoint(`block_${index + 7}`, "skip_in")],
+    });
+  }
+  return document("large", [block], instances, nets);
 }
 
+export const documentFixtures = {
+  simple: simpleDocumentFixture,
+  mixed: mixedDocumentFixture,
+  hyperedge: hyperedgeDocumentFixture,
+  hierarchy: hierarchyDocumentFixture,
+  cycle: cycleDocumentFixture,
+  crossing: crossingDocumentFixture,
+  large: largeDocumentFixture,
+};
+
+export function simpleFixture(): CircuitGraphView { return projectDocument(simpleDocumentFixture(), "fixture"); }
+export function mixedFixture(): CircuitGraphView { return projectDocument(mixedDocumentFixture(), "fixture"); }
+export function hyperedgeFixture(): CircuitGraphView { return projectDocument(hyperedgeDocumentFixture(), "fixture"); }
+export function hierarchyFixture(): CircuitGraphView { return projectDocument(hierarchyDocumentFixture(), "fixture"); }
+export function cycleFixture(): CircuitGraphView { return projectDocument(cycleDocumentFixture(), "fixture"); }
+export function crossingFixture(): CircuitGraphView { return projectDocument(crossingDocumentFixture(), "fixture"); }
+export function largeFixture(instanceCount = 200): CircuitGraphView {
+  return projectDocument(largeDocumentFixture(instanceCount), "fixture");
+}
+
+/** Renderer fixtures retained as projections while the canvas migrates incrementally. */
 export const fixtures = {
   simple: simpleFixture,
   mixed: mixedFixture,
   hyperedge: hyperedgeFixture,
   hierarchy: hierarchyFixture,
   cycle: cycleFixture,
+  crossing: crossingFixture,
   large: largeFixture,
 };
-
-export function fixtureCatalog(): CircuitDesignCatalog {
-  const designs = Object.entries(fixtures).map(([name, build]) => build().design);
-  return {
-    protocol_version,
-    document_id: "fixture_catalog",
-    source_revision_hash,
-    designs,
-    entry_design_ids: designs.map((design) => design.id),
-  };
-}

@@ -16,10 +16,10 @@ import {
 function lineRoute(): NetRoute {
   return ensureRouteIds({
     vertices: [
-      { id: "source", kind: "endpoint", terminal_id: "producer_0:port:data", point: { x: 0, y: 0 } },
+      { id: "source", kind: "endpoint", terminal_id: "producer_0:data", point: { x: 0, y: 0 } },
       { id: "source-stub", kind: "bend", point: { x: 20, y: 0 } },
       { id: "target-stub", kind: "bend", point: { x: 80, y: 0 } },
-      { id: "target", kind: "endpoint", terminal_id: "consumer_0:port:data", point: { x: 100, y: 0 } },
+      { id: "target", kind: "endpoint", terminal_id: "consumer_0:data", point: { x: 100, y: 0 } },
     ],
     segments: [
       { id: "source-segment", from_vertex: "source", to_vertex: "source-stub" },
@@ -68,7 +68,7 @@ describe("renderer-independent route editing", () => {
   test("reanchors one moved endpoint without changing the opposite endpoint or trunk id", () => {
     const route = lineRoute();
     const moved = reanchorRouteEndpoints(route, {
-      "producer_0:port:data": { point: { x: 20, y: 80 }, stub: { x: 40, y: 80 } },
+      "producer_0:data": { point: { x: 20, y: 80 }, stub: { x: 40, y: 80 } },
     });
     expect(moved.vertices.find((vertex) => vertex.id === "source")?.point).toEqual({ x: 20, y: 80 });
     expect(moved.vertices.find((vertex) => vertex.id === "target")?.point).toEqual({ x: 100, y: 0 });

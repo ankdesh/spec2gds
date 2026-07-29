@@ -1,98 +1,41 @@
 import Ajv2020, { type ErrorObject, type ValidateFunction } from "ajv/dist/2020.js";
 import protocolSchema from "./protocol.schema.json";
+import type {
+  CircuitDocument,
+  Diagnostic,
+  NetRoute,
+} from "./types.generated";
+import type { CircuitGraphView } from "./model";
+import { validateDocumentSemantics } from "./model";
 
 export * from "./types.generated";
+export * from "./model";
+export * from "./engine";
+export * from "./draft";
+export * from "./primitives";
 export * from "./fixtures";
+export * from "./backend";
+export * from "./hierarchy";
+export * from "./export";
+export * from "./tools";
 export * from "./route-editor";
-
-import type {
-  AgentProposal,
-  ChangePreview,
-  CircuitDesignerProtocol,
-  CircuitDesignCatalog,
-  CircuitGraphSnapshot,
-  CircuitNet,
-  CircuitNode,
-  CircuitTerminal,
-  CommandBatch,
-  Commands,
-  EditLease,
-  NetRoute,
-  ValidationDiagnostic,
-} from "./types.generated";
-
-export type DesignerCommand = Commands[number];
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const definitions = (protocolSchema as { $defs?: Record<string, unknown> }).$defs ?? {};
-const graphValidator: ValidateFunction<CircuitGraphSnapshot> = ajv.compile({
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $ref: "#/$defs/CircuitGraphSnapshot",
-  $defs: definitions,
-});
-const catalogValidator: ValidateFunction<CircuitDesignCatalog> = ajv.compile({
-  $schema: "https://json-schema.org/draft/2020-12/schema",
-  $ref: "#/$defs/CircuitDesignCatalog",
-  $defs: definitions,
-});
-const protocolValidator: ValidateFunction<CircuitDesignerProtocol> = ajv.compile(protocolSchema);
+const protocolValidator = ajv.compile(protocolSchema);
+const definitionValidators = new Map<string, ValidateFunction>();
 
-export interface ValidationResult {
+export interface SchemaValidationResult {
   valid: boolean;
   errors: ErrorObject[];
 }
 
-export function validateGraph(value: unknown): ValidationResult {
-  const valid = graphValidator(value);
-  return { valid, errors: valid ? [] : [...(graphValidator.errors ?? [])] };
+export interface DocumentValidationResult extends SchemaValidationResult {
+  diagnostics: Diagnostic[];
 }
 
-export function validateCatalog(value: unknown): ValidationResult {
-  const valid = catalogValidator(value);
-  return { valid, errors: valid ? [] : [...(catalogValidator.errors ?? [])] };
-}
-
-export interface CircuitDesignerReadOptions {
-  signal?: AbortSignal;
-}
-
-/** Renderer-independent read interface shared by UI code and programmatic clients. */
-export interface CircuitDesignerReadApi {
-  getCatalog(options?: CircuitDesignerReadOptions): Promise<CircuitDesignCatalog>;
-  getGraph(designId: string, options?: CircuitDesignerReadOptions): Promise<CircuitGraphSnapshot>;
-}
-
-export interface CircuitHistoryStatus {
-  can_undo: boolean;
-  can_redo: boolean;
-}
-
-export interface CircuitHistoryResult extends CircuitHistoryStatus {
-  graph: CircuitGraphSnapshot;
-}
-
-export interface CircuitDesignerApi extends CircuitDesignerReadApi {
-  getLease(options?: CircuitDesignerReadOptions): Promise<EditLease | null>;
-  acquireLease(ownerId: string, ownerKind: "human" | "agent", ttlSeconds?: number): Promise<EditLease>;
-  releaseLease(leaseId: string): Promise<void>;
-  preview(batch: CommandBatch): Promise<ChangePreview>;
-  apply(batch: CommandBatch, leaseId: string): Promise<ChangePreview>;
-  getHistory(): Promise<CircuitHistoryStatus>;
-  undo(leaseId: string, designId: string): Promise<CircuitHistoryResult>;
-  redo(leaseId: string, designId: string): Promise<CircuitHistoryResult>;
-  listProposals(): Promise<AgentProposal[]>;
-  submitProposal(proposal: AgentProposal): Promise<AgentProposal>;
-  decideProposal(proposalId: string, decision: "accepted" | "rejected", leaseId?: string): Promise<AgentProposal>;
-}
-
-export function validateProtocol(value: unknown): ValidationResult {
-  const valid = protocolValidator(value);
-  return { valid, errors: valid ? [] : [...(protocolValidator.errors ?? [])] };
-}
-
-const definitionValidators = new Map<string, ValidateFunction>();
-
-export function validateContractDefinition(name: string, value: unknown): ValidationResult {
+/** Validate any named JSON Schema definition from the published protocol bundle. */
+export function validateContractDefinition(name: string, value: unknown): SchemaValidationResult {
   let validator = definitionValidators.get(name);
   if (!validator) {
     if (!(name in definitions)) return { valid: false, errors: [] };
@@ -107,71 +50,51 @@ export function validateContractDefinition(name: string, value: unknown): Valida
   return { valid, errors: valid ? [] : [...(validator.errors ?? [])] };
 }
 
-export interface GraphIndex {
-  nodes: Map<string, CircuitNode>;
-  terminals: Map<string, CircuitTerminal>;
-  nets: Map<string, CircuitNet>;
-  terminalNets: Map<string, CircuitNet[]>;
+export function validateProtocol(value: unknown): SchemaValidationResult {
+  const valid = protocolValidator(value);
+  return { valid, errors: valid ? [] : [...(protocolValidator.errors ?? [])] };
 }
 
-export function indexGraph(graph: CircuitGraphSnapshot): GraphIndex {
-  const terminalNets = new Map<string, CircuitNet[]>();
-  for (const terminal of graph.terminals) terminalNets.set(terminal.id, []);
-  for (const net of graph.nets) {
-    for (const endpoint of net.endpoints) {
-      terminalNets.get(endpoint.terminal_id)?.push(net);
-    }
+/** Run both portable JSON shape validation and cross-reference/electrical validation. */
+export function validateCircuitDocument(value: unknown): DocumentValidationResult {
+  const schema = validateContractDefinition("CircuitDocument", value);
+  if (!schema.valid) {
+    return {
+      ...schema,
+      diagnostics: schema.errors.map((error) => ({
+        severity: "error",
+        code: "schema_validation",
+        message: `${error.instancePath || "/"} ${error.message ?? "is invalid"}`,
+        ...(error.instancePath ? { path: error.instancePath } : {}),
+      })),
+    };
   }
+  const diagnostics = validateDocumentSemantics(value as CircuitDocument);
   return {
-    nodes: new Map(graph.nodes.map((node) => [node.id, node])),
-    terminals: new Map(graph.terminals.map((terminal) => [terminal.id, terminal])),
-    nets: new Map(graph.nets.map((net) => [net.id, net])),
-    terminalNets,
+    ...schema,
+    valid: !diagnostics.some((item) => item.severity === "error"),
+    diagnostics,
   };
 }
 
-export function connectedNodeIds(graph: CircuitGraphSnapshot, nodeId: string): string[] {
-  const index = indexGraph(graph);
-  const node = index.nodes.get(nodeId);
-  if (!node) return [];
-  const connected = new Set<string>();
-  for (const terminalId of node.terminal_ids ?? []) {
-    for (const net of index.terminalNets.get(terminalId) ?? []) {
-      for (const endpoint of net.endpoints) {
-        const peerNode = index.terminals.get(endpoint.terminal_id)?.node_id;
-        if (peerNode && peerNode !== nodeId) connected.add(peerNode);
-      }
-    }
-  }
-  return [...connected].sort();
-}
-
-export function createCommandBatch(
-  batchId: string,
-  expectedSourceRevisionHash: string,
-  commands: DesignerCommand[],
-): CommandBatch {
-  if (!commands.length) throw new Error("A command batch requires at least one command.");
-  return {
-    batch_id: batchId,
-    expected_source_revision_hash: expectedSourceRevisionHash,
-    commands: commands as Commands,
-  };
-}
-
-/** Validate route-tree topology and its correspondence with one semantic net. */
-export function validateNetRoute(graph: CircuitGraphSnapshot, netId: string, route: NetRoute): ValidationDiagnostic[] {
-  const diagnostics: ValidationDiagnostic[] = [];
+/** Validate route-tree topology and its correspondence with one flattened semantic net. */
+export function validateNetRoute(graph: CircuitGraphView, netId: string, route: NetRoute): Diagnostic[] {
+  const diagnostics: Diagnostic[] = [];
   const report = (code: string, message: string): void => {
-    diagnostics.push({ severity: "error", code, message, element_id: netId });
+    diagnostics.push({ severity: "error", code, message, element_key: netId });
   };
   const net = graph.nets.find((item) => item.id === netId);
-  if (!net) { report("unknown_net", `Unknown net: ${netId}`); return diagnostics; }
+  if (!net) {
+    report("unknown_net", `Unknown net: ${netId}`);
+    return diagnostics;
+  }
   const vertices = new Map<string, NetRoute["vertices"][number]>();
   for (const vertex of route.vertices) {
     if (vertices.has(vertex.id)) report("duplicate_route_vertex", `Route vertex id is duplicated: ${vertex.id}`);
     vertices.set(vertex.id, vertex);
-    if (!Number.isFinite(vertex.point.x) || !Number.isFinite(vertex.point.y)) report("invalid_route_coordinate", `Route vertex ${vertex.id} has a non-finite coordinate.`);
+    if (!Number.isFinite(vertex.point.x) || !Number.isFinite(vertex.point.y)) {
+      report("invalid_route_coordinate", `Route vertex ${vertex.id} has a non-finite coordinate.`);
+    }
   }
   const segmentIds = new Set<string>();
   const segmentKeys = new Set<string>();
@@ -182,13 +105,20 @@ export function validateNetRoute(graph: CircuitGraphSnapshot, netId: string, rou
     segmentIds.add(id);
     const start = vertices.get(segment.from_vertex);
     const end = vertices.get(segment.to_vertex);
-    if (!start || !end) { report("unknown_route_vertex", `Route segment ${id} references an unknown vertex.`); continue; }
+    if (!start || !end) {
+      report("unknown_route_vertex", `Route segment ${id} references an unknown vertex.`);
+      continue;
+    }
     const key = [start.id, end.id].sort().join("|");
     if (segmentKeys.has(key)) report("duplicate_route_segment", `Route contains duplicate segment ${key}.`);
     segmentKeys.add(key);
-    if (start.id === end.id || (start.point.x === end.point.x && start.point.y === end.point.y)) report("zero_length_route_segment", `Route segment ${id} has zero length.`);
-    else if (start.point.x !== end.point.x && start.point.y !== end.point.y) report("diagonal_route_segment", `Route segment ${id} is not orthogonal.`);
-    adjacency.get(start.id)?.add(end.id); adjacency.get(end.id)?.add(start.id);
+    if (start.id === end.id || (start.point.x === end.point.x && start.point.y === end.point.y)) {
+      report("zero_length_route_segment", `Route segment ${id} has zero length.`);
+    } else if (start.point.x !== end.point.x && start.point.y !== end.point.y) {
+      report("diagonal_route_segment", `Route segment ${id} is not orthogonal.`);
+    }
+    adjacency.get(start.id)?.add(end.id);
+    adjacency.get(end.id)?.add(start.id);
   }
   if (vertices.size) {
     const visited = new Set<string>();
@@ -196,15 +126,22 @@ export function validateNetRoute(graph: CircuitGraphSnapshot, netId: string, rou
     while (stack.length) {
       const id = stack.pop()!;
       if (visited.has(id)) continue;
-      visited.add(id); stack.push(...(adjacency.get(id) ?? []));
+      visited.add(id);
+      stack.push(...(adjacency.get(id) ?? []));
     }
     if (visited.size !== vertices.size) report("disconnected_route", "Route vertices must form one connected tree.");
-    if (route.segments.length !== route.vertices.length - 1) report("cyclic_route", "A route must be acyclic and contain exactly vertices - 1 segments.");
+    if (route.segments.length !== route.vertices.length - 1) {
+      report("cyclic_route", "A route must be acyclic and contain exactly vertices - 1 segments.");
+    }
   }
-  const endpointVertices = route.vertices.filter((vertex) => vertex.kind === "endpoint");
-  const expectedTerminals = [...net.endpoints.map((endpoint) => endpoint.terminal_id)].sort();
-  const actualTerminals = endpointVertices.flatMap((vertex) => vertex.terminal_id ? [vertex.terminal_id] : []).sort();
-  if (expectedTerminals.join("\0") !== actualTerminals.join("\0")) report("route_endpoint_mismatch", "Route endpoints must exactly match the semantic net endpoints.");
+  const expectedTerminals = net.endpoints.map((endpoint) => endpoint.terminal_id).sort();
+  const actualTerminals = route.vertices
+    .filter((vertex) => vertex.kind === "endpoint")
+    .flatMap((vertex) => vertex.terminal_id ? [vertex.terminal_id] : [])
+    .sort();
+  if (expectedTerminals.join("\0") !== actualTerminals.join("\0")) {
+    report("route_endpoint_mismatch", "Route endpoints must exactly match the semantic net endpoints.");
+  }
   for (const vertex of route.vertices) {
     const degree = adjacency.get(vertex.id)?.size ?? 0;
     if (vertex.kind === "endpoint" && degree !== 1) report("invalid_endpoint_degree", `Endpoint ${vertex.id} must have electrical degree one.`);

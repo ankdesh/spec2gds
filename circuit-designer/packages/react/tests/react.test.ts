@@ -7,8 +7,8 @@ describe("React Flow circuit model", () => {
     const graph = simpleFixture();
     const route: NetRoute = {
       vertices: [
-        { id: "a", kind: "endpoint", terminal_id: "producer_0:port:data", point: { x: 0, y: 0 } },
-        { id: "b", kind: "endpoint", terminal_id: "consumer_0:port:data", point: { x: 100, y: 0 } },
+        { id: "a", kind: "endpoint", terminal_id: "producer_0:data", point: { x: 0, y: 0 } },
+        { id: "b", kind: "endpoint", terminal_id: "consumer_0:data", point: { x: 100, y: 0 } },
       ],
       segments: [{ from_vertex: "a", to_vertex: "b" }],
     };
@@ -19,8 +19,8 @@ describe("React Flow circuit model", () => {
     expect(edges[0]).toMatchObject({
       source: "producer_0",
       target: "consumer_0",
-      sourceHandle: terminalHandleId("producer_0:port:data", "source"),
-      targetHandle: terminalHandleId("consumer_0:port:data", "target"),
+      sourceHandle: terminalHandleId("producer_0:data", "source"),
+      targetHandle: terminalHandleId("consumer_0:data", "target"),
     });
   });
 
@@ -45,8 +45,8 @@ describe("React Flow circuit model", () => {
     const graph = simpleFixture();
     const route: NetRoute = {
       vertices: [
-        { id: "a", kind: "endpoint", terminal_id: "producer_0:port:data", point: { x: 0, y: 0 } },
-        { id: "b", kind: "endpoint", terminal_id: "consumer_0:port:data", point: { x: 100, y: 0 } },
+        { id: "a", kind: "endpoint", terminal_id: "producer_0:data", point: { x: 0, y: 0 } },
+        { id: "b", kind: "endpoint", terminal_id: "consumer_0:data", point: { x: 100, y: 0 } },
       ],
       segments: [{ id: "data-trunk", from_vertex: "a", to_vertex: "b", locked: true }],
     };

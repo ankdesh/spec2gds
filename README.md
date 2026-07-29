@@ -42,21 +42,21 @@ Most-used docs:
 - [`docs/spec_editor_a2ui_stage1.md`](docs/spec_editor_a2ui_stage1.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
-- [`docs/circuit_designer_phase0.md`](docs/circuit_designer_phase0.md) for the
-  independent React circuit-designer foundation
-- [`docs/circuit_designer_phase1.md`](docs/circuit_designer_phase1.md) for live
-  read-only SpecIR integration
-- [`docs/circuit_designer_standalone.md`](docs/circuit_designer_standalone.md)
-  for the independent local app and its SpecIR isolation boundary
-- [`docs/circuit_designer_complete.md`](docs/circuit_designer_complete.md) for
-  the shared editing contracts and optional SpecIR adapter
+- [`docs/circuit_designer_protocol_v1.md`](docs/circuit_designer_protocol_v1.md)
+  for the independent document, construction, operation, draft, and transport contracts
+- [`docs/circuit_designer_provider_v1.md`](docs/circuit_designer_provider_v1.md)
+  for hierarchy and provider callbacks
+- [`docs/circuit_designer_tools_v1.md`](docs/circuit_designer_tools_v1.md) for
+  structured agent tools and immutable proposals
+- [`docs/circuit_designer_run_v1.md`](docs/circuit_designer_run_v1.md) for
+  browser and Node/SQLite service instructions
 
 ## Circuit Designer
 
-The circuit designer is a separate React workspace with its own examples
-and an in-browser implementation of the common circuit API. Its default app has
-no Python, FastAPI, SpecIR, IP-XACT, or `.spec` package dependency and does not
-alter the spec editor interface.
+The circuit designer is a separate TypeScript workspace that owns its JSON
+Schema, canonical circuit document, operation engine, drafts, layout, rendering,
+repositories, and service API. SpecIR/IP-XACT translation is intentionally
+outside v1; a future translator will be an ordinary client.
 
 ```bash
 cd circuit-designer
@@ -66,25 +66,21 @@ npm test
 npm run dev
 ```
 
-Open `http://127.0.0.1:4180`. The standalone lab supports bundled example
-circuits, minimal component/port/net creation, grid-snapped local topology and
-layout edits, explicit select/connect/route/pan modes, manual orthogonal route
-editing and locks, port side/order controls, deterministic grid placement,
-obstacle-aware rerouting, undo/redo, reset, and JSON export.
+Open `http://127.0.0.1:4180`. The standalone app supports bundled documents,
+component catalog/local definitions, operation-based Unlock/Save/Cancel drafts,
+bus slices, select/connect/route/pan modes, worker placement/routing, proposal
+decisions, hierarchy resolution, and JSON/SVG/PNG export.
 Node.js 24 is the supported runtime.
 
-The optional SpecIR integration harness remains separate and is started only
-when explicitly requested:
+Run the loopback Node/SQLite reference service separately:
 
 ```bash
-uv run spec2gds-server
 cd circuit-designer
-npm run dev:specir
+CIRCUIT_DESIGNER_DATABASE=./circuit-designer.sqlite npm run service
 ```
 
-Open `http://127.0.0.1:4173` and select **Active SpecIR session**. The optional
-programmatic adapter is available under `/circuit-designer`; it is not linked
-from or mounted into the spec editor.
+The REST root is `http://127.0.0.1:4100/api/circuit-designer/v1`. The reference
+service is unauthenticated and intended for a trusted local environment.
 
 ## Development Setup
 

@@ -15,7 +15,7 @@
     "dev": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
     "dev:editor": "npm run dev --workspace @spec2gds/spec-editor",
     "dev:standalone": "npm run dev --workspace @spec2gds/circuit-designer-standalone",
-    "dev:specir": "npm run dev --workspace @spec2gds/circuit-designer-mock",
+    "service": "npm run start --workspace @spec2gds/circuit-service",
     "generate": "node scripts/generate-types.mjs",
     "generate:check": "node scripts/check-generated.mjs",
     "build:editor": "npm run build --workspace @spec2gds/spec-editor",

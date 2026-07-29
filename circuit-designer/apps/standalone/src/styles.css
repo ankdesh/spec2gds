@@ -15,6 +15,7 @@ select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; back
 .example-picker select { min-width: 210px; }
 .toolbar { display: flex; justify-content: flex-end; gap: 6px; }
 .toolbar button, .inspector button, .library button { border: 1px solid #899997; border-radius: 3px; background: #fff; padding: 7px 9px; color: #294a4d; }
+.toolbar .primary { border-color: #1d5f61; background: #1d5f61; color: #fff; }
 .toolbar button:hover, .inspector button:hover, .library button:hover { border-color: #2e6566; }
 .notice { display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #d5d5ce; background: #f6f5ef; padding: 0 22px; color: #526368; font: 10px ui-monospace; }
 .notice > span:last-child { margin-left: auto; overflow: hidden; max-width: 46%; color: #6a777b; text-overflow: ellipsis; white-space: nowrap; }
@@ -31,6 +32,13 @@ select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; back
 .metrics b, .metrics span { display: block; }
 .metrics b { font-size: 20px; }
 .metrics span { margin-top: 2px; color: #69777b; font-size: 9px; text-transform: uppercase; }
+.catalog-list { display: grid; gap: 5px; margin-top: 14px; }
+.catalog-list button { display: grid; gap: 3px; text-align: left; }
+.catalog-list small { color: #718084; font: 8px ui-monospace; text-transform: uppercase; }
+.slice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.proposal-card { margin: 8px 0; border: 1px solid #d7d9d3; border-radius: 3px; background: #fff; padding: 8px; font-size: 10px; }
+.proposal-card b, .proposal-card small { display: block; }
+.proposal-card p { color: #667579; line-height: 1.4; }
 .section { margin-top: 22px; border-top: 1px solid #d9dad4; padding-top: 17px; }
 .section label, .inspector label { display: grid; gap: 5px; margin: 9px 0; color: #627177; font-size: 10px; }
 .section .primary { width: 100%; margin-top: 3px; border-color: #1d5f61; background: #1d5f61; color: #fff; }

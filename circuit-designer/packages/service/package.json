@@ -1,0 +1,16 @@
+{
+  "name": "@spec2gds/circuit-service",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "start": "node --experimental-strip-types src/cli.ts"
+  },
+  "dependencies": {
+    "@spec2gds/circuit-client-local": "0.0.0",
+    "@spec2gds/circuit-core": "0.0.0"
+  }
+}

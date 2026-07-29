@@ -55,7 +55,7 @@ class ExtractedBusInterface(_ExtractionModel):
     name: str
     bus_name: str
     role: Literal["initiator", "target"]
-    port_maps: list[ExtractedPortMap] = pydantic.Field(default_factory=list)
+    port_maps: list[ExtractedPortMap] = pydantic.Field(min_length=1)
 
 
 class HardwareTableExtraction(_ExtractionModel):
@@ -86,7 +86,9 @@ Use only facts explicitly present in the supplied evidence.
 Return physical ports only when name and direction are supported.
 Convert ranges such as [31:0] to width 32 and keep the base port name.
 Create a bus interface only when protocol membership and initiator/target role
-are explicit. Every port map must reference a returned physical port.
+are explicit. Every returned bus interface must have at least one port map, and
+every port map must reference a returned physical port. Omit an interface when
+there are no explicit physical-to-logical signal mappings.
 Put ambiguity or omitted unsupported information in notes. Do not guess."""
 
 

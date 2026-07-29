@@ -1,17 +1,25 @@
 import {
-  type AgentProposal,
-  type ChangePreview,
-  type CircuitDesignerApi,
-  type CircuitDesignerReadOptions,
-  type CircuitDesignCatalog,
-  type CircuitGraphSnapshot,
-  type CircuitHistoryResult,
-  type CircuitHistoryStatus,
-  type CommandBatch,
-  type EditLease,
-  validateCatalog,
   validateContractDefinition,
-  validateGraph,
+  type CircuitChangeResult,
+  type CircuitConstruction,
+  type CircuitDesignerBackend,
+  type CircuitDocument,
+  type CircuitExport,
+  type CircuitExportOptions,
+  type CircuitOperationBatch,
+  type CircuitProposal,
+  type CircuitSnapshot,
+  type ComponentDefinition,
+  type ComponentQuery,
+  type DocumentSummary,
+  type EditLease,
+  type ProposalDecision,
+  type ProviderCommitRequest,
+  type ProviderCommitResult,
+  type ResolvedComponentDesign,
+  type ServiceError,
+  type ServiceEvent,
+  type SubgraphQuery,
 } from "@spec2gds/circuit-core";
 
 export type CircuitFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -32,113 +40,236 @@ export interface HttpCircuitDesignerOptions {
   fetch?: CircuitFetch;
 }
 
-/** HTTP implementation of the common read API; it contains no React or layout concerns. */
-export class HttpCircuitDesignerReadApi implements CircuitDesignerApi {
+/** Versioned HTTP implementation of the common independent backend contract. */
+export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
   readonly baseUrl: string;
   readonly fetch: CircuitFetch;
 
   constructor(options: HttpCircuitDesignerOptions = {}) {
-    this.baseUrl = (options.baseUrl ?? "/api/circuit-designer").replace(/\/$/, "");
+    this.baseUrl = (options.baseUrl ?? "/api/circuit-designer/v1").replace(/\/$/, "");
     this.fetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
-  async getCatalog(options: CircuitDesignerReadOptions = {}): Promise<CircuitDesignCatalog> {
-    const value = await this.getJson(`${this.baseUrl}/catalog`, options.signal);
-    const validation = validateCatalog(value);
-    if (!validation.valid) throw new CircuitDesignerHttpError("Server returned an invalid circuit catalog.", 502, validation.errors);
-    return value as CircuitDesignCatalog;
+  async create(document: CircuitDocument, requestId: string): Promise<CircuitChangeResult> {
+    return this.change(await this.sendJson(`${this.baseUrl}/documents`, "POST", { request_id: requestId, document }));
   }
 
-  async getGraph(designId: string, options: CircuitDesignerReadOptions = {}): Promise<CircuitGraphSnapshot> {
-    if (!designId) throw new TypeError("designId is required.");
-    const value = await this.getJson(`${this.baseUrl}/designs/${encodeURIComponent(designId)}`, options.signal);
-    const validation = validateGraph(value);
-    if (!validation.valid) throw new CircuitDesignerHttpError("Server returned an invalid circuit graph.", 502, validation.errors);
-    return value as CircuitGraphSnapshot;
+  async get(documentId: string): Promise<CircuitSnapshot> {
+    return this.validated("CircuitSnapshot", await this.getJson(this.documentUrl(documentId))) as CircuitSnapshot;
   }
 
-  async getLease(options: CircuitDesignerReadOptions = {}): Promise<EditLease | null> {
-    const value = await this.getJson(`${this.baseUrl}/lease`, options.signal) as { lease: EditLease | null };
+  async replace(
+    documentId: string,
+    document: CircuitDocument,
+    expectedRevision: string,
+    requestId: string,
+  ): Promise<CircuitChangeResult> {
+    return this.change(await this.sendJson(this.documentUrl(documentId), "PUT", {
+      request_id: requestId,
+      expected_revision: expectedRevision,
+      document,
+    }));
+  }
+
+  async validateConstruction(construction: CircuitConstruction): Promise<CircuitChangeResult> {
+    return this.change(await this.sendJson(`${this.baseUrl}/constructions/validate`, "POST", construction));
+  }
+
+  async preview(documentId: string, batch: CircuitOperationBatch): Promise<CircuitChangeResult> {
+    return this.change(await this.sendJson(`${this.documentUrl(documentId)}/operations/preview`, "POST", batch));
+  }
+
+  async commit(documentId: string, batch: CircuitOperationBatch, leaseId?: string): Promise<CircuitChangeResult> {
+    return this.change(await this.sendJson(`${this.documentUrl(documentId)}/operations/commit`, "POST", {
+      batch,
+      ...(leaseId ? { lease_id: leaseId } : {}),
+    }));
+  }
+
+  async getLease(documentId: string): Promise<EditLease | null> {
+    const value = await this.getJson(`${this.documentUrl(documentId)}/lock`) as { lease: EditLease | null };
     if (value.lease) this.validated("EditLease", value.lease);
     return value.lease;
   }
 
-  async acquireLease(ownerId: string, ownerKind: "human" | "agent", ttlSeconds = 300): Promise<EditLease> {
-    return this.validated("EditLease", await this.sendJson(`${this.baseUrl}/lease`, "POST", { owner_id: ownerId, owner_kind: ownerKind, ttl_seconds: ttlSeconds })) as EditLease;
+  async acquireLease(documentId: string, ownerId: string, ttlSeconds = 900): Promise<EditLease> {
+    return this.validated("EditLease", await this.sendJson(`${this.documentUrl(documentId)}/lock`, "POST", {
+      owner_id: ownerId,
+      ttl_seconds: ttlSeconds,
+    })) as EditLease;
   }
 
-  async releaseLease(leaseId: string): Promise<void> {
-    await this.sendJson(`${this.baseUrl}/lease/${encodeURIComponent(leaseId)}`, "DELETE");
+  async renewLease(documentId: string, leaseId: string, ttlSeconds = 900): Promise<EditLease> {
+    return this.validated("EditLease", await this.sendJson(
+      `${this.documentUrl(documentId)}/lock/${encodeURIComponent(leaseId)}`,
+      "PUT",
+      { ttl_seconds: ttlSeconds },
+    )) as EditLease;
   }
 
-  async preview(batch: CommandBatch): Promise<ChangePreview> {
-    return this.validated("ChangePreview", await this.sendJson(`${this.baseUrl}/commands/preview`, "POST", batch)) as ChangePreview;
+  async releaseLease(documentId: string, leaseId: string): Promise<void> {
+    await this.sendJson(`${this.documentUrl(documentId)}/lock/${encodeURIComponent(leaseId)}`, "DELETE");
   }
 
-  async apply(batch: CommandBatch, leaseId: string): Promise<ChangePreview> {
-    return this.validated("ChangePreview", await this.sendJson(`${this.baseUrl}/commands/apply`, "POST", { batch, lease_id: leaseId })) as ChangePreview;
+  async summary(documentId: string): Promise<DocumentSummary> {
+    return this.validated("DocumentSummary", await this.getJson(`${this.documentUrl(documentId)}/summary`)) as DocumentSummary;
   }
 
-  async getHistory(): Promise<CircuitHistoryStatus> {
-    return this.getJson(`${this.baseUrl}/history`) as Promise<CircuitHistoryStatus>;
+  async lookupComponents(documentId: string, query: ComponentQuery = {}): Promise<ComponentDefinition[]> {
+    const parameters = new URLSearchParams();
+    if (query.text) parameters.set("text", query.text);
+    if (query.origin) parameters.set("origin", query.origin);
+    const suffix = parameters.size ? `?${parameters}` : "";
+    const result = await this.getJson(`${this.documentUrl(documentId)}/components${suffix}`) as { components: ComponentDefinition[] };
+    result.components.forEach((component) => this.validated("ComponentDefinition", component));
+    return result.components;
   }
 
-  async undo(leaseId: string, designId: string): Promise<CircuitHistoryResult> {
-    const value = await this.sendJson(`${this.baseUrl}/history/undo`, "POST", { lease_id: leaseId, design_id: designId }) as CircuitHistoryResult;
-    this.requireGraph(value.graph); return value;
+  async subgraph(documentId: string, query: SubgraphQuery): Promise<CircuitDocument> {
+    return this.validated("CircuitDocument", await this.sendJson(
+      `${this.documentUrl(documentId)}/queries/subgraph`,
+      "POST",
+      query,
+    )) as CircuitDocument;
   }
 
-  async redo(leaseId: string, designId: string): Promise<CircuitHistoryResult> {
-    const value = await this.sendJson(`${this.baseUrl}/history/redo`, "POST", { lease_id: leaseId, design_id: designId }) as CircuitHistoryResult;
-    this.requireGraph(value.graph); return value;
+  async export(documentId: string, options: CircuitExportOptions): Promise<CircuitExport> {
+    const response = await this.fetch(`${this.documentUrl(documentId)}/exports`, {
+      method: "POST",
+      headers: { Accept: this.acceptFor(options.format), "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    });
+    if (!response.ok) await this.throwResponse(response);
+    const disposition = response.headers.get("Content-Disposition") ?? "";
+    const filename = disposition.match(/filename="?([^"]+)"?/)?.[1] ?? `${documentId}.${options.format}`;
+    return {
+      media_type: this.acceptFor(options.format),
+      filename,
+      data: options.format === "png" ? new Uint8Array(await response.arrayBuffer()) : await response.text(),
+    };
   }
 
-  async listProposals(): Promise<AgentProposal[]> {
-    const value = await this.getJson(`${this.baseUrl}/proposals`) as { proposals: AgentProposal[] };
-    value.proposals.forEach((proposal) => this.validated("AgentProposal", proposal));
+  async listProposals(documentId: string): Promise<CircuitProposal[]> {
+    const value = await this.getJson(`${this.documentUrl(documentId)}/proposals`) as { proposals: CircuitProposal[] };
+    value.proposals.forEach((proposal) => this.validated("CircuitProposal", proposal));
     return value.proposals;
   }
 
-  async submitProposal(proposal: AgentProposal): Promise<AgentProposal> {
-    return this.validated("AgentProposal", await this.sendJson(`${this.baseUrl}/proposals`, "POST", proposal)) as AgentProposal;
+  async submitProposal(proposal: CircuitProposal): Promise<CircuitProposal> {
+    return this.validated("CircuitProposal", await this.sendJson(
+      `${this.documentUrl(proposal.document_id)}/proposals`,
+      "POST",
+      proposal,
+    )) as CircuitProposal;
   }
 
-  async decideProposal(proposalId: string, decision: "accepted" | "rejected", leaseId?: string): Promise<AgentProposal> {
-    return this.validated("AgentProposal", await this.sendJson(`${this.baseUrl}/proposals/${encodeURIComponent(proposalId)}/decision`, "POST", { decision, lease_id: leaseId })) as AgentProposal;
+  async decideProposal(
+    documentId: string,
+    proposalId: string,
+    decision: ProposalDecision,
+  ): Promise<CircuitChangeResult | undefined> {
+    const value = await this.sendJson(
+      `${this.documentUrl(documentId)}/proposals/${encodeURIComponent(proposalId)}/decision`,
+      "POST",
+      { decision },
+    );
+    return value ? this.change(value) : undefined;
   }
 
-  private async getJson(url: string, signal?: AbortSignal): Promise<unknown> {
-    const response = await this.fetch(url, { headers: { Accept: "application/json" }, signal });
-    const body = await response.json().catch(() => undefined);
-    if (!response.ok) {
-      const detail = body && typeof body === "object" && "detail" in body ? String((body as { detail: unknown }).detail) : response.statusText;
-      throw new CircuitDesignerHttpError(detail || `Circuit Designer request failed (${response.status}).`, response.status, body);
-    }
-    return body;
+  async resolveComponentDesign(documentId: string, componentId: string): Promise<ResolvedComponentDesign> {
+    return this.validated("ResolvedComponentDesign", await this.sendJson(
+      `${this.documentUrl(documentId)}/components/${encodeURIComponent(componentId)}/resolve`,
+      "POST",
+      {},
+    )) as ResolvedComponentDesign;
   }
 
-  private async sendJson(url: string, method: "POST" | "DELETE", body?: unknown): Promise<unknown> {
+  async commitComponentDesign(
+    documentId: string,
+    componentId: string,
+    request: ProviderCommitRequest,
+  ): Promise<ProviderCommitResult> {
+    return this.validated("ProviderCommitResult", await this.sendJson(
+      `${this.documentUrl(documentId)}/components/${encodeURIComponent(componentId)}/commit`,
+      "POST",
+      request,
+    )) as ProviderCommitResult;
+  }
+
+  async registerProviderCallback(
+    documentId: string,
+    callbackUrl: string,
+    allowNonLoopback = false,
+  ): Promise<void> {
+    await this.sendJson(`${this.documentUrl(documentId)}/provider`, "PUT", {
+      callback_url: callbackUrl,
+      allow_non_loopback: allowNonLoopback,
+    });
+  }
+
+  /** SSE is invalidation-only: callers refetch snapshots after relevant events. */
+  subscribe(documentId: string, onEvent: (event: ServiceEvent) => void): () => void {
+    const source = new EventSource(`${this.documentUrl(documentId)}/events`);
+    source.onmessage = (message) => {
+      const value = JSON.parse(message.data) as unknown;
+      if (validateContractDefinition("ServiceEvent", value).valid) onEvent(value as ServiceEvent);
+    };
+    return () => source.close();
+  }
+
+  private documentUrl(documentId: string): string {
+    if (!documentId) throw new TypeError("documentId is required.");
+    return `${this.baseUrl}/documents/${encodeURIComponent(documentId)}`;
+  }
+
+  private async getJson(url: string): Promise<unknown> {
+    const response = await this.fetch(url, { headers: { Accept: "application/json" } });
+    if (!response.ok) await this.throwResponse(response);
+    return response.json();
+  }
+
+  private async sendJson(
+    url: string,
+    method: "POST" | "PUT" | "DELETE",
+    body?: unknown,
+  ): Promise<unknown> {
     const response = await this.fetch(url, {
       method,
       headers: { Accept: "application/json", ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const value = await response.json().catch(() => undefined);
-    if (!response.ok) {
-      const detail = value && typeof value === "object" && "detail" in value ? String((value as { detail: unknown }).detail) : response.statusText;
-      throw new CircuitDesignerHttpError(detail || `Circuit Designer request failed (${response.status}).`, response.status, value);
-    }
-    return value;
+    if (!response.ok) await this.throwResponse(response);
+    if (response.status === 204) return undefined;
+    return response.json();
+  }
+
+  private async throwResponse(response: Response): Promise<never> {
+    const body = await response.json().catch(() => undefined) as ServiceError | undefined;
+    throw new CircuitDesignerHttpError(
+      body?.message || response.statusText || `Circuit Designer request failed (${response.status}).`,
+      response.status,
+      body,
+    );
   }
 
   private validated(definition: string, value: unknown): unknown {
     const validation = validateContractDefinition(definition, value);
-    if (!validation.valid) throw new CircuitDesignerHttpError(`Server returned an invalid ${definition}.`, 502, validation.errors);
+    if (!validation.valid) {
+      throw new CircuitDesignerHttpError(`Server returned an invalid ${definition}.`, 502, validation.errors);
+    }
     return value;
   }
 
-  private requireGraph(value: unknown): asserts value is CircuitGraphSnapshot {
-    const validation = validateGraph(value);
-    if (!validation.valid) throw new CircuitDesignerHttpError("Server returned an invalid circuit graph.", 502, validation.errors);
+  private change(value: unknown): CircuitChangeResult {
+    return this.validated("CircuitChangeResult", value) as CircuitChangeResult;
+  }
+
+  private acceptFor(format: CircuitExportOptions["format"]): CircuitExport["media_type"] {
+    if (format === "json") return "application/json";
+    if (format === "svg") return "image/svg+xml";
+    return "image/png";
   }
 }
+
+/** Old name retained only as a source-level alias during the React migration. */
+export { HttpCircuitDesignerBackend as HttpCircuitDesignerReadApi };
