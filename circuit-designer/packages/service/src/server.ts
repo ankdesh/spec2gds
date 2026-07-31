@@ -6,18 +6,17 @@ import {
   type CircuitDesignerBackend,
   type CircuitDocument,
   type CircuitOperationBatch,
-  type CircuitProposal,
+  type CircuitProposalCreateRequest,
   type ServiceError,
   type ServiceEvent,
 } from "@spec2gds/circuit-core";
-import type { MemoryCircuitDesignerBackend } from "@spec2gds/circuit-client-local";
 import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
-import { renderCircuitPngBytes } from "./png";
+import { EphemeralCircuitSessionBackend } from "./session-backend";
 
-type MutableProviderBackend = CircuitDesignerBackend & Pick<MemoryCircuitDesignerBackend, "registerProvider">;
+type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
 
 export interface CircuitServiceOptions {
-  backend: MutableProviderBackend;
+  backend?: MutableProviderBackend;
   providerAllowlist?: string[];
   now?: () => Date;
 }
@@ -29,12 +28,14 @@ interface RouteContext {
 
 export class CircuitDesignerService {
   readonly server: Server;
+  private readonly backend: MutableProviderBackend;
   private eventSequence = 0;
   private readonly subscribers = new Map<string, Set<ServerResponse>>();
   private readonly allowlist: Set<string>;
   private readonly now: () => Date;
 
-  constructor(private readonly options: CircuitServiceOptions) {
+  constructor(options: CircuitServiceOptions = {}) {
+    this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
     this.allowlist = new Set(options.providerAllowlist ?? []);
     this.now = options.now ?? (() => new Date());
     this.server = createServer((request, response) => void this.handle(request, response));
@@ -66,71 +67,65 @@ export class CircuitDesignerService {
 
       if (method === "POST" && parts[0] === "documents" && parts.length === 1) {
         const body = await this.json(request) as { request_id: string; document: CircuitDocument };
-        return this.change(response, await this.options.backend.create(body.document, body.request_id), body.document.document_id);
+        return this.change(response, await this.backend.create(body.document, body.request_id), body.document.document_id);
       }
       if (method === "POST" && parts[0] === "constructions" && parts[1] === "validate") {
         const body = await this.json(request);
         this.requireDefinition("CircuitConstruction", body);
-        return this.change(response, await this.options.backend.validateConstruction(body as never));
+        return this.change(response, await this.backend.validateConstruction(body as never));
       }
       if (!context.documentId) return this.error(response, 404, "not_found", "Unknown endpoint.");
       const documentId = context.documentId;
       const tail = context.tail;
 
-      if (method === "GET" && tail.length === 0) return this.jsonResponse(response, 200, await this.options.backend.get(documentId));
+      if (method === "GET" && tail.length === 0) return this.jsonResponse(response, 200, await this.backend.get(documentId));
       if (method === "PUT" && tail.length === 0) {
         const body = await this.json(request) as { request_id: string; expected_revision: string; document: CircuitDocument };
-        return this.change(response, await this.options.backend.replace(
+        return this.change(response, await this.backend.replace(
           documentId, body.document, body.expected_revision, body.request_id,
         ), documentId);
       }
       if (method === "POST" && tail[0] === "operations" && tail[1] === "preview") {
         const batch = await this.json(request);
         this.requireDefinition("CircuitOperationBatch", batch);
-        return this.change(response, await this.options.backend.preview(documentId, batch as CircuitOperationBatch));
+        return this.change(response, await this.backend.preview(documentId, batch as CircuitOperationBatch));
       }
       if (method === "POST" && tail[0] === "operations" && tail[1] === "commit") {
         const body = await this.json(request) as { batch: CircuitOperationBatch; lease_id?: string };
         this.requireDefinition("CircuitOperationBatch", body.batch);
-        return this.change(response, await this.options.backend.commit(documentId, body.batch, body.lease_id), documentId);
+        return this.change(response, await this.backend.commit(documentId, body.batch, body.lease_id), documentId);
       }
       if (tail[0] === "lock") return await this.lockRoute(request, response, documentId, tail);
       if (method === "GET" && tail[0] === "summary") {
-        return this.jsonResponse(response, 200, await this.options.backend.summary(documentId));
+        return this.jsonResponse(response, 200, await this.backend.summary(documentId));
       }
       if (method === "GET" && tail[0] === "components" && tail.length === 1) {
         const origin = url.searchParams.get("origin") as "local" | "builtin" | "provider" | null;
         return this.jsonResponse(response, 200, {
-          components: await this.options.backend.lookupComponents(documentId, {
+          components: await this.backend.lookupComponents(documentId, {
             ...(url.searchParams.get("text") ? { text: url.searchParams.get("text")! } : {}),
             ...(origin ? { origin } : {}),
           }),
         });
       }
       if (method === "POST" && tail[0] === "components" && tail[2] === "resolve") {
-        const result = await this.options.backend.resolveComponentDesign(documentId, tail[1]);
+        const result = await this.backend.resolveComponentDesign(documentId, tail[1]);
         this.emit(documentId, "provider.requested");
         return this.jsonResponse(response, 200, result);
       }
       if (method === "POST" && tail[0] === "components" && tail[2] === "commit") {
         const body = await this.json(request);
         this.requireDefinition("ProviderCommitRequest", body);
-        const result = await this.options.backend.commitComponentDesign(documentId, tail[1], body as never);
+        const result = await this.backend.commitComponentDesign(documentId, tail[1], body as never);
         this.emit(documentId, "provider.requested");
         return this.jsonResponse(response, result.accepted ? 200 : 409, result);
       }
       if (method === "POST" && tail[0] === "queries" && tail[1] === "subgraph") {
-        return this.jsonResponse(response, 200, await this.options.backend.subgraph(documentId, await this.json(request) as never));
+        return this.jsonResponse(response, 200, await this.backend.subgraph(documentId, await this.json(request) as never));
       }
       if (method === "POST" && tail[0] === "exports") {
         const exportOptions = await this.json(request) as { format: "json" | "svg" | "png"; selection?: string[] };
-        const exported = exportOptions.format === "png"
-          ? {
-              media_type: "image/png" as const,
-              filename: `${documentId}.png`,
-              data: renderCircuitPngBytes((await this.options.backend.get(documentId)).document, exportOptions.selection),
-            }
-          : await this.options.backend.export(documentId, exportOptions);
+        const exported = await this.backend.export(documentId, exportOptions);
         response.statusCode = 200;
         response.setHeader("Content-Type", exported.media_type);
         response.setHeader("Content-Disposition", `attachment; filename="${exported.filename}"`);
@@ -149,7 +144,7 @@ export class CircuitDesignerService {
             reason instanceof Error ? reason.message : String(reason),
           );
         }
-        this.options.backend.registerProvider(new HttpCallbackProvider(callback), documentId);
+        this.backend.registerProvider(new HttpCallbackProvider(callback), documentId);
         response.statusCode = 204;
         response.end();
         return;
@@ -173,22 +168,22 @@ export class CircuitDesignerService {
     tail: string[],
   ): Promise<void> {
     if (request.method === "GET" && tail.length === 1) {
-      return this.jsonResponse(response, 200, { lease: await this.options.backend.getLease(documentId) });
+      return this.jsonResponse(response, 200, { lease: await this.backend.getLease(documentId) });
     }
     if (request.method === "POST" && tail.length === 1) {
       const body = await this.json(request) as { owner_id: string; ttl_seconds?: number };
-      const lease = await this.options.backend.acquireLease(documentId, body.owner_id, body.ttl_seconds);
+      const lease = await this.backend.acquireLease(documentId, body.owner_id, body.ttl_seconds);
       this.emit(documentId, "lock.changed");
       return this.jsonResponse(response, 201, lease);
     }
     if (request.method === "PUT" && tail[1]) {
       const body = await this.json(request) as { ttl_seconds?: number };
-      const lease = await this.options.backend.renewLease(documentId, tail[1], body.ttl_seconds);
+      const lease = await this.backend.renewLease(documentId, tail[1], body.ttl_seconds);
       this.emit(documentId, "lock.changed");
       return this.jsonResponse(response, 200, lease);
     }
     if (request.method === "DELETE" && tail[1]) {
-      await this.options.backend.releaseLease(documentId, tail[1]);
+      await this.backend.releaseLease(documentId, tail[1]);
       this.emit(documentId, "lock.changed");
       response.statusCode = 204;
       response.end();
@@ -204,18 +199,29 @@ export class CircuitDesignerService {
     tail: string[],
   ): Promise<void> {
     if (request.method === "GET" && tail.length === 1) {
-      return this.jsonResponse(response, 200, { proposals: await this.options.backend.listProposals(documentId) });
+      return this.jsonResponse(response, 200, { proposals: await this.backend.listProposals(documentId) });
     }
     if (request.method === "POST" && tail.length === 1) {
-      const proposal = await this.json(request);
-      this.requireDefinition("CircuitProposal", proposal);
-      const saved = await this.options.backend.submitProposal(proposal as CircuitProposal);
+      const input = await this.json(request) as Record<string, unknown>;
+      const proposal = {
+        proposal_id: input.proposal_id,
+        document_id: input.document_id,
+        base_revision: input.base_revision,
+        title: input.title,
+        summary: input.summary,
+        ...(input.rationale !== undefined ? { rationale: input.rationale } : {}),
+        ...(input.assumptions !== undefined ? { assumptions: input.assumptions } : {}),
+        ...(input.construction !== undefined ? { construction: input.construction } : {}),
+        ...(input.batch !== undefined ? { batch: input.batch } : {}),
+      };
+      this.requireDefinition("CircuitProposalCreateRequest", proposal);
+      const saved = await this.backend.submitProposal(proposal as CircuitProposalCreateRequest);
       this.emit(documentId, "proposal.changed");
       return this.jsonResponse(response, 201, saved);
     }
     if (request.method === "POST" && tail[1] && tail[2] === "decision") {
       const body = await this.json(request) as { decision: "accept" | "reject" };
-      const result = await this.options.backend.decideProposal(documentId, tail[1], body.decision);
+      const result = await this.backend.decideProposal(documentId, tail[1], body.decision);
       this.emit(documentId, "proposal.changed");
       if (!result) {
         response.statusCode = 204;

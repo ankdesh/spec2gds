@@ -263,9 +263,23 @@
 }
 
 .spec-narrative {
+  position: relative;
   color: #343b38;
   line-height: 1.7;
   max-width: 74ch;
+}
+
+.spec-narrative-action {
+  float: right;
+  margin: 0 0 0.4rem 0.7rem;
+  padding: 0.28rem 0.55rem;
+  border: 1px solid #b8c9c2;
+  border-radius: 999px;
+  background: #f8fbf9;
+  color: #31594e;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 750;
 }
 
 .spec-narrative code,
@@ -289,6 +303,19 @@
   color: var(--spec-muted, #59616c);
   font-size: 0.78rem;
   margin-top: 0.5rem;
+}
+
+.spec-section--proposal {
+  padding: 18px;
+}
+
+.spec-proposal-changed {
+  background: #fff3c9 !important;
+  box-shadow: inset 3px 0 #d49a2f;
+}
+
+.spec-proposal-row-changed > td {
+  background: #fff9e8;
 }
 
 .spec-callout {

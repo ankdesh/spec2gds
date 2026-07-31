@@ -8,6 +8,7 @@ import {
   type CircuitExportOptions,
   type CircuitOperationBatch,
   type CircuitProposal,
+  type CircuitProposalCreateRequest,
   type CircuitSnapshot,
   type ComponentDefinition,
   type ComponentQuery,
@@ -155,7 +156,7 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
     return value.proposals;
   }
 
-  async submitProposal(proposal: CircuitProposal): Promise<CircuitProposal> {
+  async submitProposal(proposal: CircuitProposalCreateRequest): Promise<CircuitProposal> {
     return this.validated("CircuitProposal", await this.sendJson(
       `${this.documentUrl(proposal.document_id)}/proposals`,
       "POST",

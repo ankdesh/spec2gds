@@ -4,6 +4,7 @@ import type {
   CircuitDocument,
   CircuitOperationBatch,
   CircuitProposal,
+  CircuitProposalCreateRequest,
   CircuitSnapshot,
   ComponentDefinition,
   Diagnostic,
@@ -48,8 +49,8 @@ export interface ComponentDesignProvider {
 }
 
 /**
- * Adapter-neutral backend used by the browser repository, HTTP client, and Node
- * service. Revisions are opaque to callers.
+ * Application boundary implemented by the REST client and the Node service's
+ * ephemeral session backend. Revisions are opaque to callers.
  */
 export interface CircuitDesignerBackend {
   create(document: CircuitDocument, requestId: string): Promise<CircuitChangeResult>;
@@ -75,7 +76,7 @@ export interface CircuitDesignerBackend {
   export(documentId: string, options: CircuitExportOptions): Promise<CircuitExport>;
 
   listProposals(documentId: string): Promise<CircuitProposal[]>;
-  submitProposal(proposal: CircuitProposal): Promise<CircuitProposal>;
+  submitProposal(proposal: CircuitProposalCreateRequest): Promise<CircuitProposal>;
   decideProposal(documentId: string, proposalId: string, decision: ProposalDecision): Promise<CircuitChangeResult | undefined>;
 
   resolveComponentDesign(documentId: string, componentId: string): Promise<ResolvedComponentDesign>;

@@ -9,6 +9,7 @@ import type {
   NodeGeometry,
   ParameterDefinition,
   ParameterValue,
+  TerminalDefinition,
   TerminalPlacement,
 } from "./types.generated";
 
@@ -38,7 +39,8 @@ export interface CircuitTerminalView {
   node_id?: string;
   label: string;
   kind: "interface" | "port" | "boundary_interface" | "boundary_port";
-  direction?: "in" | "out";
+  direction?: "in" | "out" | "inout";
+  width: number | string;
   role?: string;
 }
 
@@ -93,8 +95,9 @@ export function emptyLayout(): CircuitLayout {
   };
 }
 
-export function terminalDefaultPlacement(direction: "input" | "output", order: number): TerminalPlacement {
-  return { side: direction === "input" ? "WEST" : "EAST", order, locked: false };
+export function terminalDefaultPlacement(direction: TerminalDefinition["direction"], order: number): TerminalPlacement {
+  const side = direction === "input" ? "WEST" : direction === "output" ? "EAST" : "SOUTH";
+  return { side, order, locked: false };
 }
 
 export function projectDocument(document: CircuitDocument, revision = "draft"): CircuitGraphView {
@@ -120,14 +123,20 @@ export function projectDocument(document: CircuitDocument, revision = "draft"): 
       node_id: instance.id,
       label: terminal.label,
       kind: terminal.category === "interface" ? "interface" as const : "port" as const,
-      direction: terminal.direction === "input" ? "in" as const : "out" as const,
+      direction: terminal.direction === "input" ? "in" as const
+        : terminal.direction === "output" ? "out" as const
+          : "inout" as const,
+      width: terminal.width,
     })));
   }
   terminals.push(...document.design.boundary_terminals.map((terminal) => ({
     id: `boundary:${terminal.id}`,
     label: terminal.label,
     kind: terminal.category === "interface" ? "boundary_interface" as const : "boundary_port" as const,
-    direction: terminal.direction === "input" ? "in" as const : "out" as const,
+    direction: terminal.direction === "input" ? "in" as const
+      : terminal.direction === "output" ? "out" as const
+        : "inout" as const,
+    width: terminal.width,
   })));
   return {
     protocol_version: "circuit-designer.v1",
@@ -190,7 +199,7 @@ function parameterValid(definition: ParameterDefinition, value: ParameterValue):
 function terminalForEndpoint(
   document: CircuitDocument,
   endpoint: NetEndpoint,
-): { width: number; direction: "input" | "output"; key: string } | undefined {
+): { width: TerminalDefinition["width"]; direction: TerminalDefinition["direction"]; key: string } | undefined {
   if (endpoint.kind === "boundary") {
     const terminal = document.design.boundary_terminals.find((item) => item.id === endpoint.terminal_id);
     return terminal && { width: terminal.width, direction: terminal.direction, key: endpointTerminalKey(endpoint) };
@@ -256,12 +265,12 @@ export function validateDocumentSemantics(document: CircuitDocument): Diagnostic
     diagnostics.push(diagnostic("error", "duplicate_net_id", `Net ID is duplicated: ${id}`, id));
   }
 
-  const occupied = new Map<string, Array<{ netId: string; range: { lsb: number; width: number } }>>();
+  const occupied = new Map<string, Array<{ netId: string; range?: { lsb: number; width: number } }>>();
   for (const net of document.design.nets) {
     if (net.endpoints.length < 2) {
       diagnostics.push(diagnostic("warning", "incomplete_net", `Net ${net.id} has fewer than two endpoints.`, net.id));
     }
-    const widths: number[] = [];
+    const widths: Array<number | string> = [];
     let sourceCount = 0;
     for (const [index, endpoint] of net.endpoints.entries()) {
       const terminal = terminalForEndpoint(document, endpoint);
@@ -269,24 +278,46 @@ export function validateDocumentSemantics(document: CircuitDocument): Diagnostic
         diagnostics.push(diagnostic("error", "unknown_endpoint", `Net ${net.id} endpoint ${endpointTerminalKey(endpoint)} does not exist.`, net.id, `/design/nets/${net.id}/endpoints/${index}`));
         continue;
       }
-      const range = endpoint.slice ?? { lsb: 0, width: terminal.width };
-      if (range.lsb + range.width > terminal.width) {
+      if (endpoint.slice && typeof terminal.width !== "number") {
+        diagnostics.push(diagnostic(
+          "error",
+          "slice_requires_numeric_width",
+          `Endpoint slices require a resolved numeric width on ${terminal.key}.`,
+          net.id,
+        ));
+        continue;
+      }
+      const range = endpoint.slice
+        ?? (typeof terminal.width === "number" ? { lsb: 0, width: terminal.width } : undefined);
+      if (range && typeof terminal.width === "number" && range.lsb + range.width > terminal.width) {
         diagnostics.push(diagnostic("error", "slice_out_of_range", `Endpoint slice exceeds terminal width on ${terminal.key}.`, net.id));
         continue;
       }
       const prior = occupied.get(terminal.key) ?? [];
-      if (prior.some((item) => rangesOverlap(item.range, range) && item.netId !== net.id)) {
+      if (prior.some((item) =>
+        item.netId !== net.id
+        && (!item.range || !range || rangesOverlap(item.range, range)))) {
         diagnostics.push(diagnostic("error", "terminal_slice_in_multiple_nets", `Terminal slice ${endpointKey(endpoint)} belongs to more than one net.`, net.id));
       }
       prior.push({ netId: net.id, range });
       occupied.set(terminal.key, prior);
-      widths.push(range.width);
+      widths.push(range?.width ?? terminal.width);
       const isSource = endpoint.kind === "instance"
-        ? terminal.direction === "output"
-        : terminal.direction === "input";
+        ? terminal.direction === "output" || terminal.direction === "inout"
+        : terminal.direction === "input" || terminal.direction === "inout";
       if (isSource) sourceCount += 1;
     }
-    if (new Set(widths).size > 1) diagnostics.push(diagnostic("warning", "width_mismatch", `Net ${net.id} connects endpoint slices with different widths.`, net.id));
+    const widthKeys = new Set(widths.map((width) => `${typeof width}:${width}`));
+    if (widthKeys.size > 1) {
+      diagnostics.push(diagnostic(
+        "warning",
+        widths.some((width) => typeof width === "string") ? "width_unresolved" : "width_mismatch",
+        widths.some((width) => typeof width === "string")
+          ? `Net ${net.id} connects endpoints whose symbolic widths cannot be proven compatible.`
+          : `Net ${net.id} connects endpoint slices with different widths.`,
+        net.id,
+      ));
+    }
     if (sourceCount === 0 && net.endpoints.length > 1) diagnostics.push(diagnostic("warning", "net_without_source", `Net ${net.id} has no output/source endpoint.`, net.id));
     if (sourceCount > 1) diagnostics.push(diagnostic("warning", "multiple_net_sources", `Net ${net.id} has more than one output/source endpoint.`, net.id));
   }

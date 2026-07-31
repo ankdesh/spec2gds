@@ -12,12 +12,14 @@ from spec2gds.agent_spec.spec_format.samples import build_v1_sample, write_v1_sa
 from spec2gds.agent_spec.spec_format.cli import main as package_cli
 from spec2gds.agent_spec.spec_format.v1_api import (
     ActionInputRequest,
+    CircuitLaunchRequest,
     CreateDocumentRequest,
     OpenDocumentRequest,
     ProposalRequest,
     TransactionRequest,
     create_app,
 )
+from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
 
 
 def _endpoints() -> dict[str, object]:
@@ -135,6 +137,44 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
         assert opened["source_revision_hash"]
 
 
+def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import spec2gds.agent_spec.spec_format.v1_api as v1_api
+
+    package_path = tmp_path / "launch.spec"
+    write_v1_sample(package_path)
+    endpoints = _endpoints()
+    endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    published: list[dict[str, object]] = []
+
+    def publish(document: dict[str, object], **_: object) -> object:
+        published.append(document)
+        return type("Launch", (), {
+            "document_id": document["document_id"],
+            "editor_url": f"http://127.0.0.1:4180?document_id={document['document_id']}",
+            "reused_session": False,
+        })()
+
+    monkeypatch.setattr(v1_api, "publish_circuit_document", publish)
+    result = endpoints["launch_circuit"](CircuitLaunchRequest(
+        entity_kind="design",
+        entity_id="design_subsystem_internal",
+    ))
+
+    assert result["entity_id"] == "design_subsystem_internal"
+    assert result["entity_kind"] == "design"
+    assert result["editor_url"].startswith("http://127.0.0.1:4180?document_id=")
+    assert result["omitted_bus_items"] == ["link0"]
+    assert published[0]["protocol_version"] == "circuit-designer.v1"
+
+    component_result = endpoints["launch_circuit"](CircuitLaunchRequest(
+        entity_kind="component",
+        entity_id="component_leaf",
+    ))
+    assert component_result["entity_kind"] == "component"
+    assert component_result["entity_id"] == "component_leaf"
+    assert published[1]["design"]["boundary_terminals"][0]["label"] == "irq_in"
+
+
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:
     app = create_app()
     paths = {route.path for route in app.routes}
@@ -170,3 +210,184 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
     output = capsys.readouterr().out
     assert "spec2gds server: http://0.0.0.0:8080" in output
     assert "spec2gds editor: http://127.0.0.1:8765/editor" in output
+
+
+def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path) -> None:
+    package_path = tmp_path / "assistant.spec"
+    write_v1_sample(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    target = next(
+        item["ref"]
+        for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    proposal = SpecChangeProposal(
+        proposal_id="proposal_component_description",
+        document_id=opened["document_id"],
+        target=target,
+        base_source_revision_hash=opened["source_revision_hash"],
+        title="Clarify leaf behavior",
+        summary="Add a source description.",
+        rationale="The component intent should be explicit.",
+        assumptions=[],
+        operations=[
+            {
+                "operation_id": "describe_leaf",
+                "type": "set_entity_metadata",
+                "entity": target,
+                "description": "Produces a demo-link payload for its connected target.",
+            }
+        ],
+    )
+
+    context = endpoints["assistant_context"](
+        opened["document_id"], "component", "component_leaf"
+    )
+    assert context["target"] == target
+    assert any(
+        item["entity_kind"] == "design"
+        for item in context["read_only"]["dependency_refs"]
+    ) is False
+    subsystem_context = endpoints["assistant_context"](
+        opened["document_id"], "component", "component_subsystem"
+    )
+    assert (
+        subsystem_context["writable"]["owned_internal_design"]["ref"]["entity_id"]
+        == "design_subsystem_internal"
+    )
+    before = endpoints["document_snapshot"]()["source_revision_hash"]
+    preview = endpoints["assistant_proposal_preview"](proposal)
+    assert preview["status"] == "valid"
+    assert preview["candidate_source_revision_hash"] != before
+    assert endpoints["document_snapshot"]()["source_revision_hash"] == before
+    assert preview["diff"]
+
+    applied = endpoints["assistant_proposal_apply"](proposal)
+    assert applied["status"] == "applied"
+    assert not applied["idempotent_replay"]
+    assert applied["source_revision_hash"] != before
+    replay = endpoints["assistant_proposal_apply"](proposal)
+    assert replay["idempotent_replay"]
+    conflicting_replay = proposal.model_copy(
+        update={
+            "operations": [
+                {
+                    "operation_id": "describe_leaf_differently",
+                    "type": "set_entity_metadata",
+                    "entity": target,
+                    "description": "A different operation set under the same proposal ID.",
+                }
+            ]
+        }
+    )
+    with pytest.raises(fastapi.HTTPException) as conflict:
+        endpoints["assistant_proposal_apply"](conflicting_replay)
+    assert conflict.value.status_code == 409
+
+    changes = endpoints["assistant_changes"]()["assistant_changes"]
+    assert len(changes) == 1
+    assert changes[0]["proposal_id"] == proposal.proposal_id
+    assert changes[0]["decision"] == "accepted"
+    reopened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    assert reopened["source_revision_hash"] == applied["source_revision_hash"]
+    assert endpoints["assistant_changes"]()["assistant_changes"] == changes
+
+
+def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Path) -> None:
+    package_path = tmp_path / "assistant-boundary.spec"
+    write_v1_sample(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    component = next(
+        item["ref"]
+        for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    bus = opened["bus_definitions"][0]["ref"]
+    crossing = SpecChangeProposal(
+        proposal_id="proposal_crossing",
+        document_id=opened["document_id"],
+        target=component,
+        base_source_revision_hash=opened["source_revision_hash"],
+        title="Cross boundary",
+        summary="Invalid shared edit.",
+        rationale="Test ownership.",
+        operations=[
+            {
+                "operation_id": "edit_bus",
+                "type": "update_bus_definition",
+                "bus_definition": bus,
+                "properties": {"broadcast": True},
+            }
+        ],
+    )
+    preview = endpoints["assistant_proposal_preview"](crossing)
+    assert preview["status"] == "invalid"
+    assert "ownership boundary" in preview["diagnostics"][0]
+
+    forbidden_payloads = (
+        {
+            "operation_id": "rename_identity",
+            "type": "set_entity_metadata",
+            "entity": component,
+            "vlnv": "example.org:changed:identity:2.0",
+        },
+        {
+            "operation_id": "raw_xml",
+            "type": "upsert_document_xml",
+            "xml": "<component/>",
+        },
+        {
+            "operation_id": "unknown_reference",
+            "type": "set_entity_metadata",
+            "entity": {
+                **component,
+                "entity_id": "component_missing",
+            },
+            "description": "invalid",
+        },
+    )
+    for index, operation in enumerate(forbidden_payloads):
+        forbidden = crossing.model_copy(
+            update={
+                "proposal_id": f"proposal_forbidden_{index}",
+                "operations": [operation],
+            }
+        )
+        assert endpoints["assistant_proposal_preview"](forbidden)["status"] == "invalid"
+
+    stale = crossing.model_copy(
+        update={
+            "proposal_id": "proposal_stale",
+            "base_source_revision_hash": "sha256:" + "0" * 64,
+            "operations": [
+                {
+                    "operation_id": "describe",
+                    "type": "set_entity_metadata",
+                    "entity": component,
+                    "description": "stale",
+                }
+            ],
+        }
+    )
+    assert endpoints["assistant_proposal_preview"](stale)["status"] == "stale"
+    with pytest.raises(fastapi.HTTPException) as rejected:
+        endpoints["assistant_proposal_apply"](stale)
+    assert rejected.value.status_code == 409
+
+
+def test_document_projection_uses_semantic_row_ids() -> None:
+    endpoints = _endpoints()
+    sample = Path("spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec").resolve()
+    endpoints["open_document"](OpenDocumentRequest(path=str(sample)))
+    batch = endpoints["document_a2ui"]()
+    tables = [
+        component["table"]
+        for message in batch["messages"]
+        for component in message.get("updateComponents", {}).get("components", [])
+        if component.get("component") == "SpecTable"
+    ]
+    row_ids = [row["row_id"] for table in tables for row in table["rows"]]
+    assert row_ids
+    assert not any(row_id.endswith(("-0", "-1", "-2")) for row_id in row_ids)

@@ -52,17 +52,17 @@ const SpecTableApi = {
 
 const NarrativeBlockApi = {
   name: "NarrativeBlock",
-  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+  schema: z.object({ block: z.custom<NarrativeBlockData>(), documentId: z.string() }),
 };
 
 const EntityLinkApi = {
   name: "EntityLink",
-  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+  schema: z.object({ block: z.custom<NarrativeBlockData>(), documentId: z.string() }),
 };
 
 const LiveViewApi = {
   name: "LiveView",
-  schema: z.object({ block: z.custom<NarrativeBlockData>() }),
+  schema: z.object({ block: z.custom<NarrativeBlockData>(), documentId: z.string() }),
 };
 
 function renderChildren(
@@ -130,13 +130,25 @@ function dispatchEntityAction(entityRef: EntityRef): void {
   }));
 }
 
-function FactList({ section }: { section: DocumentSectionData }) {
+function FactList({
+  section,
+  changedPaths = [],
+}: {
+  section: DocumentSectionData;
+  changedPaths?: string[];
+}) {
   const facts = section.facts.filter((fact) => fact.value);
   if (!facts.length) return null;
   return (
     <dl className="spec-facts">
       {facts.map((fact) => (
-        <div key={`${fact.label}-${fact.schema_path}`} title={fact.schema_path}>
+        <div
+          className={changedPaths.some((path) =>
+            path.includes(section.section_id) && path.includes(`.facts[${fact.label}]`)
+          ) ? "spec-proposal-changed" : undefined}
+          key={`${fact.label}-${fact.schema_path}`}
+          title={fact.schema_path}
+        >
           <dt>{fact.label}</dt>
           <dd>
             {fact.reference_anchor
@@ -205,10 +217,18 @@ function CellValue({ cell }: { cell: DocumentCell }) {
 
 const SpecTable = createComponentImplementation(
   SpecTableApi,
-  ({ props }) => {
-    const table = props.table as DocumentTable;
-    return (
-      <section className="spec-table-block" aria-labelledby={`${table.table_id}-title`}>
+  ({ props }) => <DocumentTableView table={props.table as DocumentTable} />,
+);
+
+export function DocumentTableView({
+  table,
+  changedPaths = [],
+}: {
+  table: DocumentTable;
+  changedPaths?: string[];
+}) {
+  return (
+    <section className="spec-table-block" aria-labelledby={`${table.table_id}-title`}>
         <div className="spec-table-block__heading">
           <h4 id={`${table.table_id}-title`}>{table.title}</h4>
           <span>{table.rows.length} {table.rows.length === 1 ? "entry" : "entries"}</span>
@@ -226,11 +246,24 @@ const SpecTable = createComponentImplementation(
             </thead>
             <tbody>
               {table.rows.map((row) => (
-                <tr key={row.row_id}>
+              <tr
+                className={changedPaths.some((path) =>
+                  path.includes(table.table_id) && path.includes(row.row_id)
+                ) ? "spec-proposal-row-changed" : undefined}
+                key={row.row_id}
+              >
                   {table.columns.map((column) => {
                     const cell = row.cells[column.key];
                     return (
-                      <td key={column.key} title={cell?.schema_path || column.schema_path}>
+                      <td
+                        className={changedPaths.some((path) =>
+                          path.includes(table.table_id)
+                          && path.includes(row.row_id)
+                          && path.includes(`.cells.${column.key}`)
+                        ) ? "spec-proposal-changed" : undefined}
+                        key={column.key}
+                        title={cell?.schema_path || column.schema_path}
+                      >
                         {cell ? <CellValue cell={cell} /> : <span className="spec-cell--absent">—</span>}
                       </td>
                     );
@@ -240,10 +273,9 @@ const SpecTable = createComponentImplementation(
             </tbody>
           </table>
         </div>
-      </section>
-    );
-  },
-);
+    </section>
+  );
+}
 
 function safeHref(value: string): string | undefined {
   if (value.startsWith("#") || value.startsWith("/assets/")) return value;
@@ -317,10 +349,47 @@ function NarrativeNode({ block }: { block: NarrativeBlockData }): React.ReactNod
   return <p>{renderInlines(block)}</p>;
 }
 
+export function DocumentSectionView({
+  section,
+  changedPaths = [],
+  label,
+}: {
+  section: DocumentSectionData;
+  changedPaths?: string[];
+  label?: string;
+}) {
+  const Heading = (section.level === 1 ? "h2" : "h3") as "h2" | "h3";
+  return (
+    <section className="spec-section spec-section--proposal" id={section.section_id}>
+      <header className="spec-section__header">
+        <div>
+          {label && <p className="spec-kicker">{label}</p>}
+          <Heading>{section.title}</Heading>
+        </div>
+      </header>
+      <FactList section={section} changedPaths={changedPaths} />
+      {section.tables.map((table) => (
+        <DocumentTableView table={table} changedPaths={changedPaths} key={table.table_id} />
+      ))}
+      {section.narrative.map((block) => (
+        <div
+          className={changedPaths.some((path) => path.includes(block.block_id))
+            ? "spec-narrative spec-proposal-changed"
+            : "spec-narrative"}
+          key={block.block_id}
+        >
+          <NarrativeNode block={block} />
+        </div>
+      ))}
+    </section>
+  );
+}
+
 const NarrativeBlock = createComponentImplementation(
   NarrativeBlockApi,
   ({ props }) => (
     <div className="spec-narrative">
+      <NarrativeExploreButton block={props.block as NarrativeBlockData} documentId={props.documentId} />
       <NarrativeNode block={props.block as NarrativeBlockData} />
     </div>
   ),
@@ -334,6 +403,7 @@ const EntityLink = createComponentImplementation(
       <div className="spec-callout spec-callout--link">
         <span className="spec-callout__icon" aria-hidden="true">↗</span>
         <div>
+          <NarrativeExploreButton block={block} documentId={props.documentId} />
           <strong>{block.text || "Related specification entities"}</strong>
           <div className="spec-link-row">
             {block.entity_refs.map((ref) => (
@@ -359,6 +429,7 @@ const LiveView = createComponentImplementation(
       <div className="spec-callout spec-callout--live">
         <span className="spec-live-dot" aria-hidden="true" />
         <div>
+          <NarrativeExploreButton block={block} documentId={props.documentId} />
           <strong>{block.text || "Live design view"}</strong>
           <p>Renderer: <code>{block.renderer_id || "default"}</code></p>
           {block.entity_refs.map((ref) => (
@@ -374,6 +445,22 @@ const LiveView = createComponentImplementation(
     );
   },
 );
+
+function NarrativeExploreButton({ block, documentId }: { block: NarrativeBlockData; documentId: string }) {
+  return (
+    <button
+      className="spec-narrative-action"
+      type="button"
+      onClick={() => dispatchEntityAction({
+        document_id: documentId,
+        entity_id: block.block_id,
+        entity_kind: "narrative_block",
+      })}
+    >
+      Actions
+    </button>
+  );
+}
 
 export const specDocumentCatalog = new Catalog(
   SPEC_DOCUMENT_CATALOG_ID,

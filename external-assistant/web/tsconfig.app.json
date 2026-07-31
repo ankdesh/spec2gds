@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@spec2gds/circuit-core": ["../../circuit-designer/packages/core/src/index.ts"],
+      "@spec2gds/circuit-layout": ["../../circuit-designer/packages/layout/src/index.ts"],
+      "@spec2gds/circuit-react": ["../../circuit-designer/packages/react/src/index.tsx"],
+      "@spec2gds/circuit-react/styles.css": ["../../circuit-designer/packages/react/src/styles.css"],
+      "@spec2gds/document-core": ["../../circuit-designer/packages/document-core/src/index.ts"],
+      "@spec2gds/document-a2ui-react": ["../../circuit-designer/packages/document-a2ui-react/src/index.tsx"],
+      "@spec2gds/document-a2ui-react/styles.css": ["../../circuit-designer/packages/document-a2ui-react/src/styles.css"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}

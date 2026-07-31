@@ -6,7 +6,6 @@ import {
   compileConstruction,
   diffDocuments,
   exportCircuitJson,
-  renderCircuitPng,
   renderCircuitSvg,
   resolveHierarchy,
   validateCircuitDocument,
@@ -19,6 +18,7 @@ import {
   type CircuitExportOptions,
   type CircuitOperationBatch,
   type CircuitProposal,
+  type CircuitProposalCreateRequest,
   type CircuitSnapshot,
   type ComponentDefinition,
   type ComponentDesignProvider,
@@ -31,6 +31,7 @@ import {
   type ResolvedComponentDesign,
   type SubgraphQuery,
 } from "@spec2gds/circuit-core";
+import { renderCircuitPngBytes } from "./png";
 
 interface StoredDocument {
   snapshot: CircuitSnapshot;
@@ -40,15 +41,7 @@ interface StoredDocument {
   requests: Map<string, CircuitChangeResult>;
 }
 
-export interface CircuitRepositoryState {
-  snapshot: CircuitSnapshot;
-  revision_number: number;
-  lease: EditLease | null;
-  proposals: CircuitProposal[];
-  requests: Array<[string, CircuitChangeResult]>;
-}
-
-export interface MemoryBackendOptions {
+export interface SessionBackendOptions {
   now?: () => Date;
   provider?: ComponentDesignProvider;
   documents?: CircuitDocument[];
@@ -57,17 +50,21 @@ export interface MemoryBackendOptions {
 const emptyDiff = () => ({ added: [], removed: [], changed: [], connections_changed: [] });
 
 /**
- * Deterministic in-memory conformance implementation. IndexedDB and the HTTP
- * service use the same domain engine and match this behavior.
+ * Ephemeral service-side session store.
+ *
+ * Circuit state, revisions, edit leases, proposals, and idempotency results
+ * exist only for the lifetime of the Node service process. Durable ownership
+ * remains with REST clients such as a SpecIR translator or a downloaded
+ * CircuitDocument file.
  */
-export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
-  protected readonly records = new Map<string, StoredDocument>();
-  protected readonly now: () => Date;
-  protected provider?: ComponentDesignProvider;
+export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
+  private readonly records = new Map<string, StoredDocument>();
+  private readonly now: () => Date;
+  private provider?: ComponentDesignProvider;
   private readonly documentProviders = new Map<string, ComponentDesignProvider>();
   private sequence = 0;
 
-  constructor(options: MemoryBackendOptions = {}) {
+  constructor(options: SessionBackendOptions = {}) {
     this.now = options.now ?? (() => new Date());
     this.provider = options.provider;
     for (const document of options.documents ?? []) this.insertInitial(document);
@@ -102,7 +99,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
     };
     record.requests.set(requestId, clone(result));
     this.records.set(document.document_id, record);
-    await this.afterMutation(document.document_id);
     return result;
   }
 
@@ -140,7 +136,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       alias_map: {},
     };
     record.requests.set(requestId, clone(result));
-    await this.afterMutation(documentId);
     return result;
   }
 
@@ -179,7 +174,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
     };
     record.requests.set(batch.request_id, clone(committed));
     this.markProposalsStale(record);
-    await this.afterMutation(documentId);
     return committed;
   }
 
@@ -199,7 +193,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       owner_id: ownerId,
       expires_at: new Date(this.now().getTime() + ttlSeconds * 1000).toISOString(),
     };
-    await this.afterMutation(documentId);
     return clone(record.lease);
   }
 
@@ -210,7 +203,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       throw new CircuitBackendError("lock_conflict", "The edit lease is missing or expired.");
     }
     lease.expires_at = new Date(this.now().getTime() + ttlSeconds * 1000).toISOString();
-    await this.afterMutation(documentId);
     return clone(lease);
   }
 
@@ -221,7 +213,6 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       throw new CircuitBackendError("lock_conflict", "The edit lease is missing or expired.");
     }
     record.lease = null;
-    await this.afterMutation(documentId);
   }
 
   async summary(documentId: string): Promise<DocumentSummary> {
@@ -286,7 +277,11 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
     const document = this.record(documentId).snapshot.document;
     const stem = `${document.document_id}-${document.design.id}`;
     if (options.format === "json") {
-      return { media_type: "application/json", filename: `${stem}.json`, data: exportCircuitJson(document) };
+      return {
+        media_type: "application/json",
+        filename: `${document.document_id}.circuit.json`,
+        data: exportCircuitJson(document),
+      };
     }
     if (options.format === "svg") {
       return {
@@ -295,8 +290,11 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
         data: renderCircuitSvg(document, { selection: options.selection }),
       };
     }
-    const blob = await renderCircuitPng(document, { selection: options.selection });
-    return { media_type: "image/png", filename: `${stem}.png`, data: new Uint8Array(await blob.arrayBuffer()) };
+    return {
+      media_type: "image/png",
+      filename: `${stem}.png`,
+      data: renderCircuitPngBytes(document, options.selection),
+    };
   }
 
   async listProposals(documentId: string): Promise<CircuitProposal[]> {
@@ -305,7 +303,7 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
     return clone([...record.proposals.values()]);
   }
 
-  async submitProposal(proposal: CircuitProposal): Promise<CircuitProposal> {
+  async submitProposal(proposal: CircuitProposalCreateRequest): Promise<CircuitProposal> {
     const record = this.record(proposal.document_id);
     if (record.proposals.has(proposal.proposal_id)) {
       throw new CircuitBackendError("revision_conflict", `Proposal already exists: ${proposal.proposal_id}`);
@@ -321,9 +319,9 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       status: "pending" as const,
       diagnostics: evaluation.diagnostics,
       diff: evaluation.diff,
+      created_at: this.now().toISOString(),
     });
     record.proposals.set(saved.proposal_id, saved);
-    await this.afterMutation(proposal.document_id);
     return clone(saved);
   }
 
@@ -356,8 +354,9 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
         }
       }
     }
-    record.proposals.delete(proposalId);
-    await this.afterMutation(documentId);
+    if (decision === "reject" || result?.status === "accepted") {
+      record.proposals.delete(proposalId);
+    }
     return result;
   }
 
@@ -390,36 +389,13 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
     return commitProviderDocument(provider, { ...request, component });
   }
 
-  protected async afterMutation(_documentId: string): Promise<void> {}
-
-  protected insertInitial(document: CircuitDocument, revision = "1"): void {
+  private insertInitial(document: CircuitDocument, revision = "1"): void {
     this.records.set(document.document_id, {
       snapshot: { revision, document: clone(document) },
       revisionNumber: Number(revision) || 1,
       lease: null,
       proposals: new Map(),
       requests: new Map(),
-    });
-  }
-
-  protected insertState(state: CircuitRepositoryState): void {
-    this.records.set(state.snapshot.document.document_id, {
-      snapshot: clone(state.snapshot),
-      revisionNumber: state.revision_number,
-      lease: clone(state.lease),
-      proposals: new Map(clone(state.proposals).map((proposal) => [proposal.proposal_id, proposal])),
-      requests: new Map(clone(state.requests)),
-    });
-  }
-
-  protected repositoryState(documentId: string): CircuitRepositoryState {
-    const record = this.record(documentId);
-    return clone({
-      snapshot: record.snapshot,
-      revision_number: record.revisionNumber,
-      lease: record.lease,
-      proposals: [...record.proposals.values()],
-      requests: [...record.requests.entries()],
     });
   }
 
@@ -510,56 +486,5 @@ export class MemoryCircuitDesignerBackend implements CircuitDesignerBackend {
       diff: emptyDiff(),
       alias_map: {},
     };
-  }
-}
-
-/** Compatibility name for existing imports while the React app migrates. */
-export class LocalCircuitDesignerApi extends MemoryCircuitDesignerBackend {
-  constructor(document?: CircuitDocument, options: Omit<MemoryBackendOptions, "documents"> = {}) {
-    super({ ...options, documents: document ? [document] : [] });
-  }
-}
-
-const databaseVersion = 2;
-const storeName = "snapshots";
-
-/**
- * Browser repository. Domain behavior stays in MemoryCircuitDesignerBackend;
- * only authoritative snapshots are hydrated/persisted in IndexedDB.
- */
-export class IndexedDbCircuitDesignerBackend extends MemoryCircuitDesignerBackend {
-  private constructor(private readonly database: IDBDatabase, options: MemoryBackendOptions) {
-    super(options);
-  }
-
-  static async open(name = "circuit-designer-v1", options: MemoryBackendOptions = {}): Promise<IndexedDbCircuitDesignerBackend> {
-    if (typeof indexedDB === "undefined") throw new Error("IndexedDB is unavailable.");
-    const database = await new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(name, databaseVersion);
-      request.onupgradeneeded = () => {
-        if (request.result.objectStoreNames.contains(storeName)) request.result.deleteObjectStore(storeName);
-        request.result.createObjectStore(storeName, { keyPath: "snapshot.document.document_id" });
-      };
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-    const states = await new Promise<CircuitRepositoryState[]>((resolve, reject) => {
-      const request = database.transaction(storeName).objectStore(storeName).getAll();
-      request.onsuccess = () => resolve(request.result as CircuitRepositoryState[]);
-      request.onerror = () => reject(request.error);
-    });
-    const backend = new IndexedDbCircuitDesignerBackend(database, options);
-    for (const state of states) backend.insertState(state);
-    return backend;
-  }
-
-  protected override async afterMutation(documentId: string): Promise<void> {
-    const state = this.repositoryState(documentId);
-    await new Promise<void>((resolve, reject) => {
-      const transaction = this.database.transaction(storeName, "readwrite");
-      transaction.objectStore(storeName).put(state);
-      transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error);
-    });
   }
 }

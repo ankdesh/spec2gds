@@ -133,7 +133,23 @@ a:focus-visible {
   min-width: 0;
 }
 
-.package-picker label {
+.header-tools {
+  display: grid;
+  justify-items: end;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.circuit-launcher {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.package-picker label,
+.circuit-launcher label {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -141,7 +157,8 @@ a:focus-visible {
   clip: rect(0, 0, 0, 0);
 }
 
-.package-picker select {
+.package-picker select,
+.circuit-launcher select {
   min-width: 0;
   max-width: 18rem;
   padding: 0.48rem 0.65rem;
@@ -153,6 +170,7 @@ a:focus-visible {
 }
 
 .package-picker button,
+.circuit-launcher button,
 .utility-heading button,
 .activity-item button,
 .action-option button {
@@ -188,6 +206,43 @@ button:disabled {
   box-shadow: 0 0.7rem 2rem rgba(23, 35, 30, 0.16);
   color: #204a3f;
   font-size: 0.82rem;
+}
+
+.app-refresh-notice {
+  position: fixed;
+  z-index: 31;
+  left: 50%;
+  top: 5.25rem;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 0.9rem;
+  transform: translateX(-50%);
+  border: 1px solid #d3ad5f;
+  border-radius: 0.45rem;
+  background: #fff5d9;
+  box-shadow: 0 0.7rem 2rem rgba(23, 35, 30, 0.16);
+  color: #684b13;
+  font-size: 0.82rem;
+}
+
+.app-refresh-notice button {
+  border: 1px solid #936d20;
+  border-radius: 0.3rem;
+  padding: 0.35rem 0.6rem;
+  background: #936d20;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.app-refresh-notice button[aria-label="Dismiss"] {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 1.1rem;
 }
 
 .app-error {
@@ -446,6 +501,14 @@ button:disabled {
   border-top: 1px solid var(--spec-line);
 }
 
+.action-option--assistant {
+  margin-bottom: 0.35rem;
+  padding: 1rem;
+  border: 1px solid #b9d6cd;
+  border-radius: 0.5rem;
+  background: #eef7f3;
+}
+
 .action-option div {
   display: grid;
   gap: 0.2rem;
@@ -482,6 +545,10 @@ button:disabled {
     max-width: 9rem;
   }
 
+  .circuit-launcher select {
+    max-width: 7rem;
+  }
+
   .brand small {
     display: none;
   }
@@ -490,4 +557,3 @@ button:disabled {
     padding: 2rem 0.75rem;
   }
 }
-

@@ -1,5 +1,8 @@
 # Historical: Circuit Designer Phase 1
 
+> Archived and superseded. See the current
+> [Circuit Designer design](../circuit_designer_architecture_v1.md).
+
 Phase 1 connects the independent Phase 0 canvas to the active validated
 SpecIR revision. It is a read-only vertical slice: users can select and inspect
 real designs, but the circuit designer cannot yet modify source or layout.

@@ -9,9 +9,9 @@ import { emptyLayout, projectDocument, type CircuitGraphView } from "./model";
 
 function terminal(
   id: string,
-  direction: "input" | "output",
+  direction: TerminalDefinition["direction"],
   category: "port" | "interface" = "port",
-  width = 1,
+  width: TerminalDefinition["width"] = 1,
 ): TerminalDefinition {
   return { id, label: id, direction, width, category };
 }
@@ -79,6 +79,21 @@ export function mixedDocumentFixture(): CircuitDocument {
       { id: "system_bus", label: "system bus", endpoints: [endpoint("cpu_0", "bus"), endpoint("peripheral_0", "bus")] },
       { id: "irq", label: "irq", endpoints: [endpoint("peripheral_0", "irq"), endpoint("cpu_0", "irq")] },
     ],
+  );
+}
+
+export function bidirectionalDocumentFixture(): CircuitDocument {
+  return document(
+    "bidirectional",
+    [
+      component("transceiver", [terminal("data", "inout", "port", "[DATA_WIDTH-1:0]")]),
+    ],
+    [instance("transceiver_0", "transceiver"), instance("transceiver_1", "transceiver")],
+    [{
+      id: "shared_data",
+      label: "shared data",
+      endpoints: [endpoint("transceiver_0", "data"), endpoint("transceiver_1", "data")],
+    }],
   );
 }
 
@@ -222,6 +237,7 @@ export function largeDocumentFixture(instanceCount = 200): CircuitDocument {
 export const documentFixtures = {
   simple: simpleDocumentFixture,
   mixed: mixedDocumentFixture,
+  bidirectional: bidirectionalDocumentFixture,
   hyperedge: hyperedgeDocumentFixture,
   hierarchy: hierarchyDocumentFixture,
   cycle: cycleDocumentFixture,
@@ -231,6 +247,7 @@ export const documentFixtures = {
 
 export function simpleFixture(): CircuitGraphView { return projectDocument(simpleDocumentFixture(), "fixture"); }
 export function mixedFixture(): CircuitGraphView { return projectDocument(mixedDocumentFixture(), "fixture"); }
+export function bidirectionalFixture(): CircuitGraphView { return projectDocument(bidirectionalDocumentFixture(), "fixture"); }
 export function hyperedgeFixture(): CircuitGraphView { return projectDocument(hyperedgeDocumentFixture(), "fixture"); }
 export function hierarchyFixture(): CircuitGraphView { return projectDocument(hierarchyDocumentFixture(), "fixture"); }
 export function cycleFixture(): CircuitGraphView { return projectDocument(cycleDocumentFixture(), "fixture"); }
@@ -243,6 +260,7 @@ export function largeFixture(instanceCount = 200): CircuitGraphView {
 export const fixtures = {
   simple: simpleFixture,
   mixed: mixedFixture,
+  bidirectional: bidirectionalFixture,
   hyperedge: hyperedgeFixture,
   hierarchy: hierarchyFixture,
   cycle: cycleFixture,

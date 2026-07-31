@@ -8,20 +8,36 @@ activity-store operations; the browser never receives mutable package objects.
 from __future__ import annotations
 
 import base64
+import asyncio
 import dataclasses
+from datetime import UTC, datetime
 import json
+import os
 from pathlib import Path
 import typing
+from urllib.parse import urlencode
 
 import pydantic
 
 from spec2gds.agent_spec.spec_format.actions import (
     ActionService,
+    AssistantChangeDecision,
     ActivityStore,
     ArtifactSidecar,
     create_reference_registry,
 )
+from spec2gds.agent_spec.spec_format.assistant import (
+    SpecChangeProposal,
+    build_assistant_context,
+    preview_assistant_proposal,
+)
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
+from spec2gds.agent_spec.spec_format.circuit_adapter import (
+    CircuitAdapterError,
+    CircuitDesignerConnectionError,
+    project_source_to_circuit,
+    publish_circuit_document,
+)
 from spec2gds.agent_spec.spec_format.document import build_a2ui_batch, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, InterfaceEndpointIR, PortEndpointIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
@@ -93,6 +109,26 @@ class AssetRequest(pydantic.BaseModel):
     extension: str
 
 
+class CircuitLaunchRequest(pydantic.BaseModel):
+    """Select one source component or design to project into Circuit Designer."""
+
+    entity_kind: typing.Literal["component", "design"]
+    entity_id: str
+
+
+class AssistantLaunchRequest(pydantic.BaseModel):
+    """Launch a fresh external chat for one existing source entity."""
+
+    entity_kind: typing.Literal[
+        "component",
+        "design",
+        "bus_definition",
+        "abstraction_definition",
+        "narrative_block",
+    ]
+    entity_id: str
+
+
 class V1Session:
     """One local document session that keeps source and activity concerns separate."""
 
@@ -127,6 +163,24 @@ class V1Session:
         self.activity = ActivityStore(self.package, self.sidecar)
         self.save()
 
+    def commit_assistant_revision(
+        self,
+        revision: SpecRevision,
+        decision: AssistantChangeDecision,
+    ) -> None:
+        """Atomically save source and its accepted assistant decision together."""
+        next_package = revision.to_package()
+        if "activity/v1/actions.json" in self.package.files:
+            next_package.files["activity/v1/actions.json"] = self.package.files[
+                "activity/v1/actions.json"
+            ]
+        next_activity = ActivityStore(next_package, self.sidecar)
+        next_activity.record_assistant_change(decision)
+        next_package.save(self.path)
+        self.package = next_package
+        self.revision = SpecRevision.from_package(next_package)
+        self.activity = ActivityStore(next_package, self.sidecar)
+
 
 def create_app() -> typing.Any:
     """Create the production local V1 API; only the deterministic source format is accepted."""
@@ -138,7 +192,11 @@ def create_app() -> typing.Any:
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
-    state: dict[str, typing.Any] = {"active": None}
+    state: dict[str, typing.Any] = {
+        "active": None,
+        "source_event_sequence": 0,
+        "source_event": None,
+    }
     editor_root = Path(__file__).with_name("editor_dist")
     sample_root = Path(__file__).with_name("samples") / "generated"
     # A source checkout also exposes the larger real-document corpus.  Keep
@@ -178,6 +236,7 @@ def create_app() -> typing.Any:
         """Commit a successful transaction or map diagnostics to HTTP status."""
         if result.succeeded and result.revision is not None:
             active().commit_revision(result.revision)
+            _publish_source_event(state, active(), origin="editor", affected_entities=[])
             return {"committed": True, "snapshot": _snapshot(active())}
         status = 409 if any("Stale" in item or "stale" in item for item in result.diagnostics) else 422
         raise fastapi.HTTPException(status_code=status, detail={"diagnostics": list(result.diagnostics)})
@@ -226,11 +285,169 @@ def create_app() -> typing.Any:
         """Return the complete editor-facing immutable source projection."""
         return _snapshot(active())
 
+    @app.post("/assistant/launch")
+    def launch_assistant(request: AssistantLaunchRequest) -> dict[str, typing.Any]:
+        """Return the external launch URL without making the editor depend on it."""
+        target = ref(request.entity_kind, request.entity_id)
+        try:
+            active().revision.resolve(target)
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        external = os.environ.get("EXTERNAL_ASSISTANT_URL", "http://127.0.0.1:4200").rstrip("/")
+        service = os.environ.get("SPEC_EDITOR_SERVICE_URL", "http://127.0.0.1:8000").rstrip("/")
+        query = urlencode(
+            {
+                "service_base_url": service,
+                "document_id": active().revision.document_id,
+                "entity_kind": target.entity_kind,
+                "entity_id": target.entity_id,
+            }
+        )
+        return {"assistant_url": f"{external}/launch/spec?{query}", "target": _jsonable(target)}
+
+    @app.post("/circuit-designer/launch")
+    def launch_circuit(request: CircuitLaunchRequest) -> dict[str, typing.Any]:
+        """Project one direct-port design, publish it, and return its browser URL."""
+        try:
+            projection = project_source_to_circuit(
+                active().revision,
+                request.entity_kind,
+                request.entity_id,
+            )
+            launched = publish_circuit_document(
+                projection.document,
+                service_url=os.environ.get(
+                    "CIRCUIT_DESIGNER_SERVICE_URL",
+                    "http://127.0.0.1:4100/api/circuit-designer/v1",
+                ),
+                editor_url=os.environ.get("CIRCUIT_DESIGNER_UI_URL", "http://127.0.0.1:4180"),
+            )
+        except CircuitDesignerConnectionError as exc:
+            raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc
+        except CircuitAdapterError as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        return {
+            "document_id": launched.document_id,
+            "entity_id": projection.source_entity_id,
+            "entity_kind": projection.source_entity_kind,
+            "editor_url": launched.editor_url,
+            "reused_session": launched.reused_session,
+            "omitted_bus_items": list(projection.omitted_bus_items),
+        }
+
     @app.get("/documents/a2ui")
     def document_a2ui() -> dict[str, typing.Any]:
         """Return a deterministic A2UI v0.9 batch for the unified document."""
         projection = build_document_projection(active().revision)
         return build_a2ui_batch(projection).model_dump(mode="json")
+
+    @app.get("/assistant/context")
+    def assistant_context(
+        document_id: str,
+        entity_kind: str,
+        entity_id: str,
+    ) -> dict[str, typing.Any]:
+        """Return entity-bound semantic context for the external Spec agent."""
+        if document_id != active().revision.document_id:
+            raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
+        try:
+            return build_assistant_context(active().revision, ref(entity_kind, entity_id))
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        except (TypeError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.post("/assistant/proposals/preview")
+    def assistant_proposal_preview(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
+        """Validate and project an assistant proposal without persisting a draft."""
+        try:
+            result = preview_assistant_proposal(active().revision, proposal)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        result.pop("_revision", None)
+        return result
+
+    @app.post("/assistant/proposals/apply")
+    def assistant_proposal_apply(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
+        """Revalidate, atomically apply/save, and record one approved decision."""
+        session = active()
+        digest = proposal.operations_digest()
+        existing = next(
+            (
+                item
+                for item in session.activity.state.assistant_changes
+                if item.proposal_id == proposal.proposal_id
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.operations_digest != digest:
+                raise fastapi.HTTPException(
+                    status_code=409,
+                    detail="Proposal ID was already applied with different operations.",
+                )
+            return {
+                "status": "applied",
+                "idempotent_replay": True,
+                "proposal_id": proposal.proposal_id,
+                "source_revision_hash": existing.result_source_revision_hash,
+                "saved_at": existing.applied_at,
+            }
+        result = preview_assistant_proposal(session.revision, proposal)
+        if result["status"] == "stale":
+            raise fastapi.HTTPException(status_code=409, detail=result)
+        if result["status"] != "valid" or result.get("_revision") is None:
+            raise fastapi.HTTPException(status_code=422, detail=result)
+        revision = typing.cast(SpecRevision, result.pop("_revision"))
+        applied_at = datetime.now(UTC).isoformat()
+        decision = AssistantChangeDecision(
+            proposal_id=proposal.proposal_id,
+            target=proposal.target,
+            base_source_revision_hash=proposal.base_source_revision_hash,
+            result_source_revision_hash=revision.source_revision_hash,
+            operations_digest=digest,
+            operations=tuple(proposal.operations),
+            applied_at=applied_at,
+        )
+        try:
+            session.commit_assistant_revision(revision, decision)
+        except (OSError, ValueError, SpecValidationError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        _publish_source_event(
+            state,
+            session,
+            origin="assistant",
+            affected_entities=[proposal.target.model_dump(mode="json")],
+        )
+        return {
+            "status": "applied",
+            "idempotent_replay": False,
+            "proposal_id": proposal.proposal_id,
+            "source_revision_hash": session.revision.source_revision_hash,
+            "saved_at": applied_at,
+            "sections": result["candidate_sections"],
+            "diff": result["diff"],
+        }
+
+    @app.get("/events")
+    async def source_events() -> typing.Any:
+        """Stream committed source changes; consumers decide when to refresh."""
+        async def events() -> typing.AsyncIterator[str]:
+            observed = int(state["source_event_sequence"])
+            while True:
+                if int(state["source_event_sequence"]) != observed:
+                    observed = int(state["source_event_sequence"])
+                    payload = json.dumps(state["source_event"], separators=(",", ":"))
+                    yield f"id: {observed}\nevent: source.changed\ndata: {payload}\n\n"
+                else:
+                    yield ": keep-alive\n\n"
+                await asyncio.sleep(1)
+
+        return fastapi.responses.StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     @app.get("/diagnostics")
     def diagnostics() -> dict[str, typing.Any]:
@@ -417,6 +634,15 @@ def create_app() -> typing.Any:
         """List review-gated change proposals for the active package."""
         return {"proposals": [_jsonable(item) for item in active().activity.state.proposals]}
 
+    @app.get("/assistant/changes")
+    def assistant_changes() -> dict[str, typing.Any]:
+        """List accepted assistant decisions stored in package activity."""
+        return {
+            "assistant_changes": [
+                _jsonable(item) for item in active().activity.state.assistant_changes
+            ]
+        }
+
     @app.post("/proposals/{proposal_id}/preview")
     def preview_proposal(proposal_id: str, request: ProposalRequest) -> dict[str, typing.Any]:
         """Validate a pending proposal without changing source or review state."""
@@ -564,3 +790,21 @@ def _jsonable(value: typing.Any) -> typing.Any:
     if isinstance(value, dict):
         return {str(key): _jsonable(item) for key, item in value.items()}
     return value
+
+
+def _publish_source_event(
+    state: dict[str, typing.Any],
+    session: V1Session,
+    *,
+    origin: str,
+    affected_entities: list[dict[str, typing.Any]],
+) -> None:
+    """Publish one post-commit event for lightweight local SSE subscribers."""
+    state["source_event_sequence"] = int(state["source_event_sequence"]) + 1
+    state["source_event"] = {
+        "sequence": state["source_event_sequence"],
+        "document_id": session.revision.document_id,
+        "source_revision_hash": session.revision.source_revision_hash,
+        "origin": origin,
+        "affected_entities": affected_entities,
+    }

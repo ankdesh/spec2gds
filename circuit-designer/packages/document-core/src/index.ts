@@ -102,13 +102,18 @@ export interface A2UIDocumentBatch {
   messages: A2UIMessage[];
 }
 
+export interface HardwareEntitySummary {
+  ref: EntityRef;
+  vlnv: string;
+}
+
 export interface DocumentSnapshot {
   schema_version: string;
   document_id: string;
   source_revision_hash: string;
-  components: unknown[];
-  designs: unknown[];
-  entry_designs: unknown[];
+  components: HardwareEntitySummary[];
+  designs: HardwareEntitySummary[];
+  entry_designs: HardwareEntitySummary[];
   bus_definitions: unknown[];
   abstraction_definitions: unknown[];
   component_compositions: unknown[];
@@ -116,10 +121,33 @@ export interface DocumentSnapshot {
   diagnostics: { source: string[]; artifacts: string[] };
 }
 
+export interface CircuitDesignerLaunch {
+  document_id: string;
+  entity_id: string;
+  entity_kind: "component" | "design";
+  editor_url: string;
+  reused_session: boolean;
+  omitted_bus_items: string[];
+}
+
+export interface AssistantLaunch {
+  assistant_url: string;
+  target: EntityRef;
+}
+
+export interface SourceChangeEvent {
+  sequence: number;
+  document_id: string;
+  source_revision_hash: string;
+  origin: string;
+  affected_entities: EntityRef[];
+}
+
 export interface ActivityState {
   executions: Array<Record<string, unknown>>;
   artifacts: Array<Record<string, unknown>>;
   proposals: Array<Record<string, unknown>>;
+  assistant_changes: Array<Record<string, unknown>>;
 }
 
 export interface EntityAction {
@@ -161,15 +189,44 @@ export class SpecEditorHttpClient {
     return this.request("/documents/a2ui");
   }
 
+  getSnapshot(): Promise<DocumentSnapshot> {
+    return this.request("/documents/snapshot");
+  }
+
+  eventsUrl(): string {
+    return `${this.baseUrl}/events`;
+  }
+
+  launchAssistant(ref: EntityRef): Promise<AssistantLaunch> {
+    return this.request("/assistant/launch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        entity_kind: ref.entity_kind,
+        entity_id: ref.entity_id,
+      }),
+    });
+  }
+
+  launchCircuitDesigner(entityKind: "component" | "design", entityId: string): Promise<CircuitDesignerLaunch> {
+    return this.request("/circuit-designer/launch", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ entity_kind: entityKind, entity_id: entityId }),
+    });
+  }
+
   getActivity(): Promise<ActivityState> {
     return Promise.all([
       this.request<{ executions: Array<Record<string, unknown>> }>("/executions"),
       this.request<{ artifacts: Array<Record<string, unknown>> }>("/artifacts"),
       this.request<{ proposals: Array<Record<string, unknown>> }>("/proposals"),
-    ]).then(([executions, artifacts, proposals]) => ({
+      this.request<{ assistant_changes: Array<Record<string, unknown>> }>("/assistant/changes"),
+    ]).then(([executions, artifacts, proposals, assistantChanges]) => ({
       executions: executions.executions,
       artifacts: artifacts.artifacts,
       proposals: proposals.proposals,
+      assistant_changes: assistantChanges.assistant_changes,
     }));
   }
 

@@ -134,6 +134,20 @@ export type SetLayoutSettingsOperation = OperationBase & {
   grid_size?: number;
   direction?: "RIGHT" | "DOWN";
 };
+export type CircuitProposalCreateRequest = {
+  proposal_id: NonEmptyString;
+  document_id: Slug;
+  base_revision: NonEmptyString;
+  title: NonEmptyString;
+  summary: NonEmptyString;
+  rationale?: string;
+  assumptions?: NonEmptyString[];
+  construction?: CircuitConstruction;
+  batch?: CircuitOperationBatch;
+} & CircuitProposalCreateRequest1;
+export type CircuitProposalCreateRequest1 = {
+  [k: string]: any;
+};
 export type CircuitProposal = {
   proposal_id: NonEmptyString;
   document_id: Slug;
@@ -141,6 +155,7 @@ export type CircuitProposal = {
   title: NonEmptyString;
   summary: NonEmptyString;
   rationale?: string;
+  assumptions?: NonEmptyString[];
   status: "pending" | "stale";
   construction?: CircuitConstruction;
   batch?: CircuitOperationBatch;
@@ -161,6 +176,7 @@ export interface CircuitDesignerProtocol {
   construction?: CircuitConstruction;
   batch?: CircuitOperationBatch;
   result?: CircuitChangeResult;
+  proposal_create_request?: CircuitProposalCreateRequest;
   proposal?: CircuitProposal;
   lease?: EditLease;
   provider?: ResolvedComponentDesign;
@@ -190,8 +206,8 @@ export interface ComponentDefinition {
 export interface TerminalDefinition {
   id: Slug;
   label: NonEmptyString;
-  direction: "input" | "output";
-  width: number;
+  direction: "input" | "output" | "inout";
+  width: number | string;
   category?: "port" | "interface";
 }
 export interface StringParameterDefinition {
@@ -240,8 +256,8 @@ export interface CircuitDesign {
 export interface BoundaryTerminal {
   id: Slug;
   label: NonEmptyString;
-  direction: "input" | "output";
-  width: number;
+  direction: "input" | "output" | "inout";
+  width: number | string;
   category?: "port" | "interface";
 }
 export interface CircuitInstance {
@@ -369,8 +385,8 @@ export interface ConstructionInstance {
 export interface ConstructionBoundaryTerminal {
   alias?: Slug;
   name: NonEmptyString;
-  direction: "input" | "output";
-  width?: number;
+  direction: "input" | "output" | "inout";
+  width?: number | string;
   category?: "port" | "interface";
 }
 export interface ConstructionNet {

@@ -12,8 +12,11 @@ import {
   type EdgeProps,
   type Node,
   type NodeProps,
+  type Viewport,
 } from "@xyflow/react";
 import type {
+  CircuitDiff,
+  CircuitDocument,
   CircuitGraphView as CircuitGraphSnapshot,
   CircuitNodeView as CircuitNode,
   CircuitTerminalView as CircuitTerminal,
@@ -21,6 +24,7 @@ import type {
   NetRoute,
   NodeGeometry,
   TerminalPlacement,
+  Diagnostic,
 } from "@spec2gds/circuit-core";
 import {
   ensureRouteIds,
@@ -30,7 +34,9 @@ import {
   removeRouteBend,
   toggleRouteSegmentLock,
   toggleRouteVertexLock,
+  projectDocument,
 } from "@spec2gds/circuit-core";
+import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
 
 export type CircuitCanvasMode = "select" | "connect" | "route" | "pan";
 
@@ -54,6 +60,10 @@ export function interactionPolicy(mode: CircuitCanvasMode, editable: boolean): C
   };
 }
 
+export function terminalDisplayLabel(terminal: Pick<CircuitTerminal, "label" | "width">): string {
+  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.label;
+}
+
 export interface CircuitDesignerCanvasProps {
   graph: CircuitGraphSnapshot;
   layout: DiagramLayout;
@@ -68,6 +78,13 @@ export interface CircuitDesignerCanvasProps {
   mode?: CircuitCanvasMode;
   onNetRouteChange?: (netId: string, route: NetRoute) => void;
   rendererRegistry?: CircuitCanvasRendererRegistry;
+  elementStatus?: {
+    nodes?: Record<string, "added" | "removed" | "changed">;
+    nets?: Record<string, "added" | "removed" | "changed">;
+  };
+  selectedElement?: { kind: "node" | "net"; id: string } | null;
+  viewport?: Viewport;
+  onViewportChange?: (viewport: Viewport) => void;
 }
 
 type CircuitNodeData = {
@@ -126,10 +143,11 @@ function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
         const side = placement?.side ?? "SOUTH";
         const offset = 60 + (placement?.order ?? 0) * 20;
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
+        const displayLabel = terminalDisplayLabel(terminal);
         return <Fragment key={terminal.id}>
-          <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{terminal.label}</span>
-          <Handle id={terminalHandleId(terminal.id, "source")} type="source" position={positions[side]} style={style} title={terminal.label} />
-          <Handle id={terminalHandleId(terminal.id, "target")} type="target" position={positions[side]} style={style} title={terminal.label} />
+          <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{displayLabel}</span>
+          <Handle id={terminalHandleId(terminal.id, "source")} type="source" position={positions[side]} style={style} title={displayLabel} />
+          <Handle id={terminalHandleId(terminal.id, "target")} type="target" position={positions[side]} style={style} title={displayLabel} />
         </Fragment>;
       })}
     </div>
@@ -277,7 +295,7 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange, rendererRegistry }: CircuitDesignerCanvasProps) {
+export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange, rendererRegistry, elementStatus, selectedElement, viewport, onViewportChange }: CircuitDesignerCanvasProps) {
   const policy = interactionPolicy(mode, editable);
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
@@ -302,6 +320,8 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       style: { width: geometry.width, height: geometry.height },
       data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements, rendererRegistry },
       draggable: policy.nodesDraggable,
+      className: elementStatus?.nodes?.[node.id] ? `cd-element--${elementStatus.nodes[node.id]}` : undefined,
+      selected: selectedElement?.kind === "node" && selectedElement.id === node.id,
     }];
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
@@ -317,9 +337,16 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         terminals: [terminal], placements: terminalPlacements, rendererRegistry,
       },
       draggable: false,
+      className: elementStatus?.nodes?.[terminal.id] ? `cd-element--${elementStatus.nodes[terminal.id]}` : undefined,
+      selected: selectedElement?.kind === "node" && selectedElement.id === terminal.id,
     });
   }
   const edges = buildCircuitFlowEdges(graph, netRoutes, { routeEditable: policy.routeEditable, gridSize, onNetRouteChange });
+  for (const edge of edges) {
+    const status = elementStatus?.nets?.[edge.id];
+    if (status) edge.className = `cd-element--${status}`;
+    edge.selected = selectedElement?.kind === "net" && selectedElement.id === edge.id;
+  }
   return (
     <div className="cd-canvas" data-testid="circuit-canvas">
       <ReactFlow<CircuitFlowNode, CircuitFlowEdge>
@@ -329,6 +356,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         edgeTypes={{ circuit: CircuitEdgeView }}
         fitView={fitViewOnInit}
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
+        {...(viewport ? { viewport } : {})}
         minZoom={0.08}
         maxZoom={2.5}
         nodesDraggable={policy.nodesDraggable}
@@ -344,6 +372,7 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
         autoPanOnNodeDrag={false}
         autoPanOnConnect={false}
         onPaneClick={() => onSelect?.(null)}
+        onMove={(_, nextViewport) => onViewportChange?.(nextViewport)}
         onNodeClick={(_, node) => onSelect?.({ kind: "node", id: node.id.replace(/^boundary:/, "") })}
         onEdgeClick={(_, edge) => onSelect?.({ kind: "net", id: edge.id })}
         onConnect={(connection) => {
@@ -368,4 +397,147 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       </ReactFlow>
     </div>
   );
+}
+
+export interface CircuitProposalDiffViewerProps {
+  before: CircuitDocument;
+  after: CircuitDocument;
+  diff: CircuitDiff;
+  diagnostics?: Diagnostic[];
+  height?: number;
+}
+
+interface DiffCanvasState {
+  graph: CircuitGraphSnapshot;
+  layout: DiagramLayout;
+  boundaryGeometry: Record<string, NodeGeometry>;
+}
+
+export function CircuitProposalDiffViewer({
+  before,
+  after,
+  diff,
+  diagnostics = [],
+  height = 430,
+}: CircuitProposalDiffViewerProps) {
+  const [beforeState, setBeforeState] = useState<DiffCanvasState>();
+  const [afterState, setAfterState] = useState<DiffCanvasState>();
+  const [selection, setSelection] = useState<{ kind: "node" | "net"; id: string } | null>(null);
+  const [viewport, setViewport] = useState<Viewport>();
+
+  useEffect(() => {
+    let active = true;
+    void Promise.all([
+      layoutCircuitDocument(before, { preserveNodeGeometry: "all" }),
+      layoutCircuitDocument(after, { preserveNodeGeometry: "all" }),
+    ]).then(([left, right]) => {
+      if (!active) return;
+      setBeforeState({
+        graph: projectDocument(left.document, "proposal-before"),
+        layout: left.layout,
+        boundaryGeometry: left.boundary_geometry,
+      });
+      setAfterState({
+        graph: projectDocument(right.document, "proposal-after"),
+        layout: right.layout,
+        boundaryGeometry: right.boundary_geometry,
+      });
+    });
+    return () => { active = false; };
+  }, [before, after]);
+
+  const beforeStatus = useMemo(() => diffElementStatus(diff, "before"), [diff]);
+  const afterStatus = useMemo(() => diffElementStatus(diff, "after"), [diff]);
+  const errorCount = diagnostics.filter((item) => item.severity === "error").length;
+  const warningCount = diagnostics.filter((item) => item.severity === "warning").length;
+
+  return (
+    <section className="cd-proposal-diff" aria-label="Circuit proposal before and after">
+      <header className="cd-proposal-diff__header">
+        <span>{diff.added.length} added</span>
+        <span>{diff.changed.length} changed</span>
+        <span>{diff.removed.length} removed</span>
+        <span>{diff.connections_changed.length} connections changed</span>
+        {(errorCount > 0 || warningCount > 0) && (
+          <span>{errorCount} errors · {warningCount} warnings</span>
+        )}
+      </header>
+      <div className="cd-proposal-diff__grid" style={{ height }}>
+        <div className="cd-proposal-diff__pane">
+          <strong>Before</strong>
+          {beforeState ? (
+            <CircuitDesignerCanvas
+              graph={beforeState.graph}
+              layout={beforeState.layout}
+              boundaryGeometry={beforeState.boundaryGeometry}
+              elementStatus={beforeStatus}
+              selectedElement={selection}
+              onSelect={setSelection}
+              viewport={viewport}
+              onViewportChange={setViewport}
+              editable={false}
+              mode="pan"
+            />
+          ) : <div className="cd-proposal-diff__loading">Preparing layout…</div>}
+        </div>
+        <div className="cd-proposal-diff__pane">
+          <strong>After</strong>
+          {afterState ? (
+            <CircuitDesignerCanvas
+              graph={afterState.graph}
+              layout={afterState.layout}
+              boundaryGeometry={afterState.boundaryGeometry}
+              elementStatus={afterStatus}
+              selectedElement={selection}
+              onSelect={setSelection}
+              viewport={viewport}
+              onViewportChange={setViewport}
+              editable={false}
+              mode="pan"
+            />
+          ) : <div className="cd-proposal-diff__loading">Preparing layout…</div>}
+        </div>
+      </div>
+      {diagnostics.length > 0 && (
+        <details className="cd-proposal-diff__diagnostics">
+          <summary>Diagnostics</summary>
+          <ul>{diagnostics.map((item, index) => (
+            <li key={`${item.code}:${item.element_key ?? index}`} data-severity={item.severity}>
+              <code>{item.code}</code> {item.message}
+            </li>
+          ))}</ul>
+        </details>
+      )}
+    </section>
+  );
+}
+
+function diffElementStatus(
+  diff: CircuitDiff,
+  side: "before" | "after",
+): NonNullable<CircuitDesignerCanvasProps["elementStatus"]> {
+  const nodes: Record<string, "added" | "removed" | "changed"> = {};
+  const nets: Record<string, "added" | "removed" | "changed"> = {};
+  const assign = (
+    kind: "instance" | "boundary_terminal" | "net",
+    id: string,
+    status: "added" | "removed" | "changed",
+  ) => {
+    if (kind === "net") nets[id] = status;
+    else nodes[id] = status;
+  };
+  if (side === "before") {
+    for (const item of diff.removed) {
+      if (item.kind === "instance" || item.kind === "boundary_terminal" || item.kind === "net") assign(item.kind, item.id, "removed");
+    }
+  } else {
+    for (const item of diff.added) {
+      if (item.kind === "instance" || item.kind === "boundary_terminal" || item.kind === "net") assign(item.kind, item.id, "added");
+    }
+  }
+  for (const item of diff.changed) {
+    if (item.kind === "instance" || item.kind === "boundary_terminal" || item.kind === "net") assign(item.kind, item.id, "changed");
+  }
+  for (const netId of diff.connections_changed) nets[netId] = "changed";
+  return { nodes, nets };
 }

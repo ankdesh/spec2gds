@@ -167,6 +167,19 @@ class ChangeProposal(StrictModel):
     review_status: typing.Literal["pending", "accepted", "rejected"] = "pending"
 
 
+class AssistantChangeDecision(StrictModel):
+    """Minimal accepted assistant decision persisted with package activity."""
+
+    proposal_id: str
+    target: EntityRef
+    base_source_revision_hash: str
+    result_source_revision_hash: str
+    operations_digest: str
+    operations: tuple[dict[str, typing.Any], ...]
+    decision: typing.Literal["accepted"] = "accepted"
+    applied_at: str
+
+
 class _ActivityState(StrictModel):
     """Private serializable activity state stored inside a package's activity area."""
 
@@ -174,6 +187,7 @@ class _ActivityState(StrictModel):
     artifacts: tuple[ArtifactRef, ...] = ()
     executions: tuple[ActionExecution, ...] = ()
     proposals: tuple[ChangeProposal, ...] = ()
+    assistant_changes: tuple[AssistantChangeDecision, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -379,6 +393,27 @@ class ActivityStore:
         self.state = self.state.model_copy(
             update={"proposals": tuple(item if item.proposal_id != proposal.proposal_id else proposal for item in self.state.proposals)}
         )
+
+    def record_assistant_change(self, decision: AssistantChangeDecision) -> None:
+        """Append one accepted assistant decision, rejecting conflicting replay IDs."""
+        existing = next(
+            (
+                item
+                for item in self.state.assistant_changes
+                if item.proposal_id == decision.proposal_id
+            ),
+            None,
+        )
+        if existing is not None:
+            if existing.operations_digest != decision.operations_digest:
+                raise ValueError("Assistant proposal ID was reused with different operations.")
+            return
+        self.state = self.state.model_copy(
+            update={
+                "assistant_changes": (*self.state.assistant_changes, decision),
+            }
+        )
+        self.save()
 
 
 class ActionRegistry:

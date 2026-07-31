@@ -1,5 +1,8 @@
 # Historical: Circuit Designer UI Feature Selection
 
+> Archived decision worksheet; it is not the current implementation plan. See
+> the current [Circuit Designer design](../circuit_designer_architecture_v1.md).
+
 Use this document to select the next Circuit Designer implementation scope.
 Selections are intentionally independent of IP-XACT persistence unless a feature
 explicitly says otherwise. The standalone application should remain the primary

@@ -1,7 +1,8 @@
 # spec2gds Documentation
 
-The documents in this directory describe the current IP-XACT-centered V1
-product, its development method, and the completed pivot history.
+The documents in this directory describe the current IP-XACT-centered
+specification system, the independent Circuit Designer, their development
+methods, and completed migration history.
 
 ## Start Here
 
@@ -24,24 +25,41 @@ product, its development method, and the completed pivot history.
   specifications.
 - [IP-XACT Protocol Rules](ipxact_protocol.md): IEEE 1685-2022 semantics and V1
   profile.
+- [IP-XACT to Circuit Designer Adapter v1](ipxact_circuit_adapter_v1.md): run
+  the editor-to-circuit flow and understand the initial direct-port boundary.
 - [SpecIR and Atomic Edits](spec_ir_v1.md): immutable semantic reads and
   revision-guarded writes.
 - [Action Execution Contract](agent_spec_action_execution.md): snapshots,
   executors, reports, artifacts, provenance, and proposals.
 - [Local API and Editor](spec_editor_v1.md): run commands, routes, and browser
   interaction model.
+- [Spec Assistant Integration](spec-assistant-integration.md): optional
+  external Assistant UI, entity ownership, typed proposal preview/apply, and
+  refresh events.
 - [A2UI Stage 1 Editor](spec_editor_a2ui_stage1.md): unified read-only document
   projection, semantic catalog, React boundary, and Stage 2 seam.
-- [Circuit Designer v1 Protocol](circuit_designer_protocol_v1.md): canonical
-  document, construction, operations, drafts, diagnostics, and transport outcomes.
-- [Circuit Designer v1 Providers](circuit_designer_provider_v1.md): independent
-  hierarchy and callback-provider boundary.
-- [Circuit Designer v1 Tools](circuit_designer_tools_v1.md): structured agent
-  queries, previews, exports, and immutable proposals.
-- [Run Circuit Designer v1](circuit_designer_run_v1.md): browser and
-  Node/SQLite reference-service commands.
 - [Diagnostics](agent_spec_diagnostics.md): validation domains and operational
   troubleshooting.
+
+## Independent Circuit Designer
+
+Circuit Designer is a separate REST-based subsystem. It does not persist
+SpecIR, IP-XACT, or circuit sessions.
+
+- [Design and Architecture](circuit_designer_architecture_v1.md): start here for
+  ownership, components, runtime flows, REST surface, concurrency, and v1
+  boundaries.
+- [Protocol](circuit_designer_protocol_v1.md): canonical document,
+  construction, operations, drafts, diagnostics, and transport outcomes.
+- [Provider Boundary](circuit_designer_provider_v1.md): independent hierarchy,
+  HTTP callbacks, and provider-owned persistence.
+- [Agent Tools and Proposals](circuit_designer_tools_v1.md): structured
+  queries, previews, exports, and immutable proposals.
+- [Run Guide](circuit_designer_run_v1.md): browser, service-only, file, test,
+  and production commands.
+- [External Assistant](../external-assistant/docs/architecture.md): optional
+  assistant-ui, A2A agent, Circuit and Spec proposal preview, and review
+  architecture.
 
 ## Engineering Practice
 
@@ -60,5 +78,7 @@ product, its development method, and the completed pivot history.
 The four V1 pivot plans are retained as completed decision/acceptance history.
 References to removed ODT or heading-based behavior inside those plans describe
 the migration target that was eliminated, not current runtime behavior.
-Earlier Circuit Designer phase documents are retained under `docs/archive/` as
-historical context and are not active contracts.
+Earlier Circuit Designer phase documents are indexed in
+[`docs/archive/README.md`](archive/README.md). They describe removed
+SpecIR/FastAPI, local-backend, and earlier canvas designs and are not active
+contracts.

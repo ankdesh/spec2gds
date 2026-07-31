@@ -6,7 +6,9 @@ import {
   connectedInstanceIds,
   createOperationBatch,
   documentFixtures,
+  projectDocument,
   simpleDocumentFixture,
+  terminalDefaultPlacement,
   uniqueSlug,
   validateCircuitDocument,
   validateComponentDesignBoundary,
@@ -23,6 +25,43 @@ describe("independent circuit core", () => {
       expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
       expect(result.valid).toBe(true);
     }
+  });
+
+  it("preserves inout direction and opaque symbolic widths", () => {
+    const document = documentFixtures.bidirectional();
+    const checked = validateCircuitDocument(document);
+    expect(checked.valid).toBe(true);
+    expect(checked.diagnostics.map((item) => item.code)).toContain("multiple_net_sources");
+
+    const graph = projectDocument(document);
+    expect(graph.terminals.map((terminal) => ({
+      direction: terminal.direction,
+      width: terminal.width,
+    }))).toEqual([
+      { direction: "inout", width: "[DATA_WIDTH-1:0]" },
+      { direction: "inout", width: "[DATA_WIDTH-1:0]" },
+    ]);
+    expect(terminalDefaultPlacement("inout", 0).side).toBe("SOUTH");
+  });
+
+  it("allows whole symbolic terminals but rejects numeric slices on them", () => {
+    const document = simpleDocumentFixture();
+    document.components[0].terminals[0].width = "[SOURCE_WIDTH-1:0]";
+    document.components[1].terminals[0].width = "[TARGET_WIDTH-1:0]";
+
+    const unresolved = validateCircuitDocument(document);
+    expect(unresolved.valid).toBe(true);
+    expect(unresolved.diagnostics.map((item) => item.code)).toContain("width_unresolved");
+
+    document.design.nets[0].endpoints[0] = {
+      kind: "instance",
+      instance_id: "producer_0",
+      terminal_id: "data",
+      slice: { lsb: 0, width: 4 },
+    };
+    const sliced = validateCircuitDocument(document);
+    expect(sliced.valid).toBe(false);
+    expect(sliced.diagnostics.map((item) => item.code)).toContain("slice_requires_numeric_width");
   });
 
   it("queries connected instances without provider or source-format knowledge", () => {
@@ -106,6 +145,37 @@ describe("independent circuit core", () => {
     expect(result.document?.components[0].terminals.map((item) => item.width)).toEqual([8, 8]);
     expect(result.alias_map.u0).toBe("u0");
     expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
+  });
+
+  it("validates the client-authored portion of an external proposal", () => {
+    const request = {
+      proposal_id: "assistant_proposal",
+      document_id: "fixture_simple",
+      base_revision: "1",
+      title: "Add a consumer",
+      summary: "Add and connect one consumer instance.",
+      assumptions: ["The producer output can fan out."],
+      batch: {
+        request_id: "assistant_batch",
+        expected_revision: "1",
+        operations: [{
+          operation_id: "add_consumer",
+          type: "add_instance",
+          instance: {
+            id: "consumer_1",
+            label: "Consumer 1",
+            component_id: "consumer",
+            parameter_values: {},
+          },
+        }],
+      },
+    };
+    expect(validateContractDefinition("CircuitProposalCreateRequest", request).valid)
+      .toBe(true);
+    expect(validateContractDefinition("CircuitProposalCreateRequest", {
+      ...request,
+      status: "pending",
+    }).valid).toBe(false);
   });
 
   it("enforces provider child boundaries and rejects hierarchy cycles", async () => {

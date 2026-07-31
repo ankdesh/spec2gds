@@ -8,6 +8,8 @@ and narrative sources.  Browser renderers never receive XML nodes.
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import re
 import typing
 
@@ -210,13 +212,37 @@ def _columns(*items: tuple[str, str, str]) -> list[DocumentColumn]:
     return [DocumentColumn(key=key, label=label, schema_path=path) for key, label, path in items]
 
 
+def _row_key(row: dict[str, DocumentCell], kind: str) -> str:
+    """Derive a stable row identity from semantic key cells, never list position."""
+    preferred = ("name", "interface", "logical", "physical")
+    values = [
+        str(row[key].value)
+        for key in preferred
+        if key in row and row[key].value not in (None, "")
+    ]
+    if values:
+        return _slug("-".join(values))
+    if kind == "bus_properties":
+        return "properties"
+    canonical = json.dumps(
+        {key: cell.value for key, cell in sorted(row.items())},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return f"content-{hashlib.sha256(canonical).hexdigest()[:12]}"
+
+
 def _table(table_id: str, kind: str, title: str, columns: list[DocumentColumn], rows: list[dict[str, DocumentCell]]) -> DocumentTable:
     return DocumentTable(
         table_id=table_id,
         kind=kind,
         title=title,
         columns=columns,
-        rows=[DocumentRow(row_id=f"{table_id}-row-{index}", cells=row) for index, row in enumerate(rows)],
+        rows=[
+            DocumentRow(row_id=f"{table_id}-row-{_row_key(row, kind)}", cells=row)
+            for row in rows
+        ],
     )
 
 
@@ -250,11 +276,11 @@ def _configuration_tables(root: etree._Element, prefix: str) -> list[DocumentTab
         parameters.append({
             "name": _cell(_text(parameter, "name"), "/parameters/parameter/name"),
             "value": _cell(_text(value), "/parameters/parameter/value", kind="expression"),
-            "resolve": _cell(value.get("resolve", "") if value is not None else "", "/parameters/parameter/value/@resolve", kind="enum"),
-            "type": _cell(value.get("dataType", "") if value is not None else "", "/parameters/parameter/value/@dataType", kind="enum"),
-            "choice": _cell(value.get("choiceRef", "") if value is not None else "", "/parameters/parameter/value/@choiceRef", kind="reference"),
-            "minimum": _cell(value.get("minimum", "") if value is not None else "", "/parameters/parameter/value/@minimum", kind="expression"),
-            "maximum": _cell(value.get("maximum", "") if value is not None else "", "/parameters/parameter/value/@maximum", kind="expression"),
+            "resolve": _cell(parameter.get("resolve", ""), "/parameters/parameter/@resolve", kind="enum"),
+            "type": _cell(parameter.get("type", ""), "/parameters/parameter/@type", kind="enum"),
+            "choice": _cell(parameter.get("choiceRef", ""), "/parameters/parameter/@choiceRef", kind="reference"),
+            "minimum": _cell(parameter.get("minimum", ""), "/parameters/parameter/@minimum", kind="expression"),
+            "maximum": _cell(parameter.get("maximum", ""), "/parameters/parameter/@maximum", kind="expression"),
             "description": _cell(_text(parameter, "description"), "/parameters/parameter/description", kind="multiline"),
         })
     if parameters:
@@ -265,11 +291,11 @@ def _configuration_tables(root: etree._Element, prefix: str) -> list[DocumentTab
             _columns(
                 ("name", "Name", "/parameters/parameter/name"),
                 ("value", "Value", "/parameters/parameter/value"),
-                ("resolve", "Resolve", "/parameters/parameter/value/@resolve"),
-                ("type", "Type", "/parameters/parameter/value/@dataType"),
-                ("choice", "Choice", "/parameters/parameter/value/@choiceRef"),
-                ("minimum", "Minimum", "/parameters/parameter/value/@minimum"),
-                ("maximum", "Maximum", "/parameters/parameter/value/@maximum"),
+                ("resolve", "Resolve", "/parameters/parameter/@resolve"),
+                ("type", "Type", "/parameters/parameter/@type"),
+                ("choice", "Choice", "/parameters/parameter/@choiceRef"),
+                ("minimum", "Minimum", "/parameters/parameter/@minimum"),
+                ("maximum", "Maximum", "/parameters/parameter/@maximum"),
                 ("description", "Description", "/parameters/parameter/description"),
             ),
             parameters,
@@ -822,7 +848,12 @@ def build_a2ui_batch(projection: DocumentProjection) -> A2UIDocumentBatch:
                 "entity_link": "EntityLink",
                 "live_view": "LiveView",
             }.get(str(block.get("type")), "NarrativeBlock")
-            components.append({"id": component_id, "component": component, "block": copy.deepcopy(block)})
+            components.append({
+                "id": component_id,
+                "component": component,
+                "block": copy.deepcopy(block),
+                "documentId": projection.document_id,
+            })
         components.append({
             "id": section_component_id,
             "component": "SpecSection",

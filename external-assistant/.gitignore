@@ -1,0 +1,9 @@
+.venv/
+.pytest_cache/
+__pycache__/
+*.py[cod]
+data/
+web/dist/
+web/node_modules/
+web/*.tsbuildinfo
+.env

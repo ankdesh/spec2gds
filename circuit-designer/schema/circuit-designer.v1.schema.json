@@ -11,6 +11,7 @@
     "construction": { "$ref": "#/$defs/CircuitConstruction" },
     "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
     "result": { "$ref": "#/$defs/CircuitChangeResult" },
+    "proposal_create_request": { "$ref": "#/$defs/CircuitProposalCreateRequest" },
     "proposal": { "$ref": "#/$defs/CircuitProposal" },
     "lease": { "$ref": "#/$defs/EditLease" },
     "provider": { "$ref": "#/$defs/ResolvedComponentDesign" },
@@ -207,8 +208,13 @@
       "properties": {
         "id": { "$ref": "#/$defs/Slug" },
         "label": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output"] },
-        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "direction": { "enum": ["input", "output", "inout"] },
+        "width": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
         "category": { "enum": ["port", "interface"] }
       }
     },
@@ -251,8 +257,13 @@
       "properties": {
         "id": { "$ref": "#/$defs/Slug" },
         "label": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output"] },
-        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "direction": { "enum": ["input", "output", "inout"] },
+        "width": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
         "category": { "enum": ["port", "interface"] }
       }
     },
@@ -411,8 +422,13 @@
       "properties": {
         "alias": { "$ref": "#/$defs/Slug" },
         "name": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output"] },
-        "width": { "type": "integer", "minimum": 1, "default": 1 },
+        "direction": { "enum": ["input", "output", "inout"] },
+        "width": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "string", "minLength": 1 }
+          ]
+        },
         "category": { "enum": ["port", "interface"] }
       }
     },
@@ -877,6 +893,29 @@
         "expires_at": { "$ref": "#/$defs/NonEmptyString" }
       }
     },
+    "CircuitProposalCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "document_id", "base_revision", "title", "summary"],
+      "properties": {
+        "proposal_id": { "$ref": "#/$defs/NonEmptyString" },
+        "document_id": { "$ref": "#/$defs/Slug" },
+        "base_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "title": { "$ref": "#/$defs/NonEmptyString" },
+        "summary": { "$ref": "#/$defs/NonEmptyString" },
+        "rationale": { "type": "string" },
+        "assumptions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
+        "construction": { "$ref": "#/$defs/CircuitConstruction" },
+        "batch": { "$ref": "#/$defs/CircuitOperationBatch" }
+      },
+      "oneOf": [
+        { "required": ["construction"] },
+        { "required": ["batch"] }
+      ]
+    },
     "CircuitProposal": {
       "type": "object",
       "additionalProperties": false,
@@ -888,6 +927,10 @@
         "title": { "$ref": "#/$defs/NonEmptyString" },
         "summary": { "$ref": "#/$defs/NonEmptyString" },
         "rationale": { "type": "string" },
+        "assumptions": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/NonEmptyString" }
+        },
         "status": { "enum": ["pending", "stale"] },
         "construction": { "$ref": "#/$defs/CircuitConstruction" },
         "batch": { "$ref": "#/$defs/CircuitOperationBatch" },

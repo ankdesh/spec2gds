@@ -1,6 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { simpleFixture, type NetRoute } from "@spec2gds/circuit-core";
-import { buildCircuitFlowEdges, interactionPolicy, terminalHandleId, terminalIdFromHandle } from "../src/index";
+import {
+  buildCircuitFlowEdges,
+  interactionPolicy,
+  terminalDisplayLabel,
+  terminalHandleId,
+  terminalIdFromHandle,
+} from "../src/index";
 
 describe("React Flow circuit model", () => {
   test("binds every rendered net to an explicit source and target terminal handle", () => {
@@ -31,6 +37,12 @@ describe("React Flow circuit model", () => {
   test("maps either connection-handle role back to its semantic terminal", () => {
     expect(terminalIdFromHandle("node:port:data:source")).toBe("node:port:data");
     expect(terminalIdFromHandle("node:port:data:target")).toBe("node:port:data");
+  });
+
+  test("renders symbolic width text without changing numeric terminal labels", () => {
+    expect(terminalDisplayLabel({ label: "data", width: "[DATA_WIDTH-1:0]" }))
+      .toBe("data [DATA_WIDTH-1:0]");
+    expect(terminalDisplayLabel({ label: "valid", width: 1 })).toBe("valid");
   });
 
   test("keeps canvas gestures mutually exclusive in every explicit mode", () => {

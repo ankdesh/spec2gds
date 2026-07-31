@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { projectDocument, validateCircuitDocument } from "@spec2gds/circuit-core";
 import { standaloneExamples } from "./examples";
+import { linkedCircuitDocumentId } from "./launch-state";
 import { graphLayoutKey, matchingLayout } from "./layout-state";
 
 describe("standalone examples", () => {
@@ -21,5 +22,10 @@ describe("standalone examples", () => {
 
     expect(matchingLayout(subsystem, staleLayout)).toBe(staleLayout.result);
     expect(matchingLayout(datapath, staleLayout)).toBeUndefined();
+  });
+
+  test("recognizes an editor-linked Circuit Designer session URL", () => {
+    expect(linkedCircuitDocumentId("?document_id=spec_demo_top_1234")).toBe("spec_demo_top_1234");
+    expect(linkedCircuitDocumentId("?other=value")).toBeUndefined();
   });
 });

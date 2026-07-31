@@ -23,7 +23,26 @@ rationale and runtime flows, read
 | `spec2gds/agent_spec/spec_format/cli.py` | Package create/validate/inspect/pack/unpack commands. |
 | `spec2gds/agent_spec/api/__main__.py` | `spec2gds-server` and `spec2gds-editor` entry point. |
 
-## Runtime Sequence
+## Independent Circuit Designer
+
+Circuit Designer is not part of the Python/SpecIR runtime. Its external
+boundary is REST.
+
+| Path | Ownership |
+| --- | --- |
+| `circuit-designer/schema/` | Authoritative portable JSON Schema. |
+| `circuit-designer/packages/core/` | Circuit model, generated types, validation, operations, drafts, hierarchy, queries, and exports. |
+| `circuit-designer/packages/client-http/` | REST client and response validation. |
+| `circuit-designer/packages/service/` | REST/SSE service, ephemeral session state, PNG rendering, and provider callbacks. |
+| `circuit-designer/packages/layout/` | Placement and orthogonal-routing worker. |
+| `circuit-designer/packages/react/` | Canvas rendering and interaction gestures. |
+| `circuit-designer/apps/standalone/` | Human React client and portable file upload/download. |
+
+Start with
+[`circuit_designer_architecture_v1.md`](circuit_designer_architecture_v1.md)
+for system ownership and runtime flows.
+
+## Spec System Runtime Sequence
 
 ```text
 load package → validate → immutable SpecRevision
@@ -38,5 +57,6 @@ load package → validate → immutable SpecRevision
 - Semantic reads/writes: [`spec_ir_v1.md`](spec_ir_v1.md)
 - Actions and provenance: [`agent_spec_action_execution.md`](agent_spec_action_execution.md)
 - Server/editor: [`spec_editor_v1.md`](spec_editor_v1.md)
+- Circuit Designer: [`circuit_designer_architecture_v1.md`](circuit_designer_architecture_v1.md)
 - Implementation workflow: [`development_methodology.md`](development_methodology.md)
 - Future work: [`agent_spec_roadmap_questions.md`](agent_spec_roadmap_questions.md)

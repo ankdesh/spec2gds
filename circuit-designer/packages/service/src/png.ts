@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
 import type { CircuitDocument, NetEndpoint, NodeGeometry, Point } from "@spec2gds/circuit-core";
-import { endpointTerminalKey } from "@spec2gds/circuit-core";
+import { endpointTerminalKey, terminalDefaultPlacement } from "@spec2gds/circuit-core";
 
 function crc32(data: Uint8Array): number {
   let value = 0xffffffff;
@@ -53,7 +53,7 @@ function terminalPoint(
   const key = endpointTerminalKey(endpoint);
   const placement = document.layout.terminal_placements[key];
   const along = ((placement?.order ?? order) + 1) / (siblings.length + 1);
-  const side = placement?.side ?? (terminal.direction === "input" ? "WEST" : "EAST");
+  const side = placement?.side ?? terminalDefaultPlacement(terminal.direction, order).side;
   if (side === "WEST") return { x: box.x, y: box.y + box.height * along };
   if (side === "EAST") return { x: box.x + box.width, y: box.y + box.height * along };
   if (side === "NORTH") return { x: box.x + box.width * along, y: box.y };

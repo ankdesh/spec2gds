@@ -11,6 +11,7 @@ import {
   type DocumentSnapshot,
   type EntityAction,
   type EntityRef,
+  type SourceChangeEvent,
 } from "@spec2gds/document-core";
 
 type View = "document" | "activity" | "diagnostics";
@@ -46,12 +47,17 @@ export default function App() {
     executions: [],
     artifacts: [],
     proposals: [],
+    assistant_changes: [],
   });
   const [view, setView] = useState<View>("document");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
+  const [circuitTarget, setCircuitTarget] = useState("");
+  const [launchingCircuit, setLaunchingCircuit] = useState(false);
+  const [launchingAssistant, setLaunchingAssistant] = useState(false);
+  const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
 
   const refreshActivity = useCallback(async () => {
     setActivity(await client.getActivity());
@@ -72,7 +78,16 @@ export default function App() {
       setBatch(nextBatch);
       setActivity(nextActivity);
       setPath(nextPath);
+      const entryDesign = nextSnapshot.entry_designs[0]?.ref.entity_id;
+      const firstDesign = nextSnapshot.designs[0]?.ref.entity_id;
+      const firstComponent = nextSnapshot.components[0]?.ref.entity_id;
+      setCircuitTarget(
+        entryDesign ? `design:${entryDesign}`
+          : firstDesign ? `design:${firstDesign}`
+            : firstComponent ? `component:${firstComponent}` : "",
+      );
       setView("document");
+      setExternalChange(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -100,6 +115,26 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, [client, openDocument]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const source = new EventSource(client.eventsUrl());
+    const onChange = (event: MessageEvent<string>) => {
+      try {
+        const change = JSON.parse(event.data) as SourceChangeEvent;
+        if (
+          change.document_id === snapshot.document_id
+          && change.source_revision_hash !== snapshot.source_revision_hash
+        ) {
+          setExternalChange(change);
+        }
+      } catch {
+        // Ignore malformed optional notifications; normal refresh remains available.
+      }
+    };
+    source.addEventListener("source.changed", onChange as EventListener);
+    return () => source.close();
+  }, [client, snapshot?.document_id, snapshot?.source_revision_hash]);
 
   useEffect(() => {
     const onEntityAction = (event: Event) => {
@@ -157,6 +192,81 @@ export default function App() {
     }
   };
 
+  const launchCircuitDesigner = async () => {
+    if (!circuitTarget || launchingCircuit) return;
+    const [entityKind, entityId] = circuitTarget.split(":", 2) as ["component" | "design", string];
+    const pendingWindow = window.open("about:blank", "_blank");
+    if (pendingWindow) {
+      pendingWindow.opener = null;
+      pendingWindow.document.title = "Opening Circuit Designer…";
+      pendingWindow.document.body.textContent = "Projecting the selected design…";
+    }
+    setLaunchingCircuit(true);
+    setError("");
+    try {
+      const launch = await client.launchCircuitDesigner(entityKind, entityId);
+      if (pendingWindow) pendingWindow.location.replace(launch.editor_url);
+      else window.open(launch.editor_url, "_blank", "noopener,noreferrer");
+      const omitted = launch.omitted_bus_items.length;
+      const entity = [...(snapshot?.designs ?? []), ...(snapshot?.components ?? [])]
+        .find((item) => item.ref.entity_id === entityId);
+      setNotice(
+        `Opened ${entityName(entity?.vlnv)} in Circuit Designer`
+        + (omitted ? `; ${omitted} bus item${omitted === 1 ? " was" : "s were"} omitted by the direct-port adapter.` : "."),
+      );
+    } catch (caught) {
+      pendingWindow?.close();
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLaunchingCircuit(false);
+    }
+  };
+
+  const launchAssistant = async (target: EntityRef) => {
+    if (launchingAssistant) return;
+    const pendingWindow = window.open("about:blank", "_blank");
+    if (pendingWindow) {
+      pendingWindow.opener = null;
+      pendingWindow.document.title = "Opening assistant…";
+      pendingWindow.document.body.textContent = "Creating a new entity-bound chat…";
+    }
+    setLaunchingAssistant(true);
+    setError("");
+    try {
+      const launch = await client.launchAssistant(target);
+      if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
+      else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
+      setActionDialog(null);
+      setNotice(`Opened a new assistant chat for ${target.entity_id}.`);
+    } catch (caught) {
+      pendingWindow?.close();
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLaunchingAssistant(false);
+    }
+  };
+
+  const refreshExternalChange = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const [nextSnapshot, nextBatch, nextActivity] = await Promise.all([
+        client.getSnapshot(),
+        client.getA2UIBatch(),
+        client.getActivity(),
+      ]);
+      setSnapshot(nextSnapshot);
+      setBatch(nextBatch);
+      setActivity(nextActivity);
+      setExternalChange(null);
+      setNotice("Loaded the latest saved specification.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
 
@@ -176,25 +286,62 @@ export default function App() {
               type="button"
             >
               {item[0].toUpperCase() + item.slice(1)}
-              {item === "activity" && <span>{activity.executions.length + activity.proposals.length}</span>}
+              {item === "activity" && <span>{activity.executions.length + activity.proposals.length + activity.assistant_changes.length}</span>}
               {item === "diagnostics" && <span>{sourceDiagnostics.length + artifactDiagnostics.length}</span>}
             </button>
           ))}
         </nav>
-        <div className="package-picker">
-          <label htmlFor="package-path">Package</label>
-          <select id="package-path" value={path} onChange={(event) => setPath(event.target.value)}>
-            {samples.map((sample) => (
-              <option value={sample.path} key={sample.path}>{sample.name}</option>
-            ))}
-          </select>
-          <button type="button" onClick={() => openDocument(path)} disabled={!path || loading}>
-            Open
-          </button>
+        <div className="header-tools">
+          <div className="package-picker">
+            <label htmlFor="package-path">Package</label>
+            <select id="package-path" value={path} onChange={(event) => setPath(event.target.value)}>
+              {samples.map((sample) => (
+                <option value={sample.path} key={sample.path}>{sample.name}</option>
+              ))}
+            </select>
+            <button type="button" onClick={() => openDocument(path)} disabled={!path || loading}>
+              Open
+            </button>
+          </div>
+          <div className="circuit-launcher">
+            <label htmlFor="circuit-target">Circuit source</label>
+            <select
+              id="circuit-target"
+              value={circuitTarget}
+              onChange={(event) => setCircuitTarget(event.target.value)}
+              disabled={!snapshot || launchingCircuit}
+            >
+              {!snapshot?.designs.length && !snapshot?.components.length && <option value="">No circuit sources</option>}
+              {snapshot?.designs.map((design) => (
+                <option value={`design:${design.ref.entity_id}`} key={`design:${design.ref.entity_id}`}>
+                  Design · {entityName(design.vlnv)}
+                </option>
+              ))}
+              {snapshot?.components.map((component) => (
+                <option value={`component:${component.ref.entity_id}`} key={`component:${component.ref.entity_id}`}>
+                  Component · {entityName(component.vlnv)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void launchCircuitDesigner()}
+              disabled={!circuitTarget || loading || launchingCircuit}
+            >
+              {launchingCircuit ? "Opening…" : "Open circuit"}
+            </button>
+          </div>
         </div>
       </header>
 
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
+      {externalChange && (
+        <div className="app-refresh-notice" role="status">
+          <span>Document changed by assistant. Your current view has not been replaced.</span>
+          <button type="button" onClick={() => void refreshExternalChange()}>Refresh</button>
+          <button type="button" aria-label="Dismiss" onClick={() => setExternalChange(null)}>×</button>
+        </div>
+      )}
       {error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
 
       <main>
@@ -219,10 +366,16 @@ export default function App() {
           state={actionDialog}
           onClose={() => setActionDialog(null)}
           onExecute={executeAction}
+          onExplore={launchAssistant}
+          exploring={launchingAssistant}
         />
       )}
     </div>
   );
+}
+
+function entityName(vlnv?: string): string {
+  return vlnv?.split(":")[2] || "source";
 }
 
 function LoadingState() {
@@ -301,6 +454,22 @@ function ActivityView({
           })}
           {!activity.proposals.length && <p className="empty-copy">No proposals awaiting review.</p>}
         </UtilityPanel>
+        <UtilityPanel title="Accepted assistant changes" count={activity.assistant_changes.length}>
+          {activity.assistant_changes.slice().reverse().map((value) => {
+            const item = record(value);
+            const target = record(item.target);
+            const operations = Array.isArray(item.operations) ? item.operations : [];
+            return (
+              <article className="activity-item" key={text(item.proposal_id)}>
+                <span className="status status--succeeded">accepted</span>
+                <strong>{text(target.entity_kind, "entity")} · {text(target.entity_id)}</strong>
+                <small>{text(item.proposal_id)}</small>
+                <p>{operations.length} applied {operations.length === 1 ? "operation" : "operations"}</p>
+              </article>
+            );
+          })}
+          {!activity.assistant_changes.length && <p className="empty-copy">No assistant changes have been applied.</p>}
+        </UtilityPanel>
       </div>
     </div>
   );
@@ -348,10 +517,14 @@ function ActionDialog({
   state,
   onClose,
   onExecute,
+  onExplore,
+  exploring,
 }: {
   state: NonNullable<ActionDialogState>;
   onClose: () => void;
   onExecute: (action: EntityAction) => Promise<void>;
+  onExplore: (target: EntityRef) => Promise<void>;
+  exploring: boolean;
 }) {
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
@@ -369,6 +542,19 @@ function ActionDialog({
           </div>
           <button aria-label="Close" className="icon-button" onClick={onClose}>×</button>
         </header>
+        <article className="action-option action-option--assistant">
+          <div>
+            <strong>Explore with assistant</strong>
+            <small>Creates a new chat bound to this entity</small>
+            <p>Discuss ideas first, then request a typed proposal when ready.</p>
+          </div>
+          <button
+            disabled={exploring || Boolean(state.runningId)}
+            onClick={() => void onExplore(state.ref)}
+          >
+            {exploring ? "Opening…" : "Explore"}
+          </button>
+        </article>
         {state.loading && <p>Checking available actions…</p>}
         {!state.loading && !state.actions.length && <p>No actions target this entity kind.</p>}
         {state.actions.map((action) => (

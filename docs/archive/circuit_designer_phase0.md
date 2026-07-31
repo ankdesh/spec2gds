@@ -1,5 +1,8 @@
 # Historical: Circuit Designer Phase 0
 
+> Archived and superseded. See the current
+> [Circuit Designer design](../circuit_designer_architecture_v1.md).
+
 Phase 0 establishes the reusable circuit-diagram boundary and a working,
 read-only UI spike. It deliberately does not add FastAPI routes, persistence,
 edit execution, lock management, or IP-XACT writes.

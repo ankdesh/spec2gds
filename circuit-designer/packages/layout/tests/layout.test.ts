@@ -6,6 +6,7 @@ import {
   routeCircuitNets,
   routeIntersectsGeometry,
   routesCrossOrOverlap,
+  terminalSide,
 } from "../src/index";
 
 describe("deterministic circuit layout", () => {
@@ -44,6 +45,15 @@ describe("deterministic circuit layout", () => {
         }
       }
     }
+  });
+
+  test("places bidirectional terminals on the neutral south side", async () => {
+    const graph = fixtures.bidirectional();
+    expect(graph.terminals.every((terminal) => terminal.direction === "inout")).toBe(true);
+    expect(graph.terminals.map(terminalSide)).toEqual(["SOUTH", "SOUTH"]);
+    const result = await layoutCircuitGraph(graph);
+    expect(Object.values(result.layout.terminal_placements).map((placement) => placement.side))
+      .toEqual(["SOUTH", "SOUTH"]);
   });
 
   test("reroutes around fixed blocks and a user-locked net", async () => {

@@ -42,21 +42,23 @@ Most-used docs:
 - [`docs/spec_editor_a2ui_stage1.md`](docs/spec_editor_a2ui_stage1.md)
 - [`docs/coding_guidelines.md`](docs/coding_guidelines.md) for uv usage,
   documentation expectations, and Python docstring/comment conventions
+- [`docs/circuit_designer_architecture_v1.md`](docs/circuit_designer_architecture_v1.md)
+  for the authoritative REST, session, ownership, and component design
 - [`docs/circuit_designer_protocol_v1.md`](docs/circuit_designer_protocol_v1.md)
-  for the independent document, construction, operation, draft, and transport contracts
+  for document, construction, operation, draft, and transport contracts
 - [`docs/circuit_designer_provider_v1.md`](docs/circuit_designer_provider_v1.md)
   for hierarchy and provider callbacks
 - [`docs/circuit_designer_tools_v1.md`](docs/circuit_designer_tools_v1.md) for
   structured agent tools and immutable proposals
 - [`docs/circuit_designer_run_v1.md`](docs/circuit_designer_run_v1.md) for
-  browser and Node/SQLite service instructions
+  browser and in-memory Node service instructions
 
 ## Circuit Designer
 
 The circuit designer is a separate TypeScript workspace that owns its JSON
 Schema, canonical circuit document, operation engine, drafts, layout, rendering,
-repositories, and service API. SpecIR/IP-XACT translation is intentionally
-outside v1; a future translator will be an ordinary client.
+and REST service API. SpecIR/IP-XACT translation is intentionally outside v1; a
+future translator will be an ordinary REST client.
 
 ```bash
 cd circuit-designer
@@ -66,21 +68,34 @@ npm test
 npm run dev
 ```
 
-Open `http://127.0.0.1:4180`. The standalone app supports bundled documents,
-component catalog/local definitions, operation-based Unlock/Save/Cancel drafts,
-bus slices, select/connect/route/pan modes, worker placement/routing, proposal
-decisions, hierarchy resolution, and JSON/SVG/PNG export.
+Open `http://127.0.0.1:4180`. This starts the React client and ephemeral Node
+service together. The app supports bundled documents, portable JSON file
+upload/download, component catalog/local definitions, operation-based
+Unlock/Save/Cancel drafts, input/output/inout terminals, opaque symbolic width
+text, numeric bus slices, select/connect/route/pan modes, worker
+placement/routing, proposal decisions, hierarchy resolution, and SVG/PNG
+export. An accepted Save downloads the new canonical `.circuit.json`; the
+service itself never becomes durable storage.
 Node.js 24 is the supported runtime.
 
-Run the loopback Node/SQLite reference service separately:
+Run only the loopback service separately with:
 
 ```bash
 cd circuit-designer
-CIRCUIT_DESIGNER_DATABASE=./circuit-designer.sqlite npm run service
+npm run service
 ```
 
 The REST root is `http://127.0.0.1:4100/api/circuit-designer/v1`. The reference
-service is unauthenticated and intended for a trusted local environment.
+service is unauthenticated, keeps sessions only in memory, and is intended for
+a trusted local environment. Clients own durable circuit data; the service
+loses all active state when it restarts.
+
+An optional external assistant-ui application supports A2A-backed Circuit and
+Spec conversations. Circuit proposals retain the existing two-stage review;
+Spec proposals are previewed externally and applied only after one explicit
+approval. Neither editor depends on the assistant at runtime. See
+[`external-assistant/README.md`](external-assistant/README.md) and
+[`docs/spec-assistant-integration.md`](docs/spec-assistant-integration.md).
 
 ## Development Setup
 
@@ -170,6 +185,35 @@ npm run dev:editor
 Open `http://127.0.0.1:4190`. Before committing frontend changes, rebuild the
 Python-packaged assets with `npm run build:editor`. The Vite app proxies `/api`
 to the local FastAPI server; its production bundle calls same-origin routes.
+
+To use **Open circuit** from the specification editor, start the independent
+Circuit Designer in another terminal:
+
+```bash
+cd circuit-designer
+npm run dev
+```
+
+Open a `.spec` package at `http://127.0.0.1:8000/editor`, select a component or
+design, and choose **Open circuit**. The initial adapter projects direct physical ports and
+ad-hoc connections; it reports and omits bus interconnections. The resulting
+Circuit Designer tab is read-only because IP-XACT remains the source of truth.
+See [`docs/ipxact_circuit_adapter_v1.md`](docs/ipxact_circuit_adapter_v1.md).
+
+To use **Explore with assistant**, also start the optional external service:
+
+```bash
+cd external-assistant
+uv sync --dev
+export OPENAI_API_KEY="..."
+uv run spec2gds-external-assistant
+```
+
+`OPENAI_MODEL` defaults to `gpt-4o-mini`. The default ports are compatible:
+Spec API `8000`, external assistant `4200`, and its built frontend at the same
+origin. An approved Spec proposal is atomically saved to the active `.spec`;
+the editor displays a manual refresh notification. See
+[`docs/spec-assistant-integration.md`](docs/spec-assistant-integration.md).
 
 ## V1 Source Package
 

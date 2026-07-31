@@ -1,5 +1,9 @@
 # Historical: Standalone Circuit Designer
 
+> Archived and superseded. This document describes the removed local backend.
+> See the current
+> [Circuit Designer design](../circuit_designer_architecture_v1.md).
+
 ## Purpose
 
 The standalone application isolates the React circuit stack from SpecIR and

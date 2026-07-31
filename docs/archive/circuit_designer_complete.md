@@ -1,5 +1,8 @@
 # Historical: Circuit Designer Completed Roadmap
 
+> Archived and superseded. See the current
+> [Circuit Designer design](../circuit_designer_architecture_v1.md).
+
 This document covers Phases 2–5, which complete the roadmap after the Phase 0
 foundation and Phase 1 read-only integration.
 

@@ -1,5 +1,5 @@
 import type { CircuitDocument, ComponentDefinition, NodeGeometry, Point } from "./types.generated";
-import { endpointTerminalKey } from "./model";
+import { endpointTerminalKey, terminalDefaultPlacement } from "./model";
 
 export interface SvgRendererContext {
   component: ComponentDefinition;
@@ -53,7 +53,7 @@ function terminalPoint(document: CircuitDocument, terminalKey: string): Point | 
   const terminals = component!.terminals.filter((item) => item.direction === terminal.direction);
   const order = Math.max(0, terminals.findIndex((item) => item.id === terminalId));
   const placement = document.layout.terminal_placements[terminalKey];
-  const side = placement?.side ?? (terminal.direction === "input" ? "WEST" : "EAST");
+  const side = placement?.side ?? terminalDefaultPlacement(terminal.direction, order).side;
   const along = ((placement?.order ?? order) + 1) / (terminals.length + 1);
   if (side === "WEST") return { x: geometry.x, y: geometry.y + geometry.height * along };
   if (side === "EAST") return { x: geometry.x + geometry.width, y: geometry.y + geometry.height * along };

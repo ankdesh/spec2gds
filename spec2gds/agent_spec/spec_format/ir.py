@@ -55,6 +55,7 @@ class PortIR:
     name: str
     direction: str
     style: str
+    width: int | str | None = 1
 
 
 @dataclass(frozen=True)
@@ -399,7 +400,23 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
     for port in root.xpath("./*[local-name()='model']/*[local-name()='ports']/*[local-name()='port']"):
         style = "wire" if port.xpath("./*[local-name()='wire']") else "transactional"
         style_node = _first(port.xpath("./*[local-name()='wire'] | ./*[local-name()='transactional']"))
-        ports.append(PortIR(name=_text(port, "name"), direction=_text(style_node, "direction") if style_node is not None else "", style=style))
+        width: int | str | None = 1
+        if style_node is not None and style == "wire":
+            vectors = style_node.xpath("./*[local-name()='vectors']/*[local-name()='vector']")
+            if len(vectors) == 1:
+                left = _text(vectors[0], "left")
+                right = _text(vectors[0], "right")
+                width = f"[{left}:{right}]" if left and right else None
+            elif len(vectors) > 1:
+                width = None
+        ports.append(
+            PortIR(
+                name=_text(port, "name"),
+                direction=_text(style_node, "direction") if style_node is not None else "",
+                style=style,
+                width=width,
+            )
+        )
     interfaces: list[InterfaceIR] = []
     for interface in root.xpath("./*[local-name()='busInterfaces']/*[local-name()='busInterface']"):
         bus = _first(interface.xpath("./*[local-name()='busType']"))

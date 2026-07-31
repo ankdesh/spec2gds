@@ -209,7 +209,12 @@ function applyOne(document: CircuitDocument, operation: CircuitOperation, option
     case "update_boundary_terminal": {
       const current = document.design.boundary_terminals.find((item) => item.id === operation.terminal.id);
       if (!current) return [error("unknown_boundary_terminal", `Unknown boundary terminal: ${operation.terminal.id}`, id)];
-      const affected = document.design.nets.filter((net) => net.endpoints.some((endpoint) => endpoint.kind === "boundary" && endpoint.terminal_id === current.id && (endpoint.slice?.lsb ?? 0) + (endpoint.slice?.width ?? current.width) > operation.terminal.width));
+      const affected = document.design.nets.filter((net) => net.endpoints.some((endpoint) =>
+        endpoint.kind === "boundary"
+        && endpoint.terminal_id === current.id
+        && Boolean(endpoint.slice)
+        && (typeof operation.terminal.width !== "number"
+          || endpoint.slice!.lsb + endpoint.slice!.width > operation.terminal.width)));
       if (affected.length && !operation.cascade) return [error("cascade_required", `Boundary terminal update invalidates connected slices; explicit cascade is required.`, id)];
       document.design.boundary_terminals = document.design.boundary_terminals.map((item) => item.id === current.id ? clone(operation.terminal) : item);
       if (affected.length) {

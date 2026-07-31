@@ -1,18 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  IndexedDbCircuitDesignerBackend,
-  MemoryCircuitDesignerBackend,
-} from "@spec2gds/circuit-client-local";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
   exportCircuitJson,
   projectDocument,
-  renderCircuitPng,
-  renderCircuitSvg,
-  slugify,
   uniqueSlug,
   type CircuitDocument,
-  type CircuitDesignerBackend,
+  type CircuitExport,
   type CircuitOperation,
   type CircuitProposal,
   type CircuitSnapshot,
@@ -28,7 +22,14 @@ import {
   type LayoutResult,
 } from "@spec2gds/circuit-layout";
 import { CircuitDesignerCanvas, type CircuitCanvasMode } from "@spec2gds/circuit-react";
+import {
+  circuitDocumentFileContents,
+  circuitDocumentFilename,
+  parseCircuitDocumentJson,
+  summarizeFileDiagnostics,
+} from "./circuit-files";
 import { standaloneExamples, type StandaloneExampleId } from "./examples";
+import { linkedCircuitDocumentId } from "./launch-state";
 
 type Selection = { kind: "node" | "net"; id: string } | null;
 const operationId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
@@ -49,8 +50,16 @@ function endpointFromTerminal(terminalKey: string, lsb: number, width: number): 
 
 export function App() {
   const [exampleId, setExampleId] = useState<StandaloneExampleId>("subsystem");
+  const [linkedDocumentId, setLinkedDocumentId] = useState<string | undefined>(
+    () => linkedCircuitDocumentId(window.location.search),
+  );
   const initial = useMemo(() => standaloneExamples[exampleId].build(), [exampleId]);
-  const [backend, setBackend] = useState<CircuitDesignerBackend>();
+  const backend = useMemo(
+    () => new HttpCircuitDesignerBackend({
+      baseUrl: import.meta.env.VITE_CIRCUIT_DESIGNER_API_BASE ?? "/api/circuit-designer/v1",
+    }),
+    [],
+  );
   const [snapshot, setSnapshot] = useState<CircuitSnapshot>();
   const [document, setDocument] = useState<CircuitDocument>();
   const [lease, setLease] = useState<EditLease>();
@@ -66,35 +75,60 @@ export function App() {
   const [sliceLsb, setSliceLsb] = useState(0);
   const [sliceWidth, setSliceWidth] = useState(0);
   const [proposals, setProposals] = useState<CircuitProposal[]>([]);
+  const [sourceDescription, setSourceDescription] = useState(standaloneExamples.subsystem.summary);
+  const [openingFile, setOpeningFile] = useState(false);
   const draftRef = useRef<CircuitDraft>();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const priorMode = useRef<CircuitCanvasMode>("select");
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      let nextBackend: CircuitDesignerBackend;
       try {
-        const indexed = await IndexedDbCircuitDesignerBackend.open("circuit-designer-v1");
-        try {
-          await indexed.get(initial.document_id);
-        } catch {
-          await indexed.create(initial, operationId("initialize"));
+        if (linkedDocumentId) {
+          const next = await backend.get(linkedDocumentId);
+          if (!active) return;
+          setSnapshot(next);
+          setDocument(next.document);
+          setLayout(undefined);
+          setSelection(null);
+          setLease(undefined);
+          setSourceDescription("Projected from the specification editor through the direct-port adapter.");
+          setMessage(`Opened source-owned projection at revision ${next.revision}. Return to the specification editor to change source.`);
+          draftRef.current = undefined;
+          return;
         }
-        nextBackend = indexed;
-      } catch {
-        nextBackend = new MemoryCircuitDesignerBackend({ documents: [initial] });
+        const created = await backend.create(initial, operationId("initialize"));
+        let next = created.snapshot;
+        let joined = false;
+        if (created.status === "conflict") {
+          next = await backend.get(initial.document_id);
+          joined = true;
+        }
+        if (!next) {
+          throw new Error(summarizeFileDiagnostics(created.diagnostics) || "The service rejected the example document.");
+        }
+        if (!active) return;
+        setSnapshot(next);
+        setDocument(next.document);
+        setLayout(undefined);
+        setSelection(null);
+        setLease(undefined);
+        setSourceDescription(standaloneExamples[exampleId].summary);
+        setMessage(joined
+          ? `Joined the existing REST session at revision ${next.revision}.`
+          : `Created REST session at revision ${next.revision}.`);
+        draftRef.current = undefined;
+      } catch (reason) {
+        if (!active) return;
+        setSnapshot(undefined);
+        setDocument(undefined);
+        setLayout(undefined);
+        setMessage(`Circuit Designer service unavailable: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
-      const next = await nextBackend.get(initial.document_id);
-      if (!active) return;
-      setBackend(nextBackend);
-      setSnapshot(next);
-      setDocument(next.document);
-      setSelection(null);
-      setLease(undefined);
-      draftRef.current = undefined;
     })();
     return () => { active = false; };
-  }, [initial]);
+  }, [backend, exampleId, initial, linkedDocumentId]);
 
   const graph = useMemo(
     () => document ? projectDocument(document, lease ? "draft" : snapshot?.revision ?? "loading") : undefined,
@@ -116,6 +150,28 @@ export function App() {
     if (!snapshot || !backend) return;
     void backend.listProposals(snapshot.document.document_id).then(setProposals);
   }, [backend, snapshot]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const documentId = snapshot.document.document_id;
+    return backend.subscribe(documentId, (event) => {
+      if (event.kind === "proposal.changed") {
+        void backend.listProposals(documentId).then(setProposals).catch(() => undefined);
+        return;
+      }
+      if (event.kind !== "document.changed" || lease) return;
+      void backend.get(documentId).then((next) => {
+        if (next.revision === snapshot.revision) return;
+        setSnapshot(next);
+        setDocument(next.document);
+        setSelection(null);
+        setLayout(undefined);
+        setMessage(`REST session updated by another client to revision ${next.revision}.`);
+      }).catch((reason) => {
+        setMessage(`Could not refresh the REST session: ${reason instanceof Error ? reason.message : String(reason)}`);
+      });
+    });
+  }, [backend, lease, snapshot?.document.document_id, snapshot?.revision]);
 
   useEffect(() => {
     const typing = (target: EventTarget | null) =>
@@ -194,7 +250,8 @@ export function App() {
     setLease(undefined);
     setSnapshot(result.snapshot);
     setDocument(result.snapshot.document);
-    setMessage(`Saved revision ${result.snapshot.revision}.`);
+    downloadCircuitDocument(result.snapshot.document);
+    setMessage(`Saved revision ${result.snapshot.revision} and downloaded ${circuitDocumentFilename(result.snapshot.document)}.`);
   }
 
   async function cancel(): Promise<void> {
@@ -312,19 +369,102 @@ export function App() {
     }
   }
 
-  async function download(format: "json" | "svg" | "png"): Promise<void> {
-    if (!document) return;
-    let blob: Blob;
-    if (format === "json") blob = new Blob([exportCircuitJson(document)], { type: "application/json" });
-    else if (format === "svg") blob = new Blob([renderCircuitSvg(document)], { type: "image/svg+xml" });
-    else blob = await renderCircuitPng(document);
+  function triggerDownload(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob);
     const anchor = window.document.createElement("a");
     anchor.href = url;
-    anchor.download = `${document.document_id}.${format}`;
+    anchor.download = filename;
+    anchor.hidden = true;
+    window.document.body.append(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
-    setMessage(`Exported ${format.toUpperCase()}.`);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function downloadCircuitDocument(value: CircuitDocument): void {
+    triggerDownload(
+      new Blob([circuitDocumentFileContents(value)], { type: "application/json" }),
+      circuitDocumentFilename(value),
+    );
+  }
+
+  async function download(format: "json" | "svg" | "png"): Promise<void> {
+    if (!snapshot || lease) {
+      setMessage("Save or Cancel the private draft before downloading an authoritative file.");
+      return;
+    }
+    if (format === "json") {
+      downloadCircuitDocument(snapshot.document);
+      setMessage(`Downloaded ${circuitDocumentFilename(snapshot.document)}.`);
+      return;
+    }
+    try {
+      const exported: CircuitExport = await backend.export(snapshot.document.document_id, { format });
+      const data = typeof exported.data === "string"
+        ? exported.data
+        : exported.data.slice().buffer;
+      triggerDownload(new Blob([data], { type: exported.media_type }), exported.filename);
+      setMessage(`Exported ${format.toUpperCase()}.`);
+    } catch (reason) {
+      setMessage(reason instanceof Error ? reason.message : String(reason));
+    }
+  }
+
+  async function openCircuitFile(event: ChangeEvent<HTMLInputElement>): Promise<void> {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    input.value = "";
+    if (!file) return;
+    if (lease) {
+      setMessage("Save or Cancel the private draft before opening another circuit file.");
+      return;
+    }
+
+    setOpeningFile(true);
+    try {
+      const parsed = parseCircuitDocumentJson(await file.text());
+      if (!parsed.valid) {
+        setMessage(`Could not open ${file.name}: ${summarizeFileDiagnostics(parsed.diagnostics)}`);
+        return;
+      }
+      const created = await backend.create(parsed.document, operationId("open_file"));
+      let next = created.snapshot;
+      let joined = false;
+      if (created.status === "conflict") {
+        const existing = await backend.get(parsed.document.document_id);
+        if (exportCircuitJson(existing.document) !== exportCircuitJson(parsed.document)) {
+          setMessage(
+            `Could not open ${file.name}: a different REST session already uses document ID “${parsed.document.document_id}”.`,
+          );
+          return;
+        }
+        next = existing;
+        joined = true;
+      }
+      if (!next) {
+        setMessage(`Could not open ${file.name}: ${summarizeFileDiagnostics(created.diagnostics)}`);
+        return;
+      }
+      draftRef.current = undefined;
+      setSnapshot(next);
+      setDocument(next.document);
+      setLease(undefined);
+      setSelection(null);
+      setLayout(undefined);
+      setProposals(await backend.listProposals(next.document.document_id));
+      setLinkedDocumentId(undefined);
+      window.history.replaceState({}, "", window.location.pathname);
+      setSourceDescription(`Opened from ${file.name}; permanent changes are saved by downloading a new file.`);
+      const warnings = parsed.diagnostics.filter((item) => item.severity === "warning");
+      setMessage(
+        `${joined ? "Joined matching session for" : "Opened"} ${file.name} at revision ${next.revision}`
+        + (warnings.length ? ` with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}.` : "."),
+      );
+    } catch (reason) {
+      setMessage(`Could not open ${file.name}: ${reason instanceof Error ? reason.message : String(reason)}`);
+    } finally {
+      setOpeningFile(false);
+    }
   }
 
   async function openHierarchy(componentId: string): Promise<void> {
@@ -362,21 +502,45 @@ export function App() {
   return <main className="standalone-shell">
     <header className="topbar">
       <div className="brand"><span className="brand-mark">CD</span><div><span>Independent v1</span><h1>Circuit Designer</h1></div></div>
-      <label className="example-picker">Document<select value={exampleId} onChange={(event) => setExampleId(event.target.value as StandaloneExampleId)} disabled={Boolean(lease)}>
+      <label className="example-picker">Document<select value={linkedDocumentId ? "__linked__" : exampleId} onChange={(event) => {
+        if (event.target.value === "__linked__") return;
+        setSnapshot(undefined);
+        setDocument(undefined);
+        setLayout(undefined);
+        setLinkedDocumentId(undefined);
+        window.history.replaceState({}, "", window.location.pathname);
+        setExampleId(event.target.value as StandaloneExampleId);
+      }} disabled={!snapshot || Boolean(lease) || openingFile}>
+        {linkedDocumentId && <option value="__linked__">Editor projection</option>}
         {Object.entries(standaloneExamples).map(([id, example]) => <option key={id} value={id}>{example.title}</option>)}
       </select></label>
       <div className="toolbar">
-        {!lease && <button className="primary" onClick={() => void unlock()}>Unlock</button>}
+        {!lease && !linkedDocumentId && <button className="primary" onClick={() => void unlock()}>Unlock</button>}
+        {!lease && linkedDocumentId && <button disabled title="This projection is owned by the specification editor.">Source-owned</button>}
         {lease && <><button disabled={!draftRef.current?.canUndo} onClick={() => undoDraft("undo")}>Undo</button><button disabled={!draftRef.current?.canRedo} onClick={() => undoDraft("redo")}>Redo</button><button className="primary" onClick={() => void save()}>Save</button><button onClick={() => void cancel()}>Cancel</button></>}
-        <button onClick={() => void download("json")}>JSON</button><button onClick={() => void download("svg")}>SVG</button><button onClick={() => void download("png")}>PNG</button>
+        <input
+          ref={fileInputRef}
+          className="file-input"
+          type="file"
+          accept=".json,application/json"
+          aria-label="Circuit file"
+          disabled={!snapshot || Boolean(lease) || openingFile}
+          onChange={(event) => void openCircuitFile(event)}
+        />
+        <button disabled={!snapshot || Boolean(lease) || openingFile} onClick={() => fileInputRef.current?.click()}>
+          {openingFile ? "Opening…" : "Open file"}
+        </button>
+        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("json")}>Download file</button>
+        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("svg")}>SVG</button>
+        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("png")}>PNG</button>
       </div>
     </header>
-    <div className="notice"><span className="local-dot" />Independent document · {lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}<span>{layoutProgress || message}</span></div>
+    <div className="notice"><span className="local-dot" />{linkedDocumentId ? "Editor projection" : "Independent document"} · {lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}<span>{layoutProgress || message}</span></div>
     <section className="workspace">
       <aside className="library">
         <p className="eyebrow">Component catalog</p>
         <h2>{document?.label}</h2>
-        <p>{standaloneExamples[exampleId].summary}</p>
+        <p>{sourceDescription}</p>
         <div className="metrics"><div><b>{document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-list">{document?.components.map((component) => <button key={component.id} onClick={() => setMessage(`${component.label}: ${component.terminals.length} terminals · ${component.origin}`)}><b>{component.label}</b><small>{component.origin} · {component.appearance.renderer_key}</small></button>)}</div>
         <div className="section"><h3>Local definition</h3><label>Name<input value={componentName} onChange={(event) => setComponentName(event.target.value)} placeholder="Arithmetic unit" /></label><button className="primary" disabled={!lease || !componentName.trim()} onClick={addLocalComponent}>Create definition + instance</button></div>

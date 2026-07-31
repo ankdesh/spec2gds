@@ -27,8 +27,32 @@ and diagnostics. In a source checkout, the package selector also discovers the
 generated hardware-document and simple-SystemC benchmark packages. Rebuild a
 benchmark and refresh the editor page to update the selector.
 
+To open a source design in Circuit Designer, also start the independent
+Circuit Designer development system:
+
+```bash
+cd circuit-designer
+npm run dev
+```
+
+In the specification editor, select a component or design and choose **Open circuit**. The
+editor-side adapter publishes a source-owned direct-port projection and opens
+it at `http://127.0.0.1:4180`. Bus interconnections are reported but omitted in
+this first adapter milestone. See
+[IP-XACT to Circuit Designer Adapter v1](ipxact_circuit_adapter_v1.md).
+
 Stage 1 presents source data as a unified read-only document. The API remains
 the authoritative surface for actions and proposal review.
+
+The optional external assistant adds **Explore with assistant** to supported
+entity actions. It creates a fresh entity-bound chat, refreshes semantic context
+for every turn, and keeps ordinary exploration separate from typed proposals.
+The assistant previews current/proposed `DocumentSection` data and applies only
+after explicit approval; the Spec API revalidates and atomically saves the
+source plus accepted-decision provenance. A `source.changed` event displays a
+manual **Refresh** banner in an already-open editor. See
+[Spec Editor Assistant Integration](spec-assistant-integration.md) for setup,
+ownership rules, operation contracts, and lifecycle details.
 
 For frontend source changes, run the Vite development app in a second terminal:
 
@@ -82,6 +106,10 @@ actions. Direct document editing is reserved for Stage 2.
    with `POST /entities/{kind}/{entity_id}/actions/{action_id}/executions`.
 6. Inspect `GET /executions`, `/artifacts`, and `/proposals`. Preview, accept,
    or reject proposals through their dedicated endpoints.
+7. External Spec clients read entity context from `GET /assistant/context`,
+   validate exact typed proposals with `POST /assistant/proposals/preview`, and
+   commit an approved proposal with `POST /assistant/proposals/apply`.
+   `GET /events` publishes committed source changes as server-sent events.
 
 Every source-changing request includes `expected_source_revision_hash`. A stale
 hash returns HTTP 409; invalid transactions return diagnostics without changing
