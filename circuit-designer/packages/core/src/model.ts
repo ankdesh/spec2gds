@@ -95,6 +95,24 @@ export function emptyLayout(): CircuitLayout {
   };
 }
 
+/** Create a valid empty document without coupling product code to test fixtures. */
+export function createEmptyCircuitDocument(documentId: string, label = "Untitled circuit"): CircuitDocument {
+  return {
+    protocol_version: "circuit-designer.v1",
+    document_id: documentId,
+    label,
+    components: [],
+    design: {
+      id: "top",
+      label,
+      boundary_terminals: [],
+      instances: [],
+      nets: [],
+    },
+    layout: emptyLayout(),
+  };
+}
+
 export function terminalDefaultPlacement(direction: TerminalDefinition["direction"], order: number): TerminalPlacement {
   const side = direction === "input" ? "WEST" : direction === "output" ? "EAST" : "SOUTH";
   return { side, order, locked: false };

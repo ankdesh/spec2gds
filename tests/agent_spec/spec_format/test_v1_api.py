@@ -8,7 +8,7 @@ from pathlib import Path
 import fastapi
 import pytest
 
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample, write_v1_sample
+from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
 from spec2gds.agent_spec.spec_format.cli import main as package_cli
 from spec2gds.agent_spec.spec_format.v1_api import (
     ActionInputRequest,
@@ -30,22 +30,7 @@ def _endpoints() -> dict[str, object]:
 def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> None:
     """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()
-    samples = endpoints["samples"]()["samples"]
-    assert len(samples) == 11
-    assert samples[0]["name"] == "V1 Demo"
-    assert all(Path(sample["path"]).is_file() for sample in samples)
-    assert {sample["name"] for sample in samples[1:]} == {
-        "Hardware · Apb Gpio",
-        "Hardware · Apb I2C Slave",
-        "Hardware · Apb Timer",
-        "Hardware · Cv Hpdcache Csrs",
-        "Hardware · Cv Hpdcache Interface",
-        "Hardware · Cvfpu Readme",
-        "SystemC · Fifo Backpressure Hw Spec",
-        "SystemC · Pipelined Alu Hw Spec",
-        "SystemC · Simple Pipeline Hw Spec",
-        "SystemC · Switch Arbitration Hw Spec",
-    }
+    assert "samples" not in endpoints
     editor_html = endpoints["editor"]()
     assert "A2UI Document Editor" in editor_html
     assert "/editor-assets/assets/index-" in editor_html
@@ -54,9 +39,12 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         path = Path(temporary) / "acceptance.spec"
         created = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="api_acceptance"))
         assert created["source_revision_hash"]
+        with pytest.raises(fastapi.HTTPException) as existing:
+            endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="replacement"))
+        assert existing.value.status_code == 422
         assert endpoints["editor"]().count('id="root"') == 1
 
-        sample = build_v1_sample()
+        sample = build_test_package()
         document_id = created["document_id"]
 
         def local(reference: object) -> dict[str, object]:
@@ -118,7 +106,7 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
     endpoints = _endpoints()
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "v1.spec"
-        write_v1_sample(path)
+        write_test_package(path)
         opened = endpoints["open_document"](OpenDocumentRequest(path=str(path)))
         with pytest.raises(fastapi.HTTPException) as stale:
             endpoints["transaction"](
@@ -141,7 +129,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     import spec2gds.agent_spec.spec_format.v1_api as v1_api
 
     package_path = tmp_path / "launch.spec"
-    write_v1_sample(package_path)
+    write_test_package(package_path)
     endpoints = _endpoints()
     endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
     published: list[dict[str, object]] = []
@@ -214,7 +202,7 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
 
 def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path) -> None:
     package_path = tmp_path / "assistant.spec"
-    write_v1_sample(package_path)
+    write_test_package(package_path)
     endpoints = _endpoints()
     opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
     target = next(
@@ -296,7 +284,7 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
 
 def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Path) -> None:
     package_path = tmp_path / "assistant-boundary.spec"
-    write_v1_sample(package_path)
+    write_test_package(package_path)
     endpoints = _endpoints()
     opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
     component = next(
@@ -379,9 +367,11 @@ def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Pa
 
 def test_document_projection_uses_semantic_row_ids() -> None:
     endpoints = _endpoints()
-    sample = Path("spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec").resolve()
-    endpoints["open_document"](OpenDocumentRequest(path=str(sample)))
-    batch = endpoints["document_a2ui"]()
+    with tempfile.TemporaryDirectory() as temporary:
+        package_path = Path(temporary) / "projection.spec"
+        write_test_package(package_path)
+        endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+        batch = endpoints["document_a2ui"]()
     tables = [
         component["table"]
         for message in batch["messages"]

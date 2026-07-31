@@ -10,7 +10,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+from spec2gds.agent_spec.spec_format.testing import build_test_package
 from spec2gds.agent_spec.spec_format.transactions import (
     ClearInternalDesign,
     ReorderInstances,
@@ -23,7 +23,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
 
 
 def _revision() -> SpecRevision:
-    return SpecRevision.from_package(build_v1_sample())
+    return SpecRevision.from_package(build_test_package())
 
 
 def test_queries_resolve_stable_entities_hierarchy_and_dependencies() -> None:

@@ -157,7 +157,7 @@ a:focus-visible {
   clip: rect(0, 0, 0, 0);
 }
 
-.package-picker select,
+.package-picker input,
 .circuit-launcher select {
   min-width: 0;
   max-width: 18rem;
@@ -541,7 +541,7 @@ button:disabled {
 }
 
 @media (max-width: 620px) {
-  .package-picker select {
+  .package-picker input {
     max-width: 9rem;
   }
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
+  createEmptyCircuitDocument,
   exportCircuitJson,
   projectDocument,
   uniqueSlug,
@@ -28,11 +29,13 @@ import {
   parseCircuitDocumentJson,
   summarizeFileDiagnostics,
 } from "./circuit-files";
-import { standaloneExamples, type StandaloneExampleId } from "./examples";
 import { linkedCircuitDocumentId } from "./launch-state";
 
 type Selection = { kind: "node" | "net"; id: string } | null;
 const operationId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
+const emptyDocument = () => createEmptyCircuitDocument(
+  `local_${crypto.randomUUID().replaceAll("-", "_")}`,
+);
 
 function endpointFromTerminal(terminalKey: string, lsb: number, width: number): NetEndpoint {
   const slice = width > 0 ? { slice: { lsb, width } } : {};
@@ -49,11 +52,10 @@ function endpointFromTerminal(terminalKey: string, lsb: number, width: number): 
 }
 
 export function App() {
-  const [exampleId, setExampleId] = useState<StandaloneExampleId>("subsystem");
   const [linkedDocumentId, setLinkedDocumentId] = useState<string | undefined>(
     () => linkedCircuitDocumentId(window.location.search),
   );
-  const initial = useMemo(() => standaloneExamples[exampleId].build(), [exampleId]);
+  const [initial, setInitial] = useState<CircuitDocument>(emptyDocument);
   const backend = useMemo(
     () => new HttpCircuitDesignerBackend({
       baseUrl: import.meta.env.VITE_CIRCUIT_DESIGNER_API_BASE ?? "/api/circuit-designer/v1",
@@ -75,7 +77,7 @@ export function App() {
   const [sliceLsb, setSliceLsb] = useState(0);
   const [sliceWidth, setSliceWidth] = useState(0);
   const [proposals, setProposals] = useState<CircuitProposal[]>([]);
-  const [sourceDescription, setSourceDescription] = useState(standaloneExamples.subsystem.summary);
+  const [sourceDescription, setSourceDescription] = useState("Empty local circuit. Add definitions and instances after unlocking.");
   const [openingFile, setOpeningFile] = useState(false);
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -106,7 +108,7 @@ export function App() {
           joined = true;
         }
         if (!next) {
-          throw new Error(summarizeFileDiagnostics(created.diagnostics) || "The service rejected the example document.");
+          throw new Error(summarizeFileDiagnostics(created.diagnostics) || "The service rejected the empty document.");
         }
         if (!active) return;
         setSnapshot(next);
@@ -114,7 +116,7 @@ export function App() {
         setLayout(undefined);
         setSelection(null);
         setLease(undefined);
-        setSourceDescription(standaloneExamples[exampleId].summary);
+        setSourceDescription("Empty local circuit. Add definitions and instances after unlocking.");
         setMessage(joined
           ? `Joined the existing REST session at revision ${next.revision}.`
           : `Created REST session at revision ${next.revision}.`);
@@ -128,7 +130,19 @@ export function App() {
       }
     })();
     return () => { active = false; };
-  }, [backend, exampleId, initial, linkedDocumentId]);
+  }, [backend, initial, linkedDocumentId]);
+
+  function newDocument(): void {
+    setSnapshot(undefined);
+    setDocument(undefined);
+    setLayout(undefined);
+    setSelection(null);
+    setLease(undefined);
+    setLinkedDocumentId(undefined);
+    window.history.replaceState({}, "", window.location.pathname);
+    draftRef.current = undefined;
+    setInitial(emptyDocument());
+  }
 
   const graph = useMemo(
     () => document ? projectDocument(document, lease ? "draft" : snapshot?.revision ?? "loading") : undefined,
@@ -502,19 +516,9 @@ export function App() {
   return <main className="standalone-shell">
     <header className="topbar">
       <div className="brand"><span className="brand-mark">CD</span><div><span>Independent v1</span><h1>Circuit Designer</h1></div></div>
-      <label className="example-picker">Document<select value={linkedDocumentId ? "__linked__" : exampleId} onChange={(event) => {
-        if (event.target.value === "__linked__") return;
-        setSnapshot(undefined);
-        setDocument(undefined);
-        setLayout(undefined);
-        setLinkedDocumentId(undefined);
-        window.history.replaceState({}, "", window.location.pathname);
-        setExampleId(event.target.value as StandaloneExampleId);
-      }} disabled={!snapshot || Boolean(lease) || openingFile}>
-        {linkedDocumentId && <option value="__linked__">Editor projection</option>}
-        {Object.entries(standaloneExamples).map(([id, example]) => <option key={id} value={id}>{example.title}</option>)}
-      </select></label>
+      <div className="example-picker"><span>Document</span><strong>{document?.label ?? "Loading…"}</strong></div>
       <div className="toolbar">
+        <button disabled={Boolean(lease) || openingFile} onClick={newDocument}>New</button>
         {!lease && !linkedDocumentId && <button className="primary" onClick={() => void unlock()}>Unlock</button>}
         {!lease && linkedDocumentId && <button disabled title="This projection is owned by the specification editor.">Source-owned</button>}
         {lease && <><button disabled={!draftRef.current?.canUndo} onClick={() => undoDraft("undo")}>Undo</button><button disabled={!draftRef.current?.canRedo} onClick={() => undoDraft("redo")}>Redo</button><button className="primary" onClick={() => void save()}>Save</button><button onClick={() => void cancel()}>Cancel</button></>}

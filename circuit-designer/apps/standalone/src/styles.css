@@ -12,7 +12,7 @@ button:disabled { cursor: not-allowed; opacity: .42; }
 .brand h1 { margin: 3px 0 0; font-size: 19px; line-height: 1; }
 .example-picker { display: flex; align-items: center; gap: 9px; color: #637279; font-size: 12px; }
 select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; background: #fff; padding: 7px 8px; color: #17252b; }
-.example-picker select { min-width: 210px; }
+.example-picker strong { min-width: 150px; color: #26383e; }
 .toolbar { display: flex; justify-content: flex-end; gap: 6px; }
 .file-input { display: none; }
 .toolbar button, .inspector button, .library button { border: 1px solid #899997; border-radius: 3px; background: #fff; padding: 7px 9px; color: #294a4d; }

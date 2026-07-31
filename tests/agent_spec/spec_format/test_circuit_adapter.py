@@ -6,7 +6,7 @@ from spec2gds.agent_spec.spec_format.circuit_adapter import (
     project_design_to_circuit,
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.samples import _xml
+from spec2gds.agent_spec.spec_format.testing import _xml
 
 
 def _direct_revision() -> SpecRevision:
@@ -82,9 +82,9 @@ def test_projects_direct_ports_inout_and_opaque_vector_text() -> None:
 
 
 def test_reports_bus_interconnections_as_intentionally_omitted() -> None:
-    from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+    from spec2gds.agent_spec.spec_format.testing import build_test_package
 
-    revision = SpecRevision.from_package(build_v1_sample())
+    revision = SpecRevision.from_package(build_test_package())
     projection = project_design_to_circuit(revision, "design_subsystem_internal")
 
     assert projection.omitted_bus_items == ("link0",)

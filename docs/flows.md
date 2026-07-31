@@ -1,0 +1,137 @@
+# End-to-end flows
+
+## Create and edit a specification
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Spec editor
+    participant API as Spec API
+    participant Package as .spec package
+
+    User->>UI: Enter path and choose New
+    UI->>API: POST /documents/create
+    API->>Package: Create and validate empty package
+    Package-->>API: Source revision hash
+    API-->>UI: Immutable snapshot + A2UI projection
+    User->>UI: Edit structured content
+    UI->>API: POST /transactions with expected hash
+    API->>API: Apply operations and validate candidate
+    alt candidate is valid and current
+        API->>Package: Deterministic atomic save
+        API-->>UI: New snapshot and hash
+    else invalid or stale
+        API-->>UI: Diagnostics; source is unchanged
+    end
+```
+
+Scenario: a designer creates `timer.spec`, adds IP-XACT documents and narrative
+sections, and submits one transaction. The API compares the submitted revision
+hash with the active revision. A valid current candidate replaces the file; a
+stale or invalid candidate leaves it untouched. Creating a package also fails
+closed when the requested path already exists.
+
+## Open a specification in Circuit Designer
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant SE as Spec editor
+    participant SA as Spec API
+    participant CA as Circuit adapter
+    participant CS as Circuit service
+    participant CD as Circuit Designer
+
+    User->>SE: Choose a component or design
+    SE->>SA: POST /circuit-designer/launch
+    SA->>CA: Project current SpecRevision
+    CA-->>SA: CircuitDocument + omitted bus items
+    SA->>CS: Create or reuse source-owned session
+    CS-->>SA: document_id and revision
+    SA-->>SE: Editor URL and projection notes
+    SE->>CD: Open new browser tab
+    CD->>CS: Read session
+    CS-->>CD: Read-only projected circuit
+```
+
+Scenario: a specification design contains direct port wiring and bus
+interfaces. Direct ports appear in the circuit view. Unsupported bus items are
+reported, not silently converted. The projected session is read-only because
+the `.spec` file remains authoritative.
+
+## Edit an independent circuit
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Circuit Designer
+    participant Service as Circuit service
+    participant Draft as Private draft
+    participant File as .circuit.json
+
+    User->>UI: Start empty or open file
+    UI->>Service: Create or join session
+    User->>UI: Unlock
+    UI->>Service: Acquire edit lease
+    Service-->>UI: Base revision + lease
+    User->>UI: Add, connect, move, or route
+    UI->>Draft: Apply shared typed operations
+    alt Save
+        UI->>Service: Commit operation batch
+        Service->>Service: Validate revision and semantics
+        Service-->>UI: Accepted canonical snapshot
+        UI->>File: Download new file
+    else Cancel
+        UI->>Draft: Discard private changes
+    end
+```
+
+Scenario: a designer starts from the blank canvas, unlocks it, creates two
+component definitions and connects their instances. Save validates the batch,
+updates the ephemeral session, and downloads a new file. The service never
+overwrites a local file in place.
+
+## Review an assistant proposal
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Editor
+    participant Assistant
+    participant API as Owning API
+    participant Source as Canonical source
+
+    User->>Editor: Explore selected entity
+    Editor->>Assistant: Launch entity-bound chat
+    Assistant->>API: Read current context
+    User->>Assistant: Request a change proposal
+    Assistant->>API: Preview typed operations at base revision
+    API-->>Editor: Candidate projection and diagnostics
+    User->>API: Accept or reject
+    alt accepted and current
+        API->>Source: Validate and commit
+        API-->>Editor: Source-changed event
+    else rejected or stale
+        API-->>Editor: No source change
+    end
+```
+
+Scenario: the assistant proposes a description or circuit change. Discussion
+alone changes nothing. The user reviews the typed candidate. Acceptance still
+runs normal validation and revision checks; a stale proposal must be rebuilt.
+
+## Import an existing document
+
+```mermaid
+flowchart LR
+    Input["PDF, DOC/DOCX, or ODT"] --> Docling["Docling reader"]
+    Docling --> Narrative["Typed narrative + retained source"]
+    Tables["Supported hardware tables"] --> Extract["Optional OpenAI extraction"]
+    Extract --> IPXACT["Validated IP-XACT"]
+    Narrative --> Package["New .spec package"]
+    IPXACT --> Package
+```
+
+Run `uv sync --extra document-import`, then
+`uv run spec2gds-import-document path/to/input -o output.spec`. Add `--openai`
+only when table-to-IP-XACT extraction is wanted and configured.

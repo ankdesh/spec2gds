@@ -15,7 +15,6 @@ import {
 } from "@spec2gds/document-core";
 
 type View = "document" | "activity" | "diagnostics";
-type Sample = { name: string; path: string };
 
 type ActionDialogState = {
   ref: EntityRef;
@@ -39,7 +38,6 @@ export default function App() {
     () => new SpecEditorHttpClient(import.meta.env.DEV ? "/api" : ""),
     [],
   );
-  const [samples, setSamples] = useState<Sample[]>([]);
   const [path, setPath] = useState("");
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null);
   const [batch, setBatch] = useState<A2UIDocumentBatch | null>(null);
@@ -50,7 +48,7 @@ export default function App() {
     assistant_changes: [],
   });
   const [view, setView] = useState<View>("document");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
@@ -95,26 +93,31 @@ export default function App() {
     }
   }, [client]);
 
-  useEffect(() => {
-    let cancelled = false;
-    client.listSamples()
-      .then(({ samples: available }) => {
-        if (cancelled) return;
-        setSamples(available);
-        if (available[0]) {
-          setPath(available[0].path);
-          return openDocument(available[0].path);
-        }
-        setLoading(false);
-      })
-      .catch((caught) => {
-        if (!cancelled) {
-          setError(caught instanceof Error ? caught.message : String(caught));
-          setLoading(false);
-        }
-      });
-    return () => { cancelled = true; };
-  }, [client, openDocument]);
+  const createDocument = useCallback(async (nextPath: string) => {
+    if (!nextPath) return;
+    setLoading(true);
+    setError("");
+    setNotice("");
+    try {
+      const nextSnapshot = await client.createDocument(nextPath);
+      const [nextBatch, nextActivity] = await Promise.all([
+        client.getA2UIBatch(),
+        client.getActivity(),
+      ]);
+      setSnapshot(nextSnapshot);
+      setBatch(nextBatch);
+      setActivity(nextActivity);
+      setPath(nextPath);
+      setCircuitTarget("");
+      setView("document");
+      setExternalChange(null);
+      setNotice("Created a new specification package.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLoading(false);
+    }
+  }, [client]);
 
   useEffect(() => {
     if (!snapshot) return;
@@ -294,11 +297,15 @@ export default function App() {
         <div className="header-tools">
           <div className="package-picker">
             <label htmlFor="package-path">Package</label>
-            <select id="package-path" value={path} onChange={(event) => setPath(event.target.value)}>
-              {samples.map((sample) => (
-                <option value={sample.path} key={sample.path}>{sample.name}</option>
-              ))}
-            </select>
+            <input
+              id="package-path"
+              value={path}
+              onChange={(event) => setPath(event.target.value)}
+              placeholder="/path/to/design.spec"
+            />
+            <button type="button" onClick={() => createDocument(path)} disabled={!path || loading}>
+              New
+            </button>
             <button type="button" onClick={() => openDocument(path)} disabled={!path || loading}>
               Open
             </button>
@@ -355,8 +362,8 @@ export default function App() {
         )}
         {!loading && !batch && !error && (
           <div className="empty-state">
-            <h1>Open a specification package</h1>
-            <p>Select a generated sample or enter a package through the API.</p>
+            <h1>Start a specification</h1>
+            <p>Enter a server-local <code>.spec</code> path, then create a new package or open an existing one.</p>
           </div>
         )}
       </main>

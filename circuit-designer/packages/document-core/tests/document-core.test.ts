@@ -2,6 +2,22 @@ import { describe, expect, it, vi } from "vitest";
 import { SpecEditorHttpClient, type A2UIDocumentBatch } from "../src/index";
 
 describe("SpecEditorHttpClient", () => {
+  it("creates a new package at an explicit path", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ document_id: "new_spec" }), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = new SpecEditorHttpClient("/api");
+    await client.createDocument("/tmp/new.spec");
+    expect(fetchMock).toHaveBeenCalledWith("/api/documents/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: "/tmp/new.spec" }),
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("opens a package and reads an A2UI batch without renderer dependencies", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ document_id: "demo" }), { headers: { "content-type": "application/json" } }))

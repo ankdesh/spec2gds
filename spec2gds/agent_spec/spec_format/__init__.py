@@ -36,7 +36,6 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeDocument,
     SpecManifest,
 )
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample
 from spec2gds.agent_spec.spec_format.transactions import EditResult, SpecEditTransaction
 
 __all__ = [
@@ -66,6 +65,5 @@ __all__ = [
     "SpecPackage",
     "SpecEditTransaction",
     "SpecValidationError",
-    "build_v1_sample",
     "create_reference_registry",
 ]

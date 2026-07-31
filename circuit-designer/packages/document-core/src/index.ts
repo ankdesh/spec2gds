@@ -173,12 +173,16 @@ export class SpecEditorHttpClient {
     return payload as T;
   }
 
-  listSamples(): Promise<{ samples: Array<{ name: string; path: string }> }> {
-    return this.request("/samples");
-  }
-
   openDocument(path: string): Promise<DocumentSnapshot> {
     return this.request("/documents/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+  }
+
+  createDocument(path: string): Promise<DocumentSnapshot> {
+    return this.request("/documents/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path }),

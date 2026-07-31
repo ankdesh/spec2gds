@@ -145,9 +145,11 @@ class V1Session:
     def create(cls, path: str, document_id: str | None, sidecar_root: str | None = None) -> "V1Session":
         """Create a package on disk, then reopen it through the normal validator."""
         package = SpecPackage.create(document_id)
-        destination = str(Path(path).expanduser().resolve())
-        package.save(destination)
-        return cls(destination, sidecar_root)
+        destination = Path(path).expanduser().resolve()
+        if destination.exists():
+            raise FileExistsError(f"Refusing to replace existing specification package: {destination}")
+        package.save(str(destination))
+        return cls(str(destination), sidecar_root)
 
     def save(self) -> None:
         """Persist source and activity using the package's deterministic writer."""
@@ -198,18 +200,6 @@ def create_app() -> typing.Any:
         "source_event": None,
     }
     editor_root = Path(__file__).with_name("editor_dist")
-    sample_root = Path(__file__).with_name("samples") / "generated"
-    # A source checkout also exposes the larger real-document corpus.  Keep
-    # this optional so installed wheels still work without repository data.
-    benchmark_root = Path(__file__).resolve().parents[3] / "benchmarks" / "agent_spec" / "hw_docs" / "generated"
-    systemc_benchmark_root = (
-        Path(__file__).resolve().parents[3]
-        / "benchmarks"
-        / "agent_spec"
-        / "simple_spec_systemc"
-        / "generated"
-    )
-
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
     app.mount(
@@ -245,21 +235,6 @@ def create_app() -> typing.Any:
     def health() -> dict[str, str]:
         """Report server liveness and the source-format generation it serves."""
         return {"status": "ok", "format": "spec2gds-v1"}
-
-    @app.get("/samples")
-    def samples() -> dict[str, typing.Any]:
-        """List checked-in V1 packages that can be opened by the visual editor."""
-        entries = []
-        roots = (
-            (sample_root, ""),
-            (benchmark_root, "Hardware · "),
-            (systemc_benchmark_root, "SystemC · "),
-        )
-        for root, label_prefix in roots:
-            for path in sorted(root.glob("*.spec")):
-                name = path.stem.replace("_", " ").title()
-                entries.append({"name": f"{label_prefix}{name}", "path": str(path.resolve())})
-        return {"samples": entries}
 
     @app.post("/documents/create")
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:

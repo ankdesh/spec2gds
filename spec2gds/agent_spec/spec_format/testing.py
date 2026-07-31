@@ -1,10 +1,7 @@
-"""Rich, deterministic V1 package used by tests and visual verification.
+"""Programmatic package fixtures used by tests.
 
-The sample intentionally exercises every editor-facing relationship: leaf and
-composite components, an owned internal design, two entry designs, typed
-narrative blocks, an entity link, a live topology view, and a real source
-asset. Keeping this fixture meaningful makes it useful for both regression
-tests and a quick human review of the browser editor.
+Nothing from this module is shipped as a generated demo. The factory covers
+the complete source shape so contract tests can stay compact and deterministic.
 """
 
 from pathlib import Path
@@ -52,9 +49,9 @@ def _xml(root: str, entity_id: str, name: str, body: str = "") -> bytes:
 """.encode("utf-8")
 
 
-def build_v1_sample() -> SpecPackage:
+def build_test_package() -> SpecPackage:
     """Build a multi-entry architecture sample without implementation views."""
-    package = SpecPackage.create("spec_v1_demo")
+    package = SpecPackage.create("spec_v1_test")
     bus = package.add_document(
         "bus_definition",
         _xml(
@@ -267,6 +264,6 @@ def build_v1_sample() -> SpecPackage:
     return package
 
 
-def write_v1_sample(path: str | Path) -> None:
+def write_test_package(path: str | Path) -> None:
     """Write the deterministic checked-in sample package to ``path``."""
-    build_v1_sample().save(str(path))
+    build_test_package().save(str(path))

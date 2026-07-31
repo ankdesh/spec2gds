@@ -1,120 +1,76 @@
-# spec2gds External Assistant
+# Optional external assistant
 
-An independent local assistant-ui application that explores and proposes
-reviewable Circuit Designer and Spec Editor changes through one A2A service.
+This local application provides entity-bound conversations and reviewed change
+proposals for the Spec Editor and Circuit Designer. Both editors remain fully
+usable when it is stopped.
 
-The project is optional: Circuit Designer and Spec Editor continue to build and
-run without it.
+## Run
 
-## Development setup
-
-Requirements:
-
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/)
-- Node.js 24+ and npm
-- A running Circuit Designer and/or Spec Editor service
+Requirements: Python 3.12+, `uv`, Node.js 24+, npm, and at least one owning
+editor service.
 
 ```bash
-cd external-assistant
 uv sync
 cd web
 npm install
-```
-
-Set the OpenAI API key:
-
-```bash
-export OPENAI_API_KEY="..."
-```
-
-`OPENAI_MODEL` defaults to `gpt-4o-mini`.
-
-Run the backend:
-
-```bash
-cd external-assistant
-uv run spec2gds-external-assistant
-```
-
-Run the frontend development server in another terminal:
-
-```bash
-cd external-assistant/web
-npm run dev
-```
-
-Open `http://127.0.0.1:4201`. The frontend proxies local API and A2A requests
-to FastAPI on port `4200`.
-
-For a single-process local run, build the frontend first:
-
-```bash
-cd external-assistant/web
 npm run build
 cd ..
+
+export OPENAI_API_KEY="..."
 uv run spec2gds-external-assistant
 ```
 
-Then open `http://127.0.0.1:4200`. FastAPI serves `web/dist` when it exists.
+Open <http://127.0.0.1:4200>. For frontend development, run `npm run dev` in
+`web/` and open <http://127.0.0.1:4201>.
 
-For Circuit work, create a chat and connect it to:
+The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
+SQLite database defaults to `data/assistant.db`.
 
-```text
-http://127.0.0.1:4100/api/circuit-designer/v1
+## Flow and safety
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as Assistant UI
+    participant Agent as A2A agent
+    participant Owner as Spec or Circuit API
+
+    User->>UI: Open entity-bound chat
+    UI->>Agent: Message + current context
+    Agent->>Owner: Read semantic snapshot
+    Agent-->>UI: Discussion or typed proposal
+    User->>Owner: Accept or reject preview
+    Owner->>Owner: Revalidate revision and operations
+    Owner-->>UI: Committed result or diagnostics
 ```
 
-and the current Circuit Designer document ID. Each request sends the current
-semantic snapshot and SVG to the A2A agent. PNG context is opt-in.
+Conversation does not mutate source. A user must request a proposal and accept
+its preview. The owning API performs the final revision and validation checks.
 
-For Spec work, start the Spec API on port 8000 and use **Explore with
-assistant** on a component, design, bus definition, abstraction definition, or
-narrative block. The editor opens `/launch/spec`; every launch creates a new
-chat permanently bound to that document and entity. Exploration remains
-conversational until **Prepare proposal** is selected or the user explicitly
-asks for a proposal.
+Circuit service URLs are limited to loopback HTTP. Spec service URLs must match
+`SPEC_SERVICE_ALLOWLIST`, which defaults to the local port `8000` origins. The
+reference deployment has no user authentication.
 
-The external UI previews current and proposed `DocumentSection` projections.
-Approval immediately asks the Spec API to revalidate, atomically update the
-active `.spec`, and store the accepted decision. The open Spec Editor then shows
-a refresh banner without replacing its current snapshot.
+## Useful configuration
 
-## Configuration
+| Variable | Default |
+| --- | --- |
+| `OPENAI_MODEL` | `gpt-4o-mini` |
+| `ASSISTANT_HOST` | `127.0.0.1` |
+| `ASSISTANT_PORT` | `4200` |
+| `ASSISTANT_DATABASE_PATH` | `data/assistant.db` |
+| `CIRCUIT_REQUEST_TIMEOUT_SECONDS` | `30` |
+| `SPEC_REQUEST_TIMEOUT_SECONDS` | `30` |
+| `SPEC_SERVICE_ALLOWLIST` | local Spec API origins on port `8000` |
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `OPENAI_API_KEY` | none | Required when generating proposals |
-| `OPENAI_MODEL` | `gpt-4o-mini` | Structured-output model |
-| `ASSISTANT_HOST` | `127.0.0.1` | FastAPI bind host |
-| `ASSISTANT_PORT` | `4200` | FastAPI port |
-| `ASSISTANT_DATABASE_PATH` | `data/assistant.db` | Chat, review, and A2A SQLite database |
-| `ASSISTANT_WEB_DIST_PATH` | `web/dist` | Optional production web bundle |
-| `CIRCUIT_REQUEST_TIMEOUT_SECONDS` | `30` | Circuit Designer request timeout |
-| `SPEC_REQUEST_TIMEOUT_SECONDS` | `30` | Spec Editor request timeout |
-| `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:8000,http://localhost:8000` | Spec service origins permitted for server-side requests |
-
-Circuit Designer URLs are restricted to loopback HTTP endpoints. Spec URLs must
-be loopback HTTP and exactly match the allowlist. The reference service has no
-user authentication and is intended for a trusted local environment.
-
-The Spec service launch response also uses:
-
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `EXTERNAL_ASSISTANT_URL` | `http://127.0.0.1:4200` | External assistant origin opened by Spec Editor |
-| `SPEC_EDITOR_SERVICE_URL` | `http://127.0.0.1:8000` | Spec API origin permanently bound to a launched chat |
-
-## Tests
+## Verify
 
 ```bash
-cd external-assistant
-uv run pytest
+uv run python -m pytest -q
 cd web
 npm run build
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the data flow and
-[docs/protocol.md](docs/protocol.md) for the proposal contract. Verification
-details are in [docs/testing.md](docs/testing.md). The complete Spec ownership,
-preview, apply, provenance, and refresh design is documented in
-[`../docs/spec-assistant-integration.md`](../docs/spec-assistant-integration.md).
+System boundaries and full sequences are documented in
+[`../docs/architecture.md`](../docs/architecture.md) and
+[`../docs/flows.md`](../docs/flows.md).

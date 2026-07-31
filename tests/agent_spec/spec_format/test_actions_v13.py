@@ -14,11 +14,11 @@ from spec2gds.agent_spec.spec_format.actions import (
     create_reference_registry,
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+from spec2gds.agent_spec.spec_format.testing import build_test_package
 
 
 def _context() -> tuple[SpecRevision, ActivityStore, ActionService]:
-    package = build_v1_sample()
+    package = build_test_package()
     revision = SpecRevision.from_package(package)
     temporary = tempfile.TemporaryDirectory()
     # Retain the temporary owner on the store for this short test helper's caller.

@@ -10,12 +10,12 @@ import pytest
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.cli import main
 from spec2gds.agent_spec.spec_format.ipxact import validate_ipxact_document
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+from spec2gds.agent_spec.spec_format.testing import build_test_package
 
 
-def test_sample_has_required_v1_source_shape() -> None:
-    """Keep the checked-in demo broad enough for meaningful visual review."""
-    package = build_v1_sample()
+def test_package_factory_covers_the_v1_source_shape() -> None:
+    """Keep the test package broad enough to cover every persisted source kind."""
+    package = build_test_package()
     assert {entry.kind for entry in package.manifest.documents} == {
         "component",
         "design",
@@ -45,25 +45,12 @@ def test_sample_has_required_v1_source_shape() -> None:
     assert package.diagnostics() == []
 
 
-def test_checked_in_sample_matches_the_canonical_builder() -> None:
-    repository = Path(__file__).resolve().parents[3]
-    sample_path = repository / "spec2gds/agent_spec/spec_format/samples/generated/v1_demo.spec"
-    checked_in = SpecPackage.load(str(sample_path))
-    assert checked_in.source_hash() == build_v1_sample().source_hash()
-    with tempfile.TemporaryDirectory() as temporary:
-        unpacked = Path(temporary) / "unpacked"
-        repacked = Path(temporary) / "repacked.spec"
-        checked_in.unpack(str(unpacked))
-        SpecPackage.from_directory(str(unpacked)).save(str(repacked))
-        assert sample_path.read_bytes() == repacked.read_bytes()
-
-
 def test_save_load_and_repack_are_byte_deterministic() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         root = Path(temporary)
         first = root / "first.spec"
         second = root / "second.spec"
-        original = build_v1_sample()
+        original = build_test_package()
         original.save(str(first))
         loaded = SpecPackage.load(str(first))
         loaded.save(str(second))
@@ -78,7 +65,7 @@ def test_save_load_and_repack_are_byte_deterministic() -> None:
 
 
 def test_activity_is_excluded_from_source_hash_but_not_from_package_validation() -> None:
-    package = build_v1_sample()
+    package = build_test_package()
     source_hash = package.source_hash()
     package.files["activity/2026-07-18/run.json"] = b'{"status":"complete"}'
     assert package.diagnostics() == []
@@ -86,7 +73,7 @@ def test_activity_is_excluded_from_source_hash_but_not_from_package_validation()
 
 
 def test_invalid_document_hash_and_missing_asset_are_rejected() -> None:
-    package = build_v1_sample()
+    package = build_test_package()
     document_path = package.manifest.documents[0].path
     package.files[document_path] += b"\n"
     package.files.pop(package.manifest.assets[0].path)

@@ -6,11 +6,11 @@ from spec2gds.agent_spec.spec_format.document import (
     build_document_projection,
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.samples import build_v1_sample
+from spec2gds.agent_spec.spec_format.testing import build_test_package
 
 
 def _projection():
-    return build_document_projection(SpecRevision.from_package(build_v1_sample()))
+    return build_document_projection(SpecRevision.from_package(build_test_package()))
 
 
 def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> None:

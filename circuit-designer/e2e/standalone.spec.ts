@@ -1,14 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 
-test("loads examples through the REST service", async ({ page }) => {
+test("starts an empty document through the REST service", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("circuit-canvas")).toBeVisible();
   await expect(page.locator(".notice")).toContainText("REST session");
-
-  await page.getByLabel("Example").selectOption("datapath");
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await expect(page.locator(".notice")).toContainText(/REST session|existing REST session/);
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  await expect(page.locator(".library")).toContainText("Empty local circuit");
 });
 
 test("keeps select, connect, route, and pan modes mutually exclusive", async ({ page }) => {
@@ -29,22 +27,23 @@ test("keeps select, connect, route, and pan modes mutually exclusive", async ({ 
 
 test("downloads and reopens a portable circuit file", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Example").selectOption("datapath");
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
+  await page.getByRole("button", { name: "Unlock" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Producer");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
 
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Download file" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("standalone_datapath.circuit.json");
+  expect(download.suggestedFilename()).toMatch(/^local_.*\.circuit\.json$/);
   const filePath = await download.path();
   expect(filePath).not.toBeNull();
 
-  await page.getByLabel("Example").selectOption("fanout");
-  await expect(page.locator(".react-flow__node")).toHaveCount(4);
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await page.getByLabel("Circuit file").setInputFiles(filePath!);
 
-  await expect(page.locator(".react-flow__node")).toHaveCount(2);
-  await expect(page.locator(".notice")).toContainText("standalone_datapath.circuit.json");
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  await expect(page.locator(".notice")).toContainText(".circuit.json");
   await expect(page.locator(".library")).toContainText("permanent changes are saved by downloading a new file");
 });
 
@@ -73,7 +72,7 @@ test("commits a draft and downloads the accepted document", async ({ page }) => 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("standalone_subsystem.circuit.json");
+  expect(download.suggestedFilename()).toMatch(/^local_.*\.circuit\.json$/);
   const filePath = await download.path();
   expect(filePath).not.toBeNull();
   const saved = JSON.parse(await readFile(filePath!, "utf8")) as {
@@ -82,15 +81,5 @@ test("commits a draft and downloads the accepted document", async ({ page }) => 
   };
   expect(saved.components.some((component) => component.id === "inspection_block")).toBe(true);
   expect(saved.design.instances.some((instance) => instance.component_id === "inspection_block")).toBe(true);
-  await expect(page.locator(".notice")).toContainText("downloaded standalone_subsystem.circuit.json");
-});
-
-test("distinguishes true junctions from geometric crossings", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("Example").selectOption("fanout");
-  await expect(page.locator(".cd-net__junction")).not.toHaveCount(0);
-  await page.getByLabel("Example").selectOption("crossing");
-  await expect(page.locator(".react-flow__node")).toHaveCount(4);
-  await expect(page.locator(".cd-net__junction")).toHaveCount(0);
-  await expect(page.locator(".react-flow__edge")).toHaveCount(2);
+  await expect(page.locator(".notice")).toContainText("downloaded local_");
 });
