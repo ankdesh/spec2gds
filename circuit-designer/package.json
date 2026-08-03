@@ -20,7 +20,8 @@
     "generate:check": "node scripts/check-generated.mjs",
     "build:editor": "npm run build --workspace @spec2gds/spec-editor",
     "test": "node scripts/run-workspace-tests.mjs",
-    "test:e2e": "node scripts/run-playwright.mjs"
+    "test:e2e": "node scripts/run-playwright.mjs",
+    "test:e2e:editor": "npm run test:e2e --workspace @spec2gds/spec-editor --"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

@@ -57,12 +57,25 @@ npm run build
 change, run `npm run generate`, inspect the generated types and protocol copy,
 then run `npm run generate:check`.
 
-Browser acceptance tests use:
+Circuit Designer browser acceptance tests use:
 
 ```bash
 cd circuit-designer
 npm run test:e2e
 ```
+
+The specification editor owns a separate browser-test configuration and dev
+server lifecycle:
+
+```bash
+cd circuit-designer
+npm run test:e2e:editor
+```
+
+The two commands deliberately do not start each other's applications. A future
+combined workflow should be owned by the specification editor and delegate to
+the existing Circuit Designer command rather than expanding Circuit Designer's
+default startup.
 
 ## Optional assistant
 

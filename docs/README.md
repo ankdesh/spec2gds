@@ -10,9 +10,11 @@ Read in this order:
    layout.
 2. [End-to-end flows](flows.md) — block and sequence diagrams for the main user
    scenarios.
-3. [Sample application method](sample-apps.md) — how to build one representative
+3. [Specification editor UI](editor-ui.md) — menus, shortcuts, section options,
+   and intentionally unavailable commands.
+4. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-4. [Development guide](development.md) — setup, commands, checks, and where code
+5. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule

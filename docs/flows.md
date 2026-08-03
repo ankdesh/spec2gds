@@ -9,7 +9,7 @@ sequenceDiagram
     participant API as Spec API
     participant Package as .spec package
 
-    User->>UI: Enter path and choose New
+    User->>UI: File → New Specification; enter server-local path
     UI->>API: POST /documents/create
     API->>Package: Create and validate empty package
     Package-->>API: Source revision hash
@@ -30,6 +30,10 @@ sections, and submits one transaction. The API compares the submitted revision
 hash with the active revision. A valid current candidate replaces the file; a
 stale or invalid candidate leaves it untouched. Creating a package also fails
 closed when the requested path already exists.
+
+The editor keeps package operations in the **File** menu. Accepted transactions
+save automatically, so Save is informational rather than a second persistence
+step. **File → Refresh From Disk** reopens the active server-local path.
 
 ## Open a specification in Circuit Designer
 
@@ -58,6 +62,10 @@ Scenario: a specification design contains direct port wiring and bus
 interfaces. Direct ports appear in the circuit view. Unsupported bus items are
 reported, not silently converted. The projected session is read-only because
 the `.spec` file remains authoritative.
+
+Users can launch from the grouped **Circuit** menu or from **Options → Open
+circuit** on a design or component section. Non-circuit sections omit that
+command. Entity-backed sections retain **Options → More actions**.
 
 ## Edit an independent circuit
 

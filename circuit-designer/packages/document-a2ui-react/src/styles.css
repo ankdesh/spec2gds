@@ -133,22 +133,85 @@
   font-size: 1.55rem;
 }
 
-.spec-action-button {
+.spec-section-options {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.spec-options-trigger {
   appearance: none;
   background: transparent;
   border: 1px solid var(--spec-line-strong, #b7bdb9);
-  border-radius: 999px;
+  border-radius: 0.4rem;
   color: var(--spec-accent, #246b5a);
   cursor: pointer;
   font: inherit;
   font-size: 0.78rem;
   font-weight: 700;
-  padding: 0.5rem 0.85rem;
+  padding: 0.48rem 0.72rem;
 }
 
-.spec-action-button:hover {
+.spec-options-trigger:hover,
+.spec-options-trigger[aria-expanded="true"] {
   border-color: var(--spec-accent, #246b5a);
   background: rgba(36, 107, 90, 0.06);
+}
+
+.spec-options-trigger span {
+  display: inline-block;
+  margin-left: 0.25rem;
+  transition: transform 120ms ease;
+}
+
+.spec-options-trigger[aria-expanded="true"] span {
+  transform: rotate(180deg);
+}
+
+.spec-options-menu {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  display: grid;
+  min-width: 12.5rem;
+  padding: 0.35rem;
+  border: 1px solid var(--spec-line, #d9ddd9);
+  border-radius: 0.5rem;
+  background: var(--spec-paper, #fff);
+  box-shadow: 0 0.8rem 2rem rgba(23, 35, 30, 0.16);
+}
+
+.spec-options-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  border: 0;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: #2b3531;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+}
+
+.spec-options-menu button:hover,
+.spec-options-menu button:focus-visible {
+  background: color-mix(in srgb, var(--spec-accent, #246b5a) 9%, transparent);
+}
+
+.spec-options-menu button:disabled {
+  cursor: not-allowed;
+  color: var(--spec-muted, #59616c);
+  opacity: 0.62;
+}
+
+.spec-options-menu small {
+  color: var(--spec-muted, #59616c);
+  font-size: 0.68rem;
 }
 
 .spec-facts {

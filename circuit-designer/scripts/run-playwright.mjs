@@ -9,5 +9,9 @@ if (process.platform !== "win32") {
   environment.TMP = "/tmp";
   environment.TEMP = "/tmp";
 }
-const result = spawnSync(npmCommand, ["exec", "playwright", "test"], { env: environment, stdio: "inherit" });
+const result = spawnSync(
+  npmCommand,
+  ["exec", "playwright", "test", "--", ...process.argv.slice(2)],
+  { env: environment, stdio: "inherit" },
+);
 process.exit(result.status ?? 1);

@@ -43,9 +43,15 @@ uv sync
 uv run spec2gds-server
 ```
 
-Open <http://127.0.0.1:8000/editor>. Enter a server-local `.spec` path and
-choose **New** or **Open**. The server also exposes interactive API docs at
-<http://127.0.0.1:8000/docs>. **New** refuses to replace an existing path.
+Open <http://127.0.0.1:8000/editor>. Use **File → New Specification** or
+**File → Open Specification** and enter a server-local `.spec` path. The File
+menu can also refresh the active package from disk; accepted changes are saved
+automatically. **New Specification** refuses to replace an existing path.
+
+The **Circuit** menu lists available designs and components. Eligible document
+sections also expose **Options → Open circuit** beside their headings, while
+**Options → More actions** opens the entity action workflow. The server exposes
+interactive API docs at <http://127.0.0.1:8000/docs>.
 
 For frontend work:
 
@@ -101,6 +107,8 @@ uv run python -m pytest -q
 cd circuit-designer
 npm run generate:check
 npm test
+npm run test:e2e          # Circuit Designer only
+npm run test:e2e:editor   # specification editor only
 
 cd ../external-assistant
 uv run python -m pytest -q

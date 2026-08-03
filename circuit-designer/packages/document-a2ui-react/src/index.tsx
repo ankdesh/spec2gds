@@ -1,4 +1,4 @@
-import React, { Fragment, useMemo } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { A2uiSurface, createComponentImplementation } from "@a2ui/react/v0_9";
 import {
   Catalog,
@@ -20,6 +20,13 @@ import type {
 
 export const SPEC_DOCUMENT_CATALOG_ID = "urn:spec2gds:a2ui:document:v1";
 export const SPEC_ENTITY_ACTION_EVENT = "spec2gds:entity-action";
+export const SPEC_OPEN_CIRCUIT_EVENT = "spec2gds:open-circuit";
+
+export interface SpecOpenCircuitEventDetail {
+  entityRef: EntityRef;
+}
+
+const SPEC_SECTION_MENU_OPEN_EVENT = "spec2gds:section-menu-open";
 
 const SpecDocumentApi = {
   name: "SpecDocument",
@@ -130,6 +137,139 @@ function dispatchEntityAction(entityRef: EntityRef): void {
   }));
 }
 
+function dispatchOpenCircuit(entityRef: EntityRef): void {
+  window.dispatchEvent(new CustomEvent<SpecOpenCircuitEventDetail>(SPEC_OPEN_CIRCUIT_EVENT, {
+    detail: { entityRef },
+  }));
+}
+
+function SectionOptionsMenu({ section }: { section: DocumentSectionData }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuId = `${section.section_id}-options-menu`;
+  const circuitRef = section.entity_ref
+    && (section.entity_ref.entity_kind === "design" || section.entity_ref.entity_kind === "component")
+    ? section.entity_ref
+    : null;
+
+  const close = (restoreFocus = false) => {
+    setOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  };
+
+  const openMenu = () => {
+    window.dispatchEvent(new CustomEvent(SPEC_SECTION_MENU_OPEN_EVENT, {
+      detail: { menuId },
+    }));
+    setOpen(true);
+  };
+
+  useEffect(() => {
+    const onPointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) close();
+    };
+    const onOtherMenu = (event: Event) => {
+      const detail = (event as CustomEvent<{ menuId: string }>).detail;
+      if (detail.menuId !== menuId) close();
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener(SPEC_SECTION_MENU_OPEN_EVENT, onOtherMenu);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener(SPEC_SECTION_MENU_OPEN_EVENT, onOtherMenu);
+    };
+  }, [menuId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const firstItem = containerRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']:not(:disabled)");
+    firstItem?.focus();
+  }, [open]);
+
+  const onMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      close(true);
+      return;
+    }
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const items = Array.from(
+      containerRef.current?.querySelectorAll<HTMLButtonElement>("[role='menuitem']:not(:disabled)") ?? [],
+    );
+    if (!items.length) return;
+    event.preventDefault();
+    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const index = event.key === "Home" ? 0
+      : event.key === "End" ? items.length - 1
+        : event.key === "ArrowDown" ? (current + 1) % items.length
+          : (current <= 0 ? items.length : current) - 1;
+    items[index]?.focus();
+  };
+
+  return (
+    <div className="spec-section-options" ref={containerRef}>
+      <button
+        aria-controls={menuId}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="spec-options-trigger"
+        onClick={() => open ? close() : openMenu()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            event.preventDefault();
+            close(true);
+          } else if (["ArrowDown", "Enter", " "].includes(event.key) && !open) {
+            event.preventDefault();
+            openMenu();
+          }
+        }}
+        ref={triggerRef}
+        type="button"
+      >
+        Options <span aria-hidden="true">▾</span>
+      </button>
+      {open && (
+        <div
+          aria-label={`Options for ${section.title}`}
+          className="spec-options-menu"
+          id={menuId}
+          onKeyDown={onMenuKeyDown}
+          role="menu"
+        >
+          {circuitRef && (
+            <button
+              onClick={() => {
+                close(true);
+                dispatchOpenCircuit(circuitRef);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              Open circuit
+            </button>
+          )}
+          <button disabled role="menuitem" type="button">
+            <span>Launch activity</span><small>Coming soon</small>
+          </button>
+          {section.entity_ref && (
+            <button
+              onClick={() => {
+                close(true);
+                dispatchEntityAction(section.entity_ref as EntityRef);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              More actions…
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FactList({
   section,
   changedPaths = [],
@@ -176,15 +316,7 @@ const SpecSection = createComponentImplementation(
             {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
             <Heading>{section.title}</Heading>
           </div>
-          {section.entity_ref && (
-            <button
-              className="spec-action-button"
-              type="button"
-              onClick={() => dispatchEntityAction(section.entity_ref as EntityRef)}
-            >
-              Actions
-            </button>
-          )}
+          <SectionOptionsMenu section={section} />
         </header>
         <FactList section={section} />
         {renderChildren(props.children, buildChild)}

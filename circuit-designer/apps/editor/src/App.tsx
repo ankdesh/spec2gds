@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   A2UIDocumentSurface,
   SPEC_ENTITY_ACTION_EVENT,
+  SPEC_OPEN_CIRCUIT_EVENT,
+  type SpecOpenCircuitEventDetail,
 } from "@spec2gds/document-a2ui-react";
 import {
   SpecEditorHttpClient,
@@ -14,7 +16,7 @@ import {
   type SourceChangeEvent,
 } from "@spec2gds/document-core";
 
-type View = "document" | "activity" | "diagnostics";
+import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
 
 type ActionDialogState = {
   ref: EntityRef;
@@ -47,12 +49,11 @@ export default function App() {
     proposals: [],
     assistant_changes: [],
   });
-  const [view, setView] = useState<View>("document");
+  const [view, setView] = useState<EditorView>("document");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
-  const [circuitTarget, setCircuitTarget] = useState("");
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
@@ -62,7 +63,7 @@ export default function App() {
   }, [client]);
 
   const openDocument = useCallback(async (nextPath: string) => {
-    if (!nextPath) return;
+    if (!nextPath) return false;
     setLoading(true);
     setError("");
     setNotice("");
@@ -76,25 +77,19 @@ export default function App() {
       setBatch(nextBatch);
       setActivity(nextActivity);
       setPath(nextPath);
-      const entryDesign = nextSnapshot.entry_designs[0]?.ref.entity_id;
-      const firstDesign = nextSnapshot.designs[0]?.ref.entity_id;
-      const firstComponent = nextSnapshot.components[0]?.ref.entity_id;
-      setCircuitTarget(
-        entryDesign ? `design:${entryDesign}`
-          : firstDesign ? `design:${firstDesign}`
-            : firstComponent ? `component:${firstComponent}` : "",
-      );
       setView("document");
       setExternalChange(null);
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      return false;
     } finally {
       setLoading(false);
     }
   }, [client]);
 
   const createDocument = useCallback(async (nextPath: string) => {
-    if (!nextPath) return;
+    if (!nextPath) return false;
     setLoading(true);
     setError("");
     setNotice("");
@@ -108,12 +103,13 @@ export default function App() {
       setBatch(nextBatch);
       setActivity(nextActivity);
       setPath(nextPath);
-      setCircuitTarget("");
       setView("document");
       setExternalChange(null);
       setNotice("Created a new specification package.");
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      return false;
     } finally {
       setLoading(false);
     }
@@ -195,9 +191,11 @@ export default function App() {
     }
   };
 
-  const launchCircuitDesigner = async () => {
-    if (!circuitTarget || launchingCircuit) return;
-    const [entityKind, entityId] = circuitTarget.split(":", 2) as ["component" | "design", string];
+  const launchCircuitDesigner = useCallback(async (
+    entityKind: "component" | "design",
+    entityId: string,
+  ) => {
+    if (launchingCircuit) return;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
       pendingWindow.opener = null;
@@ -223,7 +221,18 @@ export default function App() {
     } finally {
       setLaunchingCircuit(false);
     }
-  };
+  }, [client, launchingCircuit, snapshot]);
+
+  useEffect(() => {
+    const onOpenCircuit = (event: Event) => {
+      const { entityRef } = (event as CustomEvent<SpecOpenCircuitEventDetail>).detail;
+      if (entityRef.entity_kind === "design" || entityRef.entity_kind === "component") {
+        void launchCircuitDesigner(entityRef.entity_kind, entityRef.entity_id);
+      }
+    };
+    window.addEventListener(SPEC_OPEN_CIRCUIT_EVENT, onOpenCircuit);
+    return () => window.removeEventListener(SPEC_OPEN_CIRCUIT_EVENT, onOpenCircuit);
+  }, [launchCircuitDesigner]);
 
   const launchAssistant = async (target: EntityRef) => {
     if (launchingAssistant) return;
@@ -275,71 +284,20 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <a className="brand" href="#" onClick={() => setView("document")}>
-          <span className="brand__mark" aria-hidden="true">S</span>
-          <span><strong>spec2gds</strong><small>Specification document</small></span>
-        </a>
-        <nav className="app-nav" aria-label="Editor views">
-          {(["document", "activity", "diagnostics"] as View[]).map((item) => (
-            <button
-              className={view === item ? "active" : ""}
-              key={item}
-              onClick={() => setView(item)}
-              type="button"
-            >
-              {item[0].toUpperCase() + item.slice(1)}
-              {item === "activity" && <span>{activity.executions.length + activity.proposals.length + activity.assistant_changes.length}</span>}
-              {item === "diagnostics" && <span>{sourceDiagnostics.length + artifactDiagnostics.length}</span>}
-            </button>
-          ))}
-        </nav>
-        <div className="header-tools">
-          <div className="package-picker">
-            <label htmlFor="package-path">Package</label>
-            <input
-              id="package-path"
-              value={path}
-              onChange={(event) => setPath(event.target.value)}
-              placeholder="/path/to/design.spec"
-            />
-            <button type="button" onClick={() => createDocument(path)} disabled={!path || loading}>
-              New
-            </button>
-            <button type="button" onClick={() => openDocument(path)} disabled={!path || loading}>
-              Open
-            </button>
-          </div>
-          <div className="circuit-launcher">
-            <label htmlFor="circuit-target">Circuit source</label>
-            <select
-              id="circuit-target"
-              value={circuitTarget}
-              onChange={(event) => setCircuitTarget(event.target.value)}
-              disabled={!snapshot || launchingCircuit}
-            >
-              {!snapshot?.designs.length && !snapshot?.components.length && <option value="">No circuit sources</option>}
-              {snapshot?.designs.map((design) => (
-                <option value={`design:${design.ref.entity_id}`} key={`design:${design.ref.entity_id}`}>
-                  Design · {entityName(design.vlnv)}
-                </option>
-              ))}
-              {snapshot?.components.map((component) => (
-                <option value={`component:${component.ref.entity_id}`} key={`component:${component.ref.entity_id}`}>
-                  Component · {entityName(component.vlnv)}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={() => void launchCircuitDesigner()}
-              disabled={!circuitTarget || loading || launchingCircuit}
-            >
-              {launchingCircuit ? "Opening…" : "Open circuit"}
-            </button>
-          </div>
-        </div>
-      </header>
+      <EditorMenuBar
+        activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
+        diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length}
+        launchingCircuit={launchingCircuit}
+        loading={loading}
+        onCreate={createDocument}
+        onError={setError}
+        onOpen={openDocument}
+        onOpenCircuit={launchCircuitDesigner}
+        onViewChange={setView}
+        path={path}
+        snapshot={snapshot}
+        view={view}
+      />
 
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       {externalChange && (
@@ -363,7 +321,7 @@ export default function App() {
         {!loading && !batch && !error && (
           <div className="empty-state">
             <h1>Start a specification</h1>
-            <p>Enter a server-local <code>.spec</code> path, then create a new package or open an existing one.</p>
+            <p>Use <strong>File → New Specification</strong> or <strong>File → Open Specification</strong> with a server-local <code>.spec</code> path.</p>
           </div>
         )}
       </main>
