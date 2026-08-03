@@ -290,7 +290,8 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
       <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="Getting started">
         <div className="editor-dialog__copy">
           <p>Use <strong>File → New Specification</strong> to create a server-local package, or <strong>File → Open Specification</strong> to load one.</p>
-          <p>Accepted changes are saved automatically. Use each section’s <strong>Options</strong> menu to open eligible circuits or access entity actions.</p>
+          <p>Use the group <strong>Options</strong> menus to create components and entry designs. Component and design sections provide explicit inline editors with Save and Cancel.</p>
+          <p>Saved edits are validated and persisted automatically. Component sections can add or edit physical wire ports when they do not own an internal design.</p>
         </div>
       </Modal>
     );
@@ -304,6 +305,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
           <div><dt>Move between menus</dt><dd><kbd>←</kbd> <kbd>→</kbd></dd></div>
           <div><dt>Move within a menu</dt><dd><kbd>↑</kbd> <kbd>↓</kbd></dd></div>
           <div><dt>Close menu or dialog</dt><dd><kbd>Esc</kbd></dd></div>
+          <div><dt>Edit text in a field</dt><dd>Native <kbd>Ctrl/⌘</kbd> + <kbd>X</kbd>/<kbd>V</kbd></dd></div>
         </dl>
       </Modal>
     );
@@ -452,9 +454,9 @@ export default function EditorMenuBar({
               <MenuAction disabled status="Coming later">Undo</MenuAction>
               <MenuAction disabled status="Coming later">Redo</MenuAction>
               <div className="editor-menu__separator" role="separator" />
-              <MenuAction disabled status="Read-only">Cut</MenuAction>
+              <MenuAction disabled status="Use keyboard in fields">Cut</MenuAction>
               <MenuAction disabled={!canCopy} onActivate={activate(() => { void copySelection(); })}>Copy</MenuAction>
-              <MenuAction disabled status="Read-only">Paste</MenuAction>
+              <MenuAction disabled status="Use keyboard in fields">Paste</MenuAction>
               <MenuAction disabled={!snapshot} onActivate={activate(selectAll)}>Select All</MenuAction>
               <div className="editor-menu__separator" role="separator" />
               <MenuAction disabled status="Coming soon">Find</MenuAction>

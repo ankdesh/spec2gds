@@ -37,6 +37,30 @@ describe("SpecEditorHttpClient", () => {
     vi.unstubAllGlobals();
   });
 
+  it("submits typed optimistic editor transactions", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ committed: true, snapshot: { source_revision_hash: "sha256:next" } }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new SpecEditorHttpClient("/api");
+    await client.applyTransaction("sha256:base", [{
+      type: "create_entity",
+      kind: "component",
+      name: "timer",
+    }]);
+    expect(fetchMock).toHaveBeenCalledWith("/api/transactions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        expected_source_revision_hash: "sha256:base",
+        operations: [{ type: "create_entity", kind: "component", name: "timer" }],
+      }),
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("launches a selected source design through the editor-side adapter", async () => {
     const launch = {
       document_id: "spec_demo_design_top_1234",

@@ -107,6 +107,41 @@ export interface HardwareEntitySummary {
   vlnv: string;
 }
 
+export interface ComponentComposition {
+  component: EntityRef;
+  internal_design: EntityRef;
+}
+
+export interface EntityMetadataInput {
+  display_name: string;
+  short_description: string;
+  description: string;
+}
+
+export interface WirePortInput {
+  name: string;
+  direction: "in" | "out" | "inout";
+  left: string | null;
+  right: string | null;
+  description: string;
+}
+
+export type EditorTransactionOperation =
+  | { type: "create_entity"; kind: "component" | "design"; name: string }
+  | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
+  | { type: "add_component_port"; component: EntityRef; port: WirePortInput }
+  | {
+    type: "update_component_port";
+    component: EntityRef;
+    name: string;
+    port: Omit<WirePortInput, "name">;
+  };
+
+export interface TransactionResult {
+  committed: true;
+  snapshot: DocumentSnapshot;
+}
+
 export interface DocumentSnapshot {
   schema_version: string;
   document_id: string;
@@ -116,7 +151,7 @@ export interface DocumentSnapshot {
   entry_designs: HardwareEntitySummary[];
   bus_definitions: unknown[];
   abstraction_definitions: unknown[];
-  component_compositions: unknown[];
+  component_compositions: ComponentComposition[];
   narrative: { blocks: NarrativeBlock[] };
   diagnostics: { source: string[]; artifacts: string[] };
 }
@@ -157,6 +192,22 @@ export interface EntityAction {
   produced_artifact_roles: string[];
 }
 
+export class SpecEditorHttpError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "SpecEditorHttpError";
+  }
+}
+
+function errorMessage(detail: unknown): string {
+  if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "diagnostics" in detail) {
+    const diagnostics = (detail as { diagnostics: unknown }).diagnostics;
+    if (Array.isArray(diagnostics)) return diagnostics.map(String).join(" ");
+  }
+  return JSON.stringify(detail) ?? "Request failed.";
+}
+
 export class SpecEditorHttpClient {
   constructor(private readonly baseUrl = "") {}
 
@@ -168,7 +219,7 @@ export class SpecEditorHttpClient {
       const detail = typeof payload === "object" && payload && "detail" in payload
         ? (payload as { detail: unknown }).detail
         : payload;
-      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+      throw new SpecEditorHttpError(errorMessage(detail), response.status);
     }
     return payload as T;
   }
@@ -195,6 +246,20 @@ export class SpecEditorHttpClient {
 
   getSnapshot(): Promise<DocumentSnapshot> {
     return this.request("/documents/snapshot");
+  }
+
+  applyTransaction(
+    expectedSourceRevisionHash: string,
+    operations: EditorTransactionOperation[],
+  ): Promise<TransactionResult> {
+    return this.request("/transactions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        expected_source_revision_hash: expectedSourceRevisionHash,
+        operations,
+      }),
+    });
   }
 
   eventsUrl(): string {

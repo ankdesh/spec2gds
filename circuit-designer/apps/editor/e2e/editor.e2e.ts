@@ -5,23 +5,33 @@ const revision = "sha256:editor-test";
 
 const designRef = { document_id: documentId, entity_id: "design_top", entity_kind: "design" };
 const componentRef = { document_id: documentId, entity_id: "component_timer", entity_kind: "component" };
+const compositeRef = { document_id: documentId, entity_id: "component_subsystem", entity_kind: "component" };
 const busRef = { document_id: documentId, entity_id: "bus_control", entity_kind: "bus_definition" };
 
 const snapshot = {
   schema_version: "1.0",
   document_id: documentId,
   source_revision_hash: revision,
-  components: [{ ref: componentRef, vlnv: "acme:blocks:Timer:1.0" }],
+  components: [
+    { ref: componentRef, vlnv: "acme:blocks:Timer:1.0" },
+    { ref: compositeRef, vlnv: "acme:blocks:Subsystem:1.0" },
+  ],
   designs: [{ ref: designRef, vlnv: "acme:systems:Processor:1.0" }],
   entry_designs: [{ ref: designRef, vlnv: "acme:systems:Processor:1.0" }],
   bus_definitions: [],
   abstraction_definitions: [],
-  component_compositions: [],
+  component_compositions: [{ component: compositeRef, internal_design: designRef }],
   narrative: { blocks: [] },
   diagnostics: { source: [], artifacts: [] },
 };
 
-function section(id: string, title: string, level: number, entityRef: object | null) {
+function section(
+  id: string,
+  title: string,
+  level: number,
+  entityRef: object | null,
+  options: { facts?: object[]; tables?: object[]; children?: string[] } = {},
+) {
   return {
     id: `section-${id}`,
     component: "SpecSection",
@@ -31,13 +41,60 @@ function section(id: string, title: string, level: number, entityRef: object | n
       level,
       eyebrow: level === 1 ? "Document section" : "Hardware entity",
       entity_ref: entityRef,
-      facts: [],
-      tables: [],
+      facts: options.facts ?? [],
+      tables: options.tables ?? [],
       narrative: [],
     },
-    children: [],
+    children: options.children ?? [],
   };
 }
+
+function cell(value: string, schemaPath: string) {
+  return { kind: "text", value, presence: value ? "explicit" : "absent", schema_path: schemaPath, reference_anchor: "" };
+}
+
+const portTable = {
+  table_id: "component-component_timer-ports",
+  kind: "component_ports",
+  title: "Ports",
+  columns: [
+    { key: "name", label: "Name", schema_path: "/model/ports/port/name" },
+    { key: "style", label: "Style", schema_path: "/model/ports/port/wire" },
+    { key: "direction", label: "Direction / initiative", schema_path: "/model/ports/port/wire/direction" },
+    { key: "left", label: "Left", schema_path: "/model/ports/port/wire/vectors/vector/left" },
+    { key: "right", label: "Right", schema_path: "/model/ports/port/wire/vectors/vector/right" },
+    { key: "width", label: "Bus width", schema_path: "/model/ports/port/transactional/busWidth" },
+    { key: "qualifier", label: "Qualifier", schema_path: "/model/ports/port/wire/qualifier" },
+    { key: "description", label: "Description", schema_path: "/model/ports/port/description" },
+  ],
+  rows: [{
+    row_id: "port-irq",
+    cells: {
+      name: cell("irq", "/model/ports/port/name"),
+      style: cell("wire", "/model/ports/port/wire"),
+      direction: cell("out", "/model/ports/port/wire/direction"),
+      left: cell("", "/model/ports/port/wire/vectors/vector/left"),
+      right: cell("", "/model/ports/port/wire/vectors/vector/right"),
+      width: cell("", "/model/ports/port/transactional/busWidth"),
+      qualifier: cell("", "/model/ports/port/wire/qualifier"),
+      description: cell("Interrupt", "/model/ports/port/description"),
+    },
+  }],
+};
+
+const componentFacts = [
+  { label: "VLNV", value: "acme:blocks:Timer:1.0", schema_path: "/vendor | /library | /name | /version", reference_anchor: "" },
+  { label: "Name", value: "Timer", schema_path: "/name", reference_anchor: "" },
+  { label: "Display name", value: "", schema_path: "/displayName", reference_anchor: "" },
+  { label: "Short description", value: "", schema_path: "/shortDescription", reference_anchor: "" },
+  { label: "Description", value: "Counts time", schema_path: "/description", reference_anchor: "" },
+];
+
+const compositePortTable = {
+  ...portTable,
+  table_id: "component-component_subsystem-ports",
+  rows: [],
+};
 
 const batch = {
   protocol_version: "v0.9",
@@ -58,8 +115,33 @@ const batch = {
         surfaceId: "spec-document-editor-test",
         components: [
           section("overview", "Overview", 1, null),
+          section("designs", "Designs", 1, null),
           section("design-design_top", "Processor", 2, designRef),
-          section("component-component_timer", "Timer", 2, componentRef),
+          section("components", "Components", 1, null),
+          section("component-component_timer", "Timer", 2, componentRef, {
+            facts: componentFacts,
+            tables: [portTable],
+            children: ["table-component-component_timer-ports"],
+          }),
+          {
+            id: "table-component-component_timer-ports",
+            component: "SpecTable",
+            table: portTable,
+          },
+          section("component-component_subsystem", "Subsystem", 2, compositeRef, {
+            facts: componentFacts.map((fact) => fact.label === "Name"
+              ? { ...fact, value: "Subsystem" }
+              : fact.label === "VLNV"
+                ? { ...fact, value: "acme:blocks:Subsystem:1.0" }
+                : { ...fact, value: "" }),
+            tables: [compositePortTable],
+            children: ["table-component-component_subsystem-ports"],
+          }),
+          {
+            id: "table-component-component_subsystem-ports",
+            component: "SpecTable",
+            table: compositePortTable,
+          },
           section("bus-definition-bus_control", "Control Bus", 2, busRef),
           {
             id: "root",
@@ -70,14 +152,20 @@ const batch = {
             sourceRevisionHash: revision,
             toc: [
               { section_id: "overview", title: "Overview", level: 1 },
+              { section_id: "designs", title: "Designs", level: 1 },
               { section_id: "design-design_top", title: "Processor", level: 2 },
+              { section_id: "components", title: "Components", level: 1 },
               { section_id: "component-component_timer", title: "Timer", level: 2 },
+              { section_id: "component-component_subsystem", title: "Subsystem", level: 2 },
               { section_id: "bus-definition-bus_control", title: "Control Bus", level: 2 },
             ],
             children: [
               "section-overview",
+              "section-designs",
               "section-design-design_top",
+              "section-components",
               "section-component-component_timer",
+              "section-component-component_subsystem",
               "section-bus-definition-bus_control",
             ],
           },
@@ -99,10 +187,20 @@ type ApiState = {
   circuits: Array<{ entity_kind: string; entity_id: string }>;
   createdPaths: string[];
   openedPaths: string[];
+  transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
+  currentRevision: string;
+  staleNextTransaction: boolean;
 };
 
 async function mockEditorApi(page: Page): Promise<ApiState> {
-  const state: ApiState = { circuits: [], createdPaths: [], openedPaths: [] };
+  const state: ApiState = {
+    circuits: [],
+    createdPaths: [],
+    openedPaths: [],
+    transactions: [],
+    currentRevision: revision,
+    staleNextTransaction: false,
+  };
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace(/^\/api/, "");
@@ -114,10 +212,27 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
       if (body.path === "/tmp/missing.spec") {
         return route.fulfill({ json: { detail: "Specification package was not found." }, status: 422 });
       }
+      state.currentRevision = revision;
       return json(snapshot);
     }
-    if (path === "/documents/snapshot") return json(snapshot);
+    if (path === "/documents/snapshot") {
+      return json({ ...snapshot, source_revision_hash: state.currentRevision });
+    }
     if (path === "/documents/a2ui") return json(batch);
+    if (path === "/transactions") {
+      const body = request.postDataJSON() as { expected_source_revision_hash: string; operations: object[] };
+      state.transactions.push(body);
+      if (state.staleNextTransaction) {
+        state.staleNextTransaction = false;
+        state.currentRevision = "sha256:external-change";
+        return route.fulfill({
+          json: { detail: { diagnostics: ["Stale base revision."] } },
+          status: 409,
+        });
+      }
+      state.currentRevision = `sha256:edited-${state.transactions.length}`;
+      return json({ committed: true, snapshot: { ...snapshot, source_revision_hash: state.currentRevision } });
+    }
     if (path === "/executions") return json({ executions: [] });
     if (path === "/artifacts") return json({ artifacts: [] });
     if (path === "/proposals") return json({ proposals: [] });
@@ -233,7 +348,7 @@ test("keeps Edit state-aware and provides working Copy and Select All", async ({
   });
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Undo Coming later" })).toBeDisabled();
-  await expect(page.getByRole("menuitem", { name: "Cut Read-only" })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: /Cut Use keyboard in fields/ })).toBeDisabled();
   await expect(page.getByRole("menuitem", { name: "Find Coming soon" })).toBeDisabled();
   await page.getByRole("menuitem", { name: "Copy", exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("Editor Test");
@@ -272,6 +387,98 @@ test("launches grouped and section circuits while preserving entity actions", as
   await bus.getByRole("button", { name: "Options" }).click();
   await expect(bus.getByRole("menuitem", { name: "Open circuit" })).toHaveCount(0);
   await expect(bus.getByRole("menuitem", { name: /More actions/ })).toBeVisible();
+});
+
+test("creates entities and edits metadata and physical ports inline", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+
+  const composite = page.locator("#component-component_subsystem");
+  await composite.getByRole("button", { name: "Options" }).click();
+  await expect(composite.getByRole("menuitem", { name: /Add port.*Composite/ })).toBeDisabled();
+
+  const components = page.locator("#components");
+  await components.getByRole("button", { name: "Options" }).click();
+  await components.getByRole("menuitem", { name: "Add component…" }).click();
+  await page.getByLabel("Component name").fill("counter");
+  await page.getByRole("button", { name: "Create component" }).click();
+  await expect.poll(() => state.transactions.length).toBe(1);
+  expect(state.transactions[0]?.operations).toEqual([
+    { type: "create_entity", kind: "component", name: "counter" },
+  ]);
+
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Edit details…" }).click();
+  await component.getByLabel("Display name").fill("Friendly timer");
+  await component.getByLabel("Short description").fill("Counts cycles");
+  await component.getByLabel("Description").fill("A programmable timer.");
+  await component.getByRole("button", { name: "Save changes" }).click();
+  await expect.poll(() => state.transactions.length).toBe(2);
+  expect(state.transactions[1]?.operations[0]).toEqual({
+    type: "set_entity_metadata",
+    entity: componentRef,
+    display_name: "Friendly timer",
+    short_description: "Counts cycles",
+    description: "A programmable timer.",
+  });
+
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Add port…" }).click();
+  await component.getByLabel("Port name").fill("count");
+  await component.getByLabel("Direction for count").selectOption("out");
+  await component.getByLabel("Left bound for count").fill("31");
+  await component.getByLabel("Right bound for count").fill("0");
+  await component.getByLabel("Description for count").fill("Current count");
+  const draftRow = component.locator(".spec-port-edit-row");
+  await draftRow.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => state.transactions.length).toBe(3);
+  expect(state.transactions[2]?.operations[0]).toEqual({
+    type: "add_component_port",
+    component: componentRef,
+    port: {
+      name: "count",
+      direction: "out",
+      left: "31",
+      right: "0",
+      description: "Current count",
+    },
+  });
+
+  const existingRow = component.locator("tbody tr").filter({ hasText: "irq" });
+  await existingRow.getByRole("button", { name: "Edit" }).click();
+  await component.getByLabel("Direction for irq").selectOption("inout");
+  await component.getByLabel("Description for irq").fill("Bidirectional interrupt");
+  await component.locator(".spec-port-edit-row").getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => state.transactions.length).toBe(4);
+  expect(state.transactions[3]?.operations[0]).toEqual({
+    type: "update_component_port",
+    component: componentRef,
+    name: "irq",
+    port: {
+      direction: "inout",
+      left: null,
+      right: null,
+      description: "Bidirectional interrupt",
+    },
+  });
+});
+
+test("preserves an inline draft when the optimistic revision is stale", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Edit details…" }).click();
+  await component.getByLabel("Description").fill("Keep this draft after refresh.");
+  state.staleNextTransaction = true;
+  await component.getByRole("button", { name: "Save changes" }).click();
+
+  await expect(component.getByLabel("Description")).toHaveValue("Keep this draft after refresh.");
+  await expect(component.getByRole("alert")).toContainText("draft was preserved");
+  await component.getByRole("button", { name: "Save changes" }).click();
+  await expect.poll(() => state.transactions.length).toBe(2);
+  expect(state.transactions[1]?.expected_source_revision_hash).toBe("sha256:external-change");
 });
 
 test("offers Help content and remains usable at a narrow viewport", async ({ page }) => {

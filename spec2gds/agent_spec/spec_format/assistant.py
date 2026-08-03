@@ -25,6 +25,10 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.source_edits import (
+    set_entity_metadata,
+    upsert_component_port,
+)
 from spec2gds.agent_spec.spec_format.transactions import (
     ClearInternalDesign,
     DeleteConnection,
@@ -684,10 +688,18 @@ def _set_metadata(root: etree._Element, operation: dict[str, typing.Any]) -> Non
     present = [name for name in ("display_name", "short_description", "description") if name in operation]
     if not present:
         raise ValueError("set_entity_metadata must set at least one editable field.")
-    order = ROOT_ORDER[_local(root)]
-    for api_name, xml_name in (("display_name", "displayName"), ("short_description", "shortDescription"), ("description", "description")):
-        if api_name in operation:
-            _set_optional(root, xml_name, operation[api_name], order)
+    values: dict[str, str | None] = {}
+    for name in ("display_name", "short_description", "description"):
+        if name in operation:
+            values[name] = typing.cast(str | None, operation[name])
+        else:
+            current = _child(root, {
+                "display_name": "displayName",
+                "short_description": "shortDescription",
+                "description": "description",
+            }[name])
+            values[name] = (current.text or "") if current is not None else None
+    set_entity_metadata(root, **values)
 
 
 def _upsert_parameter(root: etree._Element, value: dict[str, typing.Any]) -> None:
@@ -723,34 +735,7 @@ def _delete_named(root: etree._Element, container_name: str, tag: str, field: st
 
 
 def _upsert_component_port(root: etree._Element, value: dict[str, typing.Any]) -> None:
-    allowed = {"name", "style", "direction", "left", "right", "bus_width", "description"}
-    _reject_unknown_keys(value, allowed, "component port")
-    name = str(value.get("name", "")).strip()
-    style = str(value.get("style", "wire"))
-    direction = str(value.get("direction", "")).strip()
-    if not name or style not in {"wire", "transactional"} or not direction:
-        raise ValueError("Component port requires name, wire/transactional style, and direction/initiative.")
-    model = _ensure_ordered(root, "model", ROOT_ORDER["component"])
-    ports = _child(model, "ports")
-    if ports is None:
-        ports = etree.SubElement(model, _q("ports"))
-    existing = _named(ports, "port", "name", name)
-    if existing is not None:
-        ports.remove(existing)
-    port = etree.Element(_q("port"))
-    etree.SubElement(port, _q("name")).text = name
-    if value.get("description"):
-        etree.SubElement(port, _q("description")).text = str(value["description"])
-    style_node = etree.SubElement(port, _q(style))
-    etree.SubElement(style_node, _q("direction" if style == "wire" else "initiative")).text = direction
-    if style == "wire" and value.get("left") not in (None, "") and value.get("right") not in (None, ""):
-        vectors = etree.SubElement(style_node, _q("vectors"))
-        vector = etree.SubElement(vectors, _q("vector"))
-        etree.SubElement(vector, _q("left")).text = str(value["left"])
-        etree.SubElement(vector, _q("right")).text = str(value["right"])
-    if style == "transactional" and value.get("bus_width") not in (None, ""):
-        etree.SubElement(style_node, _q("busWidth")).text = str(value["bus_width"])
-    ports.append(port)
+    upsert_component_port(root, value)
 
 
 def _delete_component_port(root: etree._Element, name: str) -> None:

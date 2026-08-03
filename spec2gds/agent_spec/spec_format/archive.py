@@ -176,10 +176,17 @@ class SpecPackage:
             sha256=sha256_digest(normalized),
         )
         replaced = [item for item in self.manifest.documents if item.entity_id == entity_id]
+        replacement_index = next(
+            (index for index, item in enumerate(self.manifest.documents) if item.entity_id == entity_id),
+            None,
+        )
         documents = [item for item in self.manifest.documents if item.entity_id != entity_id]
         if any(item.path == path for item in documents):
             raise ValueError(f"Document path collision for VLNV: {vlnv}")
-        documents.append(entry)
+        if replacement_index is None:
+            documents.append(entry)
+        else:
+            documents.insert(replacement_index, entry)
         self.manifest = self.manifest.model_copy(update={"documents": documents})
         for previous in replaced:
             self.files.pop(previous.path, None)

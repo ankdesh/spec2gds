@@ -425,6 +425,142 @@
   color: #8d2424;
 }
 
+.spec-edit-global-notice {
+  position: sticky;
+  z-index: 10;
+  top: 0.5rem;
+  max-width: 42rem;
+  margin: 0.5rem auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid #d7b86e;
+  border-radius: 0.45rem;
+  background: #fff8df;
+  color: #634c17;
+  box-shadow: 0 0.35rem 1rem rgba(59, 44, 8, 0.12);
+  font-size: 0.84rem;
+}
+
+.spec-inline-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.9rem 1rem;
+  margin: 0 0 1.5rem;
+  padding: 1rem;
+  border: 1px solid color-mix(in srgb, var(--spec-accent, #246b5a) 38%, white);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--spec-accent, #246b5a) 5%, white);
+}
+
+.spec-create-editor {
+  grid-template-columns: minmax(12rem, 1fr) auto;
+  align-items: end;
+}
+
+.spec-inline-editor label {
+  display: block;
+  margin-bottom: 0.3rem;
+  color: #3b4541;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.spec-inline-editor input,
+.spec-inline-editor textarea,
+.spec-port-edit-row input,
+.spec-port-edit-row select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--spec-line-strong, #b7bdb9);
+  border-radius: 0.35rem;
+  background: white;
+  color: #202925;
+  font: inherit;
+}
+
+.spec-inline-editor input:focus,
+.spec-inline-editor textarea:focus,
+.spec-port-edit-row input:focus,
+.spec-port-edit-row select:focus {
+  outline: 2px solid color-mix(in srgb, var(--spec-accent, #246b5a) 45%, transparent);
+  outline-offset: 1px;
+  border-color: var(--spec-accent, #246b5a);
+}
+
+.spec-inline-editor small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--spec-muted, #59616c);
+  font-size: 0.7rem;
+}
+
+.spec-edit-field-wide,
+.spec-edit-error {
+  grid-column: 1 / -1;
+}
+
+.spec-edit-error {
+  margin: 0;
+  color: #912c2c;
+  font-size: 0.8rem;
+}
+
+.spec-edit-actions,
+.spec-port-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.spec-edit-actions button,
+.spec-port-actions button {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--spec-accent, #246b5a);
+  border-radius: 0.35rem;
+  background: var(--spec-accent, #246b5a);
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.spec-edit-actions button[type="button"],
+.spec-port-actions button + button {
+  background: white;
+  color: var(--spec-accent, #246b5a);
+}
+
+.spec-edit-actions button:disabled,
+.spec-port-actions button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
+.spec-port-actions small {
+  color: var(--spec-muted, #59616c);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.spec-port-edit-row td {
+  background: #f5faf7;
+  min-width: 7rem;
+}
+
+.spec-port-edit-row td:first-child,
+.spec-port-edit-row td:nth-child(2),
+.spec-port-edit-row td:nth-child(3) {
+  min-width: 5.5rem;
+}
+
+.spec-port-error-row td {
+  background: #fff3f3;
+  color: #912c2c;
+  font-size: 0.76rem;
+}
+
 @media (max-width: 800px) {
   .spec-document {
     display: block;
@@ -437,5 +573,15 @@
 
   .spec-cover {
     padding: 2.5rem 1.4rem;
+  }
+
+  .spec-inline-editor,
+  .spec-create-editor {
+    grid-template-columns: 1fr;
+  }
+
+  .spec-edit-field-wide,
+  .spec-edit-error {
+    grid-column: auto;
   }
 }

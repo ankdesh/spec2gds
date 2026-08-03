@@ -15,7 +15,14 @@ from spec2gds.agent_spec.spec_format.models import (
     ComponentComposition,
     DocumentKind,
     EntityRef,
+    ID_PATTERN,
     NarrativeBlock,
+    new_entity_id,
+)
+from spec2gds.agent_spec.spec_format.source_edits import (
+    add_component_wire_port,
+    set_entity_metadata,
+    update_component_wire_port,
 )
 
 
@@ -32,6 +39,48 @@ class DeleteDocument:
     """Remove a component, design, bus, or abstraction document by stable ID."""
 
     ref: EntityRef
+
+
+@dataclass(frozen=True)
+class CreateEntity:
+    """Create a minimal top-level component or entry design from a name."""
+
+    kind: typing.Literal["component", "design"]
+    name: str
+
+
+@dataclass(frozen=True)
+class SetEntityMetadata:
+    """Replace optional descriptive metadata without changing VLNV identity."""
+
+    entity: EntityRef
+    display_name: str | None
+    short_description: str | None
+    description: str | None
+
+
+@dataclass(frozen=True)
+class AddComponentPort:
+    """Add one scalar or vector physical wire port to a leaf component."""
+
+    component: EntityRef
+    name: str
+    direction: typing.Literal["in", "out", "inout"]
+    left: str | None = None
+    right: str | None = None
+    description: str | None = None
+
+
+@dataclass(frozen=True)
+class UpdateComponentPort:
+    """Update one existing physical wire port while preserving its name."""
+
+    component: EntityRef
+    name: str
+    direction: typing.Literal["in", "out", "inout"]
+    left: str | None = None
+    right: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True)
@@ -164,6 +213,10 @@ class RemoveAsset:
 EditOperation = typing.Union[
     UpsertDocumentXml,
     DeleteDocument,
+    CreateEntity,
+    SetEntityMetadata,
+    AddComponentPort,
+    UpdateComponentPort,
     UpsertInstance,
     DeleteInstance,
     ReorderInstances,
@@ -229,6 +282,39 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         package.add_document(operation.kind, operation.xml)
     elif isinstance(operation, DeleteDocument):
         _delete_document(package, operation.ref)
+    elif isinstance(operation, CreateEntity):
+        _create_entity(package, operation)
+    elif isinstance(operation, SetEntityMetadata):
+        root = _editable_entity_root(package, operation.entity)
+        set_entity_metadata(
+            root,
+            display_name=operation.display_name,
+            short_description=operation.short_description,
+            description=operation.description,
+        )
+        package.add_document(typing.cast(DocumentKind, operation.entity.entity_kind), _serialize(root))
+    elif isinstance(operation, AddComponentPort):
+        root = _editable_component_root(package, operation.component)
+        add_component_wire_port(
+            root,
+            name=operation.name,
+            direction=operation.direction,
+            left=operation.left,
+            right=operation.right,
+            description=operation.description,
+        )
+        package.add_document("component", _serialize(root))
+    elif isinstance(operation, UpdateComponentPort):
+        root = _editable_component_root(package, operation.component)
+        update_component_wire_port(
+            root,
+            name=operation.name,
+            direction=operation.direction,
+            left=operation.left,
+            right=operation.right,
+            description=operation.description,
+        )
+        package.add_document("component", _serialize(root))
     elif isinstance(operation, UpsertInstance):
         root, entry = _design_root(package, operation.design)
         _upsert_instance(root, operation.instance)
@@ -302,6 +388,67 @@ def _delete_document(package: SpecPackage, ref: EntityRef) -> None:
     package.manifest = package.manifest.model_copy(
         update={"documents": [item for item in package.manifest.documents if item.entity_id != ref.entity_id]}
     )
+
+
+def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
+    """Create one minimal valid IP-XACT document with editor-owned defaults."""
+    name = operation.name.strip()
+    if not name or not ID_PATTERN.fullmatch(name):
+        raise ValueError("Entity name must be a non-empty XML-compatible identifier.")
+    vlnv = f"spec2gds.local:work:{name}:1.0"
+    if any(item.kind == operation.kind and item.vlnv == vlnv for item in package.manifest.documents):
+        raise ValueError(f"A {operation.kind.replace('_', ' ')} named {name} already exists.")
+    entity_id = new_entity_id(f"{operation.kind}_{name}")
+    root_name = ipxact.ROOT_NAMES[operation.kind]
+    root = etree.Element(_q(root_name), nsmap={"ipxact": ipxact.IPXACT_NAMESPACE})
+    root.set(f"{{{ipxact.XML_NAMESPACE}}}id", entity_id)
+    for field, value in (
+        ("vendor", "spec2gds.local"),
+        ("library", "work"),
+        ("name", name),
+        ("version", "1.0"),
+    ):
+        etree.SubElement(root, _q(field)).text = value
+    package.add_document(operation.kind, _serialize(root))
+    if operation.kind == "design":
+        reference = EntityRef(
+            document_id=package.manifest.document_id,
+            entity_id=entity_id,
+            entity_kind="design",
+        )
+        package.manifest = package.manifest.model_copy(
+            update={"entry_designs": [*package.manifest.entry_designs, reference]}
+        )
+
+
+def _editable_entity_root(package: SpecPackage, ref: EntityRef) -> etree._Element:
+    """Load a component or design root for descriptive editor changes."""
+    _assert_local(package, ref)
+    if ref.entity_kind not in {"component", "design"}:
+        raise ValueError("Direct metadata editing supports only components and designs.")
+    entry = next(
+        (item for item in package.manifest.documents if item.entity_id == ref.entity_id and item.kind == ref.entity_kind),
+        None,
+    )
+    if entry is None:
+        raise KeyError(f"Unknown {ref.entity_kind}: {ref.entity_id}")
+    return ipxact.parse_xml(package.files[entry.path])
+
+
+def _editable_component_root(package: SpecPackage, ref: EntityRef) -> etree._Element:
+    """Load a leaf component root and reject composite boundary mutations."""
+    _assert_local(package, ref)
+    if ref.entity_kind != "component":
+        raise ValueError("Port operations require a component reference.")
+    if any(item.component.entity_id == ref.entity_id for item in package.manifest.component_compositions):
+        raise ValueError("Ports on components with internal designs are read-only until boundary editing is supported.")
+    entry = next(
+        (item for item in package.manifest.documents if item.entity_id == ref.entity_id and item.kind == "component"),
+        None,
+    )
+    if entry is None:
+        raise KeyError(f"Unknown component: {ref.entity_id}")
+    return ipxact.parse_xml(package.files[entry.path])
 
 
 def _set_composition(package: SpecPackage, component: EntityRef, internal_design: EntityRef) -> None:

@@ -125,6 +125,108 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
         assert opened["source_revision_hash"]
 
 
+def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_path: Path) -> None:
+    endpoints = _endpoints()
+    path = tmp_path / "direct-editor.spec"
+    snapshot = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="direct_editor"))
+
+    created = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=snapshot["source_revision_hash"],
+        operations=[
+            {"type": "create_entity", "kind": "component", "name": "timer"},
+            {"type": "create_entity", "kind": "design", "name": "timer_top"},
+        ],
+    ))["snapshot"]
+    assert created["components"][0]["vlnv"] == "spec2gds.local:work:timer:1.0"
+    assert created["designs"][0]["vlnv"] == "spec2gds.local:work:timer_top:1.0"
+    assert created["entry_designs"][0]["ref"] == created["designs"][0]["ref"]
+    component = created["components"][0]["ref"]
+
+    edited = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=created["source_revision_hash"],
+        operations=[
+            {
+                "type": "set_entity_metadata",
+                "entity": component,
+                "display_name": "Timer block",
+                "short_description": "Counts cycles",
+                "description": "A directly edited component.",
+            },
+            {
+                "type": "add_component_port",
+                "component": component,
+                "port": {
+                    "name": "count",
+                    "direction": "out",
+                    "left": "31",
+                    "right": "0",
+                    "description": "Current count",
+                },
+            },
+        ],
+    ))["snapshot"]
+    a2ui = endpoints["document_a2ui"]()
+    component_section = next(
+        item["section"]
+        for message in a2ui["messages"]
+        for item in message.get("updateComponents", {}).get("components", [])
+        if item.get("component") == "SpecSection"
+        and item.get("section", {}).get("entity_ref") == component
+    )
+    assert next(item["value"] for item in component_section["facts"] if item["label"] == "Display name") == "Timer block"
+    ports = next(
+        item["table"]
+        for message in a2ui["messages"]
+        for item in message.get("updateComponents", {}).get("components", [])
+        if item.get("component") == "SpecTable"
+        and item.get("table", {}).get("kind") == "component_ports"
+    )
+    assert ports["rows"][0]["cells"]["left"]["value"] == "31"
+
+    updated = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=edited["source_revision_hash"],
+        operations=[{
+            "type": "update_component_port",
+            "component": component,
+            "name": "count",
+            "port": {
+                "direction": "inout",
+                "left": None,
+                "right": None,
+                "description": "Scalar count",
+            },
+        }],
+    ))["snapshot"]
+    assert updated["source_revision_hash"] != edited["source_revision_hash"]
+
+    with pytest.raises(fastapi.HTTPException) as duplicate:
+        endpoints["transaction"](TransactionRequest(
+            expected_source_revision_hash=updated["source_revision_hash"],
+            operations=[{"type": "create_entity", "kind": "component", "name": "timer"}],
+        ))
+    assert duplicate.value.status_code == 422
+    assert "already exists" in str(duplicate.value.detail)
+
+    with pytest.raises(fastapi.HTTPException) as rename:
+        endpoints["transaction"](TransactionRequest(
+            expected_source_revision_hash=updated["source_revision_hash"],
+            operations=[{
+                "type": "update_component_port",
+                "component": component,
+                "name": "count",
+                "port": {
+                    "name": "renamed",
+                    "direction": "out",
+                    "left": None,
+                    "right": None,
+                    "description": "Not allowed",
+                },
+            }],
+        ))
+    assert rename.value.status_code == 422
+    assert "cannot be changed" in str(rename.value.detail)
+
+
 def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import spec2gds.agent_spec.spec_format.v1_api as v1_api
 

@@ -48,6 +48,15 @@ Open <http://127.0.0.1:8000/editor>. Use **File → New Specification** or
 menu can also refresh the active package from disk; accepted changes are saved
 automatically. **New Specification** refuses to replace an existing path.
 
+Use the top-level **Components → Options → Add component** and **Designs →
+Options → Add design** commands to create name-only IP-XACT entities. New
+entities use the editor defaults `spec2gds.local:work:<name>:1.0`, and new
+designs become entry designs. Component and design sections provide **Edit
+details** for display name and descriptions. Leaf-component sections also
+provide **Add port** and row-level editing for scalar or vector wire ports;
+Save validates and persists the complete change, while Cancel discards the
+browser-only draft.
+
 The **Circuit** menu lists available designs and components. Eligible document
 sections also expose **Options → Open circuit** beside their headings, while
 **Options → More actions** opens the entity action workflow. The server exposes

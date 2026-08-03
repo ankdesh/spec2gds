@@ -4,16 +4,21 @@ import {
   A2UIDocumentSurface,
   SPEC_ENTITY_ACTION_EVENT,
   SPEC_OPEN_CIRCUIT_EVENT,
+  type SpecDocumentEditController,
   type SpecOpenCircuitEventDetail,
 } from "@spec2gds/document-a2ui-react";
 import {
+  SpecEditorHttpError,
   SpecEditorHttpClient,
   type A2UIDocumentBatch,
   type ActivityState,
   type DocumentSnapshot,
+  type EditorTransactionOperation,
+  type EntityMetadataInput,
   type EntityAction,
   type EntityRef,
   type SourceChangeEvent,
+  type WirePortInput,
 } from "@spec2gds/document-core";
 
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
@@ -279,6 +284,76 @@ export default function App() {
     }
   };
 
+  const commitEditorOperations = useCallback(async (
+    operations: EditorTransactionOperation[],
+    successNotice: string,
+  ) => {
+    if (!snapshot) throw new Error("No specification is open.");
+    try {
+      const result = await client.applyTransaction(snapshot.source_revision_hash, operations);
+      setSnapshot(result.snapshot);
+      setExternalChange(null);
+      setError("");
+      setNotice(successNotice);
+      try {
+        setBatch(await client.getA2UIBatch());
+      } catch (refreshError) {
+        setError(
+          `The change was saved, but the document view could not refresh: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`,
+        );
+      }
+    } catch (caught) {
+      if (caught instanceof SpecEditorHttpError && caught.status === 409) {
+        const latest = await client.getSnapshot();
+        setSnapshot(latest);
+        setExternalChange(null);
+        throw new Error("The specification changed on disk. Your draft was preserved; review it and save again.");
+      }
+      throw caught;
+    }
+  }, [client, snapshot]);
+
+  const editController = useMemo<SpecDocumentEditController | undefined>(() => {
+    if (!snapshot) return undefined;
+    return {
+      async createEntity(kind: "component" | "design", name: string) {
+        await commitEditorOperations(
+          [{ type: "create_entity", kind, name }],
+          `${kind === "component" ? "Component" : "Entry design"} ${name} created and saved automatically.`,
+        );
+      },
+      async updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput) {
+        await commitEditorOperations(
+          [{ type: "set_entity_metadata", entity: ref, ...value }],
+          `${ref.entity_kind === "component" ? "Component" : "Design"} details saved automatically.`,
+        );
+      },
+      async addComponentPort(ref: EntityRef, value: WirePortInput) {
+        await commitEditorOperations(
+          [{ type: "add_component_port", component: ref, port: value }],
+          `Port ${value.name} added and saved automatically.`,
+        );
+      },
+      async updateComponentPort(ref: EntityRef, name: string, value: Omit<WirePortInput, "name">) {
+        await commitEditorOperations(
+          [{ type: "update_component_port", component: ref, name, port: value }],
+          `Port ${name} updated and saved automatically.`,
+        );
+      },
+      portEditingAvailability(ref: EntityRef) {
+        const composite = snapshot.component_compositions.some(
+          (composition) => composition.component.entity_id === ref.entity_id,
+        );
+        return composite
+          ? {
+            enabled: false,
+            reason: "Ports on components with internal designs are read-only until boundary editing is supported.",
+          }
+          : { enabled: true, reason: "" };
+      },
+    };
+  }, [commitEditorOperations, snapshot]);
+
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
 
@@ -311,7 +386,9 @@ export default function App() {
 
       <main>
         {loading && <LoadingState />}
-        {!loading && view === "document" && batch && <A2UIDocumentSurface batch={batch} />}
+        {!loading && view === "document" && batch && (
+          <A2UIDocumentSurface batch={batch} editController={editController} />
+        )}
         {!loading && view === "activity" && (
           <ActivityView activity={activity} onRefresh={refreshActivity} onReview={reviewProposal} />
         )}

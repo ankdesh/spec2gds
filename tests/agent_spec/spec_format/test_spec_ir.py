@@ -12,13 +12,18 @@ from spec2gds.agent_spec.spec_format.ir import (
 from spec2gds.agent_spec.spec_format.models import EntityRef
 from spec2gds.agent_spec.spec_format.testing import build_test_package
 from spec2gds.agent_spec.spec_format.transactions import (
+    AddComponentPort,
     ClearInternalDesign,
+    CreateEntity,
     ReorderInstances,
     SetInternalDesign,
+    SetEntityMetadata,
     SetNarrativeEntityLinks,
     SpecEditTransaction,
     UpsertConnection,
+    UpsertDocumentXml,
     UpsertInstance,
+    UpdateComponentPort,
 )
 
 
@@ -163,3 +168,128 @@ def test_save_reopen_preserves_semantic_identity_and_source_hash() -> None:
     assert reopened.source_revision_hash == revision.source_revision_hash
     assert [component.ref.entity_id for component in reopened.components] == [component.ref.entity_id for component in revision.components]
     assert [design.ref.entity_id for design in reopened.entry_designs()] == [design.ref.entity_id for design in revision.entry_designs()]
+
+
+def test_direct_editor_transactions_create_entities_and_preserve_source_order() -> None:
+    revision = _revision()
+    original_ids = [item.entity_id for item in revision.manifest.documents]
+    leaf = revision.by_vlnv("component", "spec2gds.example:demo:leaf:1.0")
+    edited = SpecEditTransaction(
+        revision.source_revision_hash,
+        (
+            SetEntityMetadata(leaf.ref, "Leaf block", "Produces data", "Updated directly."),
+            CreateEntity("component", "timer"),
+            CreateEntity("design", "timer_top"),
+        ),
+    ).apply(revision)
+    assert edited.succeeded, edited.diagnostics
+    updated = edited.revision
+    assert updated is not None
+    assert [item.entity_id for item in updated.manifest.documents[:len(original_ids)]] == original_ids
+    assert updated.by_vlnv("component", "spec2gds.local:work:timer:1.0")
+    created_design = updated.by_vlnv("design", "spec2gds.local:work:timer_top:1.0")
+    assert created_design.ref in [item.ref for item in updated.entry_designs()]
+
+    duplicate = SpecEditTransaction(
+        updated.source_revision_hash,
+        (CreateEntity("component", "timer"),),
+    ).apply(updated)
+    assert not duplicate.succeeded
+    assert "already exists" in duplicate.diagnostics[0]
+
+    unsupported = SpecEditTransaction(
+        updated.source_revision_hash,
+        (SetEntityMetadata(updated.bus_definitions[0].ref, "Bus", None, None),),
+    ).apply(updated)
+    assert not unsupported.succeeded
+    assert "only components and designs" in unsupported.diagnostics[0]
+
+    cleared = SpecEditTransaction(
+        updated.source_revision_hash,
+        (SetEntityMetadata(leaf.ref, None, None, None),),
+    ).apply(updated)
+    assert cleared.succeeded, cleared.diagnostics
+    cleared_package = cleared.revision.to_package() if cleared.revision else None
+    assert cleared_package is not None
+    leaf_entry = next(item for item in cleared_package.manifest.documents if item.entity_id == leaf.ref.entity_id)
+    assert b"displayName" not in cleared_package.files[leaf_entry.path]
+    assert b"shortDescription" not in cleared_package.files[leaf_entry.path]
+    assert b"<ipxact:description>" not in cleared_package.files[leaf_entry.path]
+
+
+def test_direct_editor_adds_and_updates_wire_ports_but_blocks_composites() -> None:
+    revision = _revision()
+    sink = revision.by_vlnv("component", "spec2gds.example:demo:sink:1.0")
+    added = SpecEditTransaction(
+        revision.source_revision_hash,
+        (AddComponentPort(sink.ref, "status", "out", "7", "0", "Status vector"),),
+    ).apply(revision)
+    assert added.succeeded, added.diagnostics
+    updated = added.revision
+    assert updated is not None
+    port = next(item for item in updated.by_vlnv("component", sink.vlnv).ports if item.name == "status")
+    assert (port.style, port.direction, port.width) == ("wire", "out", "[7:0]")
+
+    changed = SpecEditTransaction(
+        updated.source_revision_hash,
+        (UpdateComponentPort(sink.ref, "status", "inout", None, None, "Scalar status"),),
+    ).apply(updated)
+    assert changed.succeeded, changed.diagnostics
+    changed_port = next(
+        item for item in changed.revision.by_vlnv("component", sink.vlnv).ports
+        if item.name == "status"
+    ) if changed.revision else None
+    assert changed_port is not None
+    assert (changed_port.direction, changed_port.width) == ("inout", 1)
+
+    bad_bounds = SpecEditTransaction(
+        updated.source_revision_hash,
+        (AddComponentPort(sink.ref, "partial", "in", "3", None),),
+    ).apply(updated)
+    assert not bad_bounds.succeeded
+    assert "both left and right" in bad_bounds.diagnostics[0]
+
+    duplicate = SpecEditTransaction(
+        updated.source_revision_hash,
+        (AddComponentPort(sink.ref, "payload_in", "in"),),
+    ).apply(updated)
+    assert not duplicate.succeeded
+    assert "already has a port" in duplicate.diagnostics[0]
+
+    missing = SpecEditTransaction(
+        updated.source_revision_hash,
+        (UpdateComponentPort(sink.ref, "missing", "in"),),
+    ).apply(updated)
+    assert not missing.succeeded
+    assert "Unknown component port" in missing.diagnostics[0]
+
+    subsystem = revision.by_vlnv("component", "spec2gds.example:demo:subsystem:1.0")
+    composite = SpecEditTransaction(
+        revision.source_revision_hash,
+        (AddComponentPort(subsystem.ref, "blocked", "in"),),
+    ).apply(revision)
+    assert not composite.succeeded
+    assert "internal designs" in composite.diagnostics[0]
+
+    transactional_ref = EntityRef(
+        document_id=revision.document_id,
+        entity_id="component_transactional",
+        entity_kind="component",
+    )
+    transactional_xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:component xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2022" xml:id="component_transactional">
+  <ipxact:vendor>spec2gds.example</ipxact:vendor><ipxact:library>demo</ipxact:library>
+  <ipxact:name>transactional</ipxact:name><ipxact:version>1.0</ipxact:version>
+  <ipxact:model><ipxact:ports><ipxact:port><ipxact:name>service</ipxact:name>
+    <ipxact:transactional><ipxact:initiative>requires</ipxact:initiative></ipxact:transactional>
+  </ipxact:port></ipxact:ports></ipxact:model>
+</ipxact:component>"""
+    transactional = SpecEditTransaction(
+        revision.source_revision_hash,
+        (
+            UpsertDocumentXml("component", transactional_xml),
+            UpdateComponentPort(transactional_ref, "service", "in"),
+        ),
+    ).apply(revision)
+    assert not transactional.succeeded
+    assert "Transactional component ports are read-only" in transactional.diagnostics[0]

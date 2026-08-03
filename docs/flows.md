@@ -25,15 +25,23 @@ sequenceDiagram
     end
 ```
 
-Scenario: a designer creates `timer.spec`, adds IP-XACT documents and narrative
-sections, and submits one transaction. The API compares the submitted revision
-hash with the active revision. A valid current candidate replaces the file; a
-stale or invalid candidate leaves it untouched. Creating a package also fails
-closed when the requested path already exists.
+Scenario: a designer creates `timer.spec`, adds a component and entry design
+from their group menus, edits descriptive text, and adds a physical wire port.
+Each Save submits one typed transaction. The API compares the submitted
+revision hash with the active revision, constructs IP-XACT XML server-side, and
+atomically saves a valid candidate. A stale or invalid candidate leaves the
+file untouched and the inline draft available for correction. Creating a
+package also fails closed when the requested path already exists.
 
 The editor keeps package operations in the **File** menu. Accepted transactions
 save automatically, so Save is informational rather than a second persistence
 step. **File → Refresh From Disk** reopens the active server-local path.
+
+Direct editor operations are intentionally narrower than the source format.
+The editor creates components and entry designs with the fixed
+`spec2gds.local:work:<name>:1.0` identity convention, edits descriptive
+metadata, and adds or edits leaf-component wire ports. Bus interfaces, identity
+migration, port deletion, and composite boundaries remain separate workflows.
 
 ## Open a specification in Circuit Designer
 

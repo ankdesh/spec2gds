@@ -43,8 +43,10 @@ from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, Interfa
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
 from spec2gds.agent_spec.spec_format.transactions import (
     AddAsset,
+    AddComponentPort,
     AddEntryDesign,
     ClearInternalDesign,
+    CreateEntity,
     DeleteConnection,
     DeleteDocument,
     DeleteInstance,
@@ -55,12 +57,14 @@ from spec2gds.agent_spec.spec_format.transactions import (
     ReorderInstances,
     ReorderNarrativeBlocks,
     SetInternalDesign,
+    SetEntityMetadata,
     SetNarrativeEntityLinks,
     SpecEditTransaction,
     UpsertConnection,
     UpsertDocumentXml,
     UpsertInstance,
     UpsertNarrativeBlock,
+    UpdateComponentPort,
 )
 
 
@@ -672,6 +676,37 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             operations.append(UpsertDocumentXml(raw["kind"], str(raw["xml"]).encode("utf-8")))
         elif kind == "delete_document":
             operations.append(DeleteDocument(entity(raw["ref"])))
+        elif kind == "create_entity":
+            entity_kind = str(raw.get("kind", ""))
+            if entity_kind not in {"component", "design"}:
+                raise ValueError("create_entity kind must be component or design.")
+            operations.append(CreateEntity(typing.cast(typing.Any, entity_kind), str(raw.get("name", ""))))
+        elif kind == "set_entity_metadata":
+            operations.append(SetEntityMetadata(
+                entity(raw["entity"]),
+                _optional_text(raw.get("display_name")),
+                _optional_text(raw.get("short_description")),
+                _optional_text(raw.get("description")),
+            ))
+        elif kind in {"add_component_port", "update_component_port"}:
+            value = raw.get("port")
+            if not isinstance(value, dict):
+                raise ValueError(f"{kind} requires a port object.")
+            if kind == "update_component_port" and "name" in value:
+                raise ValueError("Port names cannot be changed by update_component_port.")
+            direction = str(value.get("direction", ""))
+            if direction not in {"in", "out", "inout"}:
+                raise ValueError("Wire port direction must be in, out, or inout.")
+            port_name = str(value.get("name", "")) if kind == "add_component_port" else str(raw.get("name", ""))
+            operation_type = AddComponentPort if kind == "add_component_port" else UpdateComponentPort
+            operations.append(operation_type(
+                entity(raw["component"]),
+                port_name,
+                typing.cast(typing.Any, direction),
+                _optional_text(value.get("left")),
+                _optional_text(value.get("right")),
+                _optional_text(value.get("description")),
+            ))
         elif kind == "upsert_instance":
             operations.append(UpsertInstance(entity(raw["design"]), InstanceIR(**raw["instance"])))
         elif kind == "delete_instance":
@@ -721,6 +756,13 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
         else:
             raise ValueError(f"Unsupported transaction operation: {kind}")
     return tuple(operations)
+
+
+def _optional_text(value: typing.Any) -> str | None:
+    """Normalize optional public text fields without losing multiline content."""
+    if value is None:
+        return None
+    return str(value)
 
 
 def _snapshot(session: V1Session) -> dict[str, typing.Any]:
