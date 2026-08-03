@@ -25,6 +25,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.source_edits import format_wire_range
 
 
 A2UI_PROTOCOL_VERSION = "v0.9"
@@ -366,40 +367,64 @@ def _component_tables(
 ) -> list[DocumentTable]:
     prefix = _anchor("component", component.ref.entity_id)
     tables = _configuration_tables(root, prefix)
-    port_rows: list[dict[str, DocumentCell]] = []
+    port_tables: list[DocumentTable] = []
     for port in _descendants(root, "model/ports/port"):
         wire = _child(port, "wire")
         transactional = _child(port, "transactional")
-        style = "wire" if wire is not None else "transactional"
-        style_node = wire if wire is not None else transactional
-        vectors = _child(style_node, "vectors") if style_node is not None else None
+        structured = _child(port, "structured")
+        family = "wire" if wire is not None else "transactional" if transactional is not None else "structured"
+        vectors = _child(wire, "vectors") if wire is not None else None
         vector = _child(vectors, "vector") if vectors is not None else None
-        port_rows.append({
-            "name": _cell(_text(port, "name"), "/model/ports/port/name"),
-            "style": _cell(style, "/model/ports/port/(wire|transactional)", kind="enum"),
-            "direction": _cell(_text(style_node, "direction") or _text(style_node, "initiative"), "/model/ports/port/(wire/direction|transactional/initiative)", kind="enum"),
-            "left": _cell(_text(vector, "left"), "/model/ports/port/wire/vectors/vector/left", kind="expression"),
-            "right": _cell(_text(vector, "right"), "/model/ports/port/wire/vectors/vector/right", kind="expression"),
-            "width": _cell(_text(style_node, "busWidth"), "/model/ports/port/transactional/busWidth", kind="expression"),
-            "qualifier": _cell(_qualifier(_child(style_node, "qualifier") if style_node is not None else None), "/model/ports/port/*/qualifier"),
+        struct = _child(structured, "struct") if structured is not None else None
+        kind = _child(transactional, "kind") if transactional is not None else None
+        name = _text(port, "name")
+        left = _text(vector, "left")
+        right = _text(vector, "right")
+        range_display = format_wire_range(left or None, right or None)
+        row = {
+            "name": _cell(name, "/model/ports/port/name"),
+            "family": _cell(family, "/model/ports/port/(wire|transactional|structured)", kind="enum"),
+            "display_name": _cell(_text(port, "displayName"), "/model/ports/port/displayName"),
+            "direction": _cell(
+                _text(wire, "direction") if wire is not None else (struct.get("direction", "") if struct is not None else ""),
+                "/model/ports/port/(wire/direction|structured/struct/@direction)",
+                kind="enum",
+            ),
+            "range": _cell(range_display, "/model/ports/port/wire/vectors/vector", kind="expression"),
+            "left": _cell(left, "/model/ports/port/wire/vectors/vector/left", kind="expression"),
+            "right": _cell(right, "/model/ports/port/wire/vectors/vector/right", kind="expression"),
+            "initiative": _cell(_text(transactional, "initiative"), "/model/ports/port/transactional/initiative", kind="enum"),
+            "transaction_kind": _cell(_text(transactional, "kind"), "/model/ports/port/transactional/kind", kind="enum"),
+            "custom_kind": _cell(kind.get("custom", "") if kind is not None else "", "/model/ports/port/transactional/kind/@custom"),
+            "bus_width": _cell(_text(transactional, "busWidth"), "/model/ports/port/transactional/busWidth", kind="expression"),
+            "structure": _cell("Packed struct" if structured is not None else "", "/model/ports/port/structured", kind="enum"),
             "description": _cell(_text(port, "description"), "/model/ports/port/description", kind="multiline"),
-        })
-    tables.append(_table(
-        f"{prefix}-ports",
-        "component_ports",
-        "Ports",
-        _columns(
-            ("name", "Name", "/model/ports/port/name"),
-            ("style", "Style", "/model/ports/port/(wire|transactional)"),
-            ("direction", "Direction / initiative", "/model/ports/port/*/(direction|initiative)"),
-            ("left", "Left", "/model/ports/port/wire/vectors/vector/left"),
-            ("right", "Right", "/model/ports/port/wire/vectors/vector/right"),
-            ("width", "Bus width", "/model/ports/port/transactional/busWidth"),
-            ("qualifier", "Qualifier", "/model/ports/port/*/qualifier"),
-            ("description", "Description", "/model/ports/port/description"),
-        ),
-        port_rows,
-    ))
+        }
+        port_tables.append(_table(
+            f"{prefix}-port-{_slug(name)}",
+            "component_port",
+            name,
+            _columns(
+                ("family", "Family", "/model/ports/port/(wire|transactional|structured)"),
+                ("display_name", "Display name", "/model/ports/port/displayName"),
+                ("direction", "Direction", "/model/ports/port/(wire/direction|structured/struct/@direction)"),
+                ("range", "Range", "/model/ports/port/wire/vectors/vector"),
+                ("initiative", "Initiative", "/model/ports/port/transactional/initiative"),
+                ("transaction_kind", "Kind", "/model/ports/port/transactional/kind"),
+                ("custom_kind", "Custom kind", "/model/ports/port/transactional/kind/@custom"),
+                ("bus_width", "Bus width", "/model/ports/port/transactional/busWidth"),
+                ("structure", "Structure", "/model/ports/port/structured"),
+                ("description", "Description", "/model/ports/port/description"),
+            ),
+            [row],
+        ))
+    tables.extend(port_tables or [DocumentTable(
+        table_id=f"{prefix}-ports-empty",
+        kind="component_ports_empty",
+        title="Ports",
+        columns=[],
+        rows=[],
+    )])
 
     interface_rows: list[dict[str, DocumentCell]] = []
     port_map_rows: list[dict[str, DocumentCell]] = []
@@ -817,7 +842,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     return DocumentProjection(
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
-        title=revision.document_id.replace("_", " ").title(),
+        title=revision.narrative.title or revision.document_id.replace("_", " ").title(),
         summary=f"{len(revision.components)} components · {len(revision.designs)} designs · {len(revision.bus_definitions) + len(revision.abstraction_definitions)} protocol definitions",
         toc=[TocEntry(section_id=section.section_id, title=section.title, level=section.level) for section in sections],
         sections=sections,

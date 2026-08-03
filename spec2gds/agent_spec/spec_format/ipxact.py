@@ -52,7 +52,6 @@ _BANNED_LOCAL_NAMES: set[str] = {
     "cpu",
     "indirectInterfaces",
     "indirectInterface",
-    "structured",
     "subPorts",
     "subPort",
     "arrays",
@@ -71,7 +70,6 @@ _BANNED_LOCAL_NAMES: set[str] = {
     "transTypeDefs",
     "signalTypeDefs",
     "domainTypeDefs",
-    "structPortTypeDefs",
     "typeDefinitions",
     "vendorExtensions",
 }
@@ -199,7 +197,143 @@ def profile_diagnostics(root: etree._Element, kind: DocumentKind) -> list[str]:
                 diagnostics.append("Each V1 busInterface requires exactly one abstractionType.")
             if interface.xpath(".//*[local-name()='viewRef']"):
                 diagnostics.append("V1 busInterface mappings cannot use viewRef.")
+        for port in root.xpath("./*[local-name()='model']/*[local-name()='ports']/*[local-name()='port']"):
+            diagnostics.extend(_component_port_profile_diagnostics(port))
 
     if kind == "design" and root.xpath(".//*[local-name()='monitorInterconnection']"):
         diagnostics.append("V1 does not support monitorInterconnection records.")
     return sorted(set(diagnostics))
+
+
+def _component_port_profile_diagnostics(port: etree._Element) -> list[str]:
+    """Validate one component port against the editor-authored subset."""
+    diagnostics: list[str] = []
+    name = _direct_text(port, "name") or "<unnamed>"
+    port_attributes = _attribute_names(port)
+    if port_attributes:
+        diagnostics.append(
+            f"Port {name} uses unsupported attributes: {', '.join(port_attributes)}."
+        )
+    child_names = [_local_name(child) for child in port]
+    families = [family for family in ("wire", "transactional", "structured") if family in child_names]
+    if len(families) != 1:
+        return [f"Port {name} must contain exactly one supported family."]
+    family = families[0]
+    allowed_port_children = {"name", "displayName", "description", family}
+    unsupported_port_children = sorted(set(child_names) - allowed_port_children)
+    if unsupported_port_children:
+        diagnostics.append(
+            f"Port {name} uses unsupported fields: {', '.join(unsupported_port_children)}."
+        )
+    family_node = next(child for child in port if _local_name(child) == family)
+    if family == "wire":
+        diagnostics.extend(_wire_port_profile_diagnostics(name, family_node))
+    elif family == "transactional":
+        diagnostics.extend(_transactional_port_profile_diagnostics(name, family_node))
+    else:
+        diagnostics.extend(_structured_port_profile_diagnostics(name, family_node))
+    return diagnostics
+
+
+def _wire_port_profile_diagnostics(name: str, wire: etree._Element) -> list[str]:
+    diagnostics: list[str] = []
+    attributes = sorted({
+        attribute
+        for node in wire.iter()
+        for attribute in _attribute_names(node)
+    })
+    if attributes:
+        diagnostics.append(
+            f"Wire port {name} uses unsupported attributes: {', '.join(attributes)}."
+        )
+    child_names = [_local_name(child) for child in wire]
+    unsupported = sorted(set(child_names) - {"direction", "vectors"})
+    if unsupported:
+        diagnostics.append(f"Wire port {name} uses unsupported fields: {', '.join(unsupported)}.")
+    if _direct_text(wire, "direction") not in {"in", "out", "inout"}:
+        diagnostics.append(f"Wire port {name} direction must be in, out, or inout.")
+    vectors = wire.xpath("./*[local-name()='vectors']/*[local-name()='vector']")
+    if len(vectors) > 1:
+        diagnostics.append(f"Wire port {name} supports at most one vector range.")
+    return diagnostics
+
+
+def _transactional_port_profile_diagnostics(name: str, transactional: etree._Element) -> list[str]:
+    diagnostics: list[str] = []
+    attributes = set(_attribute_names(transactional))
+    for child in transactional:
+        allowed = {"custom"} if _local_name(child) == "kind" else set()
+        attributes.update(set(_attribute_names(child)) - allowed)
+    if attributes:
+        diagnostics.append(
+            f"Transactional port {name} uses unsupported attributes: {', '.join(sorted(attributes))}."
+        )
+    child_names = [_local_name(child) for child in transactional]
+    unsupported = sorted(set(child_names) - {"initiative", "kind", "busWidth"})
+    if unsupported:
+        diagnostics.append(
+            f"Transactional port {name} uses unsupported fields: {', '.join(unsupported)}."
+        )
+    if _direct_text(transactional, "initiative") not in {"requires", "provides", "both"}:
+        diagnostics.append(
+            f"Transactional port {name} initiative must be requires, provides, or both."
+        )
+    kind = next((child for child in transactional if _local_name(child) == "kind"), None)
+    if kind is not None:
+        kind_value = (kind.text or "").strip()
+        custom = (kind.get("custom") or "").strip()
+        if kind_value == "custom" and not custom:
+            diagnostics.append(f"Transactional port {name} custom kind requires a custom name.")
+        if kind_value != "custom" and custom:
+            diagnostics.append(f"Transactional port {name} custom name requires kind custom.")
+    return diagnostics
+
+
+def _structured_port_profile_diagnostics(name: str, structured: etree._Element) -> list[str]:
+    diagnostics: list[str] = []
+    attributes = set(_attribute_names(structured)) - {"packed"}
+    for child in structured.iterdescendants():
+        allowed = {"direction"} if _local_name(child) == "struct" else set()
+        attributes.update(set(_attribute_names(child)) - allowed)
+    if attributes:
+        diagnostics.append(
+            f"Structured port {name} uses unsupported attributes: {', '.join(sorted(attributes))}."
+        )
+    packed = (structured.get("packed") or "true").strip().lower()
+    if packed not in {"true", "1"}:
+        diagnostics.append(f"Structured port {name} must be packed.")
+    child_names = [_local_name(child) for child in structured]
+    unsupported = sorted(set(child_names) - {"struct", "structPortTypeDefs"})
+    if unsupported:
+        diagnostics.append(
+            f"Structured port {name} uses unsupported fields: {', '.join(unsupported)}."
+        )
+    structs = [child for child in structured if _local_name(child) == "struct"]
+    if len(structs) != 1:
+        diagnostics.append(f"Structured port {name} must contain exactly one struct definition.")
+    elif (structs[0].get("direction") or "").strip() not in {"in", "out", "inout"}:
+        diagnostics.append(f"Structured port {name} direction must be in, out, or inout.")
+    type_defs = next(
+        (child for child in structured if _local_name(child) == "structPortTypeDefs"),
+        None,
+    )
+    definitions = [] if type_defs is None else [
+        child for child in type_defs if _local_name(child) == "structPortTypeDef"
+    ]
+    if len(definitions) != 1:
+        diagnostics.append(f"Structured port {name} requires one internal type definition.")
+    elif [_local_name(child) for child in definitions[0]] != ["typeName"]:
+        diagnostics.append(f"Structured port {name} internal type definition is not editor-owned.")
+    elif _direct_text(definitions[0], "typeName") != f"{name}_struct_t":
+        diagnostics.append(f"Structured port {name} internal type name must be {name}_struct_t.")
+    return diagnostics
+
+
+def _direct_text(root: etree._Element, name: str) -> str:
+    child = next((item for item in root if _local_name(item) == name), None)
+    return (child.text or "").strip() if child is not None else ""
+
+
+def _attribute_names(root: etree._Element) -> list[str]:
+    """Return stable namespace-independent attribute names for diagnostics."""
+    return sorted(etree.QName(name).localname for name in root.attrib)

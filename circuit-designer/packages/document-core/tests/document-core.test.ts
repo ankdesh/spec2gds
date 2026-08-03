@@ -9,11 +9,11 @@ describe("SpecEditorHttpClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new SpecEditorHttpClient("/api");
-    await client.createDocument("/tmp/new.spec");
+    await client.createDocument("/tmp/new.spec", "New accelerator");
     expect(fetchMock).toHaveBeenCalledWith("/api/documents/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path: "/tmp/new.spec" }),
+      body: JSON.stringify({ path: "/tmp/new.spec", title: "New accelerator" }),
     });
     vi.unstubAllGlobals();
   });
@@ -69,6 +69,7 @@ describe("SpecEditorHttpClient", () => {
       editor_url: "http://127.0.0.1:4180?document_id=spec_demo_design_top_1234",
       reused_session: false,
       omitted_bus_items: ["control_bus"],
+      omitted_ports: ["service"],
     };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(launch), { headers: { "content-type": "application/json" } }),

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import dataclasses
 from dataclasses import dataclass
 import typing
 
@@ -20,9 +21,9 @@ from spec2gds.agent_spec.spec_format.models import (
     new_entity_id,
 )
 from spec2gds.agent_spec.spec_format.source_edits import (
-    add_component_wire_port,
+    add_component_port,
     set_entity_metadata,
-    update_component_wire_port,
+    update_component_port,
 )
 
 
@@ -50,6 +51,13 @@ class CreateEntity:
 
 
 @dataclass(frozen=True)
+class SetDocumentTitle:
+    """Replace the human-facing specification title without changing stable IDs."""
+
+    title: str
+
+
+@dataclass(frozen=True)
 class SetEntityMetadata:
     """Replace optional descriptive metadata without changing VLNV identity."""
 
@@ -60,27 +68,58 @@ class SetEntityMetadata:
 
 
 @dataclass(frozen=True)
+class WirePortInput:
+    """Editable fields for the narrow physical wire-port profile."""
+
+    direction: typing.Literal["in", "out", "inout"]
+    range: str | None = None
+    display_name: str | None = None
+    description: str | None = None
+    family: typing.Literal["wire"] = "wire"
+
+
+@dataclass(frozen=True)
+class TransactionalPortInput:
+    """Editable fields for the common transactional-port profile."""
+
+    initiative: typing.Literal["requires", "provides", "both"]
+    kind: typing.Literal["tlm_port", "tlm_socket", "simple_socket", "multi_socket", "custom"] | None = None
+    custom_kind: str | None = None
+    bus_width: str | None = None
+    display_name: str | None = None
+    description: str | None = None
+    family: typing.Literal["transactional"] = "transactional"
+
+
+@dataclass(frozen=True)
+class StructuredPortInput:
+    """Editable fields for one opaque packed structured port."""
+
+    direction: typing.Literal["in", "out", "inout"]
+    display_name: str | None = None
+    description: str | None = None
+    family: typing.Literal["structured"] = "structured"
+
+
+ComponentPortInput = typing.Union[WirePortInput, TransactionalPortInput, StructuredPortInput]
+
+
+@dataclass(frozen=True)
 class AddComponentPort:
-    """Add one scalar or vector physical wire port to a leaf component."""
+    """Add one profiled physical port to a leaf component."""
 
     component: EntityRef
     name: str
-    direction: typing.Literal["in", "out", "inout"]
-    left: str | None = None
-    right: str | None = None
-    description: str | None = None
+    port: ComponentPortInput
 
 
 @dataclass(frozen=True)
 class UpdateComponentPort:
-    """Update one existing physical wire port while preserving its name."""
+    """Update one existing physical port while preserving its name and family."""
 
     component: EntityRef
     name: str
-    direction: typing.Literal["in", "out", "inout"]
-    left: str | None = None
-    right: str | None = None
-    description: str | None = None
+    port: ComponentPortInput
 
 
 @dataclass(frozen=True)
@@ -214,6 +253,7 @@ EditOperation = typing.Union[
     UpsertDocumentXml,
     DeleteDocument,
     CreateEntity,
+    SetDocumentTitle,
     SetEntityMetadata,
     AddComponentPort,
     UpdateComponentPort,
@@ -284,6 +324,11 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         _delete_document(package, operation.ref)
     elif isinstance(operation, CreateEntity):
         _create_entity(package, operation)
+    elif isinstance(operation, SetDocumentTitle):
+        title = operation.title.strip()
+        if not title:
+            raise ValueError("Specification name is required.")
+        package.narrative = package.narrative.model_copy(update={"title": title})
     elif isinstance(operation, SetEntityMetadata):
         root = _editable_entity_root(package, operation.entity)
         set_entity_metadata(
@@ -295,25 +340,11 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         package.add_document(typing.cast(DocumentKind, operation.entity.entity_kind), _serialize(root))
     elif isinstance(operation, AddComponentPort):
         root = _editable_component_root(package, operation.component)
-        add_component_wire_port(
-            root,
-            name=operation.name,
-            direction=operation.direction,
-            left=operation.left,
-            right=operation.right,
-            description=operation.description,
-        )
+        add_component_port(root, {"name": operation.name, **_port_input_mapping(operation.port)})
         package.add_document("component", _serialize(root))
     elif isinstance(operation, UpdateComponentPort):
         root = _editable_component_root(package, operation.component)
-        update_component_wire_port(
-            root,
-            name=operation.name,
-            direction=operation.direction,
-            left=operation.left,
-            right=operation.right,
-            description=operation.description,
-        )
+        update_component_port(root, name=operation.name, value=_port_input_mapping(operation.port))
         package.add_document("component", _serialize(root))
     elif isinstance(operation, UpsertInstance):
         root, entry = _design_root(package, operation.design)
@@ -376,6 +407,12 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         _remove_asset(package, operation.asset_id)
     else:  # pragma: no cover - protects this dispatcher when the union grows.
         raise TypeError(f"Unsupported edit operation: {type(operation).__name__}")
+
+
+def _port_input_mapping(value: ComponentPortInput) -> dict[str, typing.Any]:
+    """Convert one typed transaction value to the shared source-helper shape."""
+    result = {field.name: getattr(value, field.name) for field in dataclasses.fields(value)}
+    return typing.cast(dict[str, typing.Any], result)
 
 
 def _delete_document(package: SpecPackage, ref: EntityRef) -> None:

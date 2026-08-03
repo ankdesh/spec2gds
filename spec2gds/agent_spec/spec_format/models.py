@@ -297,6 +297,7 @@ class NarrativeDocument(StrictModel):
 
     version: int = NARRATIVE_VERSION
     document_id: str
+    title: str = ""
     blocks: list[NarrativeBlock] = pydantic.Field(default_factory=list)
 
     @pydantic.field_validator("document_id")
@@ -305,6 +306,15 @@ class NarrativeDocument(StrictModel):
         """Require the narrative tree to carry a stable document identity."""
         if not ID_PATTERN.fullmatch(value):
             raise ValueError("Narrative document_id must be XML-ID-compatible.")
+        return value
+
+    @pydantic.field_validator("title")
+    @classmethod
+    def _validate_title(cls, value: str) -> str:
+        """Keep a human-facing title compact while allowing legacy untitled packages."""
+        value = value.strip()
+        if len(value) > 200:
+            raise ValueError("Specification title must be 200 characters or fewer.")
         return value
 
     @pydantic.model_validator(mode="after")

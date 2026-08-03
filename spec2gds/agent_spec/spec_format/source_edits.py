@@ -12,6 +12,7 @@ import typing
 import lxml.etree as etree
 
 from spec2gds.agent_spec.spec_format import ipxact
+from spec2gds.agent_spec.spec_format.models import ID_PATTERN
 
 
 _COMPONENT_ORDER = [
@@ -48,114 +49,212 @@ def set_entity_metadata(
         _set_optional(root, name, value, order)
 
 
+_PORT_FIELDS = {
+    "name",
+    "family",
+    "style",  # Accepted by assistant proposals and normalized to ``family``.
+    "display_name",
+    "description",
+    "direction",
+    "range",
+    "left",  # Legacy assistant proposal spelling.
+    "right",  # Legacy assistant proposal spelling.
+    "initiative",
+    "kind",
+    "custom_kind",
+    "bus_width",
+}
+_PORT_FAMILIES = {"wire", "transactional", "structured"}
+_DIRECTIONS = {"in", "out", "inout"}
+_INITIATIVES = {"requires", "provides", "both"}
+_TRANSACTION_KINDS = {"tlm_port", "tlm_socket", "simple_socket", "multi_socket", "custom"}
+
+
 def upsert_component_port(root: etree._Element, value: dict[str, typing.Any]) -> None:
-    """Insert or replace one profiled wire or transactional component port."""
-    allowed = {"name", "style", "direction", "left", "right", "bus_width", "description"}
-    _reject_unknown_keys(value, allowed, "component port")
-    name = str(value.get("name", "")).strip()
-    style = str(value.get("style", "wire"))
-    direction = str(value.get("direction", "")).strip()
-    if not name or style not in {"wire", "transactional"} or not direction:
-        raise ValueError("Component port requires name, wire/transactional style, and direction/initiative.")
+    """Insert or replace one editor-profiled component port.
 
+    Assistant proposals use this entry point too.  The older ``style`` and
+    ``left``/``right`` spellings are accepted there, then normalized through
+    exactly the same validation as editor transactions.
+    """
+    normalized = _normalize_component_port(value, require_name=True)
     model = _ensure_ordered(root, "model", _COMPONENT_ORDER)
     ports = _child(model, "ports")
     if ports is None:
         ports = etree.SubElement(model, _q("ports"))
-    existing = _named(ports, "port", "name", name)
-    if existing is not None:
-        ports.remove(existing)
-    ports.append(_build_port(value, name=name, style=style, direction=direction))
+    existing = _named(ports, "port", "name", normalized["name"])
+    node = _build_port(normalized)
+    if existing is None:
+        ports.append(node)
+    else:
+        ports.replace(existing, node)
 
 
-def add_component_wire_port(
-    root: etree._Element,
-    *,
-    name: str,
-    direction: str,
-    left: str | None,
-    right: str | None,
-    description: str | None,
-) -> None:
-    """Add a new physical wire port without silently replacing an existing one."""
-    normalized_name = name.strip()
-    _validate_wire_port(normalized_name, direction, left, right)
+def add_component_port(root: etree._Element, value: dict[str, typing.Any]) -> None:
+    """Append a new editor-profiled component port without replacing one."""
+    normalized = _normalize_component_port(value, require_name=True)
     model = _ensure_ordered(root, "model", _COMPONENT_ORDER)
     ports = _child(model, "ports")
     if ports is None:
         ports = etree.SubElement(model, _q("ports"))
-    if _named(ports, "port", "name", normalized_name) is not None:
-        raise ValueError(f"Component already has a port named {normalized_name}.")
-    ports.append(_build_port({
-        "left": left,
-        "right": right,
-        "description": description,
-    }, name=normalized_name, style="wire", direction=direction))
+    if _named(ports, "port", "name", normalized["name"]) is not None:
+        raise ValueError(f"Component already has a port named {normalized['name']}.")
+    ports.append(_build_port(normalized))
 
 
-def update_component_wire_port(
-    root: etree._Element,
-    *,
-    name: str,
-    direction: str,
-    left: str | None,
-    right: str | None,
-    description: str | None,
-) -> None:
-    """Replace editable properties of an existing wire port, preserving its name."""
+def update_component_port(root: etree._Element, *, name: str, value: dict[str, typing.Any]) -> None:
+    """Replace editable fields while preserving a port's name, family, and order."""
     normalized_name = name.strip()
-    _validate_wire_port(normalized_name, direction, left, right)
+    if not normalized_name:
+        raise ValueError("Port name is required.")
+    normalized = _normalize_component_port({**value, "name": normalized_name}, require_name=True)
     model = _child(root, "model")
     ports = _child(model, "ports") if model is not None else None
     existing = _named(ports, "port", "name", normalized_name) if ports is not None else None
     if existing is None or ports is None:
         raise KeyError(f"Unknown component port: {normalized_name}")
-    if _child(existing, "wire") is None:
-        raise ValueError("Transactional component ports are read-only in the editor.")
+    existing_family = _port_family(existing)
+    if existing_family != normalized["family"]:
+        raise ValueError("Port family cannot be changed by update_component_port.")
     index = list(ports).index(existing)
     ports.remove(existing)
-    ports.insert(index, _build_port({
-        "left": left,
-        "right": right,
-        "description": description,
-    }, name=normalized_name, style="wire", direction=direction))
+    ports.insert(index, _build_port(normalized))
 
 
-def _validate_wire_port(name: str, direction: str, left: str | None, right: str | None) -> None:
-    if not name:
-        raise ValueError("Port name is required.")
-    if direction not in {"in", "out", "inout"}:
-        raise ValueError("Wire port direction must be in, out, or inout.")
-    has_left = left is not None and str(left).strip() != ""
-    has_right = right is not None and str(right).strip() != ""
-    if has_left != has_right:
-        raise ValueError("Vector ports require both left and right bounds.")
-
-
-def _build_port(
+def _normalize_component_port(
     value: dict[str, typing.Any],
     *,
-    name: str,
-    style: str,
-    direction: str,
-) -> etree._Element:
+    require_name: bool,
+) -> dict[str, typing.Any]:
+    _reject_unknown_keys(value, _PORT_FIELDS, "component port")
+    name = str(value.get("name", "")).strip()
+    if require_name and not name:
+        raise ValueError("Port name is required.")
+    if name and not ID_PATTERN.fullmatch(name):
+        raise ValueError("Port name must be an XML-compatible identifier.")
+    family = str(value.get("family", value.get("style", "wire"))).strip()
+    if family not in _PORT_FAMILIES:
+        raise ValueError("Port family must be wire, transactional, or structured.")
+    if "family" in value and "style" in value and value["family"] != value["style"]:
+        raise ValueError("Port family and legacy style values must match.")
+
+    normalized: dict[str, typing.Any] = {
+        "name": name,
+        "family": family,
+        "display_name": _optional_text(value.get("display_name")),
+        "description": _optional_text(value.get("description")),
+    }
+    if family == "wire":
+        direction = str(value.get("direction", "")).strip()
+        if direction not in _DIRECTIONS:
+            raise ValueError("Wire port direction must be in, out, or inout.")
+        range_value = value.get("range")
+        if range_value is None and ("left" in value or "right" in value):
+            left = _optional_text(value.get("left"))
+            right = _optional_text(value.get("right"))
+            if (left is None) != (right is None):
+                raise ValueError("Wire port ranges require both left and right expressions.")
+            range_value = None if left is None else left if left == right else f"{left}:{right}"
+        left, right = parse_wire_range(range_value)
+        normalized.update(direction=direction, left=left, right=right)
+    elif family == "transactional":
+        initiative = str(value.get("initiative", value.get("direction", ""))).strip()
+        if initiative not in _INITIATIVES:
+            raise ValueError("Transactional port initiative must be requires, provides, or both.")
+        kind = _optional_text(value.get("kind"))
+        custom_kind = _optional_text(value.get("custom_kind"))
+        if kind is not None and kind not in _TRANSACTION_KINDS:
+            raise ValueError("Unknown transactional port kind.")
+        if kind == "custom" and custom_kind is None:
+            raise ValueError("Custom transactional ports require a custom kind name.")
+        if kind != "custom" and custom_kind is not None:
+            raise ValueError("Custom kind name is only valid when transactional kind is custom.")
+        normalized.update(
+            initiative=initiative,
+            kind=kind,
+            custom_kind=custom_kind,
+            bus_width=_optional_text(value.get("bus_width")),
+        )
+    else:
+        direction = str(value.get("direction", "")).strip()
+        if direction not in _DIRECTIONS:
+            raise ValueError("Structured port direction must be in, out, or inout.")
+        normalized.update(direction=direction)
+    return normalized
+
+
+def parse_wire_range(value: typing.Any) -> tuple[str | None, str | None]:
+    """Split the editor's compact range syntax into IP-XACT bounds."""
+    expression = "" if value is None else str(value).strip()
+    if not expression:
+        return None, None
+    if expression.count(":") > 1:
+        raise ValueError("Wire port Range must contain at most one colon.")
+    if ":" not in expression:
+        return expression, expression
+    left, right = (item.strip() for item in expression.split(":", 1))
+    if not left or not right:
+        raise ValueError("Wire port Range requires expressions on both sides of the colon.")
+    return left, right
+
+
+def format_wire_range(left: str | None, right: str | None) -> str:
+    """Return the compact editor display for one optional IP-XACT vector."""
+    if left is None or right is None:
+        return ""
+    return left if left == right else f"{left}:{right}"
+
+
+def _build_port(value: dict[str, typing.Any]) -> etree._Element:
+    name = typing.cast(str, value["name"])
+    family = typing.cast(str, value["family"])
     port = etree.Element(_q("port"))
     etree.SubElement(port, _q("name")).text = name
-    description = value.get("description")
-    if description is not None and str(description).strip():
-        etree.SubElement(port, _q("description")).text = str(description)
-    style_node = etree.SubElement(port, _q(style))
-    etree.SubElement(style_node, _q("direction" if style == "wire" else "initiative")).text = direction
-    left = value.get("left")
-    right = value.get("right")
-    if style == "wire" and left not in (None, "") and right not in (None, ""):
-        vectors = etree.SubElement(style_node, _q("vectors"))
-        vector = etree.SubElement(vectors, _q("vector"))
-        etree.SubElement(vector, _q("left")).text = str(left)
-        etree.SubElement(vector, _q("right")).text = str(right)
-    if style == "transactional" and value.get("bus_width") not in (None, ""):
-        etree.SubElement(style_node, _q("busWidth")).text = str(value["bus_width"])
+    if value.get("display_name") is not None:
+        etree.SubElement(port, _q("displayName")).text = typing.cast(str, value["display_name"])
+    if value.get("description") is not None:
+        etree.SubElement(port, _q("description")).text = typing.cast(str, value["description"])
+    style_node = etree.SubElement(port, _q(family))
+    if family == "wire":
+        etree.SubElement(style_node, _q("direction")).text = typing.cast(str, value["direction"])
+        left = value.get("left")
+        right = value.get("right")
+        if left is not None and right is not None:
+            vectors = etree.SubElement(style_node, _q("vectors"))
+            vector = etree.SubElement(vectors, _q("vector"))
+            etree.SubElement(vector, _q("left")).text = str(left)
+            etree.SubElement(vector, _q("right")).text = str(right)
+    elif family == "transactional":
+        etree.SubElement(style_node, _q("initiative")).text = typing.cast(str, value["initiative"])
+        kind = value.get("kind")
+        if kind is not None:
+            kind_node = etree.SubElement(style_node, _q("kind"))
+            kind_node.text = typing.cast(str, kind)
+            if kind == "custom":
+                kind_node.set("custom", typing.cast(str, value["custom_kind"]))
+        if value.get("bus_width") is not None:
+            etree.SubElement(style_node, _q("busWidth")).text = typing.cast(str, value["bus_width"])
+    else:
+        style_node.set("packed", "true")
+        struct = etree.SubElement(style_node, _q("struct"))
+        struct.set("direction", typing.cast(str, value["direction"]))
+        type_defs = etree.SubElement(style_node, _q("structPortTypeDefs"))
+        type_def = etree.SubElement(type_defs, _q("structPortTypeDef"))
+        etree.SubElement(type_def, _q("typeName")).text = f"{name}_struct_t"
     return port
+
+
+def _port_family(port: etree._Element) -> str:
+    for family in ("wire", "transactional", "structured"):
+        if _child(port, family) is not None:
+            return family
+    raise ValueError(f"Port {_text(port, 'name')} has no supported family.")
+
+
+def _optional_text(value: typing.Any) -> str | None:
+    if value is None or str(value).strip() == "":
+        return None
+    return str(value)
 
 
 def _root_order(root: etree._Element) -> list[str]:

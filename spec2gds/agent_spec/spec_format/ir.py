@@ -50,12 +50,14 @@ def _canonical_json(model: typing.Any) -> str:
 
 @dataclass(frozen=True)
 class PortIR:
-    """A scalar/vector wire or transactional component port."""
+    """One explicitly classified component port in the editor profile."""
 
     name: str
     direction: str
-    style: str
-    width: int | str | None = 1
+    style: typing.Literal["wire", "transactional", "structured"]
+    width: int | str | None = None
+    initiative: str = ""
+    bus_width: str = ""
 
 
 @dataclass(frozen=True)
@@ -398,10 +400,18 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
     """Project one validated component XML document into immutable SpecIR."""
     ports: list[PortIR] = []
     for port in root.xpath("./*[local-name()='model']/*[local-name()='ports']/*[local-name()='port']"):
-        style = "wire" if port.xpath("./*[local-name()='wire']") else "transactional"
-        style_node = _first(port.xpath("./*[local-name()='wire'] | ./*[local-name()='transactional']"))
-        width: int | str | None = 1
-        if style_node is not None and style == "wire":
+        wire = _first(port.xpath("./*[local-name()='wire']"))
+        transactional = _first(port.xpath("./*[local-name()='transactional']"))
+        structured = _first(port.xpath("./*[local-name()='structured']"))
+        style: typing.Literal["wire", "transactional", "structured"]
+        style = "wire" if wire is not None else "transactional" if transactional is not None else "structured"
+        width: int | str | None = 1 if wire is not None else None
+        direction = ""
+        initiative = ""
+        bus_width = ""
+        if wire is not None:
+            direction = _text(wire, "direction")
+            style_node = wire
             vectors = style_node.xpath("./*[local-name()='vectors']/*[local-name()='vector']")
             if len(vectors) == 1:
                 left = _text(vectors[0], "left")
@@ -409,12 +419,20 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
                 width = f"[{left}:{right}]" if left and right else None
             elif len(vectors) > 1:
                 width = None
+        elif transactional is not None:
+            initiative = _text(transactional, "initiative")
+            bus_width = _text(transactional, "busWidth")
+        elif structured is not None:
+            struct = _first(structured.xpath("./*[local-name()='struct']"))
+            direction = (struct.get("direction") or "").strip() if struct is not None else ""
         ports.append(
             PortIR(
                 name=_text(port, "name"),
-                direction=_text(style_node, "direction") if style_node is not None else "",
+                direction=direction,
                 style=style,
                 width=width,
+                initiative=initiative,
+                bus_width=bus_width,
             )
         )
     interfaces: list[InterfaceIR] = []

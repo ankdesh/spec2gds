@@ -9,8 +9,8 @@ sequenceDiagram
     participant API as Spec API
     participant Package as .spec package
 
-    User->>UI: File → New Specification; enter server-local path
-    UI->>API: POST /documents/create
+    User->>UI: File → New Specification; enter name and server-local path
+    UI->>API: POST /documents/create with title and path
     API->>Package: Create and validate empty package
     Package-->>API: Source revision hash
     API-->>UI: Immutable snapshot + A2UI projection
@@ -25,8 +25,10 @@ sequenceDiagram
     end
 ```
 
-Scenario: a designer creates `timer.spec`, adds a component and entry design
-from their group menus, edits descriptive text, and adds a physical wire port.
+Scenario: a designer creates `timer.spec` with the visible name “Timer
+Platform,” adds a component and entry design from their group menus, edits the
+introductory paragraph, and adds wire, transactional, and packed structured
+ports. Each port is shown in its own compact definition card.
 Each Save submits one typed transaction. The API compares the submitted
 revision hash with the active revision, constructs IP-XACT XML server-side, and
 atomically saves a valid candidate. A stale or invalid candidate leaves the
@@ -38,9 +40,11 @@ save automatically, so Save is informational rather than a second persistence
 step. **File → Refresh From Disk** reopens the active server-local path.
 
 Direct editor operations are intentionally narrower than the source format.
-The editor creates components and entry designs with the fixed
-`spec2gds.local:work:<name>:1.0` identity convention, edits descriptive
-metadata, and adds or edits leaf-component wire ports. Bus interfaces, identity
+The editor creates components and entry designs with the fixed internal
+`spec2gds.local:work:<name>:1.0` identity convention, edits paragraph text, and
+adds or edits all three leaf-component port families. The visible specification
+title is stored separately so renaming it does not migrate IDs or references.
+Bus interfaces, detailed TLM protocol modeling, structured subports, identity
 migration, port deletion, and composite boundaries remain separate workflows.
 
 ## Open a specification in Circuit Designer
@@ -57,7 +61,7 @@ sequenceDiagram
     User->>SE: Choose a component or design
     SE->>SA: POST /circuit-designer/launch
     SA->>CA: Project current SpecRevision
-    CA-->>SA: CircuitDocument + omitted bus items
+    CA-->>SA: CircuitDocument + omitted bus items/non-wire ports
     SA->>CS: Create or reuse source-owned session
     CS-->>SA: document_id and revision
     SA-->>SE: Editor URL and projection notes
@@ -68,8 +72,10 @@ sequenceDiagram
 
 Scenario: a specification design contains direct port wiring and bus
 interfaces. Direct ports appear in the circuit view. Unsupported bus items are
-reported, not silently converted. The projected session is read-only because
-the `.spec` file remains authoritative.
+reported, not silently converted. Unused transactional and structured ports
+are also reported as omitted. A connected non-wire port rejects the launch
+because dropping a real design connection would be unsafe. The projected
+session is read-only because the `.spec` file remains authoritative.
 
 Users can launch from the grouped **Circuit** menu or from **Options → Open
 circuit** on a design or component section. Non-circuit sections omit that

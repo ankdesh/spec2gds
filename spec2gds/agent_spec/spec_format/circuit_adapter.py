@@ -20,6 +20,7 @@ from spec2gds.agent_spec.spec_format.ir import ComponentIR, PortIR, SpecRevision
 
 
 _DIRECTION = {"in": "input", "out": "output", "inout": "inout"}
+_PROJECTION_VERSION = "v2"
 
 
 class CircuitAdapterError(ValueError):
@@ -38,6 +39,7 @@ class CircuitProjection:
     source_entity_id: str
     source_entity_kind: typing.Literal["component", "design"]
     omitted_bus_items: tuple[str, ...]
+    omitted_ports: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -73,11 +75,13 @@ class _Ids:
 
 
 def _terminal(port: PortIR, terminal_id: str) -> dict[str, typing.Any]:
+    if port.style != "wire":
+        raise CircuitAdapterError(
+            f"Port {port.name} is {port.style}; Circuit Designer supports only physical wire ports."
+        )
     direction = _DIRECTION.get(port.direction)
     if direction is None:
         raise CircuitAdapterError(f"Port {port.name} has unsupported direction {port.direction!r}.")
-    if port.style != "wire":
-        raise CircuitAdapterError(f"Port {port.name} is transactional; only physical wire ports are supported.")
     if port.width is None:
         raise CircuitAdapterError(f"Port {port.name} has an unsupported multidimensional or incomplete vector width.")
     return {
@@ -94,6 +98,23 @@ def _component_port(component: ComponentIR, name: str) -> PortIR:
     if port is None:
         raise CircuitAdapterError(f"Component {component.vlnv} has no port named {name}.")
     return port
+
+
+def _component_definition(
+    component: ComponentIR,
+    component_id: str,
+    terminals: list[dict[str, typing.Any]],
+) -> dict[str, typing.Any]:
+    """Build one read-only Circuit Designer component definition."""
+    return {
+        "id": component_id,
+        "label": component.vlnv.split(":")[2],
+        "origin": "provider",
+        "editable": False,
+        "terminals": terminals,
+        "parameters": [],
+        "appearance": {"renderer_key": "generic", "properties": {}},
+    }
 
 
 def project_design_to_circuit(revision: SpecRevision, design_id: str) -> CircuitProjection:
@@ -117,6 +138,7 @@ def project_design_to_circuit(revision: SpecRevision, design_id: str) -> Circuit
     component_id_by_vlnv: dict[str, str] = {}
     terminal_id_by_port: dict[tuple[str, str], str] = {}
     circuit_components: list[dict[str, typing.Any]] = []
+    omitted_ports: list[str] = []
     referenced_vlnvs = list(dict.fromkeys(instance.component_vlnv for instance in design.instances))
     for vlnv in referenced_vlnvs:
         component = component_by_vlnv.get(vlnv)
@@ -135,19 +157,13 @@ def project_design_to_circuit(revision: SpecRevision, design_id: str) -> Circuit
             if port.style != "wire" or port.direction not in _DIRECTION or port.width is None:
                 if port.name in direct_ports.get(vlnv, set()):
                     _terminal(port, "unreachable")  # raises a precise error
+                if port.style != "wire":
+                    omitted_ports.append(f"{component.vlnv.split(':')[2]}.{port.name}")
                 continue
             terminal_id = terminal_ids.get(port.name, "port")
             terminal_id_by_port[(vlnv, port.name)] = terminal_id
             terminals.append(_terminal(port, terminal_id))
-        circuit_components.append({
-            "id": component_id,
-            "label": vlnv.split(":")[2],
-            "origin": "provider",
-            "editable": False,
-            "terminals": terminals,
-            "parameters": [],
-            "appearance": {"renderer_key": "generic", "properties": {}},
-        })
+        circuit_components.append(_component_definition(component, component_id, terminals))
 
     instance_ids = _Ids()
     instance_id_by_name: dict[str, str] = {}
@@ -227,7 +243,7 @@ def project_design_to_circuit(revision: SpecRevision, design_id: str) -> Circuit
     revision_tag = revision.source_revision_hash.removeprefix("sha256:")[:12]
     document_ids = _Ids()
     document_id = document_ids.get(
-        f"{revision.document_id}_{design.ref.entity_id}_{revision_tag}",
+        f"{revision.document_id}_{design.ref.entity_id}_{revision_tag}_{_PROJECTION_VERSION}",
         "circuit",
     )
     design_ids = _Ids()
@@ -261,6 +277,7 @@ def project_design_to_circuit(revision: SpecRevision, design_id: str) -> Circuit
         omitted_bus_items=tuple(
             connection.name for connection in design.connections if connection.kind == "interface"
         ),
+        omitted_ports=tuple(omitted_ports),
     )
 
 
@@ -277,6 +294,7 @@ def project_component_to_circuit(revision: SpecRevision, component_id: str) -> C
             source_entity_id=component.ref.entity_id,
             source_entity_kind="component",
             omitted_bus_items=projected.omitted_bus_items,
+            omitted_ports=projected.omitted_ports,
         )
 
     mapped_ports = {physical for interface in component.interfaces for _, physical in interface.port_maps}
@@ -291,22 +309,31 @@ def project_component_to_circuit(revision: SpecRevision, component_id: str) -> C
     ]
     revision_tag = revision.source_revision_hash.removeprefix("sha256:")[:12]
     document_id = _Ids().get(
-        f"{revision.document_id}_{component.ref.entity_id}_{revision_tag}",
+        f"{revision.document_id}_{component.ref.entity_id}_{revision_tag}_{_PROJECTION_VERSION}",
         "circuit",
     )
+    component_definition_id = _Ids().get(component.ref.entity_id, "component")
     design_id = _Ids().get(component.ref.entity_id, "component")
+    preview_instance_id = _Ids().get(f"{component.ref.entity_id}_preview", "instance")
     label = component.vlnv.split(":")[2]
     return CircuitProjection(
         document={
             "protocol_version": "circuit-designer.v1",
             "document_id": document_id,
             "label": label,
-            "components": [],
+            "components": [
+                _component_definition(component, component_definition_id, terminals)
+            ],
             "design": {
                 "id": design_id,
                 "label": label,
-                "boundary_terminals": terminals,
-                "instances": [],
+                "boundary_terminals": [],
+                "instances": [{
+                    "id": preview_instance_id,
+                    "label": label,
+                    "component_id": component_definition_id,
+                    "parameter_values": {},
+                }],
                 "nets": [],
             },
             "layout": {
@@ -321,6 +348,7 @@ def project_component_to_circuit(revision: SpecRevision, component_id: str) -> C
         source_entity_id=component.ref.entity_id,
         source_entity_kind="component",
         omitted_bus_items=tuple(interface.name for interface in component.interfaces),
+        omitted_ports=tuple(port.name for port in component.ports if port.style != "wire"),
     )
 
 

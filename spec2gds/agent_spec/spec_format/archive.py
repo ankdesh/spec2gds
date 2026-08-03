@@ -86,12 +86,12 @@ class SpecPackage:
         self.path = path
 
     @classmethod
-    def create(cls, document_id: str | None = None) -> "SpecPackage":
+    def create(cls, document_id: str | None = None, title: str | None = None) -> "SpecPackage":
         """Create an empty V1 package with a matching narrative document."""
         identity = document_id or new_entity_id("spec")
         return cls(
             manifest=SpecManifest(document_id=identity),
-            narrative=NarrativeDocument(document_id=identity),
+            narrative=NarrativeDocument(document_id=identity, title=title or ""),
         )
 
     @classmethod

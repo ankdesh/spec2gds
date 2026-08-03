@@ -44,23 +44,42 @@ uv run spec2gds-server
 ```
 
 Open <http://127.0.0.1:8000/editor>. Use **File → New Specification** or
-**File → Open Specification** and enter a server-local `.spec` path. The File
-menu can also refresh the active package from disk; accepted changes are saved
-automatically. **New Specification** refuses to replace an existing path.
+**File → Open Specification**. New asks for a human-readable specification
+name plus a server-local `.spec` path; Open asks only for the path. The visible
+name is editable from the document cover and is stored separately from the
+stable internal document ID. The File menu can also refresh the active package
+from disk; accepted changes are saved automatically. **New Specification**
+refuses to replace an existing path.
 
 Use the top-level **Components → Options → Add component** and **Designs →
 Options → Add design** commands to create name-only IP-XACT entities. New
 entities use the editor defaults `spec2gds.local:work:<name>:1.0`, and new
-designs become entry designs. Component and design sections provide **Edit
-details** for display name and descriptions. Leaf-component sections also
-provide **Add port** and row-level editing for scalar or vector wire ports;
-Save validates and persists the complete change, while Cancel discards the
+designs become entry designs. These underlying IP-XACT identity fields are not
+shown in the normal document view. Component and design sections provide
+**Edit text** for the introductory paragraph beneath the heading.
+Leaf-component sections provide separate **Add wire port**, **Add
+transactional port**, and **Add structured port** commands. Every port is shown
+in its own compact card with its display name and description. Wire ports use
+an optional Range such as `DATA_WIDTH-1:0`; transactional ports capture their
+initiative and optional kind; structured ports are generated as packed structs
+with their required IP-XACT type definition maintained internally. Save
+validates and persists the complete change, while Cancel discards the
 browser-only draft.
 
 The **Circuit** menu lists available designs and components. Eligible document
 sections also expose **Options → Open circuit** beside their headings, while
 **Options → More actions** opens the entity action workflow. The server exposes
 interactive API docs at <http://127.0.0.1:8000/docs>.
+
+Launching a leaf component shows one read-only component preview with its wire
+ports attached to that component. Ports are not presented as separate design
+boundary objects. Components that own an internal design continue to open that
+internal design instead.
+
+The current editor intentionally accepts the narrow IP-XACT profile authored
+by spec2gds. Circuit Designer remains wire-only: unused transactional and
+structured ports are reported as omitted, while a design that connects either
+family is rejected with a validation diagnostic.
 
 For frontend work:
 

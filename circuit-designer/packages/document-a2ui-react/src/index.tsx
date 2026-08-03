@@ -18,6 +18,8 @@ import { z } from "zod";
 
 import type {
   A2UIDocumentBatch,
+  ComponentPortInput,
+  ComponentPortUpdateInput,
   DocumentCell,
   DocumentSectionData,
   DocumentTable,
@@ -25,7 +27,7 @@ import type {
   EntityRef,
   NarrativeBlock as NarrativeBlockData,
   TocEntry,
-  WirePortInput,
+  TransactionalPortKind,
 } from "@spec2gds/document-core";
 
 export const SPEC_DOCUMENT_CATALOG_ID = "urn:spec2gds:a2ui:document:v1";
@@ -37,10 +39,11 @@ export interface SpecOpenCircuitEventDetail {
 }
 
 export interface SpecDocumentEditController {
+  updateDocumentTitle(title: string): Promise<void>;
   createEntity(kind: "component" | "design", name: string): Promise<void>;
   updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput): Promise<void>;
-  addComponentPort(ref: EntityRef, value: WirePortInput): Promise<void>;
-  updateComponentPort(ref: EntityRef, name: string, value: Omit<WirePortInput, "name">): Promise<void>;
+  addComponentPort(ref: EntityRef, value: ComponentPortInput): Promise<void>;
+  updateComponentPort(ref: EntityRef, name: string, value: ComponentPortUpdateInput): Promise<void>;
   portEditingAvailability(ref: EntityRef): { enabled: boolean; reason: string };
 }
 
@@ -168,40 +171,117 @@ function shortHash(value: string): string {
 
 const SpecDocument = createComponentImplementation(
   SpecDocumentApi,
-  ({ props, buildChild }) => (
-    <div className="spec-document">
-      <aside className="spec-toc" aria-label="Document contents">
-        <div className="spec-toc__sticky">
-          <p className="spec-kicker">Contents</p>
-          <nav>
-            {(props.toc as TocEntry[]).map((entry) => (
-              <a
-                className={`spec-toc__link spec-toc__link--level-${entry.level}`}
-                href={`#${entry.section_id}`}
-                key={entry.section_id}
-              >
-                {entry.title}
-              </a>
-            ))}
-          </nav>
-          <dl className="spec-toc__meta">
-            <div><dt>Document</dt><dd>{props.documentId}</dd></div>
-            <div title={props.sourceRevisionHash}>
-              <dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd>
-            </div>
-          </dl>
-        </div>
-      </aside>
-      <article className="spec-paper">
-        <header className="spec-cover">
-          <p className="spec-kicker">Unified hardware specification</p>
-          <h1>{props.title}</h1>
-          <p>{props.summary}</p>
-        </header>
-        {renderChildren(props.children, buildChild)}
-      </article>
-    </div>
-  ),
+  ({ props, buildChild }) => {
+    const coordinator = useContext(EditCoordinatorContext);
+    const [editingTitle, setEditingTitle] = useState(false);
+    const [draftTitle, setDraftTitle] = useState(props.title);
+    const [titleError, setTitleError] = useState("");
+    const [titleBusy, setTitleBusy] = useState(false);
+    const editButtonRef = useRef<HTMLButtonElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
+    const editorId = "document-title";
+
+    useEffect(() => {
+      if (editingTitle) inputRef.current?.focus();
+    }, [editingTitle]);
+
+    const finishTitleEdit = () => {
+      coordinator.finishEditor(editorId);
+      setEditingTitle(false);
+      setTitleError("");
+      window.setTimeout(() => editButtonRef.current?.focus(), 0);
+    };
+
+    const saveTitle = async (event: React.FormEvent) => {
+      event.preventDefault();
+      const title = draftTitle.trim();
+      if (!title) {
+        setTitleError("Specification name is required.");
+        return;
+      }
+      if (!coordinator.controller) return;
+      setTitleBusy(true);
+      setTitleError("");
+      try {
+        await coordinator.controller.updateDocumentTitle(title);
+        finishTitleEdit();
+      } catch (caught) {
+        setTitleError(caught instanceof Error ? caught.message : String(caught));
+      } finally {
+        setTitleBusy(false);
+      }
+    };
+
+    return (
+      <div className="spec-document">
+        <aside className="spec-toc" aria-label="Document contents">
+          <div className="spec-toc__sticky">
+            <p className="spec-kicker">Contents</p>
+            <nav>
+              {(props.toc as TocEntry[]).map((entry) => (
+                <a
+                  className={`spec-toc__link spec-toc__link--level-${entry.level}`}
+                  href={`#${entry.section_id}`}
+                  key={entry.section_id}
+                >
+                  {entry.title}
+                </a>
+              ))}
+            </nav>
+            <dl className="spec-toc__meta">
+              <div><dt>Document</dt><dd>{props.documentId}</dd></div>
+              <div title={props.sourceRevisionHash}>
+                <dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd>
+              </div>
+            </dl>
+          </div>
+        </aside>
+        <article className="spec-paper">
+          <header className="spec-cover">
+            <p className="spec-kicker">Unified hardware specification</p>
+            {editingTitle ? (
+              <form className="spec-title-editor" onSubmit={saveTitle}>
+                <label htmlFor="specification-title">Specification name</label>
+                <input
+                  id="specification-title"
+                  maxLength={200}
+                  onChange={(event) => setDraftTitle(event.target.value)}
+                  ref={inputRef}
+                  value={draftTitle}
+                />
+                {titleError && <p className="spec-edit-error" role="alert">{titleError}</p>}
+                <div className="spec-edit-actions">
+                  <button disabled={titleBusy} type="submit">{titleBusy ? "Saving…" : "Save name"}</button>
+                  <button disabled={titleBusy} onClick={finishTitleEdit} type="button">Cancel</button>
+                </div>
+              </form>
+            ) : (
+              <div className="spec-cover__title-row">
+                <h1>{props.title}</h1>
+                {coordinator.controller && (
+                  <button
+                    className="spec-title-edit-button"
+                    onClick={() => {
+                      if (coordinator.requestEditor(editorId)) {
+                        setDraftTitle(props.title);
+                        setEditingTitle(true);
+                      }
+                    }}
+                    ref={editButtonRef}
+                    type="button"
+                  >
+                    Edit name
+                  </button>
+                )}
+              </div>
+            )}
+            <p>{props.summary}</p>
+          </header>
+          {renderChildren(props.children, buildChild)}
+        </article>
+      </div>
+    );
+  },
 );
 
 function dispatchEntityAction(entityRef: EntityRef): void {
@@ -226,7 +306,7 @@ function SectionOptionsMenu({
   section: DocumentSectionData;
   onCreate?: (kind: "component" | "design") => void;
   onEditDetails?: () => void;
-  onAddPort?: () => void;
+  onAddPort?: (family: ComponentPortInput["family"]) => void;
   portAvailability?: { enabled: boolean; reason: string };
 }) {
   const [open, setOpen] = useState(false);
@@ -355,24 +435,25 @@ function SectionOptionsMenu({
               role="menuitem"
               type="button"
             >
-              Edit details…
+              Edit text…
             </button>
           )}
-          {onAddPort && (
+          {onAddPort && (["wire", "transactional", "structured"] as const).map((family) => (
             <button
               disabled={!portAvailability?.enabled}
+              key={family}
               onClick={() => {
                 close(true);
-                onAddPort();
+                onAddPort(family);
               }}
               role="menuitem"
               title={portAvailability?.enabled ? undefined : portAvailability?.reason}
               type="button"
             >
-              <span>Add port…</span>
+              <span>Add {family} port…</span>
               {!portAvailability?.enabled && <small>Composite</small>}
             </button>
-          )}
+          ))}
           {circuitRef && (
             <button
               onClick={() => {
@@ -406,6 +487,17 @@ function SectionOptionsMenu({
   );
 }
 
+const HIDDEN_IDENTITY_FACTS = new Set([
+  "VLNV",
+  "Vendor",
+  "Library",
+  "Name",
+  "Version",
+  "Display name",
+  "Short description",
+  "Description",
+]);
+
 function FactList({
   section,
   changedPaths = [],
@@ -415,7 +507,11 @@ function FactList({
   changedPaths?: string[];
   excludeLabels?: string[];
 }) {
-  const facts = section.facts.filter((fact) => fact.value && !excludeLabels.includes(fact.label));
+  const facts = section.facts.filter((fact) => (
+    fact.value
+    && !HIDDEN_IDENTITY_FACTS.has(fact.label)
+    && !excludeLabels.includes(fact.label)
+  ));
   if (!facts.length) return null;
   return (
     <dl className="spec-facts">
@@ -439,7 +535,13 @@ function FactList({
   );
 }
 
-type SectionEditMode = "" | "create-component" | "create-design" | "metadata" | "add-port";
+type SectionEditMode = ""
+  | "create-component"
+  | "create-design"
+  | "metadata"
+  | "add-wire-port"
+  | "add-transactional-port"
+  | "add-structured-port";
 
 interface SectionEditState {
   section: DocumentSectionData;
@@ -508,7 +610,7 @@ function EntityCreationForm({
           title="Start with a letter or underscore; then use letters, numbers, dots, underscores, or hyphens."
           value={name}
         />
-        <small>Creates <code>spec2gds.local:work:{name.trim() || "name"}:1.0</code>.</small>
+        <small>This immutable name becomes the section heading.</small>
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions">
@@ -520,12 +622,12 @@ function EntityCreationForm({
 }
 
 function EntityMetadataForm({ state }: { state: SectionEditState }) {
-  const [displayName, setDisplayName] = useState(() => factValue(state.section, "Display name"));
-  const [shortDescription, setShortDescription] = useState(() => factValue(state.section, "Short description"));
+  const [displayName] = useState(() => factValue(state.section, "Display name"));
+  const [shortDescription] = useState(() => factValue(state.section, "Short description"));
   const [description, setDescription] = useState(() => factValue(state.section, "Description"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => inputRef.current?.focus(), []);
 
   const submit = async (event: React.FormEvent) => {
@@ -550,31 +652,16 @@ function EntityMetadataForm({ state }: { state: SectionEditState }) {
 
   return (
     <form className="spec-inline-editor spec-metadata-editor" onSubmit={submit}>
-      <div>
-        <label htmlFor={`${state.editorId}-display-name`}>Display name</label>
-        <input
-          id={`${state.editorId}-display-name`}
-          onChange={(event) => setDisplayName(event.target.value)}
-          ref={inputRef}
-          value={displayName}
-        />
-      </div>
-      <div>
-        <label htmlFor={`${state.editorId}-short-description`}>Short description</label>
-        <input
-          id={`${state.editorId}-short-description`}
-          onChange={(event) => setShortDescription(event.target.value)}
-          value={shortDescription}
-        />
-      </div>
       <div className="spec-edit-field-wide">
-        <label htmlFor={`${state.editorId}-description`}>Description</label>
+        <label htmlFor={`${state.editorId}-description`}>Specification text</label>
         <textarea
           id={`${state.editorId}-description`}
           onChange={(event) => setDescription(event.target.value)}
+          ref={inputRef}
           rows={4}
           value={description}
         />
+        <small>Shown as paragraph text directly below this section heading.</small>
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions spec-edit-field-wide">
@@ -617,6 +704,7 @@ const SpecSection = createComponentImplementation(
     const entityIsEditable = coordinator.controller
       && section.entity_ref
       && ["component", "design"].includes(section.entity_ref.entity_kind);
+    const sectionText = factValue(section, "Description");
 
     return (
       <SectionEditContext.Provider value={editState}>
@@ -631,7 +719,7 @@ const SpecSection = createComponentImplementation(
             </div>
             <SectionOptionsMenu
               onAddPort={section.entity_ref?.entity_kind === "component" && coordinator.controller
-                ? () => begin("add-port")
+                ? (family) => begin(`add-${family}-port`)
                 : undefined}
               onCreate={coordinator.controller && ["components", "designs"].includes(section.section_id)
                 ? (kind) => begin(kind === "component" ? "create-component" : "create-design")
@@ -643,13 +731,18 @@ const SpecSection = createComponentImplementation(
           </header>
           {mode === "create-component" && <EntityCreationForm kind="component" state={editState} />}
           {mode === "create-design" && <EntityCreationForm kind="design" state={editState} />}
+          {mode === "metadata"
+            ? <EntityMetadataForm state={editState} />
+            : sectionText && <p className="spec-section-text">{sectionText}</p>}
           <FactList
             excludeLabels={mode === "metadata"
               ? ["Display name", "Short description", "Description"]
               : []}
             section={section}
           />
-          {mode === "metadata" && <EntityMetadataForm state={editState} />}
+          {mode === "add-wire-port" && <PortEditorCard adding family="wire" sectionEdit={editState} />}
+          {mode === "add-transactional-port" && <PortEditorCard adding family="transactional" sectionEdit={editState} />}
+          {mode === "add-structured-port" && <PortEditorCard adding family="structured" sectionEdit={editState} />}
           {renderChildren(props.children, buildChild)}
         </section>
       </SectionEditContext.Provider>
@@ -692,10 +785,17 @@ export function DocumentTableView({
   changedPaths?: string[];
 }) {
   const sectionEdit = useContext(SectionEditContext);
-  const editablePorts = table.kind === "component_ports"
-    && sectionEdit?.section.entity_ref?.entity_kind === "component"
-    && sectionEdit.controller;
-  const showActions = Boolean(editablePorts);
+  if (table.kind === "component_port") {
+    return <ComponentPortCard changedPaths={changedPaths} sectionEdit={sectionEdit} table={table} />;
+  }
+  if (table.kind === "component_ports_empty") {
+    return (
+      <section className="spec-ports-empty" aria-labelledby={`${table.table_id}-title`}>
+        <h4 id={`${table.table_id}-title`}>Ports</h4>
+        <p>No wire, transactional, or structured ports have been defined.</p>
+      </section>
+    );
+  }
   return (
     <section className="spec-table-block" aria-labelledby={`${table.table_id}-title`}>
         <div className="spec-table-block__heading">
@@ -711,26 +811,10 @@ export function DocumentTableView({
                     {column.label}
                   </th>
                 ))}
-                {showActions && <th scope="col">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {sectionEdit?.mode === "add-port" && editablePorts && (
-                <PortEditorRows
-                  adding
-                  columns={table.columns.map((column) => column.key)}
-                  sectionEdit={sectionEdit}
-                />
-              )}
-              {table.rows.map((row) => editablePorts ? (
-                <EditablePortRow
-                  changedPaths={changedPaths}
-                  key={row.row_id}
-                  row={row}
-                  sectionEdit={sectionEdit}
-                  table={table}
-                />
-              ) : (
+              {table.rows.map((row) => (
                 <tr
                   className={changedPaths.some((path) =>
                     path.includes(table.table_id) && path.includes(row.row_id)
@@ -767,33 +851,72 @@ function rowText(row: DocumentTable["rows"][number], key: string): string {
   return value === null || value === undefined ? "" : String(value);
 }
 
-function EditablePortRow({
-  row,
+type PortFamily = ComponentPortInput["family"];
+
+function titleCase(value: string): string {
+  return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function portInputFromRow(row: DocumentTable["rows"][number]): ComponentPortInput {
+  const name = rowText(row, "name");
+  const display_name = rowText(row, "display_name");
+  const description = rowText(row, "description");
+  const family = rowText(row, "family") as PortFamily;
+  if (family === "transactional") {
+    return {
+      name,
+      family,
+      display_name,
+      description,
+      initiative: rowText(row, "initiative") as Extract<ComponentPortInput, { family: "transactional" }>["initiative"],
+      kind: (rowText(row, "transaction_kind") || null) as TransactionalPortKind | null,
+      custom_kind: rowText(row, "custom_kind") || null,
+      bus_width: rowText(row, "bus_width") || null,
+    };
+  }
+  if (family === "structured") {
+    return {
+      name,
+      family,
+      display_name,
+      description,
+      direction: rowText(row, "direction") as Extract<ComponentPortInput, { family: "structured" }>["direction"],
+    };
+  }
+  return {
+    name,
+    family: "wire",
+    display_name,
+    description,
+    direction: rowText(row, "direction") as Extract<ComponentPortInput, { family: "wire" }>["direction"],
+    range: rowText(row, "range") || null,
+  };
+}
+
+function ComponentPortCard({
   table,
   changedPaths,
   sectionEdit,
 }: {
-  row: DocumentTable["rows"][number];
   table: DocumentTable;
   changedPaths: string[];
-  sectionEdit: SectionEditState;
+  sectionEdit: SectionEditState | null;
 }) {
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const row = table.rows[0];
+  if (!row) return null;
   const name = rowText(row, "name");
-  const editorId = `${sectionEdit.section.section_id}-port-${name}`;
-  if (editing) {
+  const editorId = `${sectionEdit?.section.section_id ?? table.table_id}-port-${name}`;
+  const family = rowText(row, "family") as PortFamily;
+  const editingSupported = Boolean(sectionEdit?.controller);
+  const canEdit = Boolean(sectionEdit?.portAvailability.enabled && sectionEdit.controller);
+  if (editing && sectionEdit) {
     return (
-      <PortEditorRows
-        columns={table.columns.map((column) => column.key)}
-        initial={{
-          name,
-          direction: rowText(row, "direction") as WirePortInput["direction"],
-          left: rowText(row, "left") || null,
-          right: rowText(row, "right") || null,
-          description: rowText(row, "description"),
-        }}
+      <PortEditorCard
+        family={family}
+        initial={portInputFromRow(row)}
         onFinished={() => {
           coordinator.finishEditor(editorId);
           setEditing(false);
@@ -803,25 +926,19 @@ function EditablePortRow({
       />
     );
   }
-  const isWire = rowText(row, "style") === "wire";
-  const canEdit = sectionEdit.portAvailability.enabled && isWire;
+  const displayName = rowText(row, "display_name");
+  const description = rowText(row, "description");
+  const changed = changedPaths.some((path) => path.includes(table.table_id) || path.includes(row.row_id));
   return (
-    <tr
-      className={changedPaths.some((path) =>
-        path.includes(table.table_id) && path.includes(row.row_id)
-      ) ? "spec-proposal-row-changed" : undefined}
-    >
-      {table.columns.map((column) => {
-        const cell = row.cells[column.key];
-        return (
-          <td key={column.key} title={cell?.schema_path || column.schema_path}>
-            {cell ? <CellValue cell={cell} /> : <span className="spec-cell--absent">—</span>}
-          </td>
-        );
-      })}
-      <td className="spec-port-actions">
+    <section className={`spec-port-card${changed ? " spec-proposal-changed" : ""}`} aria-labelledby={`${table.table_id}-title`}>
+      <header>
+        <div>
+          <span className="spec-port-kind">{titleCase(family)} port</span>
+          <h4 id={`${table.table_id}-title`}>{name}</h4>
+        </div>
         {canEdit ? (
           <button
+            className="spec-port-edit-button"
             onClick={() => {
               if (coordinator.requestEditor(editorId)) setEditing(true);
             }}
@@ -830,38 +947,81 @@ function EditablePortRow({
           >
             Edit
           </button>
-        ) : (
-          <small title={isWire ? sectionEdit.portAvailability.reason : "Transactional ports are read-only."}>
-            {isWire ? "Composite boundary" : "Transactional"}
+        ) : editingSupported ? (
+          <small title={sectionEdit?.portAvailability.reason}>
+            Composite boundary is read-only
           </small>
-        )}
-      </td>
-    </tr>
+        ) : null}
+      </header>
+      <table className="spec-port-definition">
+        <tbody>
+          <tr><th scope="row">Family</th><td>{titleCase(family)}</td></tr>
+          <tr><th scope="row">Display name</th><td>{displayName || "—"}</td></tr>
+          {family === "wire" && (
+            <>
+              <tr><th scope="row">Direction</th><td>{rowText(row, "direction") || "—"}</td></tr>
+              <tr><th scope="row">Range</th><td><code>{rowText(row, "range") || "—"}</code></td></tr>
+            </>
+          )}
+          {family === "transactional" && (
+            <>
+              <tr><th scope="row">Initiative</th><td>{rowText(row, "initiative") || "—"}</td></tr>
+              <tr><th scope="row">Kind</th><td>{titleCase(rowText(row, "transaction_kind")) || "—"}</td></tr>
+              {rowText(row, "transaction_kind") === "custom" && (
+                <tr><th scope="row">Custom kind</th><td>{rowText(row, "custom_kind") || "—"}</td></tr>
+              )}
+              <tr><th scope="row">Bus width</th><td>{rowText(row, "bus_width") || "—"}</td></tr>
+            </>
+          )}
+          {family === "structured" && (
+            <>
+              <tr><th scope="row">Direction</th><td>{rowText(row, "direction") || "—"}</td></tr>
+              <tr><th scope="row">Structure</th><td>Packed struct</td></tr>
+            </>
+          )}
+          <tr><th scope="row">Description</th><td className="spec-port-text">{description || "—"}</td></tr>
+        </tbody>
+      </table>
+    </section>
   );
 }
 
-function PortEditorRows({
+function PortEditorCard({
   adding = false,
-  columns,
+  family,
   initial,
   onFinished,
   sectionEdit,
 }: {
   adding?: boolean;
-  columns: string[];
-  initial?: WirePortInput;
+  family: PortFamily;
+  initial?: ComponentPortInput;
   onFinished?: () => void;
   sectionEdit: SectionEditState;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [direction, setDirection] = useState<WirePortInput["direction"]>(initial?.direction ?? "in");
-  const [left, setLeft] = useState(initial?.left ?? "");
-  const [right, setRight] = useState(initial?.right ?? "");
+  const [displayName, setDisplayName] = useState(initial?.display_name ?? "");
+  const [direction, setDirection] = useState<"in" | "out" | "inout">(
+    initial && initial.family !== "transactional" ? initial.direction : "in",
+  );
+  const [range, setRange] = useState(initial?.family === "wire" ? initial.range ?? "" : "");
+  const [initiative, setInitiative] = useState<"requires" | "provides" | "both">(
+    initial?.family === "transactional" ? initial.initiative : "requires",
+  );
+  const [transactionKind, setTransactionKind] = useState<TransactionalPortKind | "">(
+    initial?.family === "transactional" ? initial.kind ?? "" : "",
+  );
+  const [customKind, setCustomKind] = useState(
+    initial?.family === "transactional" ? initial.custom_kind ?? "" : "",
+  );
+  const [busWidth, setBusWidth] = useState(
+    initial?.family === "transactional" ? initial.bus_width ?? "" : "",
+  );
   const [description, setDescription] = useState(initial?.description ?? "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const rowRef = useRef<HTMLTableRowElement>(null);
-  useEffect(() => rowRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("input, select")?.focus(), []);
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => formRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("input, select")?.focus(), []);
   const finish = onFinished ?? sectionEdit.cancel;
   const ref = sectionEdit.section.entity_ref;
 
@@ -871,27 +1031,42 @@ function PortEditorRows({
       setError("Port name is required.");
       return;
     }
-    if ((left.trim() && !right.trim()) || (!left.trim() && right.trim())) {
-      setError("Vector ports require both left and right bounds.");
+    if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name.trim())) {
+      setError("Use a letter or underscore first, followed by letters, numbers, dots, underscores, or hyphens.");
+      return;
+    }
+    if (family === "wire" && (
+      range.trim().split(":").length > 2
+      || (range.includes(":") && range.split(":").some((part) => !part.trim()))
+    )) {
+      setError("Range must be empty, one expression, or a left:right expression pair.");
+      return;
+    }
+    if (family === "transactional" && transactionKind === "custom" && !customKind.trim()) {
+      setError("Custom transactional ports require a custom kind name.");
       return;
     }
     setBusy(true);
     setError("");
-    const value: WirePortInput = {
-      name: name.trim(),
-      direction,
-      left: left.trim() || null,
-      right: right.trim() || null,
-      description,
-    };
+    const common = { name: name.trim(), display_name: displayName, description };
+    const value: ComponentPortInput = family === "wire"
+      ? { ...common, family, direction, range: range.trim() || null }
+      : family === "transactional"
+        ? {
+          ...common,
+          family,
+          initiative,
+          kind: transactionKind || null,
+          custom_kind: transactionKind === "custom" ? customKind.trim() : null,
+          bus_width: busWidth.trim() || null,
+        }
+        : { ...common, family, direction };
     try {
       if (adding) await sectionEdit.controller.addComponentPort(ref, value);
-      else await sectionEdit.controller.updateComponentPort(ref, value.name, {
-        direction: value.direction,
-        left: value.left,
-        right: value.right,
-        description: value.description,
-      });
+      else {
+        const { name: _immutableName, ...update } = value;
+        await sectionEdit.controller.updateComponentPort(ref, value.name, update);
+      }
       finish();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -900,40 +1075,104 @@ function PortEditorRows({
     }
   };
 
-  const editorCell = (key: string): React.ReactNode => {
-    const id = `${sectionEdit.section.section_id}-${adding ? "new" : name}-${key}`;
-    if (key === "name") return adding ? (
-      <input aria-label="Port name" id={id} onChange={(event) => setName(event.target.value)} value={name} />
-    ) : <strong>{name}</strong>;
-    if (key === "style") return "wire";
-    if (key === "direction") return (
-      <select aria-label={`Direction for ${name || "new port"}`} id={id} onChange={(event) => setDirection(event.target.value as WirePortInput["direction"])} value={direction}>
-        <option value="in">in</option>
-        <option value="out">out</option>
-        <option value="inout">inout</option>
-      </select>
-    );
-    if (key === "left") return <input aria-label={`Left bound for ${name || "new port"}`} id={id} onChange={(event) => setLeft(event.target.value)} value={left} />;
-    if (key === "right") return <input aria-label={`Right bound for ${name || "new port"}`} id={id} onChange={(event) => setRight(event.target.value)} value={right} />;
-    if (key === "description") return <input aria-label={`Description for ${name || "new port"}`} id={id} onChange={(event) => setDescription(event.target.value)} value={description} />;
-    return <span className="spec-cell--absent">—</span>;
-  };
+  const idPrefix = `${sectionEdit.section.section_id}-${adding ? `new-${family}` : name}`;
 
   return (
-    <>
-      <tr className="spec-port-edit-row" ref={rowRef}>
-        {columns.map((key) => <td key={key}>{editorCell(key)}</td>)}
-        <td className="spec-port-actions">
-          <button disabled={busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Save"}</button>
+    <form
+      className="spec-port-card spec-port-card--editor"
+      onSubmit={(event) => { event.preventDefault(); void save(); }}
+      ref={formRef}
+    >
+      <header>
+        <div>
+          <span className="spec-port-kind">{titleCase(family)} port</span>
+          <h4>{adding ? `Add ${family} port` : name}</h4>
+        </div>
+      </header>
+      <div className="spec-port-editor-grid">
+        {adding && (
+          <div>
+            <label htmlFor={`${idPrefix}-name`}>Port name</label>
+            <input
+              autoComplete="off"
+              id={`${idPrefix}-name`}
+              onChange={(event) => setName(event.target.value)}
+              pattern="[A-Za-z_][A-Za-z0-9_.-]*"
+              value={name}
+            />
+          </div>
+        )}
+        <div>
+          <label htmlFor={`${idPrefix}-display-name`}>Display name</label>
+          <input id={`${idPrefix}-display-name`} onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
+        </div>
+        {family !== "transactional" && (
+          <div>
+            <label htmlFor={`${idPrefix}-direction`}>Direction</label>
+            <select id={`${idPrefix}-direction`} onChange={(event) => setDirection(event.target.value as typeof direction)} value={direction}>
+              <option value="in">in</option>
+              <option value="out">out</option>
+              <option value="inout">inout</option>
+            </select>
+          </div>
+        )}
+        {family === "wire" && (
+          <div className="spec-edit-field-wide">
+            <label htmlFor={`${idPrefix}-range`}>Range</label>
+            <input id={`${idPrefix}-range`} onChange={(event) => setRange(event.target.value)} placeholder="DATA_WIDTH-1:0" value={range} />
+            <small>Optional. Use left:right, or one expression for identical bounds.</small>
+          </div>
+        )}
+        {family === "transactional" && (
+          <>
+            <div>
+              <label htmlFor={`${idPrefix}-initiative`}>Initiative</label>
+              <select id={`${idPrefix}-initiative`} onChange={(event) => setInitiative(event.target.value as typeof initiative)} value={initiative}>
+                <option value="requires">requires</option>
+                <option value="provides">provides</option>
+                <option value="both">both</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`${idPrefix}-kind`}>Kind</label>
+              <select id={`${idPrefix}-kind`} onChange={(event) => setTransactionKind(event.target.value as typeof transactionKind)} value={transactionKind}>
+                <option value="">Unspecified</option>
+                <option value="tlm_port">TLM port</option>
+                <option value="tlm_socket">TLM socket</option>
+                <option value="simple_socket">Simple socket</option>
+                <option value="multi_socket">Multi socket</option>
+                <option value="custom">Custom</option>
+              </select>
+            </div>
+            {transactionKind === "custom" && (
+              <div>
+                <label htmlFor={`${idPrefix}-custom-kind`}>Custom kind name</label>
+                <input id={`${idPrefix}-custom-kind`} onChange={(event) => setCustomKind(event.target.value)} value={customKind} />
+              </div>
+            )}
+            <div>
+              <label htmlFor={`${idPrefix}-bus-width`}>Bus width</label>
+              <input id={`${idPrefix}-bus-width`} onChange={(event) => setBusWidth(event.target.value)} value={busWidth} />
+            </div>
+          </>
+        )}
+        {family === "structured" && (
+          <div>
+            <span className="spec-port-editor-label">Structure</span>
+            <strong>Packed struct</strong>
+          </div>
+        )}
+        <div className="spec-edit-field-wide">
+          <label htmlFor={`${idPrefix}-description`}>Description</label>
+          <textarea id={`${idPrefix}-description`} onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
+        </div>
+      </div>
+      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+      <div className="spec-port-actions">
+          <button disabled={busy} type="submit">{busy ? "Saving…" : "Save"}</button>
           <button disabled={busy} onClick={finish} type="button">Cancel</button>
-        </td>
-      </tr>
-      {error && (
-        <tr className="spec-port-error-row">
-          <td colSpan={columns.length + 1}><span role="alert">{error}</span></td>
-        </tr>
-      )}
-    </>
+      </div>
+    </form>
   );
 }
 

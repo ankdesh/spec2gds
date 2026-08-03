@@ -15,7 +15,7 @@ interface EditorMenuBarProps {
   path: string;
   snapshot: DocumentSnapshot | null;
   view: EditorView;
-  onCreate: (path: string) => Promise<boolean>;
+  onCreate: (path: string, title: string) => Promise<boolean>;
   onError: (message: string) => void;
   onOpen: (path: string) => Promise<boolean>;
   onOpenCircuit: (entityKind: "component" | "design", entityId: string) => Promise<void>;
@@ -244,9 +244,10 @@ function PathDialog({
   loading: boolean;
   mode: "new" | "open";
   onClose: () => void;
-  onSubmit: (path: string) => Promise<boolean>;
+  onSubmit: (path: string, title: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState(initialPath);
+  const [title, setTitle] = useState("");
   const action = mode === "new" ? "Create" : "Open";
   return (
     <Modal
@@ -258,12 +259,26 @@ function PathDialog({
         onSubmit={async (event) => {
           event.preventDefault();
           const nextPath = value.trim();
-          if (nextPath && await onSubmit(nextPath)) onClose();
+          const nextTitle = title.trim();
+          if (nextPath && (mode === "open" || nextTitle) && await onSubmit(nextPath, nextTitle)) onClose();
         }}
       >
+        {mode === "new" && (
+          <>
+            <label htmlFor="specification-name">Specification name</label>
+            <input
+              autoFocus
+              id="specification-name"
+              maxLength={200}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="My hardware specification"
+              value={title}
+            />
+          </>
+        )}
         <label htmlFor="specification-path">Server-local package path</label>
         <input
-          autoFocus
+          autoFocus={mode === "open"}
           id="specification-path"
           onChange={(event) => setValue(event.target.value)}
           placeholder="/path/to/design.spec"
@@ -274,7 +289,7 @@ function PathDialog({
         </p>
         <div className="editor-dialog__actions">
           <button className="secondary" onClick={onClose} type="button">Cancel</button>
-          <button disabled={!value.trim() || loading} type="submit">
+          <button disabled={!value.trim() || (mode === "new" && !title.trim()) || loading} type="submit">
             {loading ? `${action}ing…` : action}
           </button>
         </div>
@@ -289,9 +304,9 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
     return (
       <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="Getting started">
         <div className="editor-dialog__copy">
-          <p>Use <strong>File → New Specification</strong> to create a server-local package, or <strong>File → Open Specification</strong> to load one.</p>
-          <p>Use the group <strong>Options</strong> menus to create components and entry designs. Component and design sections provide explicit inline editors with Save and Cancel.</p>
-          <p>Saved edits are validated and persisted automatically. Component sections can add or edit physical wire ports when they do not own an internal design.</p>
+          <p>Use <strong>File → New Specification</strong> to name and create a server-local package, or <strong>File → Open Specification</strong> to load one.</p>
+          <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
+          <p>Saved edits are validated and persisted automatically. Leaf components provide direct commands for wire, transactional, and packed structured ports; wire ranges use <code>left:right</code> syntax.</p>
         </div>
       </Modal>
     );
@@ -514,7 +529,7 @@ export default function EditorMenuBar({
 
         <div className="active-document" title={path || "No server-local package is open"}>
           <span className={snapshot ? "active-document__status" : "active-document__status active-document__status--idle"} />
-          <span><small>{snapshot ? "Active specification" : "File → New or Open"}</small><strong>{displayPathName(path)}</strong></span>
+          <span><small>{snapshot ? displayPathName(path) : "File → New or Open"}</small><strong>{snapshot?.narrative.title || displayPathName(path)}</strong></span>
         </div>
       </header>
 
@@ -522,7 +537,13 @@ export default function EditorMenuBar({
         <PathDialog initialPath="" loading={loading} mode="new" onClose={() => setDialog(null)} onSubmit={onCreate} />
       )}
       {dialog === "open" && (
-        <PathDialog initialPath={path} loading={loading} mode="open" onClose={() => setDialog(null)} onSubmit={onOpen} />
+        <PathDialog
+          initialPath={path}
+          loading={loading}
+          mode="open"
+          onClose={() => setDialog(null)}
+          onSubmit={(nextPath) => onOpen(nextPath)}
+        />
       )}
       {dialog && !["new", "open"].includes(dialog) && (
         <HelpDialog dialog={dialog as Exclude<DialogId, "new" | "open">} onClose={() => setDialog(null)} />

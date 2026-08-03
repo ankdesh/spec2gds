@@ -35,7 +35,7 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
         for table in section.tables
     }
     assert {
-        "component_ports",
+        "component_port",
         "bus_interfaces",
         "port_maps",
         "design_instances",
@@ -44,6 +44,15 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
         "bus_properties",
         "abstraction_ports",
     }.issubset(table_kinds)
+    port_tables = [
+        table
+        for section in component_sections
+        for table in section.tables
+        if table.kind == "component_port"
+    ]
+    assert port_tables
+    assert all(len(table.rows) == 1 for table in port_tables)
+    assert all(table.title == table.rows[0].cells["name"].value for table in port_tables)
 
 
 def test_document_cells_retain_schema_identity_and_presence() -> None:

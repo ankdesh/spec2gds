@@ -86,6 +86,59 @@
   letter-spacing: -0.04em;
 }
 
+.spec-cover__title-row {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 0.8rem 1.2rem;
+}
+
+.spec-cover__title-row h1 {
+  flex: 0 1 auto;
+}
+
+.spec-title-edit-button,
+.spec-port-edit-button {
+  margin-bottom: 1.15rem;
+  padding: 0.38rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--spec-accent, #246b5a) 48%, white);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--spec-accent, #246b5a);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.spec-title-editor {
+  display: grid;
+  max-width: 42rem;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.spec-title-editor label,
+.spec-port-editor-grid label,
+.spec-port-editor-label {
+  color: #3b4541;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.spec-title-editor input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.65rem 0.72rem;
+  border: 1px solid var(--spec-line-strong, #b7bdb9);
+  border-radius: 0.4rem;
+  background: white;
+  color: #202925;
+  font: inherit;
+  font-size: 1.2rem;
+}
+
 .spec-cover > p:last-child {
   color: var(--spec-muted, #59616c);
   margin: 0;
@@ -131,6 +184,15 @@
 
 .spec-section h3 {
   font-size: 1.55rem;
+}
+
+.spec-section-text {
+  max-width: 74ch;
+  margin: 0 0 1.5rem;
+  color: #343b38;
+  font-size: 0.98rem;
+  line-height: 1.72;
+  white-space: pre-wrap;
 }
 
 .spec-section-options {
@@ -245,6 +307,131 @@
 
 .spec-table-block {
   margin: 1.7rem 0;
+}
+
+.spec-port-card,
+.spec-ports-empty {
+  margin: 1rem 0;
+  border: 1px solid var(--spec-line, #d9ddd9);
+  border-radius: 0.65rem;
+  background: #fff;
+  box-shadow: 0 0.35rem 1.2rem rgba(30, 38, 35, 0.055);
+  overflow: hidden;
+}
+
+.spec-port-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--spec-line, #d9ddd9);
+  background: var(--spec-table-head, #f1f3ef);
+}
+
+.spec-port-card > header h4,
+.spec-ports-empty h4 {
+  margin: 0.18rem 0 0;
+  font-size: 1rem;
+}
+
+.spec-port-card > header small {
+  color: var(--spec-muted, #59616c);
+  font-size: 0.68rem;
+}
+
+.spec-port-kind {
+  color: var(--spec-accent, #246b5a);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.spec-port-edit-button {
+  margin: 0;
+  background: white;
+}
+
+.spec-port-definition {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.spec-port-definition th,
+.spec-port-definition td {
+  padding: 0.62rem 0.8rem;
+  border-bottom: 1px solid var(--spec-line, #d9ddd9);
+  text-align: left;
+  vertical-align: top;
+}
+
+.spec-port-definition tr:last-child th,
+.spec-port-definition tr:last-child td {
+  border-bottom: 0;
+}
+
+.spec-port-definition th {
+  width: 7rem;
+  color: var(--spec-muted, #59616c);
+  font-size: 0.68rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.spec-port-text {
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.spec-ports-empty {
+  padding: 1rem;
+  border-style: dashed;
+  box-shadow: none;
+}
+
+.spec-ports-empty p {
+  margin: 0.35rem 0 0;
+  color: var(--spec-muted, #59616c);
+  font-size: 0.82rem;
+}
+
+.spec-port-card--editor {
+  padding-bottom: 1rem;
+  border-color: color-mix(in srgb, var(--spec-accent, #246b5a) 45%, white);
+  background: color-mix(in srgb, var(--spec-accent, #246b5a) 4%, white);
+}
+
+.spec-port-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.8rem 1rem;
+  padding: 1rem;
+}
+
+.spec-port-editor-grid label,
+.spec-port-editor-label {
+  display: block;
+  margin-bottom: 0.3rem;
+}
+
+.spec-port-editor-grid input,
+.spec-port-editor-grid select,
+.spec-port-editor-grid textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--spec-line-strong, #b7bdb9);
+  border-radius: 0.35rem;
+  background: white;
+  color: #202925;
+  font: inherit;
+}
+
+.spec-port-card--editor > .spec-edit-error,
+.spec-port-card--editor > .spec-port-actions {
+  margin: 0 1rem;
 }
 
 .spec-table-block__heading {
@@ -576,7 +763,8 @@
   }
 
   .spec-inline-editor,
-  .spec-create-editor {
+  .spec-create-editor,
+  .spec-port-editor-grid {
     grid-template-columns: 1fr;
   }
 

@@ -21,7 +21,7 @@ const snapshot = {
   bus_definitions: [],
   abstraction_definitions: [],
   component_compositions: [{ component: compositeRef, internal_design: designRef }],
-  narrative: { blocks: [] },
+  narrative: { title: "Editor Test", blocks: [] },
   diagnostics: { source: [], artifacts: [] },
 };
 
@@ -54,30 +54,82 @@ function cell(value: string, schemaPath: string) {
 }
 
 const portTable = {
-  table_id: "component-component_timer-ports",
-  kind: "component_ports",
-  title: "Ports",
+  table_id: "component-component_timer-port-irq",
+  kind: "component_port",
+  title: "irq",
   columns: [
-    { key: "name", label: "Name", schema_path: "/model/ports/port/name" },
-    { key: "style", label: "Style", schema_path: "/model/ports/port/wire" },
-    { key: "direction", label: "Direction / initiative", schema_path: "/model/ports/port/wire/direction" },
-    { key: "left", label: "Left", schema_path: "/model/ports/port/wire/vectors/vector/left" },
-    { key: "right", label: "Right", schema_path: "/model/ports/port/wire/vectors/vector/right" },
-    { key: "width", label: "Bus width", schema_path: "/model/ports/port/transactional/busWidth" },
-    { key: "qualifier", label: "Qualifier", schema_path: "/model/ports/port/wire/qualifier" },
+    { key: "family", label: "Family", schema_path: "/model/ports/port" },
+    { key: "display_name", label: "Display name", schema_path: "/model/ports/port/displayName" },
+    { key: "direction", label: "Direction", schema_path: "/model/ports/port/wire/direction" },
+    { key: "range", label: "Range", schema_path: "/model/ports/port/wire/vectors/vector" },
     { key: "description", label: "Description", schema_path: "/model/ports/port/description" },
   ],
   rows: [{
     row_id: "port-irq",
     cells: {
       name: cell("irq", "/model/ports/port/name"),
-      style: cell("wire", "/model/ports/port/wire"),
+      family: cell("wire", "/model/ports/port/wire"),
+      display_name: cell("Interrupt request", "/model/ports/port/displayName"),
       direction: cell("out", "/model/ports/port/wire/direction"),
+      range: cell("", "/model/ports/port/wire/vectors/vector"),
       left: cell("", "/model/ports/port/wire/vectors/vector/left"),
       right: cell("", "/model/ports/port/wire/vectors/vector/right"),
-      width: cell("", "/model/ports/port/transactional/busWidth"),
-      qualifier: cell("", "/model/ports/port/wire/qualifier"),
+      initiative: cell("", "/model/ports/port/transactional/initiative"),
+      transaction_kind: cell("", "/model/ports/port/transactional/kind"),
+      custom_kind: cell("", "/model/ports/port/transactional/kind/@custom"),
+      bus_width: cell("", "/model/ports/port/transactional/busWidth"),
+      structure: cell("", "/model/ports/port/structured"),
       description: cell("Interrupt", "/model/ports/port/description"),
+    },
+  }],
+};
+
+const transactionalPortTable = {
+  table_id: "component-component_timer-port-request_stream",
+  kind: "component_port",
+  title: "request_stream",
+  columns: portTable.columns,
+  rows: [{
+    row_id: "port-request_stream",
+    cells: {
+      name: cell("request_stream", "/model/ports/port/name"),
+      family: cell("transactional", "/model/ports/port/transactional"),
+      display_name: cell("Request stream", "/model/ports/port/displayName"),
+      direction: cell("", "/model/ports/port/wire/direction"),
+      range: cell("", "/model/ports/port/wire/vectors/vector"),
+      left: cell("", "/model/ports/port/wire/vectors/vector/left"),
+      right: cell("", "/model/ports/port/wire/vectors/vector/right"),
+      initiative: cell("provides", "/model/ports/port/transactional/initiative"),
+      transaction_kind: cell("custom", "/model/ports/port/transactional/kind"),
+      custom_kind: cell("timer_service", "/model/ports/port/transactional/kind/@custom"),
+      bus_width: cell("DATA_WIDTH", "/model/ports/port/transactional/busWidth"),
+      structure: cell("", "/model/ports/port/structured"),
+      description: cell("Streams timer requests", "/model/ports/port/description"),
+    },
+  }],
+};
+
+const structuredPortTable = {
+  table_id: "component-component_timer-port-status_bundle",
+  kind: "component_port",
+  title: "status_bundle",
+  columns: portTable.columns,
+  rows: [{
+    row_id: "port-status_bundle",
+    cells: {
+      name: cell("status_bundle", "/model/ports/port/name"),
+      family: cell("structured", "/model/ports/port/structured"),
+      display_name: cell("Status bundle", "/model/ports/port/displayName"),
+      direction: cell("out", "/model/ports/port/structured/struct/@direction"),
+      range: cell("", "/model/ports/port/wire/vectors/vector"),
+      left: cell("", "/model/ports/port/wire/vectors/vector/left"),
+      right: cell("", "/model/ports/port/wire/vectors/vector/right"),
+      initiative: cell("", "/model/ports/port/transactional/initiative"),
+      transaction_kind: cell("", "/model/ports/port/transactional/kind"),
+      custom_kind: cell("", "/model/ports/port/transactional/kind/@custom"),
+      bus_width: cell("", "/model/ports/port/transactional/busWidth"),
+      structure: cell("Packed struct", "/model/ports/port/structured"),
+      description: cell("Packed status fields", "/model/ports/port/description"),
     },
   }],
 };
@@ -91,8 +143,10 @@ const componentFacts = [
 ];
 
 const compositePortTable = {
-  ...portTable,
-  table_id: "component-component_subsystem-ports",
+  table_id: "component-component_subsystem-ports-empty",
+  kind: "component_ports_empty",
+  title: "Ports",
+  columns: [],
   rows: [],
 };
 
@@ -120,13 +174,27 @@ const batch = {
           section("components", "Components", 1, null),
           section("component-component_timer", "Timer", 2, componentRef, {
             facts: componentFacts,
-            tables: [portTable],
-            children: ["table-component-component_timer-ports"],
+            tables: [portTable, transactionalPortTable, structuredPortTable],
+            children: [
+              "table-component-component_timer-port-irq",
+              "table-component-component_timer-port-request_stream",
+              "table-component-component_timer-port-status_bundle",
+            ],
           }),
           {
-            id: "table-component-component_timer-ports",
+            id: "table-component-component_timer-port-irq",
             component: "SpecTable",
             table: portTable,
+          },
+          {
+            id: "table-component-component_timer-port-request_stream",
+            component: "SpecTable",
+            table: transactionalPortTable,
+          },
+          {
+            id: "table-component-component_timer-port-status_bundle",
+            component: "SpecTable",
+            table: structuredPortTable,
           },
           section("component-component_subsystem", "Subsystem", 2, compositeRef, {
             facts: componentFacts.map((fact) => fact.label === "Name"
@@ -135,10 +203,10 @@ const batch = {
                 ? { ...fact, value: "acme:blocks:Subsystem:1.0" }
                 : { ...fact, value: "" }),
             tables: [compositePortTable],
-            children: ["table-component-component_subsystem-ports"],
+            children: ["table-component-component_subsystem-ports-empty"],
           }),
           {
-            id: "table-component-component_subsystem-ports",
+            id: "table-component-component_subsystem-ports-empty",
             component: "SpecTable",
             table: compositePortTable,
           },
@@ -186,6 +254,7 @@ const batch = {
 type ApiState = {
   circuits: Array<{ entity_kind: string; entity_id: string }>;
   createdPaths: string[];
+  createdTitles: string[];
   openedPaths: string[];
   transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
   currentRevision: string;
@@ -196,6 +265,7 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
   const state: ApiState = {
     circuits: [],
     createdPaths: [],
+    createdTitles: [],
     openedPaths: [],
     transactions: [],
     currentRevision: revision,
@@ -207,13 +277,16 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
     const json = (value: unknown) => route.fulfill({ json: value, status: 200 });
 
     if (path === "/documents/create" || path === "/documents/open") {
-      const body = request.postDataJSON() as { path: string };
+      const body = request.postDataJSON() as { path: string; title?: string };
       (path.endsWith("create") ? state.createdPaths : state.openedPaths).push(body.path);
+      if (path.endsWith("create")) state.createdTitles.push(body.title ?? "");
       if (body.path === "/tmp/missing.spec") {
         return route.fulfill({ json: { detail: "Specification package was not found." }, status: 422 });
       }
       state.currentRevision = revision;
-      return json(snapshot);
+      return json(path.endsWith("create")
+        ? { ...snapshot, narrative: { ...snapshot.narrative, title: body.title ?? "" } }
+        : snapshot);
     }
     if (path === "/documents/snapshot") {
       return json({ ...snapshot, source_revision_hash: state.currentRevision });
@@ -247,6 +320,7 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
         editor_url: "http://127.0.0.1:4180/?document_id=circuit-test",
         reused_session: false,
         omitted_bus_items: [],
+        omitted_ports: [],
       });
     }
     if (/^\/entities\/[^/]+\/[^/]+\/actions$/.test(path)) {
@@ -299,10 +373,12 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Specification/ }).click();
   await expect(page.getByText("visible to the server running spec2gds")).toBeVisible();
+  await page.getByLabel("Specification name").fill("New editor specification");
   await page.getByLabel("Server-local package path").fill("/tmp/new-editor.spec");
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("new-editor.spec", { exact: true })).toBeVisible();
+  await expect(page.getByText("New editor specification", { exact: true })).toBeVisible();
   expect(state.createdPaths).toEqual(["/tmp/new-editor.spec"]);
+  expect(state.createdTitles).toEqual(["New editor specification"]);
 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toBeDisabled();
@@ -329,6 +405,19 @@ test("supports keyboard menu navigation and restores trigger focus", async ({ pa
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu", { name: "Edit" })).toBeHidden();
   await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeFocused();
+});
+
+test("edits the persisted specification name without changing the stable identity", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+
+  await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
+  await page.getByLabel("Specification name").fill("Timer Platform Specification");
+  await page.getByRole("button", { name: "Save name" }).click();
+  await expect.poll(() => state.transactions.length).toBe(1);
+  expect(state.transactions[0]?.operations).toEqual([
+    { type: "set_document_title", title: "Timer Platform Specification" },
+  ]);
 });
 
 test("keeps Edit state-aware and provides working Copy and Select All", async ({ context, page }) => {
@@ -363,8 +452,9 @@ test("launches grouped and section circuits while preserving entity actions", as
   await openSample(page);
 
   await page.getByRole("menuitem", { name: "Circuit", exact: true }).click();
-  await expect(page.getByText("Designs", { exact: true })).toBeVisible();
-  await expect(page.getByText("Components", { exact: true })).toBeVisible();
+  const circuitMenu = page.getByRole("menu", { name: "Circuit" });
+  await expect(circuitMenu.getByText("Designs", { exact: true })).toBeVisible();
+  await expect(circuitMenu.getByText("Components", { exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: /Processor Entry/ }).click();
   await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
 
@@ -389,13 +479,15 @@ test("launches grouped and section circuits while preserving entity actions", as
   await expect(bus.getByRole("menuitem", { name: /More actions/ })).toBeVisible();
 });
 
-test("creates entities and edits metadata and physical ports inline", async ({ page }) => {
+test("creates entities and edits all three port families inline", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
 
   const composite = page.locator("#component-component_subsystem");
   await composite.getByRole("button", { name: "Options" }).click();
-  await expect(composite.getByRole("menuitem", { name: /Add port.*Composite/ })).toBeDisabled();
+  await expect(composite.getByRole("menuitem", { name: /Add wire port.*Composite/ })).toBeDisabled();
+  await expect(composite.getByRole("menuitem", { name: /Add transactional port.*Composite/ })).toBeDisabled();
+  await expect(composite.getByRole("menuitem", { name: /Add structured port.*Composite/ })).toBeDisabled();
 
   const components = page.locator("#components");
   await components.getByRole("button", { name: "Options" }).click();
@@ -408,60 +500,150 @@ test("creates entities and edits metadata and physical ports inline", async ({ p
   ]);
 
   const component = page.locator("#component-component_timer");
+  await expect(component.getByText("Counts time", { exact: true })).toHaveClass(/spec-section-text/);
+  await expect(component.getByText("acme:blocks:Timer:1.0", { exact: true })).toHaveCount(0);
+  await expect(component.locator(".spec-port-card", { hasText: "irq" })).toBeVisible();
+  const transactionalCard = component.locator(".spec-port-card", { hasText: "request_stream" });
+  await expect(transactionalCard).toContainText("Transactional port");
+  await expect(transactionalCard).toContainText("Request stream");
+  await expect(transactionalCard).toContainText("provides");
+  await expect(transactionalCard).toContainText("timer_service");
+  await expect(transactionalCard).toContainText("DATA_WIDTH");
+  await expect(transactionalCard).toContainText("Streams timer requests");
+  const structuredCard = component.locator(".spec-port-card", { hasText: "status_bundle" });
+  await expect(structuredCard).toContainText("Structured port");
+  await expect(structuredCard).toContainText("Status bundle");
+  await expect(structuredCard).toContainText("Packed struct");
+  await expect(structuredCard).toContainText("Packed status fields");
   await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: "Edit details…" }).click();
-  await component.getByLabel("Display name").fill("Friendly timer");
-  await component.getByLabel("Short description").fill("Counts cycles");
-  await component.getByLabel("Description").fill("A programmable timer.");
+  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.getByLabel("Specification text").fill("A programmable timer.");
   await component.getByRole("button", { name: "Save changes" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations[0]).toEqual({
     type: "set_entity_metadata",
     entity: componentRef,
-    display_name: "Friendly timer",
-    short_description: "Counts cycles",
+    display_name: "",
+    short_description: "",
     description: "A programmable timer.",
   });
 
   await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: "Add port…" }).click();
-  await component.getByLabel("Port name").fill("count");
-  await component.getByLabel("Direction for count").selectOption("out");
-  await component.getByLabel("Left bound for count").fill("31");
-  await component.getByLabel("Right bound for count").fill("0");
-  await component.getByLabel("Description for count").fill("Current count");
-  const draftRow = component.locator(".spec-port-edit-row");
-  await draftRow.getByRole("button", { name: "Save" }).click();
+  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  const draftCard = component.locator(".spec-port-card--editor");
+  await draftCard.getByLabel("Port name").fill("count");
+  await draftCard.getByLabel("Display name").fill("Current count");
+  await draftCard.getByLabel("Direction").selectOption("out");
+  await draftCard.getByLabel("Range").fill("31:0");
+  await draftCard.getByLabel("Description").fill("Current counter value");
+  await draftCard.getByRole("button", { name: "Save" }).click();
   await expect.poll(() => state.transactions.length).toBe(3);
   expect(state.transactions[2]?.operations[0]).toEqual({
     type: "add_component_port",
     component: componentRef,
     port: {
       name: "count",
+      family: "wire",
+      display_name: "Current count",
       direction: "out",
-      left: "31",
-      right: "0",
-      description: "Current count",
+      range: "31:0",
+      description: "Current counter value",
     },
   });
 
-  const existingRow = component.locator("tbody tr").filter({ hasText: "irq" });
-  await existingRow.getByRole("button", { name: "Edit" }).click();
-  await component.getByLabel("Direction for irq").selectOption("inout");
-  await component.getByLabel("Description for irq").fill("Bidirectional interrupt");
-  await component.locator(".spec-port-edit-row").getByRole("button", { name: "Save" }).click();
+  const existingCard = component.locator(".spec-port-card", { hasText: "irq" });
+  await existingCard.getByRole("button", { name: "Edit" }).click();
+  const editCard = component.locator(".spec-port-card--editor");
+  await expect(editCard.getByLabel("Port name")).toHaveCount(0);
+  await editCard.getByLabel("Display name").fill("Interrupt request line");
+  await editCard.getByLabel("Direction").selectOption("inout");
+  await editCard.getByLabel("Description").fill("Bidirectional interrupt");
+  await editCard.getByRole("button", { name: "Save" }).click();
   await expect.poll(() => state.transactions.length).toBe(4);
   expect(state.transactions[3]?.operations[0]).toEqual({
     type: "update_component_port",
     component: componentRef,
     name: "irq",
     port: {
+      family: "wire",
+      display_name: "Interrupt request line",
       direction: "inout",
-      left: null,
-      right: null,
+      range: null,
       description: "Bidirectional interrupt",
     },
   });
+
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Add transactional port…" }).click();
+  const transactionalDraft = component.locator(".spec-port-card--editor");
+  await transactionalDraft.getByLabel("Port name").fill("service");
+  await transactionalDraft.getByLabel("Display name").fill("Timer service");
+  await transactionalDraft.getByLabel("Initiative").selectOption("provides");
+  await transactionalDraft.getByLabel("Kind").selectOption("custom");
+  await transactionalDraft.getByLabel("Custom kind name").fill("timer_service");
+  await transactionalDraft.getByLabel("Bus width").fill("DATA_WIDTH");
+  await transactionalDraft.getByLabel("Description").fill("Transaction-level timer service");
+  await transactionalDraft.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => state.transactions.length).toBe(5);
+  expect(state.transactions[4]?.operations[0]).toEqual({
+    type: "add_component_port",
+    component: componentRef,
+    port: {
+      name: "service",
+      family: "transactional",
+      display_name: "Timer service",
+      initiative: "provides",
+      kind: "custom",
+      custom_kind: "timer_service",
+      bus_width: "DATA_WIDTH",
+      description: "Transaction-level timer service",
+    },
+  });
+
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Add structured port…" }).click();
+  const structuredDraft = component.locator(".spec-port-card--editor");
+  await structuredDraft.getByLabel("Port name").fill("response");
+  await structuredDraft.getByLabel("Display name").fill("Response bundle");
+  await structuredDraft.getByLabel("Direction").selectOption("out");
+  await expect(structuredDraft).toContainText("Packed struct");
+  await structuredDraft.getByLabel("Description").fill("Packed response fields");
+  await structuredDraft.getByRole("button", { name: "Save" }).click();
+  await expect.poll(() => state.transactions.length).toBe(6);
+  expect(state.transactions[5]?.operations[0]).toEqual({
+    type: "add_component_port",
+    component: componentRef,
+    port: {
+      name: "response",
+      family: "structured",
+      display_name: "Response bundle",
+      direction: "out",
+      description: "Packed response fields",
+    },
+  });
+});
+
+test("validates port drafts, enforces one active editor, and restores focus", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  const component = page.locator("#component-component_timer");
+  const options = component.getByRole("button", { name: "Options" });
+
+  await options.click();
+  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  const draft = component.locator(".spec-port-card--editor");
+  await draft.getByLabel("Port name").fill("invalid_range");
+  await draft.getByLabel("Range").fill("31::0");
+  await draft.getByRole("button", { name: "Save" }).click();
+  await expect(draft.getByRole("alert")).toContainText("left:right expression pair");
+
+  await component.locator(".spec-port-card", { hasText: "irq" }).getByRole("button", { name: "Edit" }).click();
+  await expect(page.getByText("Save or cancel the current edit before starting another one.")).toBeVisible();
+  await expect(draft).toBeVisible();
+
+  await draft.getByRole("button", { name: "Cancel" }).click();
+  await expect(options).toBeFocused();
+  await expect(draft).toHaveCount(0);
 });
 
 test("preserves an inline draft when the optimistic revision is stale", async ({ page }) => {
@@ -469,12 +651,12 @@ test("preserves an inline draft when the optimistic revision is stale", async ({
   await openSample(page);
   const component = page.locator("#component-component_timer");
   await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: "Edit details…" }).click();
-  await component.getByLabel("Description").fill("Keep this draft after refresh.");
+  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.getByLabel("Specification text").fill("Keep this draft after refresh.");
   state.staleNextTransaction = true;
   await component.getByRole("button", { name: "Save changes" }).click();
 
-  await expect(component.getByLabel("Description")).toHaveValue("Keep this draft after refresh.");
+  await expect(component.getByLabel("Specification text")).toHaveValue("Keep this draft after refresh.");
   await expect(component.getByRole("alert")).toContainText("draft was preserved");
   await component.getByRole("button", { name: "Save changes" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
@@ -488,7 +670,7 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
 
   await page.getByRole("menuitem", { name: "Help", exact: true }).click();
   await page.getByRole("menuitem", { name: "Getting Started" }).click();
-  await expect(page.getByRole("dialog", { name: "Getting started" })).toContainText("saved automatically");
+  await expect(page.getByRole("dialog", { name: "Getting started" })).toContainText("persisted automatically");
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("menuitem", { name: "File", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Document", exact: true })).toBeVisible();

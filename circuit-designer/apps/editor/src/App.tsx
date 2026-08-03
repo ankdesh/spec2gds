@@ -12,13 +12,14 @@ import {
   SpecEditorHttpClient,
   type A2UIDocumentBatch,
   type ActivityState,
+  type ComponentPortInput,
+  type ComponentPortUpdateInput,
   type DocumentSnapshot,
   type EditorTransactionOperation,
   type EntityMetadataInput,
   type EntityAction,
   type EntityRef,
   type SourceChangeEvent,
-  type WirePortInput,
 } from "@spec2gds/document-core";
 
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
@@ -93,13 +94,13 @@ export default function App() {
     }
   }, [client]);
 
-  const createDocument = useCallback(async (nextPath: string) => {
-    if (!nextPath) return false;
+  const createDocument = useCallback(async (nextPath: string, title: string) => {
+    if (!nextPath || !title.trim()) return false;
     setLoading(true);
     setError("");
     setNotice("");
     try {
-      const nextSnapshot = await client.createDocument(nextPath);
+      const nextSnapshot = await client.createDocument(nextPath, title.trim());
       const [nextBatch, nextActivity] = await Promise.all([
         client.getA2UIBatch(),
         client.getActivity(),
@@ -213,12 +214,18 @@ export default function App() {
       const launch = await client.launchCircuitDesigner(entityKind, entityId);
       if (pendingWindow) pendingWindow.location.replace(launch.editor_url);
       else window.open(launch.editor_url, "_blank", "noopener,noreferrer");
-      const omitted = launch.omitted_bus_items.length;
+      const omittedBuses = launch.omitted_bus_items.length;
+      const omittedPorts = launch.omitted_ports.length;
       const entity = [...(snapshot?.designs ?? []), ...(snapshot?.components ?? [])]
         .find((item) => item.ref.entity_id === entityId);
       setNotice(
         `Opened ${entityName(entity?.vlnv)} in Circuit Designer`
-        + (omitted ? `; ${omitted} bus item${omitted === 1 ? " was" : "s were"} omitted by the direct-port adapter.` : "."),
+        + (omittedBuses || omittedPorts
+          ? `; omitted ${[
+            omittedBuses ? `${omittedBuses} bus item${omittedBuses === 1 ? "" : "s"}` : "",
+            omittedPorts ? `${omittedPorts} non-wire port${omittedPorts === 1 ? "" : "s"}` : "",
+          ].filter(Boolean).join(" and ")} from the wire-only projection.`
+          : "."),
       );
     } catch (caught) {
       pendingWindow?.close();
@@ -316,6 +323,12 @@ export default function App() {
   const editController = useMemo<SpecDocumentEditController | undefined>(() => {
     if (!snapshot) return undefined;
     return {
+      async updateDocumentTitle(title: string) {
+        await commitEditorOperations(
+          [{ type: "set_document_title", title }],
+          `Specification name changed to ${title} and saved automatically.`,
+        );
+      },
       async createEntity(kind: "component" | "design", name: string) {
         await commitEditorOperations(
           [{ type: "create_entity", kind, name }],
@@ -328,13 +341,13 @@ export default function App() {
           `${ref.entity_kind === "component" ? "Component" : "Design"} details saved automatically.`,
         );
       },
-      async addComponentPort(ref: EntityRef, value: WirePortInput) {
+      async addComponentPort(ref: EntityRef, value: ComponentPortInput) {
         await commitEditorOperations(
           [{ type: "add_component_port", component: ref, port: value }],
           `Port ${value.name} added and saved automatically.`,
         );
       },
-      async updateComponentPort(ref: EntityRef, name: string, value: Omit<WirePortInput, "name">) {
+      async updateComponentPort(ref: EntityRef, name: string, value: ComponentPortUpdateInput) {
         await commitEditorOperations(
           [{ type: "update_component_port", component: ref, name, port: value }],
           `Port ${name} updated and saved automatically.`,

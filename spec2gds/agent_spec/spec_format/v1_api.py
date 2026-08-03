@@ -56,15 +56,19 @@ from spec2gds.agent_spec.spec_format.transactions import (
     ReorderConnections,
     ReorderInstances,
     ReorderNarrativeBlocks,
+    SetDocumentTitle,
     SetInternalDesign,
     SetEntityMetadata,
     SetNarrativeEntityLinks,
     SpecEditTransaction,
+    StructuredPortInput,
+    TransactionalPortInput,
     UpsertConnection,
     UpsertDocumentXml,
     UpsertInstance,
     UpsertNarrativeBlock,
     UpdateComponentPort,
+    WirePortInput,
 )
 
 
@@ -79,6 +83,7 @@ class CreateDocumentRequest(pydantic.BaseModel):
     """Create and activate an empty deterministic V1 package."""
 
     path: str
+    title: str | None = None
     document_id: str | None = None
     sidecar_root: str | None = None
 
@@ -146,10 +151,18 @@ class V1Session:
         self.actions = ActionService(create_reference_registry(), self.sidecar)
 
     @classmethod
-    def create(cls, path: str, document_id: str | None, sidecar_root: str | None = None) -> "V1Session":
+    def create(
+        cls,
+        path: str,
+        document_id: str | None,
+        sidecar_root: str | None = None,
+        title: str | None = None,
+    ) -> "V1Session":
         """Create a package on disk, then reopen it through the normal validator."""
-        package = SpecPackage.create(document_id)
         destination = Path(path).expanduser().resolve()
+        if title is not None and not title.strip():
+            raise ValueError("Specification name is required.")
+        package = SpecPackage.create(document_id, title=title.strip() if title is not None else destination.stem)
         if destination.exists():
             raise FileExistsError(f"Refusing to replace existing specification package: {destination}")
         package.save(str(destination))
@@ -244,7 +257,12 @@ def create_app() -> typing.Any:
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
         """Create, validate, activate, and return a new package snapshot."""
         try:
-            state["active"] = V1Session.create(request.path, request.document_id, request.sidecar_root)
+            state["active"] = V1Session.create(
+                request.path,
+                request.document_id,
+                request.sidecar_root,
+                request.title,
+            )
             return _snapshot(active())
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
@@ -312,6 +330,7 @@ def create_app() -> typing.Any:
             "editor_url": launched.editor_url,
             "reused_session": launched.reused_session,
             "omitted_bus_items": list(projection.omitted_bus_items),
+            "omitted_ports": list(projection.omitted_ports),
         }
 
     @app.get("/documents/a2ui")
@@ -681,6 +700,8 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             if entity_kind not in {"component", "design"}:
                 raise ValueError("create_entity kind must be component or design.")
             operations.append(CreateEntity(typing.cast(typing.Any, entity_kind), str(raw.get("name", ""))))
+        elif kind == "set_document_title":
+            operations.append(SetDocumentTitle(str(raw.get("title", ""))))
         elif kind == "set_entity_metadata":
             operations.append(SetEntityMetadata(
                 entity(raw["entity"]),
@@ -694,18 +715,12 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
                 raise ValueError(f"{kind} requires a port object.")
             if kind == "update_component_port" and "name" in value:
                 raise ValueError("Port names cannot be changed by update_component_port.")
-            direction = str(value.get("direction", ""))
-            if direction not in {"in", "out", "inout"}:
-                raise ValueError("Wire port direction must be in, out, or inout.")
             port_name = str(value.get("name", "")) if kind == "add_component_port" else str(raw.get("name", ""))
             operation_type = AddComponentPort if kind == "add_component_port" else UpdateComponentPort
             operations.append(operation_type(
                 entity(raw["component"]),
                 port_name,
-                typing.cast(typing.Any, direction),
-                _optional_text(value.get("left")),
-                _optional_text(value.get("right")),
-                _optional_text(value.get("description")),
+                _decode_component_port_input(value, include_name=kind == "add_component_port"),
             ))
         elif kind == "upsert_instance":
             operations.append(UpsertInstance(entity(raw["design"]), InstanceIR(**raw["instance"])))
@@ -763,6 +778,68 @@ def _optional_text(value: typing.Any) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _decode_component_port_input(
+    value: dict[str, typing.Any],
+    *,
+    include_name: bool,
+) -> WirePortInput | TransactionalPortInput | StructuredPortInput:
+    """Decode the public discriminated port union without accepting legacy shapes."""
+    family = str(value.get("family", ""))
+    common = {"family", "display_name", "description"}
+    if include_name:
+        common.add("name")
+    display_name = _optional_text(value.get("display_name"))
+    description = _optional_text(value.get("description"))
+    if family == "wire":
+        _reject_operation_fields(value, common | {"direction", "range"}, "wire port")
+        direction = str(value.get("direction", ""))
+        if direction not in {"in", "out", "inout"}:
+            raise ValueError("Wire port direction must be in, out, or inout.")
+        return WirePortInput(
+            direction=typing.cast(typing.Any, direction),
+            range=_optional_text(value.get("range")),
+            display_name=display_name,
+            description=description,
+        )
+    if family == "transactional":
+        _reject_operation_fields(
+            value,
+            common | {"initiative", "kind", "custom_kind", "bus_width"},
+            "transactional port",
+        )
+        initiative = str(value.get("initiative", ""))
+        if initiative not in {"requires", "provides", "both"}:
+            raise ValueError("Transactional port initiative must be requires, provides, or both.")
+        transaction_kind = _optional_text(value.get("kind"))
+        if transaction_kind not in {None, "tlm_port", "tlm_socket", "simple_socket", "multi_socket", "custom"}:
+            raise ValueError("Unknown transactional port kind.")
+        return TransactionalPortInput(
+            initiative=typing.cast(typing.Any, initiative),
+            kind=typing.cast(typing.Any, transaction_kind),
+            custom_kind=_optional_text(value.get("custom_kind")),
+            bus_width=_optional_text(value.get("bus_width")),
+            display_name=display_name,
+            description=description,
+        )
+    if family == "structured":
+        _reject_operation_fields(value, common | {"direction"}, "structured port")
+        direction = str(value.get("direction", ""))
+        if direction not in {"in", "out", "inout"}:
+            raise ValueError("Structured port direction must be in, out, or inout.")
+        return StructuredPortInput(
+            direction=typing.cast(typing.Any, direction),
+            display_name=display_name,
+            description=description,
+        )
+    raise ValueError("Port family must be wire, transactional, or structured.")
+
+
+def _reject_operation_fields(value: dict[str, typing.Any], allowed: set[str], label: str) -> None:
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(f"Unknown {label} fields: {', '.join(unknown)}")
 
 
 def _snapshot(session: V1Session) -> dict[str, typing.Any]:

@@ -127,17 +127,33 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
 
 def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_path: Path) -> None:
     endpoints = _endpoints()
+    with pytest.raises(fastapi.HTTPException) as unnamed:
+        endpoints["create_document"](CreateDocumentRequest(
+            path=str(tmp_path / "unnamed.spec"),
+            title="   ",
+        ))
+    assert unnamed.value.status_code == 422
+    assert "name is required" in str(unnamed.value.detail)
+
     path = tmp_path / "direct-editor.spec"
-    snapshot = endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="direct_editor"))
+    snapshot = endpoints["create_document"](CreateDocumentRequest(
+        path=str(path),
+        document_id="direct_editor",
+        title="Direct Editor",
+    ))
+    assert snapshot["narrative"]["title"] == "Direct Editor"
 
     created = endpoints["transaction"](TransactionRequest(
         expected_source_revision_hash=snapshot["source_revision_hash"],
         operations=[
+            {"type": "set_document_title", "title": "Timer Specification"},
             {"type": "create_entity", "kind": "component", "name": "timer"},
             {"type": "create_entity", "kind": "design", "name": "timer_top"},
         ],
     ))["snapshot"]
     assert created["components"][0]["vlnv"] == "spec2gds.local:work:timer:1.0"
+    assert created["document_id"] == "direct_editor"
+    assert created["narrative"]["title"] == "Timer Specification"
     assert created["designs"][0]["vlnv"] == "spec2gds.local:work:timer_top:1.0"
     assert created["entry_designs"][0]["ref"] == created["designs"][0]["ref"]
     component = created["components"][0]["ref"]
@@ -157,9 +173,10 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "component": component,
                 "port": {
                     "name": "count",
+                    "family": "wire",
+                    "display_name": "Count",
                     "direction": "out",
-                    "left": "31",
-                    "right": "0",
+                    "range": "31:0",
                     "description": "Current count",
                 },
             },
@@ -174,14 +191,24 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
         and item.get("section", {}).get("entity_ref") == component
     )
     assert next(item["value"] for item in component_section["facts"] if item["label"] == "Display name") == "Timer block"
+    document_root = next(
+        item
+        for message in a2ui["messages"]
+        for item in message.get("updateComponents", {}).get("components", [])
+        if item.get("component") == "SpecDocument"
+    )
+    assert document_root["title"] == "Timer Specification"
     ports = next(
         item["table"]
         for message in a2ui["messages"]
         for item in message.get("updateComponents", {}).get("components", [])
         if item.get("component") == "SpecTable"
-        and item.get("table", {}).get("kind") == "component_ports"
+        and item.get("table", {}).get("kind") == "component_port"
     )
-    assert ports["rows"][0]["cells"]["left"]["value"] == "31"
+    assert ports["rows"][0]["cells"]["family"]["value"] == "wire"
+    assert ports["rows"][0]["cells"]["range"]["value"] == "31:0"
+    assert ports["rows"][0]["cells"]["display_name"]["value"] == "Count"
+    assert ports["title"] == "count"
 
     updated = endpoints["transaction"](TransactionRequest(
         expected_source_revision_hash=edited["source_revision_hash"],
@@ -190,14 +217,49 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
             "component": component,
             "name": "count",
             "port": {
+                "family": "wire",
+                "display_name": "Count",
                 "direction": "inout",
-                "left": None,
-                "right": None,
+                "range": None,
                 "description": "Scalar count",
             },
         }],
     ))["snapshot"]
     assert updated["source_revision_hash"] != edited["source_revision_hash"]
+
+    updated = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=updated["source_revision_hash"],
+        operations=[
+            {
+                "type": "add_component_port",
+                "component": component,
+                "port": {
+                    "name": "service",
+                    "family": "transactional",
+                    "display_name": "Service",
+                    "description": "Submits work.",
+                    "initiative": "provides",
+                    "kind": "custom",
+                    "custom_kind": "timer_service",
+                    "bus_width": "DATA_WIDTH",
+                },
+            },
+            {
+                "type": "add_component_port",
+                "component": component,
+                "port": {
+                    "name": "response",
+                    "family": "structured",
+                    "display_name": "Response",
+                    "description": "Packed response aggregate.",
+                    "direction": "out",
+                },
+            },
+        ],
+    ))["snapshot"]
+    assert {port["style"] for port in updated["components"][0]["ports"]} == {
+        "wire", "transactional", "structured",
+    }
 
     with pytest.raises(fastapi.HTTPException) as duplicate:
         endpoints["transaction"](TransactionRequest(
@@ -216,9 +278,10 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "name": "count",
                 "port": {
                     "name": "renamed",
+                    "family": "wire",
+                    "display_name": "",
                     "direction": "out",
-                    "left": None,
-                    "right": None,
+                    "range": None,
                     "description": "Not allowed",
                 },
             }],
@@ -254,6 +317,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert result["entity_kind"] == "design"
     assert result["editor_url"].startswith("http://127.0.0.1:4180?document_id=")
     assert result["omitted_bus_items"] == ["link0"]
+    assert result["omitted_ports"] == []
     assert published[0]["protocol_version"] == "circuit-designer.v1"
 
     component_result = endpoints["launch_circuit"](CircuitLaunchRequest(
@@ -262,7 +326,9 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     ))
     assert component_result["entity_kind"] == "component"
     assert component_result["entity_id"] == "component_leaf"
-    assert published[1]["design"]["boundary_terminals"][0]["label"] == "irq_in"
+    assert published[1]["design"]["boundary_terminals"] == []
+    assert published[1]["design"]["instances"][0]["label"] == "leaf"
+    assert published[1]["components"][0]["terminals"][0]["label"] == "irq_in"
 
 
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:
@@ -327,7 +393,22 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
                 "type": "set_entity_metadata",
                 "entity": target,
                 "description": "Produces a demo-link payload for its connected target.",
-            }
+            },
+            {
+                "operation_id": "add_leaf_service",
+                "type": "upsert_component_port",
+                "component": target,
+                "port": {
+                    "name": "assistant_service",
+                    "family": "transactional",
+                    "display_name": "Assistant service",
+                    "description": "Exercises the shared port mutation helper.",
+                    "initiative": "provides",
+                    "kind": "tlm_port",
+                    "custom_kind": None,
+                    "bus_width": "32",
+                },
+            },
         ],
     )
 
@@ -381,6 +462,11 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
     assert changes[0]["decision"] == "accepted"
     reopened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
     assert reopened["source_revision_hash"] == applied["source_revision_hash"]
+    leaf = next(item for item in reopened["components"] if item["ref"]["entity_id"] == "component_leaf")
+    assistant_port = next(item for item in leaf["ports"] if item["name"] == "assistant_service")
+    assert (assistant_port["style"], assistant_port["initiative"], assistant_port["bus_width"]) == (
+        "transactional", "provides", "32",
+    )
     assert endpoints["assistant_changes"]()["assistant_changes"] == changes
 
 

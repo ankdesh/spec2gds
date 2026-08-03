@@ -118,23 +118,54 @@ export interface EntityMetadataInput {
   description: string;
 }
 
-export interface WirePortInput {
+export interface PortCommonInput {
   name: string;
-  direction: "in" | "out" | "inout";
-  left: string | null;
-  right: string | null;
-  description: string;
+  display_name?: string | null;
+  description?: string | null;
 }
+
+export interface WirePortInput extends PortCommonInput {
+  family: "wire";
+  direction: "in" | "out" | "inout";
+  range: string | null;
+}
+
+export type TransactionalPortKind =
+  | "tlm_port"
+  | "tlm_socket"
+  | "simple_socket"
+  | "multi_socket"
+  | "custom";
+
+export interface TransactionalPortInput extends PortCommonInput {
+  family: "transactional";
+  initiative: "requires" | "provides" | "both";
+  kind: TransactionalPortKind | null;
+  custom_kind: string | null;
+  bus_width: string | null;
+}
+
+export interface StructuredPortInput extends PortCommonInput {
+  family: "structured";
+  direction: "in" | "out" | "inout";
+}
+
+export type ComponentPortInput = WirePortInput | TransactionalPortInput | StructuredPortInput;
+export type ComponentPortUpdateInput =
+  | Omit<WirePortInput, "name">
+  | Omit<TransactionalPortInput, "name">
+  | Omit<StructuredPortInput, "name">;
 
 export type EditorTransactionOperation =
   | { type: "create_entity"; kind: "component" | "design"; name: string }
+  | { type: "set_document_title"; title: string }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
-  | { type: "add_component_port"; component: EntityRef; port: WirePortInput }
+  | { type: "add_component_port"; component: EntityRef; port: ComponentPortInput }
   | {
     type: "update_component_port";
     component: EntityRef;
     name: string;
-    port: Omit<WirePortInput, "name">;
+    port: ComponentPortUpdateInput;
   };
 
 export interface TransactionResult {
@@ -152,7 +183,7 @@ export interface DocumentSnapshot {
   bus_definitions: unknown[];
   abstraction_definitions: unknown[];
   component_compositions: ComponentComposition[];
-  narrative: { blocks: NarrativeBlock[] };
+  narrative: { title: string; blocks: NarrativeBlock[] };
   diagnostics: { source: string[]; artifacts: string[] };
 }
 
@@ -163,6 +194,7 @@ export interface CircuitDesignerLaunch {
   editor_url: string;
   reused_session: boolean;
   omitted_bus_items: string[];
+  omitted_ports: string[];
 }
 
 export interface AssistantLaunch {
@@ -232,11 +264,11 @@ export class SpecEditorHttpClient {
     });
   }
 
-  createDocument(path: string): Promise<DocumentSnapshot> {
+  createDocument(path: string, title: string): Promise<DocumentSnapshot> {
     return this.request("/documents/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, title }),
     });
   }
 

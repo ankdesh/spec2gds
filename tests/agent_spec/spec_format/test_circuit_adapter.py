@@ -1,7 +1,10 @@
 """Direct-port IP-XACT to Circuit Designer adapter tests."""
 
+import pytest
+
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
+    CircuitAdapterError,
     project_component_to_circuit,
     project_design_to_circuit,
 )
@@ -9,7 +12,7 @@ from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.testing import _xml
 
 
-def _direct_revision() -> SpecRevision:
+def _direct_revision(*, connect_structured: bool = False) -> SpecRevision:
     package = SpecPackage.create("adapter_demo")
     package.add_document(
         "component",
@@ -23,6 +26,13 @@ def _direct_revision() -> SpecRevision:
       <ipxact:direction>inout</ipxact:direction>
       <ipxact:vectors><ipxact:vector><ipxact:left>DATA_WIDTH-1</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector></ipxact:vectors>
     </ipxact:wire></ipxact:port>
+    <ipxact:port><ipxact:name>service</ipxact:name><ipxact:transactional>
+      <ipxact:initiative>requires</ipxact:initiative>
+    </ipxact:transactional></ipxact:port>
+    <ipxact:port><ipxact:name>bundle</ipxact:name><ipxact:structured packed="true">
+      <ipxact:struct direction="out"/>
+      <ipxact:structPortTypeDefs><ipxact:structPortTypeDef><ipxact:typeName>bundle_struct_t</ipxact:typeName></ipxact:structPortTypeDef></ipxact:structPortTypeDefs>
+    </ipxact:structured></ipxact:port>
   </ipxact:ports></ipxact:model>""",
         ),
     )
@@ -38,6 +48,10 @@ def _direct_revision() -> SpecRevision:
       <ipxact:direction>in</ipxact:direction>
       <ipxact:vectors><ipxact:vector><ipxact:left>DATA_WIDTH-1</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector></ipxact:vectors>
     </ipxact:wire></ipxact:port>
+    <ipxact:port><ipxact:name>bundle</ipxact:name><ipxact:structured packed="true">
+      <ipxact:struct direction="in"/>
+      <ipxact:structPortTypeDefs><ipxact:structPortTypeDef><ipxact:typeName>bundle_struct_t</ipxact:typeName></ipxact:structPortTypeDef></ipxact:structPortTypeDefs>
+    </ipxact:structured></ipxact:port>
   </ipxact:ports></ipxact:model>""",
         ),
     )
@@ -47,7 +61,7 @@ def _direct_revision() -> SpecRevision:
             "design",
             "design_direct",
             "direct",
-            """
+            f"""
   <ipxact:componentInstances>
     <ipxact:componentInstance><ipxact:instanceName>source0</ipxact:instanceName><ipxact:componentRef vendor="spec2gds.example" library="demo" name="source" version="1.0"/></ipxact:componentInstance>
     <ipxact:componentInstance><ipxact:instanceName>sink0</ipxact:instanceName><ipxact:componentRef vendor="spec2gds.example" library="demo" name="sink" version="1.0"/></ipxact:componentInstance>
@@ -58,7 +72,15 @@ def _direct_revision() -> SpecRevision:
       <ipxact:internalPortReference componentInstanceRef="source0" portRef="data"/>
       <ipxact:internalPortReference componentInstanceRef="sink0" portRef="data"/>
     </ipxact:portReferences>
-  </ipxact:adHocConnection></ipxact:adHocConnections>""",
+  </ipxact:adHocConnection>
+  {'''<ipxact:adHocConnection>
+    <ipxact:name>bundle_link</ipxact:name>
+    <ipxact:portReferences>
+      <ipxact:internalPortReference componentInstanceRef="source0" portRef="bundle"/>
+      <ipxact:internalPortReference componentInstanceRef="sink0" portRef="bundle"/>
+    </ipxact:portReferences>
+  </ipxact:adHocConnection>''' if connect_structured else ''}
+  </ipxact:adHocConnections>""",
         ),
     )
     return SpecRevision.from_package(package)
@@ -79,6 +101,7 @@ def test_projects_direct_ports_inout_and_opaque_vector_text() -> None:
     assert {terminal["width"] for terminal in terminals} == {"[DATA_WIDTH-1:0]"}
     assert projection.source_entity_kind == "design"
     assert projection.omitted_bus_items == ()
+    assert set(projection.omitted_ports) == {"source.service", "source.bundle", "sink.bundle"}
 
 
 def test_reports_bus_interconnections_as_intentionally_omitted() -> None:
@@ -88,20 +111,37 @@ def test_reports_bus_interconnections_as_intentionally_omitted() -> None:
     projection = project_design_to_circuit(revision, "design_subsystem_internal")
 
     assert projection.omitted_bus_items == ("link0",)
+    assert projection.omitted_ports == ()
     assert projection.document["design"]["nets"] == []
 
 
-def test_projects_a_leaf_component_as_a_direct_port_boundary() -> None:
+def test_projects_a_leaf_component_as_one_preview_instance() -> None:
     revision = _direct_revision()
     projection = project_component_to_circuit(revision, "component_source")
 
     assert projection.source_entity_kind == "component"
     assert projection.source_entity_id == "component_source"
-    assert projection.document["design"]["instances"] == []
-    assert projection.document["design"]["boundary_terminals"] == [{
+    assert projection.document["document_id"].endswith("_v2")
+    assert projection.document["design"]["boundary_terminals"] == []
+    assert projection.document["design"]["instances"] == [{
+        "id": "component_source_preview",
+        "label": "source",
+        "component_id": "component_source",
+        "parameter_values": {},
+    }]
+    assert projection.document["components"][0]["label"] == "source"
+    assert projection.document["components"][0]["terminals"] == [{
         "id": "data",
         "label": "data",
         "direction": "inout",
         "width": "[DATA_WIDTH-1:0]",
         "category": "port",
     }]
+    assert projection.omitted_ports == ("service", "bundle")
+
+
+def test_rejects_a_design_connection_that_uses_a_non_wire_port() -> None:
+    revision = _direct_revision(connect_structured=True)
+
+    with pytest.raises(CircuitAdapterError, match="bundle is structured"):
+        project_design_to_circuit(revision, "design_direct")

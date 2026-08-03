@@ -10,7 +10,7 @@ import pytest
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.cli import main
 from spec2gds.agent_spec.spec_format.ipxact import validate_ipxact_document
-from spec2gds.agent_spec.spec_format.testing import build_test_package
+from spec2gds.agent_spec.spec_format.testing import _xml, build_test_package
 
 
 def test_package_factory_covers_the_v1_source_shape() -> None:
@@ -92,6 +92,39 @@ def test_profile_rejects_implementation_views() -> None:
   <ipxact:model><ipxact:views><ipxact:view><ipxact:name>rtl</ipxact:name></ipxact:view></ipxact:views></ipxact:model>
 </ipxact:component>'''
     with pytest.raises(ValueError, match="does not support IP-XACT element views"):
+        validate_ipxact_document(component, "component")
+
+
+@pytest.mark.parametrize(("port_xml", "message"), [
+    ("""<ipxact:port><ipxact:name>wide</ipxact:name><ipxact:wire>
+      <ipxact:direction>out</ipxact:direction><ipxact:vectors>
+        <ipxact:vector><ipxact:left>7</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector>
+        <ipxact:vector><ipxact:left>3</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector>
+      </ipxact:vectors></ipxact:wire></ipxact:port>""", "at most one vector range"),
+    ("""<ipxact:port><ipxact:name>clock</ipxact:name><ipxact:wire>
+      <ipxact:direction>in</ipxact:direction><ipxact:qualifier><ipxact:isClock>true</ipxact:isClock></ipxact:qualifier>
+    </ipxact:wire></ipxact:port>""", "uses unsupported fields: qualifier"),
+    ("""<ipxact:port><ipxact:name>logical</ipxact:name><ipxact:wire allLogicalDirectionsAllowed="true">
+      <ipxact:direction>in</ipxact:direction>
+    </ipxact:wire></ipxact:port>""", "uses unsupported attributes: allLogicalDirectionsAllowed"),
+    ("""<ipxact:port><ipxact:name>service</ipxact:name><ipxact:transactional>
+      <ipxact:initiative>requires</ipxact:initiative><ipxact:protocol><ipxact:protocolType>tlm</ipxact:protocolType></ipxact:protocol>
+    </ipxact:transactional></ipxact:port>""", "uses unsupported fields: protocol"),
+    ("""<ipxact:port><ipxact:name>bundle</ipxact:name><ipxact:structured packed="false">
+      <ipxact:union direction="out"/><ipxact:structPortTypeDefs><ipxact:structPortTypeDef>
+        <ipxact:typeName>bundle_struct_t</ipxact:typeName>
+      </ipxact:structPortTypeDef></ipxact:structPortTypeDefs>
+    </ipxact:structured></ipxact:port>""", "must be packed"),
+])
+def test_profile_rejects_unsupported_port_constructs(port_xml: str, message: str) -> None:
+    component = _xml(
+        "component",
+        "component_bad_port",
+        "bad_port",
+        f"<ipxact:model><ipxact:ports>{port_xml}</ipxact:ports></ipxact:model>",
+    )
+
+    with pytest.raises(ValueError, match=message):
         validate_ipxact_document(component, "component")
 
 
