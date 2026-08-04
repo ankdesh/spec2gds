@@ -6,6 +6,8 @@ import argparse
 import os
 from collections.abc import Sequence
 
+from spec2gds.service_registry import load_service_registry
+
 _APP_FACTORY = "spec2gds.agent_spec.spec_format.v1_api:create_app"
 
 
@@ -19,20 +21,21 @@ def _port(value: str) -> int:
 
 def _parser(command: str) -> argparse.ArgumentParser:
     """Build the shared server/editor argument parser."""
+    configured = load_service_registry().spec_editor.service
     parser = argparse.ArgumentParser(
         prog=f"spec2gds-{command}",
         description="Run the V1 API and its bundled React/A2UI browser editor.",
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("AGENT_SPEC_HOST", "127.0.0.1"),
-        help="bind address (default: AGENT_SPEC_HOST or 127.0.0.1)",
+        default=os.environ.get("AGENT_SPEC_HOST", configured.host),
+        help="bind address (default: AGENT_SPEC_HOST or config/services.json)",
     )
     parser.add_argument(
         "--port",
         type=_port,
-        default=_port(os.environ.get("AGENT_SPEC_PORT", "8000")),
-        help="bind port (default: AGENT_SPEC_PORT or 8000)",
+        default=_port(os.environ.get("AGENT_SPEC_PORT", str(configured.port))),
+        help="bind port (default: AGENT_SPEC_PORT or config/services.json)",
     )
     parser.add_argument(
         "--reload",

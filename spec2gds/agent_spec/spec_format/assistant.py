@@ -268,9 +268,11 @@ def compile_assistant_operations(
             _delete_named(root_for(reference), "parameters", "parameter", "name", str(raw["name"]))
         elif operation_type == "upsert_component_port":
             reference = _ref(raw["component"])
+            _assert_component_port_editable(revision, reference)
             _upsert_component_port(root_for(reference), _mapping(raw, "port"))
         elif operation_type == "delete_component_port":
             reference = _ref(raw["component"])
+            _assert_component_port_editable(revision, reference)
             _delete_component_port(root_for(reference), str(raw["name"]))
         elif operation_type == "upsert_bus_interface":
             reference = _ref(raw["component"])
@@ -413,6 +415,23 @@ def _assert_operation_owned(revision: SpecRevision, target: EntityRef, operation
             raise ValueError("A shared or entry design cannot become component-owned content.")
     if kind in {"upsert_narrative_block", "delete_narrative_block", "reorder_narrative_blocks", "set_narrative_entity_links"}:
         _assert_narrative_operation_owned(revision, target, operation)
+
+
+def _assert_component_port_editable(
+    revision: SpecRevision,
+    component: EntityRef,
+) -> None:
+    """Apply the same component-boundary rule used by direct editor transactions."""
+    if component.entity_kind != "component":
+        raise ValueError("Component port operations require a component reference.")
+    if any(
+        item.component.entity_id == component.entity_id
+        for item in revision.manifest.component_compositions
+    ):
+        raise ValueError(
+            "Ports on components with internal designs are read-only until "
+            "boundary editing is supported."
+        )
 
 
 def _assert_narrative_operation_owned(revision: SpecRevision, target: EntityRef, operation: dict[str, typing.Any]) -> None:

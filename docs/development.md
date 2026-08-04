@@ -12,12 +12,17 @@ circuit-designer/packages/layout/  placement and orthogonal routing
 circuit-designer/packages/react/   canvas rendering and gestures
 circuit-designer/apps/editor/      specification editor frontend
 circuit-designer/apps/standalone/  independent Circuit Designer frontend
-external-assistant/                optional assistant service and web client
+ai-assistant/                      optional AI Assistant service and web client
+config/services.json               shared hosted-service IP/port registry
 tests/                             Python contract and integration tests
 docs/                              current architecture and workflows
 ```
 
 ## Python environment
+
+Service processes and frontend dev proxies read `config/services.json` at
+startup. Use `SPEC2GDS_SERVICE_CONFIG=/absolute/path/services.json` for an
+untracked machine-specific registry.
 
 Use `uv`; do not install project packages into the system interpreter.
 
@@ -77,12 +82,12 @@ combined workflow should be owned by the specification editor and delegate to
 the existing Circuit Designer command rather than expanding Circuit Designer's
 default startup.
 
-## Optional assistant
+## Optional AI Assistant
 
-The assistant is a separate Python project with its own `uv` environment.
+The AI Assistant is a separate Python project with its own `uv` environment.
 
 ```bash
-cd external-assistant
+cd ai-assistant
 uv sync
 uv run python -m pytest -q
 cd web

@@ -18,6 +18,7 @@ import { z } from "zod";
 
 import type {
   A2UIDocumentBatch,
+  ComponentInstanceInput,
   ComponentPortInput,
   ComponentPortUpdateInput,
   DocumentCell,
@@ -41,10 +42,17 @@ export interface SpecOpenCircuitEventDetail {
 export interface SpecDocumentEditController {
   updateDocumentTitle(title: string): Promise<void>;
   createEntity(kind: "component" | "design", name: string): Promise<void>;
+  addComponentInstance(design: EntityRef, value: ComponentInstanceInput): Promise<void>;
+  componentInstanceOptions(): ComponentInstanceOption[];
   updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput): Promise<void>;
   addComponentPort(ref: EntityRef, value: ComponentPortInput): Promise<void>;
   updateComponentPort(ref: EntityRef, name: string, value: ComponentPortUpdateInput): Promise<void>;
   portEditingAvailability(ref: EntityRef): { enabled: boolean; reason: string };
+}
+
+export interface ComponentInstanceOption {
+  label: string;
+  vlnv: string;
 }
 
 interface EditCoordinator {
@@ -300,13 +308,17 @@ function SectionOptionsMenu({
   section,
   onCreate,
   onEditDetails,
+  onAddInstance,
   onAddPort,
+  instanceAvailability,
   portAvailability,
 }: {
   section: DocumentSectionData;
   onCreate?: (kind: "component" | "design") => void;
   onEditDetails?: () => void;
+  onAddInstance?: () => void;
   onAddPort?: (family: ComponentPortInput["family"]) => void;
+  instanceAvailability?: { enabled: boolean; reason: string };
   portAvailability?: { enabled: boolean; reason: string };
 }) {
   const [open, setOpen] = useState(false);
@@ -438,6 +450,21 @@ function SectionOptionsMenu({
               Edit text…
             </button>
           )}
+          {onAddInstance && (
+            <button
+              disabled={!instanceAvailability?.enabled}
+              onClick={() => {
+                close(true);
+                onAddInstance();
+              }}
+              role="menuitem"
+              title={instanceAvailability?.enabled ? undefined : instanceAvailability?.reason}
+              type="button"
+            >
+              <span>Add component instance…</span>
+              {!instanceAvailability?.enabled && <small>No components</small>}
+            </button>
+          )}
           {onAddPort && (["wire", "transactional", "structured"] as const).map((family) => (
             <button
               disabled={!portAvailability?.enabled}
@@ -538,6 +565,7 @@ function FactList({
 type SectionEditMode = ""
   | "create-component"
   | "create-design"
+  | "add-component-instance"
   | "metadata"
   | "add-wire-port"
   | "add-transactional-port"
@@ -621,6 +649,91 @@ function EntityCreationForm({
   );
 }
 
+function ComponentInstanceForm({ state }: { state: SectionEditState }) {
+  const options = state.controller?.componentInstanceOptions() ?? [];
+  const [name, setName] = useState("");
+  const [componentVlnv, setComponentVlnv] = useState(options[0]?.vlnv ?? "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
+  const existingNames = new Set(
+    state.section.tables
+      .find((table) => table.kind === "design_instances")
+      ?.rows.map((row) => String(row.cells.name?.value ?? "")) ?? [],
+  );
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const design = state.section.entity_ref;
+    const trimmedName = name.trim();
+    if (!design || !state.controller) return;
+    if (!trimmedName) {
+      setError("Instance name is required.");
+      return;
+    }
+    if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(trimmedName)) {
+      setError("Use a letter or underscore first, followed by letters, numbers, dots, underscores, or hyphens.");
+      return;
+    }
+    if (existingNames.has(trimmedName)) {
+      setError(`This design already has an instance named ${trimmedName}.`);
+      return;
+    }
+    if (!componentVlnv) {
+      setError("Choose a component.");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await state.controller.addComponentInstance(design, {
+        name: trimmedName,
+        component_vlnv: componentVlnv,
+      });
+      state.cancel();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="spec-inline-editor spec-instance-editor" onSubmit={submit}>
+      <div>
+        <label htmlFor={`${state.editorId}-name`}>Instance name</label>
+        <input
+          autoComplete="off"
+          id={`${state.editorId}-name`}
+          onChange={(event) => setName(event.target.value)}
+          pattern="[A-Za-z_][A-Za-z0-9_.-]*"
+          ref={inputRef}
+          value={name}
+        />
+      </div>
+      <div>
+        <label htmlFor={`${state.editorId}-component`}>Component</label>
+        <select
+          id={`${state.editorId}-component`}
+          onChange={(event) => setComponentVlnv(event.target.value)}
+          value={componentVlnv}
+        >
+          {options.map((option) => (
+            <option key={option.vlnv} value={option.vlnv}>{option.label}</option>
+          ))}
+        </select>
+        <small>Components defined at the specification’s top level are available here.</small>
+      </div>
+      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+      <div className="spec-edit-actions">
+        <button disabled={busy} type="submit">{busy ? "Adding…" : "Add instance"}</button>
+        <button disabled={busy} onClick={state.cancel} type="button">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 function EntityMetadataForm({ state }: { state: SectionEditState }) {
   const [displayName] = useState(() => factValue(state.section, "Display name"));
   const [shortDescription] = useState(() => factValue(state.section, "Short description"));
@@ -683,6 +796,12 @@ const SpecSection = createComponentImplementation(
     const portAvailability = section.entity_ref?.entity_kind === "component" && coordinator.controller
       ? coordinator.controller.portEditingAvailability(section.entity_ref)
       : { enabled: false, reason: "Port editing is unavailable." };
+    const instanceOptions = coordinator.controller?.componentInstanceOptions() ?? [];
+    const instanceAvailability = instanceOptions.length
+      ? { enabled: true, reason: "" }
+      : { enabled: false, reason: "Create a component before adding an instance." };
+    const isEntryDesign = section.entity_ref?.entity_kind === "design"
+      && section.eyebrow === "Entry design";
 
     const begin = (nextMode: Exclude<SectionEditMode, "">) => {
       const nextEditorId = `${section.section_id}-${nextMode}`;
@@ -718,6 +837,10 @@ const SpecSection = createComponentImplementation(
               <Heading>{section.title}</Heading>
             </div>
             <SectionOptionsMenu
+              instanceAvailability={instanceAvailability}
+              onAddInstance={isEntryDesign && coordinator.controller
+                ? () => begin("add-component-instance")
+                : undefined}
               onAddPort={section.entity_ref?.entity_kind === "component" && coordinator.controller
                 ? (family) => begin(`add-${family}-port`)
                 : undefined}
@@ -731,6 +854,7 @@ const SpecSection = createComponentImplementation(
           </header>
           {mode === "create-component" && <EntityCreationForm kind="component" state={editState} />}
           {mode === "create-design" && <EntityCreationForm kind="design" state={editState} />}
+          {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
           {mode === "metadata"
             ? <EntityMetadataForm state={editState} />
             : sectionText && <p className="spec-section-text">{sectionText}</p>}
@@ -740,9 +864,6 @@ const SpecSection = createComponentImplementation(
               : []}
             section={section}
           />
-          {mode === "add-wire-port" && <PortEditorCard adding family="wire" sectionEdit={editState} />}
-          {mode === "add-transactional-port" && <PortEditorCard adding family="transactional" sectionEdit={editState} />}
-          {mode === "add-structured-port" && <PortEditorCard adding family="structured" sectionEdit={editState} />}
           {renderChildren(props.children, buildChild)}
         </section>
       </SectionEditContext.Provider>
@@ -785,8 +906,8 @@ export function DocumentTableView({
   changedPaths?: string[];
 }) {
   const sectionEdit = useContext(SectionEditContext);
-  if (table.kind === "component_port") {
-    return <ComponentPortCard changedPaths={changedPaths} sectionEdit={sectionEdit} table={table} />;
+  if (table.kind === "component_ports" || table.kind === "component_port") {
+    return <ComponentPortsTable changedPaths={changedPaths} sectionEdit={sectionEdit} table={table} />;
   }
   if (table.kind === "component_ports_empty") {
     return (
@@ -893,7 +1014,29 @@ function portInputFromRow(row: DocumentTable["rows"][number]): ComponentPortInpu
   };
 }
 
-function ComponentPortCard({
+const PORT_FAMILY_BY_MODE: Partial<Record<SectionEditMode, PortFamily>> = {
+  "add-wire-port": "wire",
+  "add-transactional-port": "transactional",
+  "add-structured-port": "structured",
+};
+
+function portDefinition(row: DocumentTable["rows"][number], family: PortFamily): React.ReactNode {
+  if (family === "wire") {
+    return <>{rowText(row, "direction") || "—"}{rowText(row, "range") && <> · <code>{rowText(row, "range")}</code></>}</>;
+  }
+  if (family === "transactional") {
+    const details = [
+      rowText(row, "initiative"),
+      titleCase(rowText(row, "transaction_kind")),
+      rowText(row, "custom_kind"),
+      rowText(row, "bus_width") && `width ${rowText(row, "bus_width")}`,
+    ].filter(Boolean);
+    return details.join(" · ") || "—";
+  }
+  return <>{rowText(row, "direction") || "—"} · Packed struct</>;
+}
+
+function ComponentPortsTable({
   table,
   changedPaths,
   sectionEdit,
@@ -902,11 +1045,64 @@ function ComponentPortCard({
   changedPaths: string[];
   sectionEdit: SectionEditState | null;
 }) {
+  const addFamily = sectionEdit ? PORT_FAMILY_BY_MODE[sectionEdit.mode] : undefined;
+  return (
+    <section className="spec-table-block spec-ports-table" aria-labelledby={`${table.table_id}-title`}>
+      <div className="spec-table-block__heading">
+        <h4 id={`${table.table_id}-title`}>Ports</h4>
+        <span>{table.rows.length} {table.rows.length === 1 ? "port" : "ports"}</span>
+      </div>
+      <div className="spec-table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Family</th>
+              <th scope="col">Display name</th>
+              <th scope="col">Definition</th>
+              <th scope="col">Description</th>
+              <th scope="col"><span className="spec-visually-hidden">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {addFamily && sectionEdit && (
+              <tr className="spec-port-editor-row">
+                <td colSpan={6}><PortEditorCard adding family={addFamily} sectionEdit={sectionEdit} /></td>
+              </tr>
+            )}
+            {table.rows.map((row) => (
+              <ComponentPortRow
+                changedPaths={changedPaths}
+                key={row.row_id}
+                row={row}
+                sectionEdit={sectionEdit}
+                table={table}
+              />
+            ))}
+            {!table.rows.length && !addFamily && (
+              <tr><td className="spec-table-empty" colSpan={6}>No wire, transactional, or structured ports have been defined.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ComponentPortRow({
+  table,
+  row,
+  changedPaths,
+  sectionEdit,
+}: {
+  table: DocumentTable;
+  row: DocumentTable["rows"][number];
+  changedPaths: string[];
+  sectionEdit: SectionEditState | null;
+}) {
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const row = table.rows[0];
-  if (!row) return null;
   const name = rowText(row, "name");
   const editorId = `${sectionEdit?.section.section_id ?? table.table_id}-port-${name}`;
   const family = rowText(row, "family") as PortFamily;
@@ -914,28 +1110,33 @@ function ComponentPortCard({
   const canEdit = Boolean(sectionEdit?.portAvailability.enabled && sectionEdit.controller);
   if (editing && sectionEdit) {
     return (
-      <PortEditorCard
-        family={family}
-        initial={portInputFromRow(row)}
-        onFinished={() => {
-          coordinator.finishEditor(editorId);
-          setEditing(false);
-          window.setTimeout(() => buttonRef.current?.focus(), 0);
-        }}
-        sectionEdit={sectionEdit}
-      />
+      <tr className="spec-port-editor-row">
+        <td colSpan={6}>
+          <PortEditorCard
+            family={family}
+            initial={portInputFromRow(row)}
+            onFinished={() => {
+              coordinator.finishEditor(editorId);
+              setEditing(false);
+              window.setTimeout(() => buttonRef.current?.focus(), 0);
+            }}
+            sectionEdit={sectionEdit}
+          />
+        </td>
+      </tr>
     );
   }
   const displayName = rowText(row, "display_name");
   const description = rowText(row, "description");
   const changed = changedPaths.some((path) => path.includes(table.table_id) || path.includes(row.row_id));
   return (
-    <section className={`spec-port-card${changed ? " spec-proposal-changed" : ""}`} aria-labelledby={`${table.table_id}-title`}>
-      <header>
-        <div>
-          <span className="spec-port-kind">{titleCase(family)} port</span>
-          <h4 id={`${table.table_id}-title`}>{name}</h4>
-        </div>
+    <tr className={`spec-port-row${changed ? " spec-proposal-changed" : ""}`}>
+      <th scope="row"><strong>{name}</strong></th>
+      <td><span className="spec-port-family">{titleCase(family)}</span></td>
+      <td>{displayName || "—"}</td>
+      <td>{portDefinition(row, family)}</td>
+      <td className="spec-port-text">{description || "—"}</td>
+      <td className="spec-port-row-actions">
         {canEdit ? (
           <button
             className="spec-port-edit-button"
@@ -949,40 +1150,11 @@ function ComponentPortCard({
           </button>
         ) : editingSupported ? (
           <small title={sectionEdit?.portAvailability.reason}>
-            Composite boundary is read-only
+            Read-only
           </small>
         ) : null}
-      </header>
-      <table className="spec-port-definition">
-        <tbody>
-          <tr><th scope="row">Family</th><td>{titleCase(family)}</td></tr>
-          <tr><th scope="row">Display name</th><td>{displayName || "—"}</td></tr>
-          {family === "wire" && (
-            <>
-              <tr><th scope="row">Direction</th><td>{rowText(row, "direction") || "—"}</td></tr>
-              <tr><th scope="row">Range</th><td><code>{rowText(row, "range") || "—"}</code></td></tr>
-            </>
-          )}
-          {family === "transactional" && (
-            <>
-              <tr><th scope="row">Initiative</th><td>{rowText(row, "initiative") || "—"}</td></tr>
-              <tr><th scope="row">Kind</th><td>{titleCase(rowText(row, "transaction_kind")) || "—"}</td></tr>
-              {rowText(row, "transaction_kind") === "custom" && (
-                <tr><th scope="row">Custom kind</th><td>{rowText(row, "custom_kind") || "—"}</td></tr>
-              )}
-              <tr><th scope="row">Bus width</th><td>{rowText(row, "bus_width") || "—"}</td></tr>
-            </>
-          )}
-          {family === "structured" && (
-            <>
-              <tr><th scope="row">Direction</th><td>{rowText(row, "direction") || "—"}</td></tr>
-              <tr><th scope="row">Structure</th><td>Packed struct</td></tr>
-            </>
-          )}
-          <tr><th scope="row">Description</th><td className="spec-port-text">{description || "—"}</td></tr>
-        </tbody>
-      </table>
-    </section>
+      </td>
+    </tr>
   );
 }
 
@@ -1079,7 +1251,7 @@ function PortEditorCard({
 
   return (
     <form
-      className="spec-port-card spec-port-card--editor"
+      className="spec-port-editor"
       onSubmit={(event) => { event.preventDefault(); void save(); }}
       ref={formRef}
     >

@@ -12,9 +12,13 @@ Read in this order:
    scenarios.
 3. [Specification editor UI](editor-ui.md) — menus, shortcuts, section options,
    and intentionally unavailable commands.
-4. [Sample application method](sample-apps.md) — how to build one representative
+4. [Service configuration](service-configuration.md) — shared IP/port registry,
+   discovery, and cross-application launch behavior.
+5. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
+   boundary, and proposal contracts.
+6. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-5. [Development guide](development.md) — setup, commands, checks, and where code
+7. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule

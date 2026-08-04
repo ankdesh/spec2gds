@@ -367,7 +367,7 @@ def _component_tables(
 ) -> list[DocumentTable]:
     prefix = _anchor("component", component.ref.entity_id)
     tables = _configuration_tables(root, prefix)
-    port_tables: list[DocumentTable] = []
+    port_rows: list[dict[str, DocumentCell]] = []
     for port in _descendants(root, "model/ports/port"):
         wire = _child(port, "wire")
         transactional = _child(port, "transactional")
@@ -400,31 +400,29 @@ def _component_tables(
             "structure": _cell("Packed struct" if structured is not None else "", "/model/ports/port/structured", kind="enum"),
             "description": _cell(_text(port, "description"), "/model/ports/port/description", kind="multiline"),
         }
-        port_tables.append(_table(
-            f"{prefix}-port-{_slug(name)}",
-            "component_port",
-            name,
-            _columns(
-                ("family", "Family", "/model/ports/port/(wire|transactional|structured)"),
-                ("display_name", "Display name", "/model/ports/port/displayName"),
-                ("direction", "Direction", "/model/ports/port/(wire/direction|structured/struct/@direction)"),
-                ("range", "Range", "/model/ports/port/wire/vectors/vector"),
-                ("initiative", "Initiative", "/model/ports/port/transactional/initiative"),
-                ("transaction_kind", "Kind", "/model/ports/port/transactional/kind"),
-                ("custom_kind", "Custom kind", "/model/ports/port/transactional/kind/@custom"),
-                ("bus_width", "Bus width", "/model/ports/port/transactional/busWidth"),
-                ("structure", "Structure", "/model/ports/port/structured"),
-                ("description", "Description", "/model/ports/port/description"),
-            ),
-            [row],
-        ))
-    tables.extend(port_tables or [DocumentTable(
-        table_id=f"{prefix}-ports-empty",
-        kind="component_ports_empty",
+        port_rows.append(row)
+    tables.append(DocumentTable(
+        table_id=f"{prefix}-ports",
+        kind="component_ports",
         title="Ports",
-        columns=[],
-        rows=[],
-    )])
+        columns=_columns(
+            ("name", "Name", "/model/ports/port/name"),
+            ("family", "Family", "/model/ports/port/(wire|transactional|structured)"),
+            ("display_name", "Display name", "/model/ports/port/displayName"),
+            ("direction", "Direction", "/model/ports/port/(wire/direction|structured/struct/@direction)"),
+            ("range", "Range", "/model/ports/port/wire/vectors/vector"),
+            ("initiative", "Initiative", "/model/ports/port/transactional/initiative"),
+            ("transaction_kind", "Kind", "/model/ports/port/transactional/kind"),
+            ("custom_kind", "Custom kind", "/model/ports/port/transactional/kind/@custom"),
+            ("bus_width", "Bus width", "/model/ports/port/transactional/busWidth"),
+            ("structure", "Structure", "/model/ports/port/structured"),
+            ("description", "Description", "/model/ports/port/description"),
+        ),
+        rows=[
+            DocumentRow(row_id=f"{prefix}-ports-row-{_row_key(row, 'component_ports')}", cells=row)
+            for row in port_rows
+        ],
+    ))
 
     interface_rows: list[dict[str, DocumentCell]] = []
     port_map_rows: list[dict[str, DocumentCell]] = []
@@ -732,13 +730,6 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         title="Overview",
         level=1,
         eyebrow="Unified source document",
-        facts=[
-            DocumentFact(label="Document ID", value=revision.document_id),
-            DocumentFact(label="Source revision", value=revision.source_revision_hash),
-            DocumentFact(label="Components", value=str(len(revision.components))),
-            DocumentFact(label="Designs", value=str(len(revision.designs))),
-            DocumentFact(label="Entry designs", value=str(len(revision.entry_designs()))),
-        ],
         narrative=[block.model_dump(mode="json") for block in overview_narrative],
     ))
 

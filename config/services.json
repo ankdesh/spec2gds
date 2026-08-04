@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "spec_editor": {
+    "service": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "base_path": ""
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "base_path": "/editor"
+    }
+  },
+  "circuit_designer": {
+    "service": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 4100,
+      "base_path": "/api/circuit-designer/v1"
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 4180,
+      "base_path": ""
+    }
+  },
+  "ai_assistant": {
+    "service": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 4200,
+      "base_path": ""
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 4200,
+      "base_path": ""
+    }
+  }
+}

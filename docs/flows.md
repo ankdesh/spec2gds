@@ -28,7 +28,9 @@ sequenceDiagram
 Scenario: a designer creates `timer.spec` with the visible name “Timer
 Platform,” adds a component and entry design from their group menus, edits the
 introductory paragraph, and adds wire, transactional, and packed structured
-ports. Each port is shown in its own compact definition card.
+ports. Ports appear as rows in one definition table. The designer can then add
+top-level component instances to the entry design by choosing from the
+specification’s component list.
 Each Save submits one typed transaction. The API compares the submitted
 revision hash with the active revision, constructs IP-XACT XML server-side, and
 atomically saves a valid candidate. A stale or invalid candidate leaves the
@@ -113,13 +115,13 @@ component definitions and connects their instances. Save validates the batch,
 updates the ephemeral session, and downloads a new file. The service never
 overwrites a local file in place.
 
-## Review an assistant proposal
+## Review an AI Assistant proposal
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Editor
-    participant Assistant
+    participant Assistant as AI Assistant
     participant API as Owning API
     participant Source as Canonical source
 
@@ -138,7 +140,7 @@ sequenceDiagram
     end
 ```
 
-Scenario: the assistant proposes a description or circuit change. Discussion
+Scenario: the AI Assistant proposes a description or circuit change. Discussion
 alone changes nothing. The user reviews the typed candidate. Acceptance still
 runs normal validation and revision checks; a stale proposal must be rebuilt.
 

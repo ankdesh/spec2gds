@@ -154,6 +154,9 @@
 }
 
 .spec-section {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
   scroll-margin-top: 1.5rem;
   padding: 2.2rem clamp(1.4rem, 5vw, 4rem);
   border-bottom: 1px solid var(--spec-line, #d9ddd9);
@@ -306,10 +309,11 @@
 }
 
 .spec-table-block {
+  min-width: 0;
+  max-width: 100%;
   margin: 1.7rem 0;
 }
 
-.spec-port-card,
 .spec-ports-empty {
   margin: 1rem 0;
   border: 1px solid var(--spec-line, #d9ddd9);
@@ -319,25 +323,9 @@
   overflow: hidden;
 }
 
-.spec-port-card > header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.8rem 1rem;
-  border-bottom: 1px solid var(--spec-line, #d9ddd9);
-  background: var(--spec-table-head, #f1f3ef);
-}
-
-.spec-port-card > header h4,
 .spec-ports-empty h4 {
   margin: 0.18rem 0 0;
   font-size: 1rem;
-}
-
-.spec-port-card > header small {
-  color: var(--spec-muted, #59616c);
-  font-size: 0.68rem;
 }
 
 .spec-port-kind {
@@ -353,31 +341,62 @@
   background: white;
 }
 
-.spec-port-definition {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.82rem;
+.spec-ports-table table {
+  min-width: 52rem;
 }
 
-.spec-port-definition th,
-.spec-port-definition td {
-  padding: 0.62rem 0.8rem;
-  border-bottom: 1px solid var(--spec-line, #d9ddd9);
-  text-align: left;
-  vertical-align: top;
+.spec-ports-table {
+  overflow: hidden;
 }
 
-.spec-port-definition tr:last-child th,
-.spec-port-definition tr:last-child td {
-  border-bottom: 0;
+.spec-port-row > th {
+  background: white;
+  color: #202925;
+  font-size: 0.79rem;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
-.spec-port-definition th {
-  width: 7rem;
-  color: var(--spec-muted, #59616c);
+.spec-port-family {
+  display: inline-block;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--spec-accent, #246b5a) 10%, white);
+  color: var(--spec-accent, #246b5a);
   font-size: 0.68rem;
-  letter-spacing: 0.055em;
-  text-transform: uppercase;
+  font-weight: 750;
+}
+
+.spec-port-row-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.spec-table-empty {
+  color: var(--spec-muted, #59616c);
+  font-style: italic;
+  text-align: center;
+}
+
+.spec-port-editor-row > td {
+  padding: 0;
+  background: color-mix(in srgb, var(--spec-accent, #246b5a) 4%, white);
+}
+
+.spec-port-editor {
+  padding: 0.9rem;
+}
+
+.spec-port-editor > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.1rem;
+}
+
+.spec-port-editor > header h4 {
+  margin: 0.18rem 0 0;
 }
 
 .spec-port-text {
@@ -395,12 +414,6 @@
   margin: 0.35rem 0 0;
   color: var(--spec-muted, #59616c);
   font-size: 0.82rem;
-}
-
-.spec-port-card--editor {
-  padding-bottom: 1rem;
-  border-color: color-mix(in srgb, var(--spec-accent, #246b5a) 45%, white);
-  background: color-mix(in srgb, var(--spec-accent, #246b5a) 4%, white);
 }
 
 .spec-port-editor-grid {
@@ -429,8 +442,8 @@
   font: inherit;
 }
 
-.spec-port-card--editor > .spec-edit-error,
-.spec-port-card--editor > .spec-port-actions {
+.spec-port-editor > .spec-edit-error,
+.spec-port-editor > .spec-port-actions {
   margin: 0 1rem;
 }
 
@@ -453,6 +466,8 @@
 }
 
 .spec-table-scroll {
+  box-sizing: border-box;
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--spec-line, #d9ddd9);
@@ -653,6 +668,7 @@
 }
 
 .spec-inline-editor input,
+.spec-inline-editor select,
 .spec-inline-editor textarea,
 .spec-port-edit-row input,
 .spec-port-edit-row select {
@@ -667,6 +683,7 @@
 }
 
 .spec-inline-editor input:focus,
+.spec-inline-editor select:focus,
 .spec-inline-editor textarea:focus,
 .spec-port-edit-row input:focus,
 .spec-port-edit-row select:focus {
@@ -680,6 +697,22 @@
   margin-top: 0.35rem;
   color: var(--spec-muted, #59616c);
   font-size: 0.7rem;
+}
+
+.spec-instance-editor .spec-edit-actions {
+  grid-column: 1 / -1;
+}
+
+.spec-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .spec-edit-field-wide,
@@ -766,6 +799,21 @@
   .spec-create-editor,
   .spec-port-editor-grid {
     grid-template-columns: 1fr;
+  }
+
+  .spec-ports-table table {
+    min-width: 0;
+    table-layout: fixed;
+  }
+
+  .spec-ports-table th,
+  .spec-ports-table td {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  .spec-port-row-actions {
+    width: auto;
   }
 
   .spec-edit-field-wide,

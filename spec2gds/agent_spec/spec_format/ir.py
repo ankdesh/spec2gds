@@ -58,6 +58,12 @@ class PortIR:
     width: int | str | None = None
     initiative: str = ""
     bus_width: str = ""
+    display_name: str = ""
+    description: str = ""
+    range: str = ""
+    kind: str = ""
+    custom_kind: str = ""
+    packed: bool = False
 
 
 @dataclass(frozen=True)
@@ -409,6 +415,10 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
         direction = ""
         initiative = ""
         bus_width = ""
+        range_value = ""
+        kind_value = ""
+        custom_kind = ""
+        packed = False
         if wire is not None:
             direction = _text(wire, "direction")
             style_node = wire
@@ -417,14 +427,19 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
                 left = _text(vectors[0], "left")
                 right = _text(vectors[0], "right")
                 width = f"[{left}:{right}]" if left and right else None
+                range_value = left if left == right else f"{left}:{right}"
             elif len(vectors) > 1:
                 width = None
         elif transactional is not None:
             initiative = _text(transactional, "initiative")
             bus_width = _text(transactional, "busWidth")
+            kind_node = _first(transactional.xpath("./*[local-name()='kind']"))
+            kind_value = (kind_node.text or "").strip() if kind_node is not None else ""
+            custom_kind = (kind_node.get("custom") or "").strip() if kind_node is not None else ""
         elif structured is not None:
             struct = _first(structured.xpath("./*[local-name()='struct']"))
             direction = (struct.get("direction") or "").strip() if struct is not None else ""
+            packed = (structured.get("packed") or "true").strip().lower() == "true"
         ports.append(
             PortIR(
                 name=_text(port, "name"),
@@ -433,6 +448,12 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
                 width=width,
                 initiative=initiative,
                 bus_width=bus_width,
+                display_name=_text(port, "displayName"),
+                description=_text(port, "description"),
+                range=range_value,
+                kind=kind_value,
+                custom_kind=custom_kind,
+                packed=packed,
             )
         )
     interfaces: list[InterfaceIR] = []

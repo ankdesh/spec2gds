@@ -12,6 +12,7 @@ from spec2gds.agent_spec.spec_format.testing import build_test_package, write_te
 from spec2gds.agent_spec.spec_format.cli import main as package_cli
 from spec2gds.agent_spec.spec_format.v1_api import (
     ActionInputRequest,
+    AssistantLaunchRequest,
     CircuitLaunchRequest,
     CreateDocumentRequest,
     OpenDocumentRequest,
@@ -31,6 +32,11 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()
     assert "samples" not in endpoints
+    services = endpoints["services"]()
+    assert services["services"]["ai_assistant"]["ui_url"] == "http://127.0.0.1:4200"
+    assert services["services"]["circuit_designer"]["service_url"].endswith(
+        "/api/circuit-designer/v1"
+    )
     editor_html = endpoints["editor"]()
     assert "A2UI Document Editor" in editor_html
     assert "/editor-assets/assets/index-" in editor_html
@@ -158,6 +164,22 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
     assert created["entry_designs"][0]["ref"] == created["designs"][0]["ref"]
     component = created["components"][0]["ref"]
 
+    created = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=created["source_revision_hash"],
+        operations=[{
+            "type": "upsert_instance",
+            "design": created["designs"][0]["ref"],
+            "instance": {
+                "name": "timer0",
+                "component_vlnv": "spec2gds.local:work:timer:1.0",
+            },
+        }],
+    ))["snapshot"]
+    assert created["designs"][0]["instances"] == [{
+        "name": "timer0",
+        "component_vlnv": "spec2gds.local:work:timer:1.0",
+    }]
+
     edited = endpoints["transaction"](TransactionRequest(
         expected_source_revision_hash=created["source_revision_hash"],
         operations=[
@@ -203,12 +225,12 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
         for message in a2ui["messages"]
         for item in message.get("updateComponents", {}).get("components", [])
         if item.get("component") == "SpecTable"
-        and item.get("table", {}).get("kind") == "component_port"
+        and item.get("table", {}).get("kind") == "component_ports"
     )
     assert ports["rows"][0]["cells"]["family"]["value"] == "wire"
     assert ports["rows"][0]["cells"]["range"]["value"] == "31:0"
     assert ports["rows"][0]["cells"]["display_name"]["value"] == "Count"
-    assert ports["title"] == "count"
+    assert ports["title"] == "Ports"
 
     updated = endpoints["transaction"](TransactionRequest(
         expected_source_revision_hash=edited["source_revision_hash"],
@@ -329,6 +351,35 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert published[1]["design"]["boundary_terminals"] == []
     assert published[1]["design"]["instances"][0]["label"] == "leaf"
     assert published[1]["components"][0]["terminals"][0]["label"] == "irq_in"
+
+
+def test_editor_launches_ai_assistant_with_transitional_url_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    package_path = tmp_path / "assistant-launch.spec"
+    write_test_package(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    component = next(
+        item["ref"]
+        for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    request = AssistantLaunchRequest(
+        entity_kind="component",
+        entity_id=component["entity_id"],
+    )
+
+    monkeypatch.delenv("AI_ASSISTANT_URL", raising=False)
+    monkeypatch.setenv("EXTERNAL_ASSISTANT_URL", "http://127.0.0.1:4300/")
+    legacy = endpoints["launch_assistant"](request)
+    assert legacy["assistant_url"].startswith("http://127.0.0.1:4300/launch/spec?")
+
+    monkeypatch.setenv("AI_ASSISTANT_URL", "http://127.0.0.1:4400/")
+    preferred = endpoints["launch_assistant"](request)
+    assert preferred["assistant_url"].startswith("http://127.0.0.1:4400/launch/spec?")
+    assert preferred["target"] == component
 
 
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:
@@ -551,6 +602,92 @@ def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Pa
     with pytest.raises(fastapi.HTTPException) as rejected:
         endpoints["assistant_proposal_apply"](stale)
     assert rejected.value.status_code == 409
+
+
+def test_spec_assistant_port_edits_match_direct_editor_boundaries(tmp_path: Path) -> None:
+    package_path = tmp_path / "assistant-port-profile.spec"
+    write_test_package(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    leaf = next(
+        item["ref"]
+        for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    composite = next(
+        item["ref"]
+        for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_subsystem"
+    )
+
+    def proposal(
+        proposal_id: str,
+        target: dict[str, object],
+        port: dict[str, object],
+    ) -> SpecChangeProposal:
+        return SpecChangeProposal(
+            proposal_id=proposal_id,
+            document_id=opened["document_id"],
+            target=target,
+            base_source_revision_hash=opened["source_revision_hash"],
+            title="Port proposal",
+            summary="Exercise the shared port profile.",
+            rationale="Assistant and direct edits must enforce the same rules.",
+            operations=[{
+                "operation_id": f"{proposal_id}_operation",
+                "type": "upsert_component_port",
+                "component": target,
+                "port": port,
+            }],
+        )
+
+    structured = endpoints["assistant_proposal_preview"](
+        proposal(
+            "proposal_structured_port",
+            leaf,
+            {
+                "name": "response",
+                "family": "structured",
+                "display_name": "Response",
+                "description": "Packed response aggregate.",
+                "direction": "in",
+            },
+        )
+    )
+    assert structured["status"] == "valid"
+
+    family_change = endpoints["assistant_proposal_preview"](
+        proposal(
+            "proposal_family_change",
+            leaf,
+            {
+                "name": "irq",
+                "family": "structured",
+                "display_name": None,
+                "description": None,
+                "direction": "out",
+            },
+        )
+    )
+    assert family_change["status"] == "invalid"
+    assert "family cannot be changed" in family_change["diagnostics"][0]
+
+    composite_edit = endpoints["assistant_proposal_preview"](
+        proposal(
+            "proposal_composite_port",
+            composite,
+            {
+                "name": "boundary",
+                "family": "wire",
+                "display_name": None,
+                "description": None,
+                "direction": "inout",
+                "range": None,
+            },
+        )
+    )
+    assert composite_edit["status"] == "invalid"
+    assert "internal designs are read-only" in composite_edit["diagnostics"][0]
 
 
 def test_document_projection_uses_semantic_row_ids() -> None:

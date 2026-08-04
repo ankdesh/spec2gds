@@ -11,6 +11,21 @@ afterEach(async () => {
 });
 
 describe("Circuit Designer REST service", () => {
+  it("exposes health and the shared service directory", async () => {
+    service = new CircuitDesignerService();
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
+
+    expect(await (await fetch(`${base}/health`)).json()).toMatchObject({
+      status: "ok",
+      service: "circuit_designer",
+    });
+    const directory = await (await fetch(`${base}/services`)).json() as {
+      services: { ai_assistant: { ui_url: string } };
+    };
+    expect(directory.services.ai_assistant.ui_url).toBe("http://127.0.0.1:4200");
+  });
+
   it("uses ephemeral process memory by default", async () => {
     const document = simpleDocumentFixture();
     service = new CircuitDesignerService();

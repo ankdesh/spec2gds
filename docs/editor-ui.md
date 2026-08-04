@@ -3,6 +3,10 @@
 The specification editor uses a sticky application bar so document operations
 remain available while the unified specification scrolls. The active package
 name appears in the bar; hover it to inspect the full server-local path.
+The upper-right **AI Assistant ↗** button uses the shared service registry and
+opens the Assistant with the Spec workspace selected. Use an entity's **More
+actions → Explore with AI Assistant** command when a fully entity-bound chat is
+required.
 
 ## Application menus
 
@@ -40,18 +44,25 @@ heading. Narrative subheadings and table captions do not receive this control.
   directly between the entity heading and its structured definitions. VLNV,
   Vendor, Library, Name, and Version are kept in the source but omitted from
   the normal rendered document.
+- Entry-design entities provide **Add component instance**. The inline form
+  collects a unique instance name and selects from components defined at the
+  specification’s top level. Saving appends the IP-XACT component instance to
+  that design.
 - Leaf components provide separate **Add wire port**, **Add transactional
-  port**, and **Add structured port** commands. Each existing port is rendered
-  as its own compact card and exposes Edit when supported. Port names and
-  families stay fixed after creation.
+  port**, and **Add structured port** commands. One Ports table contains every
+  port as a row and exposes an Edit action per supported row. New-port drafts
+  also appear inside this table. Port names and families stay fixed after
+  creation.
 - Every section shows disabled **Launch activity — Coming soon** so the planned
   workflow has a stable location without implying that it already runs.
 - Entity-backed sections provide **More actions**, which opens the existing
   action and assistant workflow.
 
-Overview contains only the disabled Launch activity placeholder. The Designs
-and Components groups add their respective creation command. Protocol entities
-keep More actions but do not offer circuit launch.
+Overview contains narrative content when present plus the disabled Launch
+activity placeholder; internal document IDs, revision hashes, and entity counts
+are intentionally omitted. The Designs and Components groups add their
+respective creation command. Protocol entities keep More actions but do not
+offer circuit launch.
 
 ## Direct editing lifecycle
 

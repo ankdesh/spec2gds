@@ -1,0 +1,33 @@
+{
+  "name": "@spec2gds/ai-assistant-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4201",
+    "build": "tsc -b && vite build",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@assistant-ui/react": "^0.15.1",
+    "@assistant-ui/react-a2a": "^0.2.0",
+    "@spec2gds/circuit-core": "file:../../circuit-designer/packages/core",
+    "@spec2gds/circuit-layout": "file:../../circuit-designer/packages/layout",
+    "@spec2gds/circuit-react": "file:../../circuit-designer/packages/react",
+    "@spec2gds/document-a2ui-react": "file:../../circuit-designer/packages/document-a2ui-react",
+    "@spec2gds/document-core": "file:../../circuit-designer/packages/document-core",
+    "assistant-stream": "^0.3.30",
+    "lucide-react": "^0.468.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.6",
+    "@types/node": "^24.1.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "5.8.3",
+    "vite": "^6.0.7",
+    "vitest": "3.2.7"
+  }
+}

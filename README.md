@@ -34,6 +34,19 @@ The two editors have different source-of-truth rules:
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
 
+## Configure service addresses
+
+All three applications read [`config/services.json`](config/services.json).
+It contains the host, port, and base path for each API and browser UI. Change
+that file before starting the services when the defaults are not appropriate;
+set `SPEC2GDS_SERVICE_CONFIG` to point at an alternate registry. Existing
+per-service environment variables remain supported as overrides.
+
+The editors expose **AI Assistant ↗** in their upper-right toolbar. Circuit
+Designer opens a chat already bound to the active circuit. Spec Editor opens
+the Spec workspace; use an entity's **Options → More actions… → Explore with AI
+Assistant** when the chat should be bound to that exact entity.
+
 ## Run the specification editor
 
 Python development uses `uv` and the repository virtual environment.
@@ -56,10 +69,12 @@ Options → Add design** commands to create name-only IP-XACT entities. New
 entities use the editor defaults `spec2gds.local:work:<name>:1.0`, and new
 designs become entry designs. These underlying IP-XACT identity fields are not
 shown in the normal document view. Component and design sections provide
-**Edit text** for the introductory paragraph beneath the heading.
+**Edit text** for the introductory paragraph beneath the heading. Entry-design
+sections also provide **Add component instance**: enter a unique instance name
+and choose any component defined at the specification’s top level.
 Leaf-component sections provide separate **Add wire port**, **Add
-transactional port**, and **Add structured port** commands. Every port is shown
-in its own compact card with its display name and description. Wire ports use
+transactional port**, and **Add structured port** commands. All ports are shown
+as editable rows in one Ports table. Wire ports use
 an optional Range such as `DATA_WIDTH-1:0`; transactional ports capture their
 initiative and optional kind; structured ports are generated as packed structs
 with their required IP-XACT type definition maintained internally. Save
@@ -112,20 +127,22 @@ file, or **Open file** to load an existing `.circuit.json`.
 
 To use **Open circuit** from the specification editor, run both services. The
 default Spec API (`8000`) and Circuit service (`4100`) already use compatible
-settings.
+settings from `config/services.json`.
 
-## Optional assistant
+## Optional AI Assistant
 
 ```bash
-cd external-assistant
+cd ai-assistant
 uv sync
 cd web && npm install && cd ..
 export OPENAI_API_KEY="..."
-uv run spec2gds-external-assistant
+uv run spec2gds-ai-assistant
 ```
 
-The assistant is optional and does not sit on either editor's critical path.
-See [external-assistant/README.md](external-assistant/README.md).
+The AI Assistant is optional and does not sit on either editor's critical path.
+It checks the configured Spec and Circuit health endpoints when its workspace
+chooser opens. `EXTERNAL_ASSISTANT_URL` and the old CLI name remain transitional
+aliases. See [ai-assistant/README.md](ai-assistant/README.md).
 
 ## Verify changes
 
@@ -138,7 +155,7 @@ npm test
 npm run test:e2e          # Circuit Designer only
 npm run test:e2e:editor   # specification editor only
 
-cd ../external-assistant
+cd ../ai-assistant
 uv run python -m pytest -q
 cd web && npm run build
 ```

@@ -12,6 +12,7 @@ import {
 } from "@spec2gds/circuit-core";
 import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
 import { EphemeralCircuitSessionBackend } from "./session-backend";
+import { resolvedServiceDirectory, type PublicServiceDirectory } from "./service-registry";
 
 type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
 
@@ -19,6 +20,7 @@ export interface CircuitServiceOptions {
   backend?: MutableProviderBackend;
   providerAllowlist?: string[];
   now?: () => Date;
+  serviceDirectory?: PublicServiceDirectory;
 }
 
 interface RouteContext {
@@ -33,11 +35,13 @@ export class CircuitDesignerService {
   private readonly subscribers = new Map<string, Set<ServerResponse>>();
   private readonly allowlist: Set<string>;
   private readonly now: () => Date;
+  private readonly serviceDirectory: PublicServiceDirectory;
 
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
     this.allowlist = new Set(options.providerAllowlist ?? []);
     this.now = options.now ?? (() => new Date());
+    this.serviceDirectory = options.serviceDirectory ?? resolvedServiceDirectory();
     this.server = createServer((request, response) => void this.handle(request, response));
   }
 
@@ -64,6 +68,13 @@ export class CircuitDesignerService {
       const parts = url.pathname.slice(prefix.length).split("/").filter(Boolean).map(decodeURIComponent);
       const context = this.routeContext(parts);
       const method = request.method ?? "GET";
+
+      if (method === "GET" && parts[0] === "health" && parts.length === 1) {
+        return this.jsonResponse(response, 200, { status: "ok", service: "circuit_designer" });
+      }
+      if (method === "GET" && parts[0] === "services" && parts.length === 1) {
+        return this.jsonResponse(response, 200, this.serviceDirectory);
+      }
 
       if (method === "POST" && parts[0] === "documents" && parts.length === 1) {
         const body = await this.json(request) as { request_id: string; document: CircuitDocument };

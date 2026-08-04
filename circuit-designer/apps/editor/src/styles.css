@@ -64,6 +64,28 @@ a:focus-visible {
   min-width: 0;
 }
 
+.app-header__utilities {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.assistant-launch {
+  flex: 0 0 auto;
+  padding: 0.48rem 0.68rem;
+  border: 1px solid #9fc2b7;
+  border-radius: 0.38rem;
+  background: #e8f3ef;
+  color: #174f43;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.assistant-launch:hover { background: #dbece6; }
+
 .brand {
   display: inline-flex;
   align-items: center;
@@ -762,6 +784,8 @@ button:disabled {
     justify-self: end;
   }
 
+  .app-header__utilities { justify-self: end; }
+
   .activity-grid {
     grid-template-columns: 1fr;
   }
@@ -802,6 +826,11 @@ button:disabled {
   .active-document {
     justify-self: stretch;
     justify-content: flex-start;
+  }
+
+  .app-header__utilities {
+    justify-self: stretch;
+    justify-content: space-between;
   }
 
   .active-document > span:last-child {

@@ -70,6 +70,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     UpdateComponentPort,
     WirePortInput,
 )
+from spec2gds.service_registry import load_service_registry
 
 
 class OpenDocumentRequest(pydantic.BaseModel):
@@ -126,7 +127,7 @@ class CircuitLaunchRequest(pydantic.BaseModel):
 
 
 class AssistantLaunchRequest(pydantic.BaseModel):
-    """Launch a fresh external chat for one existing source entity."""
+    """Launch a fresh AI Assistant chat for one existing source entity."""
 
     entity_kind: typing.Literal[
         "component",
@@ -211,6 +212,28 @@ def create_app() -> typing.Any:
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
+    registry = load_service_registry()
+
+    def service_urls() -> dict[str, dict[str, str]]:
+        configured = registry.public_dict()
+        configured["spec_editor"]["service_url"] = os.environ.get(
+            "SPEC_EDITOR_SERVICE_URL", configured["spec_editor"]["service_url"]
+        ).rstrip("/")
+        configured["circuit_designer"]["service_url"] = os.environ.get(
+            "CIRCUIT_DESIGNER_SERVICE_URL",
+            configured["circuit_designer"]["service_url"],
+        ).rstrip("/")
+        configured["circuit_designer"]["ui_url"] = os.environ.get(
+            "CIRCUIT_DESIGNER_UI_URL", configured["circuit_designer"]["ui_url"]
+        ).rstrip("/")
+        assistant_override = (
+            os.environ.get("AI_ASSISTANT_URL")
+            or os.environ.get("EXTERNAL_ASSISTANT_URL")
+        )
+        if assistant_override:
+            configured["ai_assistant"]["service_url"] = assistant_override.rstrip("/")
+            configured["ai_assistant"]["ui_url"] = assistant_override.rstrip("/")
+        return configured
     state: dict[str, typing.Any] = {
         "active": None,
         "source_event_sequence": 0,
@@ -253,6 +276,11 @@ def create_app() -> typing.Any:
         """Report server liveness and the source-format generation it serves."""
         return {"status": "ok", "format": "spec2gds-v1"}
 
+    @app.get("/services")
+    def services() -> dict[str, typing.Any]:
+        """Expose the resolved cross-application endpoints to the browser UI."""
+        return {"schema_version": 1, "services": service_urls()}
+
     @app.post("/documents/create")
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
         """Create, validate, activate, and return a new package snapshot."""
@@ -284,14 +312,15 @@ def create_app() -> typing.Any:
 
     @app.post("/assistant/launch")
     def launch_assistant(request: AssistantLaunchRequest) -> dict[str, typing.Any]:
-        """Return the external launch URL without making the editor depend on it."""
+        """Return the AI Assistant launch URL without making the editor depend on it."""
         target = ref(request.entity_kind, request.entity_id)
         try:
             active().revision.resolve(target)
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
-        external = os.environ.get("EXTERNAL_ASSISTANT_URL", "http://127.0.0.1:4200").rstrip("/")
-        service = os.environ.get("SPEC_EDITOR_SERVICE_URL", "http://127.0.0.1:8000").rstrip("/")
+        urls = service_urls()
+        assistant_base = urls["ai_assistant"]["service_url"]
+        service = urls["spec_editor"]["service_url"]
         query = urlencode(
             {
                 "service_base_url": service,
@@ -300,7 +329,10 @@ def create_app() -> typing.Any:
                 "entity_id": target.entity_id,
             }
         )
-        return {"assistant_url": f"{external}/launch/spec?{query}", "target": _jsonable(target)}
+        return {
+            "assistant_url": f"{assistant_base}/launch/spec?{query}",
+            "target": _jsonable(target),
+        }
 
     @app.post("/circuit-designer/launch")
     def launch_circuit(request: CircuitLaunchRequest) -> dict[str, typing.Any]:
@@ -313,11 +345,8 @@ def create_app() -> typing.Any:
             )
             launched = publish_circuit_document(
                 projection.document,
-                service_url=os.environ.get(
-                    "CIRCUIT_DESIGNER_SERVICE_URL",
-                    "http://127.0.0.1:4100/api/circuit-designer/v1",
-                ),
-                editor_url=os.environ.get("CIRCUIT_DESIGNER_UI_URL", "http://127.0.0.1:4180"),
+                service_url=service_urls()["circuit_designer"]["service_url"],
+                editor_url=service_urls()["circuit_designer"]["ui_url"],
             )
         except CircuitDesignerConnectionError as exc:
             raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc

@@ -29,9 +29,28 @@ import {
   parseCircuitDocumentJson,
   summarizeFileDiagnostics,
 } from "./circuit-files";
-import { linkedCircuitDocumentId } from "./launch-state";
+import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
 
 type Selection = { kind: "node" | "net"; id: string } | null;
+type ServiceDirectory = {
+  services: {
+    circuit_designer: { service_url: string; ui_url: string };
+    ai_assistant: { service_url: string; ui_url: string };
+  };
+};
+
+const defaultServices: ServiceDirectory = {
+  services: {
+    circuit_designer: {
+      service_url: "http://127.0.0.1:4100/api/circuit-designer/v1",
+      ui_url: "http://127.0.0.1:4180",
+    },
+    ai_assistant: {
+      service_url: "http://127.0.0.1:4200",
+      ui_url: "http://127.0.0.1:4200",
+    },
+  },
+};
 const operationId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const emptyDocument = () => createEmptyCircuitDocument(
   `local_${crypto.randomUUID().replaceAll("-", "_")}`,
@@ -56,12 +75,12 @@ export function App() {
     () => linkedCircuitDocumentId(window.location.search),
   );
   const [initial, setInitial] = useState<CircuitDocument>(emptyDocument);
+  const apiBase = import.meta.env.VITE_CIRCUIT_DESIGNER_API_BASE ?? "/api/circuit-designer/v1";
   const backend = useMemo(
-    () => new HttpCircuitDesignerBackend({
-      baseUrl: import.meta.env.VITE_CIRCUIT_DESIGNER_API_BASE ?? "/api/circuit-designer/v1",
-    }),
-    [],
+    () => new HttpCircuitDesignerBackend({ baseUrl: apiBase }),
+    [apiBase],
   );
+  const [services, setServices] = useState<ServiceDirectory>(defaultServices);
   const [snapshot, setSnapshot] = useState<CircuitSnapshot>();
   const [document, setDocument] = useState<CircuitDocument>();
   const [lease, setLease] = useState<EditLease>();
@@ -82,6 +101,13 @@ export function App() {
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const priorMode = useRef<CircuitCanvasMode>("select");
+
+  useEffect(() => {
+    void fetch(`${apiBase}/services`)
+      .then((response) => response.ok ? response.json() as Promise<ServiceDirectory> : Promise.reject())
+      .then(setServices)
+      .catch(() => undefined);
+  }, [apiBase]);
 
   useEffect(() => {
     let active = true;
@@ -505,6 +531,17 @@ export function App() {
     setMessage(`Proposal ${decision === "accept" ? "accepted" : "rejected"}.`);
   }
 
+  function openAssistant(): void {
+    if (!snapshot) return;
+    const target = assistantCircuitUrl(
+      services.services.ai_assistant.ui_url,
+      services.services.circuit_designer.service_url,
+      snapshot.document.document_id,
+    );
+    const opened = window.open(target, "_blank", "noopener,noreferrer");
+    if (opened) opened.opener = null;
+  }
+
   const selectedInstance = selection?.kind === "node"
     ? document?.design.instances.find((item) => item.id === selection.id)
     : undefined;
@@ -537,6 +574,14 @@ export function App() {
         <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("json")}>Download file</button>
         <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("svg")}>SVG</button>
         <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("png")}>PNG</button>
+        <button
+          className="assistant"
+          disabled={!snapshot || Boolean(lease)}
+          onClick={openAssistant}
+          title={lease ? "Save or Cancel the private draft before opening AI Assistant." : "Open a chat bound to this circuit"}
+        >
+          AI Assistant ↗
+        </button>
       </div>
     </header>
     <div className="notice"><span className="local-dot" />{linkedDocumentId ? "Editor projection" : "Independent document"} · {lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}<span>{layoutProgress || message}</span></div>

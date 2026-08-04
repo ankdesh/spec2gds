@@ -23,7 +23,7 @@ flowchart TB
     end
 
     subgraph Optional["Optional collaboration"]
-        AU["Assistant UI + A2A agent"]
+        AU["AI Assistant UI + A2A agent"]
     end
 
     IR --> ADAPTER["Direct-port adapter"] --> CS
@@ -41,7 +41,7 @@ flowchart TB
 | Independent circuit | client | `.circuit.json` | private draft, then Save |
 | Circuit session | Circuit service | memory only | lease and revision checks |
 | Spec-derived circuit | specification source | read-only circuit session | edit the `.spec`, then project again |
-| Assistant suggestion | user review | proposal record | explicit accept or reject |
+| AI Assistant suggestion | user review | proposal record | explicit accept or reject |
 
 The service processes are local reference implementations. They have no user
 authentication and should bind to trusted loopback interfaces unless a secure
@@ -110,4 +110,4 @@ projections and clients; they do not mutate model objects directly.
   bus interfaces remain in the specification source.
 - Imported PDF, Word, and ODT files become narrative source; optional model
   extraction requires explicit OpenAI configuration.
-- The assistant is optional and all writes remain review-gated.
+- The AI Assistant is optional and all writes remain review-gated.

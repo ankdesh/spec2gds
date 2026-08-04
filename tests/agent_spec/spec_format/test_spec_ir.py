@@ -329,8 +329,16 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
     assert (by_name["service"].style, by_name["service"].initiative, by_name["service"].bus_width) == (
         "transactional", "requires", "64",
     )
+    assert (
+        by_name["service"].display_name,
+        by_name["service"].description,
+        by_name["service"].kind,
+        by_name["service"].custom_kind,
+    ) == ("Service", "Submits work.", "custom", "demo_rpc")
     assert (by_name["response"].style, by_name["response"].direction) == ("structured", "out")
+    assert (by_name["response"].display_name, by_name["response"].packed) == ("Response", True)
     assert by_name["indexed"].width == "[0:0]"
+    assert by_name["indexed"].range == "0"
 
     package = family_revision.to_package()
     sink_entry = next(item for item in package.manifest.documents if item.entity_id == sink.ref.entity_id)

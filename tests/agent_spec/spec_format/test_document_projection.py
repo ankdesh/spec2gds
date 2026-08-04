@@ -18,6 +18,7 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
 
     assert projection.schema_version == "spec2gds.document.v1"
     assert projection.sections[0].title == "Overview"
+    assert projection.sections[0].facts == []
     level_one_titles = [section.title for section in projection.sections if section.level == 1]
     assert level_one_titles[:4] == ["Overview", "Designs", "Components", "Protocols"]
     assert [entry.section_id for entry in projection.toc] == [
@@ -35,7 +36,7 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
         for table in section.tables
     }
     assert {
-        "component_port",
+        "component_ports",
         "bus_interfaces",
         "port_maps",
         "design_instances",
@@ -44,15 +45,17 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
         "bus_properties",
         "abstraction_ports",
     }.issubset(table_kinds)
-    port_tables = [
-        table
+    port_tables_by_section = [
+        [table for table in section.tables if table.kind == "component_ports"]
         for section in component_sections
-        for table in section.tables
-        if table.kind == "component_port"
     ]
-    assert port_tables
-    assert all(len(table.rows) == 1 for table in port_tables)
-    assert all(table.title == table.rows[0].cells["name"].value for table in port_tables)
+    assert all(len(tables) == 1 for tables in port_tables_by_section)
+    assert all(tables[0].title == "Ports" for tables in port_tables_by_section)
+    expected_counts = sorted(
+        len(component.ports)
+        for component in SpecRevision.from_package(build_test_package()).components
+    )
+    assert sorted(len(tables[0].rows) for tables in port_tables_by_section) == expected_counts
 
 
 def test_document_cells_retain_schema_identity_and_presence() -> None:

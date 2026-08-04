@@ -8,6 +8,7 @@ type MenuId = "file" | "edit" | "circuit" | "help";
 type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | null;
 
 interface EditorMenuBarProps {
+  assistantUrl: string;
   activityCount: number;
   diagnosticCount: number;
   launchingCircuit: boolean;
@@ -306,7 +307,8 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
         <div className="editor-dialog__copy">
           <p>Use <strong>File → New Specification</strong> to name and create a server-local package, or <strong>File → Open Specification</strong> to load one.</p>
           <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
-          <p>Saved edits are validated and persisted automatically. Leaf components provide direct commands for wire, transactional, and packed structured ports; wire ranges use <code>left:right</code> syntax.</p>
+          <p>Entry designs can add named instances of available top-level components. Leaf components keep wire, transactional, and packed structured ports together in one editable table; wire ranges use <code>left:right</code> syntax.</p>
+          <p>Saved edits are validated and persisted automatically after an explicit Save.</p>
         </div>
       </Modal>
     );
@@ -336,6 +338,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
 }
 
 export default function EditorMenuBar({
+  assistantUrl,
   activityCount,
   diagnosticCount,
   launchingCircuit,
@@ -444,6 +447,13 @@ export default function EditorMenuBar({
     if (opened) opened.opener = null;
   };
 
+  const openAssistant = () => {
+    const target = new URL(assistantUrl, window.location.href);
+    target.searchParams.set("workspace", "spec");
+    const opened = window.open(target, "_blank", "noopener,noreferrer");
+    if (opened) opened.opener = null;
+  };
+
   return (
     <>
       <header className="app-header" ref={rootRef}>
@@ -527,9 +537,14 @@ export default function EditorMenuBar({
           ))}
         </nav>
 
-        <div className="active-document" title={path || "No server-local package is open"}>
-          <span className={snapshot ? "active-document__status" : "active-document__status active-document__status--idle"} />
-          <span><small>{snapshot ? displayPathName(path) : "File → New or Open"}</small><strong>{snapshot?.narrative.title || displayPathName(path)}</strong></span>
+        <div className="app-header__utilities">
+          <button className="assistant-launch" onClick={openAssistant} type="button">
+            AI Assistant <span aria-hidden="true">↗</span>
+          </button>
+          <div className="active-document" title={path || "No server-local package is open"}>
+            <span className={snapshot ? "active-document__status" : "active-document__status active-document__status--idle"} />
+            <span><small>{snapshot ? displayPathName(path) : "File → New or Open"}</small><strong>{snapshot?.narrative.title || displayPathName(path)}</strong></span>
+          </div>
         </div>
       </header>
 

@@ -1,6 +1,15 @@
 import { fileURLToPath, URL } from "node:url";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+
+const serviceConfig = JSON.parse(readFileSync(
+  process.env.SPEC2GDS_SERVICE_CONFIG
+    ?? fileURLToPath(new URL("../../../config/services.json", import.meta.url)),
+  "utf8",
+));
+const specService = serviceConfig.spec_editor.service;
+const specServiceOrigin = `${specService.scheme}://${specService.host}:${specService.port}`;
 
 export default defineConfig({
   base: "/editor-assets/",
@@ -13,12 +22,12 @@ export default defineConfig({
     port: 4190,
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: specServiceOrigin,
         changeOrigin: false,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
       "/docs": {
-        target: "http://127.0.0.1:8000",
+        target: specServiceOrigin,
         changeOrigin: false,
       },
     },

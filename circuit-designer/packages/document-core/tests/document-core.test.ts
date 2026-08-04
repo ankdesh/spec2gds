@@ -2,6 +2,25 @@ import { describe, expect, it, vi } from "vitest";
 import { SpecEditorHttpClient, type A2UIDocumentBatch } from "../src/index";
 
 describe("SpecEditorHttpClient", () => {
+  it("loads the shared service directory", async () => {
+    const directory = {
+      schema_version: 1,
+      services: {
+        spec_editor: { service_url: "http://127.0.0.1:8000", ui_url: "http://127.0.0.1:8000/editor" },
+        circuit_designer: { service_url: "http://127.0.0.1:4100/api/circuit-designer/v1", ui_url: "http://127.0.0.1:4180" },
+        ai_assistant: { service_url: "http://127.0.0.1:4200", ui_url: "http://127.0.0.1:4200" },
+      },
+    } as const;
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(directory), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new SpecEditorHttpClient("/api").getServiceDirectory()).resolves.toEqual(directory);
+    expect(fetchMock).toHaveBeenCalledWith("/api/services", undefined);
+    vi.unstubAllGlobals();
+  });
+
   it("creates a new package at an explicit path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ document_id: "new_spec" }), { headers: { "content-type": "application/json" } }),

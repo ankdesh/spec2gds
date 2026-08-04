@@ -83,6 +83,8 @@ def upsert_component_port(root: etree._Element, value: dict[str, typing.Any]) ->
     if ports is None:
         ports = etree.SubElement(model, _q("ports"))
     existing = _named(ports, "port", "name", normalized["name"])
+    if existing is not None and _port_family(existing) != normalized["family"]:
+        raise ValueError("Port family cannot be changed by upsert_component_port.")
     node = _build_port(normalized)
     if existing is None:
         ports.append(node)

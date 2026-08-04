@@ -12,6 +12,7 @@ import {
   SpecEditorHttpClient,
   type A2UIDocumentBatch,
   type ActivityState,
+  type ComponentInstanceInput,
   type ComponentPortInput,
   type ComponentPortUpdateInput,
   type DocumentSnapshot,
@@ -62,10 +63,17 @@ export default function App() {
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
+  const [assistantUrl, setAssistantUrl] = useState("http://127.0.0.1:4200");
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
 
   const refreshActivity = useCallback(async () => {
     setActivity(await client.getActivity());
+  }, [client]);
+
+  useEffect(() => {
+    void client.getServiceDirectory()
+      .then((directory) => setAssistantUrl(directory.services.ai_assistant.ui_url))
+      .catch(() => undefined);
   }, [client]);
 
   const openDocument = useCallback(async (nextPath: string) => {
@@ -251,8 +259,8 @@ export default function App() {
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
       pendingWindow.opener = null;
-      pendingWindow.document.title = "Opening assistant…";
-      pendingWindow.document.body.textContent = "Creating a new entity-bound chat…";
+      pendingWindow.document.title = "Opening AI Assistant…";
+      pendingWindow.document.body.textContent = "Creating a new entity-bound AI Assistant chat…";
     }
     setLaunchingAssistant(true);
     setError("");
@@ -261,7 +269,7 @@ export default function App() {
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
       setActionDialog(null);
-      setNotice(`Opened a new assistant chat for ${target.entity_id}.`);
+      setNotice(`Opened a new AI Assistant chat for ${target.entity_id}.`);
     } catch (caught) {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -335,6 +343,18 @@ export default function App() {
           `${kind === "component" ? "Component" : "Entry design"} ${name} created and saved automatically.`,
         );
       },
+      async addComponentInstance(design: EntityRef, value: ComponentInstanceInput) {
+        await commitEditorOperations(
+          [{ type: "upsert_instance", design, instance: value }],
+          `Component instance ${value.name} added and saved automatically.`,
+        );
+      },
+      componentInstanceOptions() {
+        return snapshot.components.map((component) => ({
+          label: entityName(component.vlnv),
+          vlnv: component.vlnv,
+        }));
+      },
       async updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput) {
         await commitEditorOperations(
           [{ type: "set_entity_metadata", entity: ref, ...value }],
@@ -374,6 +394,7 @@ export default function App() {
     <div className="app-shell">
       <EditorMenuBar
         activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
+        assistantUrl={assistantUrl}
         diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length}
         launchingCircuit={launchingCircuit}
         loading={loading}
@@ -390,7 +411,7 @@ export default function App() {
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
-          <span>Document changed by assistant. Your current view has not been replaced.</span>
+          <span>Document changed by AI Assistant. Your current view has not been replaced.</span>
           <button type="button" onClick={() => void refreshExternalChange()}>Refresh</button>
           <button type="button" aria-label="Dismiss" onClick={() => setExternalChange(null)}>×</button>
         </div>
@@ -509,7 +530,7 @@ function ActivityView({
           })}
           {!activity.proposals.length && <p className="empty-copy">No proposals awaiting review.</p>}
         </UtilityPanel>
-        <UtilityPanel title="Accepted assistant changes" count={activity.assistant_changes.length}>
+        <UtilityPanel title="Accepted AI Assistant changes" count={activity.assistant_changes.length}>
           {activity.assistant_changes.slice().reverse().map((value) => {
             const item = record(value);
             const target = record(item.target);
@@ -523,7 +544,7 @@ function ActivityView({
               </article>
             );
           })}
-          {!activity.assistant_changes.length && <p className="empty-copy">No assistant changes have been applied.</p>}
+          {!activity.assistant_changes.length && <p className="empty-copy">No AI Assistant changes have been applied.</p>}
         </UtilityPanel>
       </div>
     </div>
@@ -599,7 +620,7 @@ function ActionDialog({
         </header>
         <article className="action-option action-option--assistant">
           <div>
-            <strong>Explore with assistant</strong>
+            <strong>Explore with AI Assistant</strong>
             <small>Creates a new chat bound to this entity</small>
             <p>Discuss ideas first, then request a typed proposal when ready.</p>
           </div>

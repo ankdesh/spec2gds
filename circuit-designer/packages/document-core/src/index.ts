@@ -156,10 +156,16 @@ export type ComponentPortUpdateInput =
   | Omit<TransactionalPortInput, "name">
   | Omit<StructuredPortInput, "name">;
 
+export interface ComponentInstanceInput {
+  name: string;
+  component_vlnv: string;
+}
+
 export type EditorTransactionOperation =
   | { type: "create_entity"; kind: "component" | "design"; name: string }
   | { type: "set_document_title"; title: string }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
+  | { type: "upsert_instance"; design: EntityRef; instance: ComponentInstanceInput }
   | { type: "add_component_port"; component: EntityRef; port: ComponentPortInput }
   | {
     type: "update_component_port";
@@ -200,6 +206,20 @@ export interface CircuitDesignerLaunch {
 export interface AssistantLaunch {
   assistant_url: string;
   target: EntityRef;
+}
+
+export interface HostedServiceLocation {
+  service_url: string;
+  ui_url: string;
+}
+
+export interface ServiceDirectory {
+  schema_version: 1;
+  services: {
+    spec_editor: HostedServiceLocation;
+    circuit_designer: HostedServiceLocation;
+    ai_assistant: HostedServiceLocation;
+  };
 }
 
 export interface SourceChangeEvent {
@@ -278,6 +298,10 @@ export class SpecEditorHttpClient {
 
   getSnapshot(): Promise<DocumentSnapshot> {
     return this.request("/documents/snapshot");
+  }
+
+  getServiceDirectory(): Promise<ServiceDirectory> {
+    return this.request("/services");
   }
 
   applyTransaction(

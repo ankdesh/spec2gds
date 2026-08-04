@@ -17,6 +17,8 @@ select, input { width: 100%; border: 1px solid #aeb8b6; border-radius: 3px; back
 .file-input { display: none; }
 .toolbar button, .inspector button, .library button { border: 1px solid #899997; border-radius: 3px; background: #fff; padding: 7px 9px; color: #294a4d; }
 .toolbar .primary { border-color: #1d5f61; background: #1d5f61; color: #fff; }
+.toolbar .assistant { border-color: #9c82bd; background: #f0eafa; color: #4e3470; font-weight: 750; }
+.toolbar .assistant:hover { border-color: #705092; background: #e7dcf5; }
 .toolbar button:hover, .inspector button:hover, .library button:hover { border-color: #2e6566; }
 .notice { display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #d5d5ce; background: #f6f5ef; padding: 0 22px; color: #526368; font: 10px ui-monospace; }
 .notice > span:last-child { margin-left: auto; overflow: hidden; max-width: 46%; color: #6a777b; text-overflow: ellipsis; white-space: nowrap; }
