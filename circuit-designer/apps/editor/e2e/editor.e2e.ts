@@ -272,12 +272,13 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
 
     if (path === "/services") {
       return json({
-        schema_version: 1,
+        schema_version: 2,
         services: {
           spec_editor: { service_url: "http://127.0.0.1:8000", ui_url: "http://127.0.0.1:8000/editor" },
           circuit_designer: { service_url: "http://127.0.0.1:4100/api/circuit-designer/v1", ui_url: "http://127.0.0.1:4180" },
           ai_assistant: { service_url: "http://127.0.0.1:4200", ui_url: "http://127.0.0.1:4200" },
         },
+        logging: { enabled: false, level: "info" },
       });
     }
 

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict
 import json
 import os
+from dataclasses import asdict
 from pathlib import Path
 from typing import Sequence
+
+from spec2gds_runtime import StructuredLogger
 
 from spec2gds.agent_spec.importers.docling_reader import DoclingDocumentReader
 from spec2gds.agent_spec.importers.document import DocumentImportOptions, DocumentToSpecConverter
@@ -15,6 +17,7 @@ from spec2gds.agent_spec.importers.ipxact_from_tables import (
     DEFAULT_OPENAI_MODEL,
     OpenAIHardwareTableEnricher,
 )
+from spec2gds.service_registry import load_service_registry
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -47,9 +50,14 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run one document import and return a shell-compatible status."""
     args = _parser().parse_args(argv)
+    logger = StructuredLogger("spec-editor", load_service_registry().logging)
     input_path = Path(args.input)
     output_path = Path(args.output) if args.output else input_path.with_suffix(".spec")
     try:
+        logger.event(
+            "document-import", "started", "Starting document import",
+            details={"arguments": vars(args)},
+        )
         if not input_path.is_file():
             raise FileNotFoundError(f"Source document does not exist: {input_path}")
         if output_path.suffix.lower() != ".spec":
@@ -62,7 +70,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise ValueError("--openai requires OPENAI_API_KEY in the environment.")
 
         reader = DoclingDocumentReader(ocr=not args.no_ocr, image_scale=args.image_scale)
-        enricher = OpenAIHardwareTableEnricher(model=args.model) if args.openai else None
+        enricher = OpenAIHardwareTableEnricher(model=args.model, logger=logger) if args.openai else None
         converter = DocumentToSpecConverter(reader=reader, enricher=enricher)
         result = converter.convert(
             input_path,
@@ -78,8 +86,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         report = asdict(result)
         report["output_path"] = str(result.output_path)
         print(json.dumps(report, indent=2, sort_keys=True))
+        logger.event("document-import", "completed", "Completed document import", details=report)
         return 0
     except Exception as exc:
+        logger.event(
+            "document-import", "failed", "Document import failed",
+            severity="error", details={"arguments": vars(args)}, exception=exc,
+        )
         print(f"Error: {exc}", file=__import__("sys").stderr)
         return 2
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { DocumentSnapshot, EntityRef } from "@spec2gds/document-core";
+import type { DocumentSnapshot } from "@spec2gds/document-core";
 
 export type EditorView = "document" | "activity" | "diagnostics";
 

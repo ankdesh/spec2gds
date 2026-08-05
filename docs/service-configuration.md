@@ -9,6 +9,16 @@ AI Assistant serve their UI from the same listener as their API. Circuit
 Designer uses two listeners: its REST service defaults to port `4100` and its
 Vite UI defaults to port `4180`.
 
+The schema also contains the unified logging policy and the loopback-only Log
+Viewer address. Logging has only two environment overrides:
+
+- `SPEC2GDS_LOGGING=ON|OFF`
+- `SPEC2GDS_LOG_LEVEL=info|debug`
+
+The file path, maximum size, and viewer port are configuration-file-only. The
+single active file retains its newest complete entries when it reaches the
+limit; the logger does not create backup files.
+
 Edit the complete JSON file when an address changes. A service restart is
 required afterward. Frontend development servers also read the file when they
 start. Set `SPEC2GDS_SERVICE_CONFIG` to use another absolute JSON file without

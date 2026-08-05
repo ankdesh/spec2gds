@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+type LogLevel = "info" | "debug";
 
 interface EndpointConfig {
   scheme: "http" | "https";
@@ -15,7 +16,8 @@ interface HostedServiceConfig {
 }
 
 interface RegistryConfig {
-  schema_version: 1;
+  schema_version: 2;
+  logging: { enabled: boolean; level: LogLevel };
   spec_editor: HostedServiceConfig;
   circuit_designer: HostedServiceConfig;
   ai_assistant: HostedServiceConfig;
@@ -27,31 +29,33 @@ export interface ServiceLocation {
 }
 
 export interface PublicServiceDirectory {
-  schema_version: 1;
+  schema_version: 2;
   services: {
     spec_editor: ServiceLocation;
     circuit_designer: ServiceLocation;
     ai_assistant: ServiceLocation;
   };
+  logging: { enabled: boolean; level: LogLevel };
 }
 
 export function loadServiceRegistry(
   path = process.env.SPEC2GDS_SERVICE_CONFIG ?? defaultRegistryPath(),
 ): RegistryConfig {
   const value = JSON.parse(readFileSync(path, "utf8")) as RegistryConfig;
-  if (value.schema_version !== 1) throw new Error("Service registry schema_version must be 1.");
+  if (value.schema_version !== 2) throw new Error("Service registry schema_version must be 2.");
   return value;
 }
 
 export function resolvedServiceDirectory(): PublicServiceDirectory {
   const value = loadServiceRegistry();
   const directory: PublicServiceDirectory = {
-    schema_version: 1,
+    schema_version: 2,
     services: {
       spec_editor: location(value.spec_editor),
       circuit_designer: location(value.circuit_designer),
       ai_assistant: location(value.ai_assistant),
     },
+    logging: publicLogging(value),
   };
   directory.services.spec_editor.service_url = stripTrailingSlash(
     process.env.SPEC_EDITOR_SERVICE_URL ?? directory.services.spec_editor.service_url,
@@ -62,14 +66,25 @@ export function resolvedServiceDirectory(): PublicServiceDirectory {
   directory.services.circuit_designer.ui_url = stripTrailingSlash(
     process.env.CIRCUIT_DESIGNER_UI_URL ?? directory.services.circuit_designer.ui_url,
   );
-  const assistantOverride = process.env.AI_ASSISTANT_URL
-    ?? process.env.EXTERNAL_ASSISTANT_URL;
+  const assistantOverride = process.env.AI_ASSISTANT_URL;
   if (assistantOverride) {
     const assistant = stripTrailingSlash(assistantOverride);
     directory.services.ai_assistant.service_url = assistant;
     directory.services.ai_assistant.ui_url = assistant;
   }
   return directory;
+}
+
+function publicLogging(value: RegistryConfig): { enabled: boolean; level: LogLevel } {
+  const logging = value.logging;
+  const enabledOverride = process.env.SPEC2GDS_LOGGING;
+  const normalized = enabledOverride?.toLowerCase();
+  if (normalized !== undefined && normalized !== "on" && normalized !== "off") {
+    throw new Error("SPEC2GDS_LOGGING must be ON or OFF.");
+  }
+  const level = String(process.env.SPEC2GDS_LOG_LEVEL ?? logging?.level ?? "info").toLowerCase();
+  if (level !== "info" && level !== "debug") throw new Error("SPEC2GDS_LOG_LEVEL must be info or debug.");
+  return { enabled: normalized === undefined ? logging.enabled : normalized === "on", level };
 }
 
 function defaultRegistryPath(): string {

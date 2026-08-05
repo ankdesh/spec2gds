@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { BrowserLogger } from "@spec2gds/observability/browser";
 
 import { ApiError, assistantApi } from "./api";
 import { useAssistantApp } from "./runtime";
@@ -34,10 +35,17 @@ import type {
   ProposalReview,
   ServiceDirectory,
   SpecDiffEntry,
-  SpecProposalArtifact,
 } from "./types";
 
 export function App() {
+  const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
+  useEffect(() => {
+    void assistantApi.getServices().then((directory) => {
+      setBrowserLogger(new BrowserLogger("/api/logs/events", directory.logging));
+    }).catch(() => undefined);
+  }, []);
+  useEffect(() => browserLogger?.captureGlobalErrors(), [browserLogger]);
+
   return (
     <main className="app-shell">
       <aside className="thread-sidebar">
@@ -255,7 +263,7 @@ function DomainHeader({
 type ConnectionTarget = "circuit" | "spec";
 
 const fallbackServices: ServiceDirectory = {
-  schema_version: 1,
+  schema_version: 2,
   services: {
     spec_editor: {
       service_url: "http://127.0.0.1:8000",
@@ -276,6 +284,7 @@ const fallbackServices: ServiceDirectory = {
       detail: "Available",
     },
   },
+  logging: { enabled: false, level: "info" },
 };
 
 function ConnectionSetup({

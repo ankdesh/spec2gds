@@ -21,10 +21,8 @@ from .agents.circuit_editor import CircuitEditingAgent
 from .agents.spec_editor import SpecEditingAgent
 from .models import (
     CircuitAgentRequest,
-    CircuitProposalArtifact,
     CircuitProposalDraft,
     SpecAgentRequest,
-    SpecProposalArtifact,
     SpecProposalDraft,
 )
 

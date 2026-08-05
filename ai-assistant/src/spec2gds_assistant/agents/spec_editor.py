@@ -5,6 +5,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from openai import AsyncOpenAI
+from spec2gds_runtime import StructuredLogger
 
 from ..config import Settings
 from ..models import (
@@ -14,7 +15,6 @@ from ..models import (
     SpecProposalDraft,
 )
 from .context import SpecContextProcessor
-
 
 EXPLORATION_INSTRUCTIONS = """\
 You are a hardware specification design partner. Explore the user's idea using the
@@ -91,6 +91,7 @@ class SpecEditingAgent:
         self.settings = settings
         self.context_processor = context_processor or SpecContextProcessor()
         self._client = client
+        self._logger = StructuredLogger("ai-assistant", settings.logging) if settings.logging else None
 
     async def respond(
         self, request: SpecAgentRequest
@@ -104,17 +105,45 @@ class SpecEditingAgent:
 
         prompt = f"{processed.text}\n\nCURRENT USER REQUEST:\n{request.user_request}"
         if not request.proposal_requested:
+            call = {
+                "model": self.settings.openai_model,
+                "instructions": EXPLORATION_INSTRUCTIONS,
+                "input": prompt,
+                "store": False,
+            }
+            if self._logger:
+                self._logger.event(
+                    "openai", "request", "Sending Spec exploration request to OpenAI",
+                    details=call,
+                )
             response = await client.responses.create(
                 model=self.settings.openai_model,
                 instructions=EXPLORATION_INSTRUCTIONS,
                 input=prompt,
                 store=False,
             )
+            if self._logger:
+                self._logger.event(
+                    "openai", "response", "Received Spec exploration response from OpenAI",
+                    details=response,
+                )
             answer = response.output_text.strip()
             if not answer:
                 raise RuntimeError("The model did not return an exploration response.")
             return answer
 
+        call = {
+            "model": self.settings.openai_model,
+            "instructions": PROPOSAL_INSTRUCTIONS,
+            "input": prompt,
+            "text_format": SpecProposalDraft.__name__,
+            "store": False,
+        }
+        if self._logger:
+            self._logger.event(
+                "openai", "request", "Sending Spec proposal request to OpenAI",
+                details=call,
+            )
         response = await client.responses.parse(
             model=self.settings.openai_model,
             instructions=PROPOSAL_INSTRUCTIONS,
@@ -122,6 +151,11 @@ class SpecEditingAgent:
             text_format=SpecProposalDraft,
             store=False,
         )
+        if self._logger:
+            self._logger.event(
+                "openai", "response", "Received Spec proposal response from OpenAI",
+                details=response,
+            )
         draft = response.output_parsed
         if draft is None:
             raise RuntimeError("The model did not return a Spec proposal.")

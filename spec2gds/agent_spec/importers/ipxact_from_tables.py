@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 import json
 import re
+from collections import defaultdict
 from typing import Literal, Protocol, Sequence
 
 import lxml.etree as etree
 import pydantic
+from spec2gds_runtime import StructuredLogger
 
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.models import DocumentEntry
-
 
 DEFAULT_OPENAI_MODEL = "gpt-5.6-sol"
 _XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace"
@@ -101,12 +101,14 @@ class OpenAIHardwareTableEnricher:
         model: str = DEFAULT_OPENAI_MODEL,
         client: object | None = None,
         max_evidence_chars: int = 120_000,
+        logger: StructuredLogger | None = None,
     ) -> None:
         if not model:
             raise ValueError("An OpenAI model is required.")
         self.model = model
         self._client = client
         self.max_evidence_chars = max_evidence_chars
+        self.logger = logger
 
     @property
     def client(self):
@@ -142,6 +144,21 @@ class OpenAIHardwareTableEnricher:
                 f"Table evidence is {len(encoded)} characters; limit is {self.max_evidence_chars}. "
                 "Reduce the source document or raise max_evidence_chars programmatically."
             )
+        call = {
+            "model": self.model,
+            "reasoning": {"effort": "low"},
+            "store": False,
+            "input": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": encoded},
+            ],
+            "text_format": HardwareTableExtraction.__name__,
+        }
+        if self.logger:
+            self.logger.event(
+                "openai", "request", "Sending document extraction request to OpenAI",
+                details=call,
+            )
         response = self.client.responses.parse(
             model=self.model,
             reasoning={"effort": "low"},
@@ -152,6 +169,11 @@ class OpenAIHardwareTableEnricher:
             ],
             text_format=HardwareTableExtraction,
         )
+        if self.logger:
+            self.logger.event(
+                "openai", "response", "Received document extraction response from OpenAI",
+                details=response,
+            )
         extraction = response.output_parsed
         if extraction is None:
             raise RuntimeError("OpenAI returned no parsed hardware extraction.")

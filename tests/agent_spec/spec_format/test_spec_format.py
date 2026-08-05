@@ -138,14 +138,14 @@ def test_xml_namespace_prefixes_are_normalized_deterministically() -> None:
     assert b"<x:design" not in normalized
 
 
-def test_legacy_odt_mimetype_is_explicitly_rejected() -> None:
+def test_unsupported_package_mimetype_is_rejected() -> None:
     with tempfile.TemporaryDirectory() as temporary:
-        legacy = Path(temporary) / "legacy.spec"
-        with zipfile.ZipFile(legacy, "w") as archive:
+        unsupported = Path(temporary) / "unsupported.spec"
+        with zipfile.ZipFile(unsupported, "w") as archive:
             archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
             archive.writestr("content.xml", "<document-content/>")
-        with pytest.raises(SpecValidationError, match="legacy ODT"):
-            SpecPackage.load(str(legacy))
+        with pytest.raises(SpecValidationError, match="Unsupported package mimetype"):
+            SpecPackage.load(str(unsupported))
 
 
 def test_cli_create_validate_inspect_unpack_and_pack(capsys: pytest.CaptureFixture[str]) -> None:

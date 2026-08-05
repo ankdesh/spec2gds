@@ -7,31 +7,34 @@ activity-store operations; the browser never receives mutable package objects.
 
 from __future__ import annotations
 
-import base64
 import asyncio
+import base64
 import dataclasses
-from datetime import UTC, datetime
 import json
 import os
-from pathlib import Path
+import time
 import typing
+from datetime import UTC, datetime
+from pathlib import Path
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import pydantic
+from spec2gds_runtime import StructuredLogger
 
 from spec2gds.agent_spec.spec_format.actions import (
     ActionService,
-    AssistantChangeDecision,
     ActivityStore,
     ArtifactSidecar,
+    AssistantChangeDecision,
     create_reference_registry,
 )
+from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.assistant import (
     SpecChangeProposal,
     build_assistant_context,
     preview_assistant_proposal,
 )
-from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
     CircuitDesignerConnectionError,
@@ -39,7 +42,13 @@ from spec2gds.agent_spec.spec_format.circuit_adapter import (
     publish_circuit_document,
 )
 from spec2gds.agent_spec.spec_format.document import build_a2ui_batch, build_document_projection
-from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, InterfaceEndpointIR, PortEndpointIR, SpecRevision
+from spec2gds.agent_spec.spec_format.ir import (
+    ConnectionIR,
+    InstanceIR,
+    InterfaceEndpointIR,
+    PortEndpointIR,
+    SpecRevision,
+)
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
 from spec2gds.agent_spec.spec_format.transactions import (
     AddAsset,
@@ -57,17 +66,17 @@ from spec2gds.agent_spec.spec_format.transactions import (
     ReorderInstances,
     ReorderNarrativeBlocks,
     SetDocumentTitle,
-    SetInternalDesign,
     SetEntityMetadata,
+    SetInternalDesign,
     SetNarrativeEntityLinks,
     SpecEditTransaction,
     StructuredPortInput,
     TransactionalPortInput,
+    UpdateComponentPort,
     UpsertConnection,
     UpsertDocumentXml,
     UpsertInstance,
     UpsertNarrativeBlock,
-    UpdateComponentPort,
     WirePortInput,
 )
 from spec2gds.service_registry import load_service_registry
@@ -213,6 +222,8 @@ def create_app() -> typing.Any:
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
     registry = load_service_registry()
+    logger = StructuredLogger("spec-editor", registry.logging)
+    app.state.structured_logger = logger
 
     def service_urls() -> dict[str, dict[str, str]]:
         configured = registry.public_dict()
@@ -226,14 +237,43 @@ def create_app() -> typing.Any:
         configured["circuit_designer"]["ui_url"] = os.environ.get(
             "CIRCUIT_DESIGNER_UI_URL", configured["circuit_designer"]["ui_url"]
         ).rstrip("/")
-        assistant_override = (
-            os.environ.get("AI_ASSISTANT_URL")
-            or os.environ.get("EXTERNAL_ASSISTANT_URL")
-        )
+        assistant_override = os.environ.get("AI_ASSISTANT_URL")
         if assistant_override:
             configured["ai_assistant"]["service_url"] = assistant_override.rstrip("/")
             configured["ai_assistant"]["ui_url"] = assistant_override.rstrip("/")
         return configured
+
+    @app.middleware("http")
+    async def log_request(request: typing.Any, call_next: typing.Any) -> typing.Any:
+        """Record one request outcome and propagate a cross-service correlation ID."""
+        correlation_id = request.headers.get("x-request-id") or uuid4().hex
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as reason:
+            logger.event(
+                "http",
+                "request_failed",
+                f"{request.method} {request.url.path} failed",
+                severity="error",
+                correlation_id=correlation_id,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                exception=reason,
+                details={"method": request.method, "url": str(request.url)},
+            )
+            raise
+        response.headers["X-Request-ID"] = correlation_id
+        logger.event(
+            "http",
+            "request_completed",
+            f"{request.method} {request.url.path} returned {response.status_code}",
+            severity="error" if response.status_code >= 500 else "warning" if response.status_code >= 400 else "info",
+            correlation_id=correlation_id,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            status=response.status_code,
+            details={"method": request.method, "url": str(request.url)},
+        )
+        return response
     state: dict[str, typing.Any] = {
         "active": None,
         "source_event_sequence": 0,
@@ -279,12 +319,28 @@ def create_app() -> typing.Any:
     @app.get("/services")
     def services() -> dict[str, typing.Any]:
         """Expose the resolved cross-application endpoints to the browser UI."""
-        return {"schema_version": 1, "services": service_urls()}
+        return {
+            "schema_version": 2,
+            "services": service_urls(),
+            "logging": {"enabled": registry.logging.enabled, "level": registry.logging.level},
+        }
+
+    @app.post("/logs/events", status_code=204)
+    def browser_log_events(payload: dict[str, typing.Any]) -> None:
+        """Append a bounded batch of browser events using trusted server metadata."""
+        encoded_size = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        if encoded_size > 262_144:
+            raise fastapi.HTTPException(status_code=413, detail="Browser log batch is too large.")
+        events = payload.get("events")
+        if not isinstance(events, list) or len(events) > 100:
+            raise fastapi.HTTPException(status_code=422, detail="Browser log events must be a list of at most 100 items.")
+        logger.browser_events(str(payload.get("session_id", "unknown")), [item for item in events if isinstance(item, dict)])
 
     @app.post("/documents/create")
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
         """Create, validate, activate, and return a new package snapshot."""
         try:
+            logger.event("documents", "create_requested", "Creating specification", details=request)
             state["active"] = V1Session.create(
                 request.path,
                 request.document_id,
@@ -297,12 +353,12 @@ def create_app() -> typing.Any:
 
     @app.post("/documents/open")
     def open_document(request: OpenDocumentRequest) -> dict[str, typing.Any]:
-        """Validate and activate an existing package; legacy containers fail closed."""
+        """Validate and activate an existing deterministic package."""
         try:
+            logger.event("documents", "open_requested", "Opening specification", details=request)
             state["active"] = V1Session(request.path, request.sidecar_root)
             return _snapshot(active())
         except (OSError, ValueError, SpecValidationError) as exc:
-            # In particular, legacy ODT containers fail with an explicit V1 package diagnostic.
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/documents/snapshot")
@@ -545,6 +601,12 @@ def create_app() -> typing.Any:
     def transaction(request: TransactionRequest) -> dict[str, typing.Any]:
         """Decode and atomically apply a revision-guarded edit transaction."""
         try:
+            logger.event(
+                "transactions",
+                "apply_requested",
+                f"Applying {len(request.operations)} specification operation(s)",
+                details=request,
+            )
             operations = _decode_transaction_operations(active().revision.document_id, request.operations)
         except (KeyError, ValueError, pydantic.ValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
@@ -814,7 +876,7 @@ def _decode_component_port_input(
     *,
     include_name: bool,
 ) -> WirePortInput | TransactionalPortInput | StructuredPortInput:
-    """Decode the public discriminated port union without accepting legacy shapes."""
+    """Decode the strict public discriminated port union."""
     family = str(value.get("family", ""))
     common = {"family", "display_name", "description"}
     if include_name:

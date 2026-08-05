@@ -3,6 +3,7 @@ from __future__ import annotations
 from uuid import uuid4
 
 from openai import AsyncOpenAI
+from spec2gds_runtime import StructuredLogger
 
 from ..config import Settings
 from ..models import (
@@ -46,6 +47,7 @@ class CircuitEditingAgent:
         self.settings = settings
         self.context_processor = context_processor or CircuitContextProcessor()
         self._client = client
+        self._logger = StructuredLogger("ai-assistant", settings.logging) if settings.logging else None
 
     async def propose(
         self, request: CircuitAgentRequest
@@ -76,6 +78,18 @@ class CircuitEditingAgent:
                 }
             )
 
+        call = {
+            "model": self.settings.openai_model,
+            "instructions": INSTRUCTIONS,
+            "input": [{"role": "user", "content": content}],
+            "text_format": CircuitProposalDraft.__name__,
+            "store": False,
+        }
+        if self._logger:
+            self._logger.event(
+                "openai", "request", "Sending Circuit proposal request to OpenAI",
+                details=call,
+            )
         response = await client.responses.parse(
             model=self.settings.openai_model,
             instructions=INSTRUCTIONS,
@@ -83,6 +97,11 @@ class CircuitEditingAgent:
             text_format=CircuitProposalDraft,
             store=False,
         )
+        if self._logger:
+            self._logger.event(
+                "openai", "response", "Received Circuit proposal response from OpenAI",
+                details=response,
+            )
         draft = response.output_parsed
         if draft is None:
             raise RuntimeError("The model did not return a circuit proposal.")

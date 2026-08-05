@@ -10,11 +10,11 @@ import zipfile
 
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.models import (
+    MIMETYPE,
     AssetEntry,
     DocumentEntry,
     DocumentKind,
     EntityRef,
-    MIMETYPE,
     NarrativeDocument,
     SpecManifest,
     document_directory,
@@ -22,7 +22,6 @@ from spec2gds.agent_spec.spec_format.models import (
     sha256_digest,
     validate_safe_path,
 )
-
 
 _FIXED_ZIP_DATE: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0)
 _REQUIRED_PATHS: set[str] = {"mimetype", "manifest.json", "document/document.json"}
@@ -96,7 +95,7 @@ class SpecPackage:
 
     @classmethod
     def load(cls, path: str) -> "SpecPackage":
-        """Load a custom V1 package and reject legacy ODT-style containers."""
+        """Load a V1 package and reject every unsupported container format."""
         package_path = pathlib.Path(path)
         if not package_path.exists():
             raise FileNotFoundError(path)
@@ -113,7 +112,7 @@ class SpecPackage:
                 if mimetype_info.compress_type != zipfile.ZIP_STORED:
                     raise SpecValidationError(["V1 mimetype entry must be uncompressed."])
                 if archive.read("mimetype") != MIMETYPE.encode("ascii"):
-                    raise SpecValidationError(["Unsupported package mimetype; legacy ODT .spec files are not supported."])
+                    raise SpecValidationError(["Unsupported package mimetype."])
                 for info in archive.infolist():
                     if info.is_dir():
                         raise SpecValidationError([f"V1 package cannot contain directory entry: {info.filename}"])

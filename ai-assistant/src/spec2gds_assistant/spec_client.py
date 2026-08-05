@@ -6,6 +6,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
+from spec2gds_runtime import StructuredLogger
 
 
 class SpecServiceError(RuntimeError):
@@ -29,9 +30,17 @@ def normalize_spec_base_url(base_url: str, allowlist: tuple[str, ...]) -> str:
 
 
 class SpecEditorClient:
-    def __init__(self, timeout_seconds: float, allowlist: tuple[str, ...]) -> None:
+    """Validated Spec API client with optional boundary-level diagnostics."""
+
+    def __init__(
+        self,
+        timeout_seconds: float,
+        allowlist: tuple[str, ...],
+        logger: StructuredLogger | None = None,
+    ) -> None:
         self.timeout_seconds = timeout_seconds
         self.allowlist = allowlist
+        self.logger = logger
 
     def normalize(self, base_url: str) -> str:
         return normalize_spec_base_url(base_url, self.allowlist)
@@ -68,11 +77,27 @@ class SpecEditorClient:
         )
 
     async def _request(self, method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        if self.logger:
+            self.logger.event(
+                "spec-client",
+                "request",
+                f"Calling Spec Editor {method} {url}",
+                details={"method": method, "url": url, "request": kwargs},
+            )
         try:
             async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
                 response = await client.request(method, url, **kwargs)
         except httpx.HTTPError as exc:
             raise SpecServiceError(503, f"Spec service request failed: {exc}") from exc
+        if self.logger:
+            self.logger.event(
+                "spec-client",
+                "response",
+                f"Spec Editor returned {response.status_code}",
+                severity="warning" if response.is_error else "info",
+                status=response.status_code,
+                details={"headers": dict(response.headers), "body": response.text},
+            )
         if response.is_error:
             try:
                 payload = response.json()

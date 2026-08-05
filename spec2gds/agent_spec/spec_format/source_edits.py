@@ -14,7 +14,6 @@ import lxml.etree as etree
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.models import ID_PATTERN
 
-
 _COMPONENT_ORDER = [
     "vendor",
     "library",
@@ -52,13 +51,10 @@ def set_entity_metadata(
 _PORT_FIELDS = {
     "name",
     "family",
-    "style",  # Accepted by assistant proposals and normalized to ``family``.
     "display_name",
     "description",
     "direction",
     "range",
-    "left",  # Legacy assistant proposal spelling.
-    "right",  # Legacy assistant proposal spelling.
     "initiative",
     "kind",
     "custom_kind",
@@ -71,12 +67,7 @@ _TRANSACTION_KINDS = {"tlm_port", "tlm_socket", "simple_socket", "multi_socket",
 
 
 def upsert_component_port(root: etree._Element, value: dict[str, typing.Any]) -> None:
-    """Insert or replace one editor-profiled component port.
-
-    Assistant proposals use this entry point too.  The older ``style`` and
-    ``left``/``right`` spellings are accepted there, then normalized through
-    exactly the same validation as editor transactions.
-    """
+    """Insert or replace a strictly typed editor-profiled component port."""
     normalized = _normalize_component_port(value, require_name=True)
     model = _ensure_ordered(root, "model", _COMPONENT_ORDER)
     ports = _child(model, "ports")
@@ -134,12 +125,9 @@ def _normalize_component_port(
         raise ValueError("Port name is required.")
     if name and not ID_PATTERN.fullmatch(name):
         raise ValueError("Port name must be an XML-compatible identifier.")
-    family = str(value.get("family", value.get("style", "wire"))).strip()
+    family = str(value.get("family", "")).strip()
     if family not in _PORT_FAMILIES:
         raise ValueError("Port family must be wire, transactional, or structured.")
-    if "family" in value and "style" in value and value["family"] != value["style"]:
-        raise ValueError("Port family and legacy style values must match.")
-
     normalized: dict[str, typing.Any] = {
         "name": name,
         "family": family,
@@ -150,17 +138,10 @@ def _normalize_component_port(
         direction = str(value.get("direction", "")).strip()
         if direction not in _DIRECTIONS:
             raise ValueError("Wire port direction must be in, out, or inout.")
-        range_value = value.get("range")
-        if range_value is None and ("left" in value or "right" in value):
-            left = _optional_text(value.get("left"))
-            right = _optional_text(value.get("right"))
-            if (left is None) != (right is None):
-                raise ValueError("Wire port ranges require both left and right expressions.")
-            range_value = None if left is None else left if left == right else f"{left}:{right}"
-        left, right = parse_wire_range(range_value)
+        left, right = parse_wire_range(value.get("range"))
         normalized.update(direction=direction, left=left, right=right)
     elif family == "transactional":
-        initiative = str(value.get("initiative", value.get("direction", ""))).strip()
+        initiative = str(value.get("initiative", "")).strip()
         if initiative not in _INITIATIVES:
             raise ValueError("Transactional port initiative must be requires, provides, or both.")
         kind = _optional_text(value.get("kind"))

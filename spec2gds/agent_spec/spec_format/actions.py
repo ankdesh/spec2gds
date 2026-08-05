@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import UTC, datetime
 import hashlib
 import json
-from pathlib import Path
 import subprocess
 import sys
 import tempfile
 import typing
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 import jsonschema
 import pydantic
@@ -18,9 +18,9 @@ import pydantic
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, DesignIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import (
+    SHA256_PATTERN,
     EntityRef,
     NarrativeBlock,
-    SHA256_PATTERN,
     StrictModel,
     new_entity_id,
     sha256_digest,
@@ -32,7 +32,6 @@ from spec2gds.agent_spec.spec_format.transactions import (
     SpecEditTransaction,
     UpsertNarrativeBlock,
 )
-
 
 _ACTIVITY_PATH = "activity/v1/actions.json"
 _BUNDLE_VERSION = 1

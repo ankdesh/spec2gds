@@ -38,9 +38,11 @@ connection form is also available for known document/entity IDs.
 The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
 SQLite database defaults to `data/assistant.db`.
 
-`spec2gds-external-assistant` remains available as a transitional command
-alias. Existing local launch configurations can migrate without changing the
-assistant database or its conversation history.
+Unified logging uses the root `config/services.json`. Set
+`SPEC2GDS_LOGGING=ON` and optionally `SPEC2GDS_LOG_LEVEL=debug` before starting
+the service to include Assistant activity in the shared log. Debug mode records
+the redacted request immediately before each OpenAI call and its response
+immediately afterward.
 
 ## Flow and safety
 

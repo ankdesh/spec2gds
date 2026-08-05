@@ -47,7 +47,6 @@ from spec2gds.agent_spec.spec_format.transactions import (
     UpsertNarrativeBlock,
 )
 
-
 SUPPORTED_TARGET_KINDS = {
     "component",
     "design",

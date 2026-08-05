@@ -10,6 +10,7 @@
     "start": "vite-node src/cli.ts"
   },
   "dependencies": {
-    "@spec2gds/circuit-core": "0.0.0"
+    "@spec2gds/circuit-core": "0.0.0",
+    "@spec2gds/observability": "0.1.0"
   }
 }

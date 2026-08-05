@@ -214,12 +214,13 @@ export interface HostedServiceLocation {
 }
 
 export interface ServiceDirectory {
-  schema_version: 1;
+  schema_version: 2;
   services: {
     spec_editor: HostedServiceLocation;
     circuit_designer: HostedServiceLocation;
     ai_assistant: HostedServiceLocation;
   };
+  logging: { enabled: boolean; level: "info" | "debug" };
 }
 
 export interface SourceChangeEvent {

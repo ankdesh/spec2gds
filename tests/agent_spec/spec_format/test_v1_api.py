@@ -1,4 +1,4 @@
-"""V1.4 API/editor acceptance checks without the legacy ODT production path."""
+"""V1.4 API/editor acceptance checks for the current deterministic format."""
 
 import inspect
 import tempfile
@@ -108,7 +108,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         assert package_cli(["validate", "--container", str(path)]) == 0
 
 
-def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
+def test_v1_api_rejects_stale_edits_and_unsupported_packages() -> None:
     endpoints = _endpoints()
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "v1.spec"
@@ -120,14 +120,14 @@ def test_v1_api_rejects_stale_edits_and_legacy_odt_packages() -> None:
             )
         assert stale.value.status_code == 409
 
-        odt = Path(temporary) / "legacy.spec"
+        odt = Path(temporary) / "unsupported.spec"
         with zipfile.ZipFile(odt, "w") as archive:
             archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
             archive.writestr("content.xml", "<office:document-content/>")
         with pytest.raises(fastapi.HTTPException) as rejected:
             endpoints["open_document"](OpenDocumentRequest(path=str(odt)))
         assert rejected.value.status_code == 422
-        assert "legacy ODT" in str(rejected.value.detail)
+        assert "Unsupported package mimetype" in str(rejected.value.detail)
         assert opened["source_revision_hash"]
 
 
@@ -353,7 +353,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert published[1]["components"][0]["terminals"][0]["label"] == "irq_in"
 
 
-def test_editor_launches_ai_assistant_with_transitional_url_fallback(
+def test_editor_launches_ai_assistant_with_configured_url_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -370,11 +370,6 @@ def test_editor_launches_ai_assistant_with_transitional_url_fallback(
         entity_kind="component",
         entity_id=component["entity_id"],
     )
-
-    monkeypatch.delenv("AI_ASSISTANT_URL", raising=False)
-    monkeypatch.setenv("EXTERNAL_ASSISTANT_URL", "http://127.0.0.1:4300/")
-    legacy = endpoints["launch_assistant"](request)
-    assert legacy["assistant_url"].startswith("http://127.0.0.1:4300/launch/spec?")
 
     monkeypatch.setenv("AI_ASSISTANT_URL", "http://127.0.0.1:4400/")
     preferred = endpoints["launch_assistant"](request)
@@ -407,11 +402,11 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
     assert calls == [
         (
             "spec2gds.agent_spec.spec_format.v1_api:create_app",
-            {"factory": True, "host": "0.0.0.0", "port": 8080, "reload": True},
+                {"factory": True, "host": "0.0.0.0", "port": 8080, "reload": True, "access_log": False},
         ),
         (
             "spec2gds.agent_spec.spec_format.v1_api:create_app",
-            {"factory": True, "host": "127.0.0.1", "port": 8765, "reload": False},
+                {"factory": True, "host": "127.0.0.1", "port": 8765, "reload": False, "access_log": False},
         ),
     ]
     output = capsys.readouterr().out

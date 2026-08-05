@@ -5,7 +5,7 @@ import typing
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from .circuit_client import (
     CircuitDesignerClient,

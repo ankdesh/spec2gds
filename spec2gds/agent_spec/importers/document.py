@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import importlib.metadata
 import json
+from dataclasses import dataclass
 from pathlib import Path
 
 from spec2gds.agent_spec.importers.docling_reader import (
@@ -29,7 +29,6 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeDocument,
     sha256_digest,
 )
-
 
 _ANNOTATION_ROOT = "annotations/document_import"
 

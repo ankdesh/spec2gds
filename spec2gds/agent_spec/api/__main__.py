@@ -6,6 +6,8 @@ import argparse
 import os
 from collections.abc import Sequence
 
+from spec2gds_runtime import StructuredLogger
+
 from spec2gds.service_registry import load_service_registry
 
 _APP_FACTORY = "spec2gds.agent_spec.spec_format.v1_api:create_app"
@@ -48,6 +50,14 @@ def _parser(command: str) -> argparse.ArgumentParser:
 def _run(command: str, argv: Sequence[str] | None = None) -> None:
     """Parse one public command and run the shared FastAPI application."""
     args = _parser(command).parse_args(argv)
+    registry = load_service_registry()
+    logger = StructuredLogger("spec-editor", registry.logging)
+    logger.event(
+        "process",
+        "starting",
+        f"Starting spec2gds {command}",
+        details={"host": args.host, "port": args.port, "reload": args.reload},
+    )
     editor_url = f"http://{args.host}:{args.port}/editor"
     if command == "editor":
         print(f"spec2gds editor: {editor_url}")
@@ -64,7 +74,9 @@ def _run(command: str, argv: Sequence[str] | None = None) -> None:
         host=args.host,
         port=args.port,
         reload=args.reload,
+        access_log=False,
     )
+    logger.event("process", "stopped", f"Stopped spec2gds {command}")
 
 
 def server_main(argv: Sequence[str] | None = None) -> None:

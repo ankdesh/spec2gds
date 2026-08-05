@@ -30,16 +30,20 @@ import {
   summarizeFileDiagnostics,
 } from "./circuit-files";
 import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
+import { BrowserLogger, type PublicLoggingConfig } from "@spec2gds/observability/browser";
 
 type Selection = { kind: "node" | "net"; id: string } | null;
 type ServiceDirectory = {
+  schema_version: 2;
   services: {
     circuit_designer: { service_url: string; ui_url: string };
     ai_assistant: { service_url: string; ui_url: string };
   };
+  logging: PublicLoggingConfig;
 };
 
 const defaultServices: ServiceDirectory = {
+  schema_version: 2,
   services: {
     circuit_designer: {
       service_url: "http://127.0.0.1:4100/api/circuit-designer/v1",
@@ -50,6 +54,7 @@ const defaultServices: ServiceDirectory = {
       ui_url: "http://127.0.0.1:4200",
     },
   },
+  logging: { enabled: false, level: "info" },
 };
 const operationId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
 const emptyDocument = () => createEmptyCircuitDocument(
@@ -81,6 +86,10 @@ export function App() {
     [apiBase],
   );
   const [services, setServices] = useState<ServiceDirectory>(defaultServices);
+  const browserLogger = useMemo(
+    () => new BrowserLogger(`${apiBase}/logs/events`, services.logging),
+    [apiBase, services.logging],
+  );
   const [snapshot, setSnapshot] = useState<CircuitSnapshot>();
   const [document, setDocument] = useState<CircuitDocument>();
   const [lease, setLease] = useState<EditLease>();
@@ -108,6 +117,8 @@ export function App() {
       .then(setServices)
       .catch(() => undefined);
   }, [apiBase]);
+
+  useEffect(() => browserLogger.captureGlobalErrors(), [browserLogger]);
 
   useEffect(() => {
     let active = true;
@@ -146,8 +157,14 @@ export function App() {
         setMessage(joined
           ? `Joined the existing REST session at revision ${next.revision}.`
           : `Created REST session at revision ${next.revision}.`);
+        browserLogger.event(
+          "documents", joined ? "joined" : "created",
+          joined ? "Joined Circuit Designer session" : "Created Circuit Designer session",
+          "info", { snapshot: next },
+        );
         draftRef.current = undefined;
       } catch (reason) {
+        browserLogger.event("documents", "initialization_failed", "Could not initialize Circuit Designer", "error", { error: String(reason) });
         if (!active) return;
         setSnapshot(undefined);
         setDocument(undefined);
@@ -156,7 +173,7 @@ export function App() {
       }
     })();
     return () => { active = false; };
-  }, [backend, initial, linkedDocumentId]);
+  }, [backend, browserLogger, initial, linkedDocumentId]);
 
   function newDocument(): void {
     setSnapshot(undefined);

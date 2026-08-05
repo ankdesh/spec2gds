@@ -42,6 +42,20 @@ that file before starting the services when the defaults are not appropriate;
 set `SPEC2GDS_SERVICE_CONFIG` to point at an alternate registry. Existing
 per-service environment variables remain supported as overrides.
 
+Unified file logging is disabled by default. Enable concise operational logs
+with `SPEC2GDS_LOGGING=ON`; add boundary data and owned OpenAI request/response
+objects with `SPEC2GDS_LOG_LEVEL=debug`. All applications append to the single
+file configured under `logging.file`. At its configured size limit the file is
+compacted in place so only the newest complete entries remain; no backups are
+created. Start the color-coded local viewer with:
+
+```bash
+uv run spec2gds-log-viewer
+```
+
+See [the logging guide](docs/logging.md) for filters, redaction, and the event
+format.
+
 The editors expose **AI Assistant ↗** in their upper-right toolbar. Circuit
 Designer opens a chat already bound to the active circuit. Spec Editor opens
 the Spec workspace; use an entity's **Options → More actions… → Explore with AI
@@ -141,13 +155,14 @@ uv run spec2gds-ai-assistant
 
 The AI Assistant is optional and does not sit on either editor's critical path.
 It checks the configured Spec and Circuit health endpoints when its workspace
-chooser opens. `EXTERNAL_ASSISTANT_URL` and the old CLI name remain transitional
-aliases. See [ai-assistant/README.md](ai-assistant/README.md).
+chooser opens. See [ai-assistant/README.md](ai-assistant/README.md).
 
 ## Verify changes
 
 ```bash
 uv run python -m pytest -q
+uv run ruff check spec2gds runtime/src
+uv run vulture spec2gds runtime/src --min-confidence 90
 
 cd circuit-designer
 npm run generate:check

@@ -13,6 +13,8 @@ import {
 import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
 import { EphemeralCircuitSessionBackend } from "./session-backend";
 import { resolvedServiceDirectory, type PublicServiceDirectory } from "./service-registry";
+import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observability/node";
+import { randomUUID } from "node:crypto";
 
 type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
 
@@ -21,6 +23,7 @@ export interface CircuitServiceOptions {
   providerAllowlist?: string[];
   now?: () => Date;
   serviceDirectory?: PublicServiceDirectory;
+  logger?: StructuredLogger;
 }
 
 interface RouteContext {
@@ -36,12 +39,14 @@ export class CircuitDesignerService {
   private readonly allowlist: Set<string>;
   private readonly now: () => Date;
   private readonly serviceDirectory: PublicServiceDirectory;
+  private readonly logger: StructuredLogger;
 
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
     this.allowlist = new Set(options.providerAllowlist ?? []);
     this.now = options.now ?? (() => new Date());
     this.serviceDirectory = options.serviceDirectory ?? resolvedServiceDirectory();
+    this.logger = options.logger ?? new StructuredLogger("circuit-designer", loadObservabilityConfig());
     this.server = createServer((request, response) => void this.handle(request, response));
   }
 
@@ -61,6 +66,24 @@ export class CircuitDesignerService {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const correlationId = String(request.headers["x-request-id"] ?? randomUUID().replaceAll("-", ""));
+    const started = performance.now();
+    let failure: unknown;
+    response.setHeader("X-Request-ID", correlationId);
+    response.once("finish", () => {
+      if (request.url?.includes("/logs/events")) return;
+      const status = response.statusCode;
+      this.logger.event({
+        component: "http", event: "request_completed",
+        message: `${request.method ?? "GET"} ${request.url ?? "/"} returned ${status}`,
+        severity: status >= 500 ? "error" : status >= 400 ? "warning" : "info",
+        correlationId, durationMs: performance.now() - started, status,
+        details: {
+          method: request.method, url: request.url,
+          ...(failure instanceof Error ? { error: { name: failure.name, message: failure.message, stack: failure.stack } } : {}),
+        },
+      });
+    });
     try {
       const url = new URL(request.url ?? "/", "http://localhost");
       const prefix = "/api/circuit-designer/v1";
@@ -74,6 +97,25 @@ export class CircuitDesignerService {
       }
       if (method === "GET" && parts[0] === "services" && parts.length === 1) {
         return this.jsonResponse(response, 200, this.serviceDirectory);
+      }
+      if (method === "POST" && parts[0] === "logs" && parts[1] === "events" && parts.length === 2) {
+        const body = await this.json(request) as { session_id?: string; events?: unknown[] };
+        if (JSON.stringify(body).length > 262_144 || !Array.isArray(body.events) || body.events.length > 100) {
+          return this.error(response, 422, "validation_failed", "Browser log batch is invalid.");
+        }
+        for (const value of body.events) {
+          if (!value || typeof value !== "object") continue;
+          const event = value as Record<string, unknown>;
+          const severity = ["debug", "info", "warning", "error"].includes(String(event.severity))
+            ? String(event.severity) as "debug" | "info" | "warning" | "error" : "warning";
+          this.logger.event({
+            component: String(event.component ?? "ui"), event: String(event.event ?? "browser_event"),
+            message: String(event.message ?? "Browser event"), severity, origin: "browser",
+            details: event.details, correlationId: typeof event.correlation_id === "string" ? event.correlation_id : undefined,
+            sessionId: String(body.session_id ?? "unknown"), timestamp: typeof event.timestamp === "string" ? event.timestamp : undefined,
+          });
+        }
+        response.statusCode = 204; response.end(); return;
       }
 
       if (method === "POST" && parts[0] === "documents" && parts.length === 1) {
@@ -163,6 +205,7 @@ export class CircuitDesignerService {
       if (method === "GET" && tail[0] === "events") return this.subscribe(request, response, documentId);
       return this.error(response, 404, "not_found", "Unknown endpoint.");
     } catch (reason) {
+      failure = reason;
       this.handleError(response, reason);
     }
   }
@@ -276,6 +319,11 @@ export class CircuitDesignerService {
           : result.status === "rejected" ? 400
             : 200;
     if (status === 200 && documentId) this.emit(documentId, "document.changed", result.snapshot?.revision);
+    this.logger.event({
+      component: "documents", event: "change_completed",
+      message: `Circuit change ${result.status}${documentId ? ` for ${documentId}` : ""}`,
+      severity: status >= 400 ? "warning" : "info", status, details: result,
+    });
     this.jsonResponse(response, status, result);
   }
 

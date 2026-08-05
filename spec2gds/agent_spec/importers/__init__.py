@@ -1,16 +1,16 @@
 """Document-to-``.spec`` import utilities."""
 
-from spec2gds.agent_spec.importers.document import (
-    DocumentImportOptions,
-    DocumentImportResult,
-    DocumentToSpecConverter,
-)
 from spec2gds.agent_spec.importers.docling_reader import (
     DoclingDocumentReader,
     ParsedDocument,
     ParsedImage,
     ParsedTable,
     ParsedText,
+)
+from spec2gds.agent_spec.importers.document import (
+    DocumentImportOptions,
+    DocumentImportResult,
+    DocumentToSpecConverter,
 )
 from spec2gds.agent_spec.importers.ipxact_from_tables import (
     ExtractedBusInterface,

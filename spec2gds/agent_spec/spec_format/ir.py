@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from types import MappingProxyType
 import typing
+from dataclasses import dataclass
+from types import MappingProxyType
 
 import lxml.etree as etree
 
@@ -19,7 +19,6 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeDocument,
     SpecManifest,
 )
-
 
 _INTERFACE_ROLES = ("initiator", "target", "system", "monitor")
 
@@ -192,7 +191,6 @@ class SpecRevision:
         package.require_valid()
         manifest = SpecManifest.model_validate_json(_canonical_json(package.manifest))
         narrative = NarrativeDocument.model_validate_json(_canonical_json(package.narrative))
-        documents = {entry.entity_id: entry for entry in manifest.documents}
         components: list[ComponentIR] = []
         designs: list[DesignIR] = []
         buses: list[BusDefinitionIR] = []

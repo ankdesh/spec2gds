@@ -24,6 +24,7 @@ import {
 } from "@spec2gds/document-core";
 
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
+import { BrowserLogger } from "@spec2gds/observability/browser";
 
 type ActionDialogState = {
   ref: EntityRef;
@@ -65,6 +66,7 @@ export default function App() {
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [assistantUrl, setAssistantUrl] = useState("http://127.0.0.1:4200");
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
+  const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
 
   const refreshActivity = useCallback(async () => {
     setActivity(await client.getActivity());
@@ -72,9 +74,14 @@ export default function App() {
 
   useEffect(() => {
     void client.getServiceDirectory()
-      .then((directory) => setAssistantUrl(directory.services.ai_assistant.ui_url))
+      .then((directory) => {
+        setAssistantUrl(directory.services.ai_assistant.ui_url);
+        setBrowserLogger(new BrowserLogger(`${import.meta.env.DEV ? "/api" : ""}/logs/events`, directory.logging));
+      })
       .catch(() => undefined);
   }, [client]);
+
+  useEffect(() => browserLogger?.captureGlobalErrors(), [browserLogger]);
 
   const openDocument = useCallback(async (nextPath: string) => {
     if (!nextPath) return false;
@@ -93,14 +100,16 @@ export default function App() {
       setPath(nextPath);
       setView("document");
       setExternalChange(null);
+      browserLogger?.event("documents", "opened", "Opened specification", "info", { path: nextPath, snapshot: nextSnapshot });
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      browserLogger?.event("documents", "open_failed", "Could not open specification", "error", { path: nextPath, error: String(caught) });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [browserLogger, client]);
 
   const createDocument = useCallback(async (nextPath: string, title: string) => {
     if (!nextPath || !title.trim()) return false;
@@ -120,14 +129,16 @@ export default function App() {
       setView("document");
       setExternalChange(null);
       setNotice("Created a new specification package.");
+      browserLogger?.event("documents", "created", "Created specification", "info", { path: nextPath, title, snapshot: nextSnapshot });
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
+      browserLogger?.event("documents", "create_failed", "Could not create specification", "error", { path: nextPath, title, error: String(caught) });
       return false;
     } finally {
       setLoading(false);
     }
-  }, [client]);
+  }, [browserLogger, client]);
 
   useEffect(() => {
     if (!snapshot) return;

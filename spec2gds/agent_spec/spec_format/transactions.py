@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import copy
 import dataclasses
-from dataclasses import dataclass
 import typing
+from dataclasses import dataclass
 
 import lxml.etree as etree
 
@@ -13,10 +13,10 @@ from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import (
+    ID_PATTERN,
     ComponentComposition,
     DocumentKind,
     EntityRef,
-    ID_PATTERN,
     NarrativeBlock,
     new_entity_id,
 )

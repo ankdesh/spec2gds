@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import quote, urlsplit, urlunsplit
 
 import httpx
+from spec2gds_runtime import StructuredLogger
 
 
 class CircuitServiceError(RuntimeError):
@@ -42,10 +43,14 @@ def normalize_circuit_base_url(
 
 class CircuitDesignerClient:
     def __init__(
-        self, timeout_seconds: float = 30, allowlist: tuple[str, ...] = ()
+        self,
+        timeout_seconds: float = 30,
+        allowlist: tuple[str, ...] = (),
+        logger: StructuredLogger | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.allowlist = allowlist
+        self.logger = logger
 
     def normalize(self, base_url: str) -> str:
         return normalize_circuit_base_url(base_url, self.allowlist)
@@ -107,8 +112,28 @@ class CircuitDesignerClient:
     async def _request(
         self, method: str, url: str, **kwargs: Any
     ) -> httpx.Response:
+        if self.logger:
+            self.logger.event(
+                "circuit-client",
+                "request",
+                f"Calling Circuit Designer {method} {url}",
+                details={"method": method, "url": url, "request": kwargs},
+            )
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.request(method, url, **kwargs)
+        if self.logger:
+            media_type = response.headers.get("content-type", "")
+            self.logger.event(
+                "circuit-client",
+                "response",
+                f"Circuit Designer returned {response.status_code}",
+                severity="warning" if response.is_error else "info",
+                status=response.status_code,
+                details={
+                    "headers": dict(response.headers),
+                    "body": response.content if media_type.startswith("image/") else response.text,
+                },
+            )
         if response.is_error:
             try:
                 detail: Any = response.json()

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import typing
+from pathlib import Path
 
 
 def _write_json(path: Path, value: dict[str, typing.Any]) -> None:

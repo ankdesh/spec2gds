@@ -12,6 +12,7 @@ dependencies = [
     "pyedaa-ipxact>=0.6.5",
     "pytest>=9.0.3",
     "uvicorn[standard]>=0.35.0",
+    "spec2gds-runtime",
 ]
 
 [project.optional-dependencies]
@@ -23,10 +24,24 @@ document-import = [
     "torchvision>=0.17.0",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.12.0",
+    "vulture>=2.14",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["F", "I"]
+
 [project.scripts]
 spec2gds-server = "spec2gds.agent_spec.api.__main__:server_main"
 spec2gds-editor = "spec2gds.agent_spec.api.__main__:editor_main"
 spec2gds-import-document = "spec2gds.agent_spec.importers.cli:main"
+spec2gds-log-viewer = "spec2gds.log_viewer:main"
 
 [tool.uv]
 package = true
@@ -40,6 +55,7 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [tool.uv.sources]
+spec2gds-runtime = { path = "runtime", editable = true }
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
 

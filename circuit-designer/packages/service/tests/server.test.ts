@@ -2,6 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { simpleDocumentFixture } from "@spec2gds/circuit-core";
 import { CircuitDesignerService } from "../src/server";
 import { EphemeralCircuitSessionBackend } from "../src/session-backend";
+import { StructuredLogger } from "@spec2gds/observability/node";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 let service: CircuitDesignerService | undefined;
 
@@ -11,6 +15,26 @@ afterEach(async () => {
 });
 
 describe("Circuit Designer REST service", () => {
+  it("accepts browser events into the trusted combined-log contract", async () => {
+    const file = join(mkdtempSync(join(tmpdir(), "spec2gds-service-log-")), "combined.jsonl");
+    const logger = new StructuredLogger("circuit-designer", {
+      enabled: true, level: "debug", file, maxBytes: 100_000,
+      viewerHost: "127.0.0.1", viewerPort: 4300,
+    });
+    service = new CircuitDesignerService({ logger });
+    const port = await service.listen();
+    const response = await fetch(`http://127.0.0.1:${port}/api/circuit-designer/v1/logs/events`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        session_id: "browser-1",
+        events: [{ component: "canvas", event: "selected", message: "Selected block", details: { id: "producer_0" } }],
+      }),
+    });
+    expect(response.status).toBe(204);
+    const record = JSON.parse(readFileSync(file, "utf8"));
+    expect(record).toMatchObject({ application: "circuit-designer", origin: "browser", session_id: "browser-1" });
+  });
+
   it("exposes health and the shared service directory", async () => {
     service = new CircuitDesignerService();
     const port = await service.listen();

@@ -60,12 +60,10 @@ Description. An upsert is a complete value, so unchanged fields must be copied
 from context. Family conversion is rejected, and ports on components owning an
 internal design are read-only just as they are in the direct editor.
 
-## Naming and compatibility
+## Naming and configuration
 
-Run the service with `uv run spec2gds-ai-assistant`. The previous
-`spec2gds-external-assistant` command remains a transitional alias. The editor
-uses the shared `config/services.json`, with `AI_ASSISTANT_URL` and then the
-previous `EXTERNAL_ASSISTANT_URL` as overrides. The neutral
+Run the service with `uv run spec2gds-ai-assistant`. The editor uses the shared
+`config/services.json`, with `AI_ASSISTANT_URL` as its URL override. The neutral
 `/assistant/*` routes, `assistant_url` response field, internal
 `spec2gds_assistant` Python package, and `ASSISTANT_*` service settings remain
 stable.

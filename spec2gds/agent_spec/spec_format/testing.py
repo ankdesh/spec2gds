@@ -9,7 +9,6 @@ from pathlib import Path
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.models import ComponentComposition, EntityRef, NarrativeBlock
 
-
 _NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
 _ARCHITECTURE_SVG = b"""<svg xmlns="http://www.w3.org/2000/svg" width="960" height="360" viewBox="0 0 960 360">
   <rect width="960" height="360" rx="24" fill="#f5f8f2"/>

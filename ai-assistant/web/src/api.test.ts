@@ -8,7 +8,11 @@ afterEach(() => {
 
 describe("assistant connection API", () => {
   it("loads hosted-service availability", async () => {
-    const directory = { schema_version: 1, services: { spec_editor: { available: true } } };
+    const directory = {
+      schema_version: 2,
+      services: { spec_editor: { available: true } },
+      logging: { enabled: false, level: "info" },
+    };
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(directory));
     vi.stubGlobal("fetch", fetchMock);
 

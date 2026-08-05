@@ -31,12 +31,13 @@ export interface HostedServiceStatus {
 }
 
 export interface ServiceDirectory {
-  schema_version: 1;
+  schema_version: 2;
   services: {
     spec_editor: HostedServiceStatus;
     circuit_designer: HostedServiceStatus;
     ai_assistant: HostedServiceStatus;
   };
+  logging: { enabled: boolean; level: "info" | "debug" };
 }
 
 export interface StoredMessage {

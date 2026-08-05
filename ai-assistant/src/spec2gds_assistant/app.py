@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
+from uuid import uuid4
 
 import httpx
-
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import (
     add_a2a_routes_to_fastapi,
@@ -16,9 +18,10 @@ from a2a.server.routes import (
 )
 from a2a.server.tasks import DatabaseTaskStore
 from a2a.types import AgentCapabilities, AgentCard, AgentInterface, AgentSkill
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from spec2gds_runtime import StructuredLogger
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from .a2a_agent import (
@@ -37,14 +40,17 @@ from .spec_client import SpecEditorClient, SpecServiceError
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    logger = StructuredLogger("ai-assistant", settings.logging) if settings.logging else None
     database = AssistantDatabase(settings.database_path)
     circuit_client = CircuitDesignerClient(
         settings.circuit_request_timeout_seconds,
         settings.circuit_service_allowlist,
+        logger=logger,
     )
     spec_client = SpecEditorClient(
         settings.spec_request_timeout_seconds,
         settings.spec_service_allowlist,
+        logger=logger,
     )
 
     task_engine = _task_engine(settings.database_path)
@@ -63,7 +69,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         database.initialize()
         await task_store.initialize()
+        if logger:
+            logger.event("application", "ready", "AI Assistant is ready")
         yield
+        if logger:
+            logger.event("application", "stopping", "AI Assistant is stopping")
         await task_engine.dispose()
 
     app = FastAPI(
@@ -74,6 +84,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.settings = settings
     app.state.database = database
     app.state.a2a_task_store = task_store
+    app.state.structured_logger = logger
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
@@ -83,6 +94,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def log_request(request: Request, call_next):
+        """Add correlation IDs and record a single outcome for each HTTP boundary."""
+        correlation_id = request.headers.get("x-request-id") or uuid4().hex
+        started = time.perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception as reason:
+            if logger:
+                logger.event(
+                    "http", "request_failed", f"{request.method} {request.url.path} failed",
+                    severity="error", correlation_id=correlation_id,
+                    duration_ms=(time.perf_counter() - started) * 1000,
+                    details={"method": request.method, "url": str(request.url)}, exception=reason,
+                )
+            raise
+        response.headers["X-Request-ID"] = correlation_id
+        if logger and not request.url.path.startswith("/api/logs"):
+            logger.event(
+                "http", "request_completed",
+                f"{request.method} {request.url.path} returned {response.status_code}",
+                severity="error" if response.status_code >= 500 else "warning" if response.status_code >= 400 else "info",
+                correlation_id=correlation_id,
+                duration_ms=(time.perf_counter() - started) * 1000,
+                status=response.status_code,
+                details={"method": request.method, "url": str(request.url)},
+            )
+        return response
 
     # The A2A SDK installs a dynamic ``/{tenant}`` mount. Register Vite's
     # asset prefix first so requests such as ``/assets/index-*.js`` are not
@@ -121,7 +161,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             probe(f"{settings.circuit_designer_service_url}/health"),
         )
         return {
-            "schema_version": 1,
+            "schema_version": 2,
             "services": {
                 "spec_editor": {
                     "service_url": settings.spec_editor_service_url,
@@ -142,7 +182,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "detail": "Available",
                 },
             },
+            "logging": {
+                "enabled": bool(settings.logging and settings.logging.enabled),
+                "level": settings.logging.level if settings.logging else "info",
+            },
         }
+
+    @app.post("/api/logs/events", status_code=204, include_in_schema=False)
+    async def browser_log_events(payload: dict) -> None:
+        """Receive bounded browser diagnostics without trusting source metadata."""
+        if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > 262_144:
+            raise HTTPException(status_code=413, detail="Browser log batch is too large.")
+        events = payload.get("events")
+        if not isinstance(events, list) or len(events) > 100:
+            raise HTTPException(status_code=422, detail="Browser log events must be a list of at most 100 items.")
+        if logger:
+            logger.browser_events(
+                str(payload.get("session_id", "unknown")),
+                [item for item in events if isinstance(item, dict)],
+            )
 
     @app.get("/launch/spec", include_in_schema=False)
     async def launch_spec(

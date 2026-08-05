@@ -5,6 +5,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from spec2gds_runtime import LogSettings, load_log_settings
+
 
 @dataclass(frozen=True, slots=True)
 class Settings:
@@ -31,11 +33,13 @@ class Settings:
     circuit_designer_ui_url: str = "http://127.0.0.1:4180"
     ai_assistant_service_url: str = "http://127.0.0.1:4200"
     ai_assistant_ui_url: str = "http://127.0.0.1:4200"
+    logging: LogSettings | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
         project_root = Path(__file__).resolve().parents[2]
-        services = _service_urls(project_root)
+        config_path = _service_config_path(project_root)
+        services = _service_urls(config_path)
         database_path = Path(
             os.environ.get(
                 "ASSISTANT_DATABASE_PATH",
@@ -83,19 +87,25 @@ class Settings:
             circuit_designer_ui_url=str(services["circuit_designer"]["ui_url"]),
             ai_assistant_service_url=str(services["ai_assistant"]["service_url"]),
             ai_assistant_ui_url=str(services["ai_assistant"]["ui_url"]),
+            logging=load_log_settings(config_path),
         )
 
 
-def _service_urls(project_root: Path) -> dict[str, dict[str, str | int]]:
-    path = Path(
+def _service_config_path(project_root: Path) -> Path:
+    """Resolve the one shared registry without defining per-app fallbacks."""
+    return Path(
         os.environ.get(
             "SPEC2GDS_SERVICE_CONFIG",
             str(project_root.parent / "config" / "services.json"),
         )
-    ).expanduser()
+    ).expanduser().resolve()
+
+
+def _service_urls(path: Path) -> dict[str, dict[str, str | int]]:
+    """Read hosted endpoints used by the Assistant and its browser chooser."""
     payload = json.loads(path.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != 1:
-        raise ValueError("Service registry schema_version must be 1.")
+    if payload.get("schema_version") != 2:
+        raise ValueError("Service registry schema_version must be 2.")
 
     result: dict[str, dict[str, str | int]] = {}
     for name in ("spec_editor", "circuit_designer", "ai_assistant"):
@@ -118,9 +128,7 @@ def _service_urls(project_root: Path) -> dict[str, dict[str, str | int]]:
     result["circuit_designer"]["ui_url"] = os.environ.get(
         "CIRCUIT_DESIGNER_UI_URL", str(result["circuit_designer"]["ui_url"])
     ).rstrip("/")
-    assistant_override = os.environ.get("AI_ASSISTANT_URL") or os.environ.get(
-        "EXTERNAL_ASSISTANT_URL"
-    )
+    assistant_override = os.environ.get("AI_ASSISTANT_URL")
     if assistant_override:
         assistant = assistant_override.rstrip("/")
         result["ai_assistant"]["service_url"] = assistant

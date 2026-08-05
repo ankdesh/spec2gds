@@ -7,7 +7,6 @@ Circuit Designer REST service.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import re
@@ -15,9 +14,9 @@ import typing
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, PortIR, SpecRevision
-
 
 _DIRECTION = {"in": "input", "out": "output", "inout": "inout"}
 _PROJECTION_VERSION = "v2"

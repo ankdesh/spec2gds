@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from spec2gds_runtime import LogSettings, load_log_settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,6 +37,7 @@ class ServiceRegistry:
     spec_editor: HostedService
     circuit_designer: HostedService
     ai_assistant: HostedService
+    logging: LogSettings
 
     def public_dict(self) -> dict[str, dict[str, str]]:
         return {
@@ -59,12 +62,13 @@ def load_service_registry(path: Path | None = None) -> ServiceRegistry:
     """Read and validate the small versioned JSON registry."""
     source = path or service_config_path()
     payload = json.loads(source.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != 1:
-        raise ValueError("Service registry schema_version must be 1.")
+    if payload.get("schema_version") != 2:
+        raise ValueError("Service registry schema_version must be 2.")
     return ServiceRegistry(
         spec_editor=_hosted_service(payload, "spec_editor"),
         circuit_designer=_hosted_service(payload, "circuit_designer"),
         ai_assistant=_hosted_service(payload, "ai_assistant"),
+        logging=load_log_settings(source),
     )
 
 

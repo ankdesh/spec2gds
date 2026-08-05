@@ -7,7 +7,6 @@ import uuid
 
 import pydantic
 
-
 MIMETYPE: str = "application/vnd.spec2gds.spec+zip"
 FORMAT_VERSION: int = 1
 PROFILE_VERSION: int = 1
@@ -311,7 +310,7 @@ class NarrativeDocument(StrictModel):
     @pydantic.field_validator("title")
     @classmethod
     def _validate_title(cls, value: str) -> str:
-        """Keep a human-facing title compact while allowing legacy untitled packages."""
+        """Keep the optional human-facing title compact and normalized."""
         value = value.strip()
         if len(value) > 200:
             raise ValueError("Specification title must be 200 characters or fewer.")

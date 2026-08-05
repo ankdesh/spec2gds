@@ -16,9 +16,12 @@ Read in this order:
    discovery, and cross-application launch behavior.
 5. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
    boundary, and proposal contracts.
-6. [Sample application method](sample-apps.md) — how to build one representative
+6. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+   browser viewer.
+7. [Code quality](code-quality.md) — commenting and unused-code review gates.
+8. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-7. [Development guide](development.md) — setup, commands, checks, and where code
+9. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule

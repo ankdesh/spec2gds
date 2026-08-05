@@ -13,6 +13,7 @@
     "@spec2gds/circuit-core": "0.0.0",
     "@spec2gds/circuit-layout": "0.0.0",
     "@spec2gds/circuit-react": "0.0.0",
+    "@spec2gds/observability": "0.1.0",
     "@xyflow/react": "12.8.4",
     "react": "18.3.1",
     "react-dom": "18.3.1"

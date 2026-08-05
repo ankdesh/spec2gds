@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>spec2gds Log Viewer</title>
+    <link rel="stylesheet" href="/assets/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div><h1>spec2gds Log Viewer</h1><p id="status">Loading…</p></div>
+      <label class="follow"><input id="follow" type="checkbox" checked /> Follow live log</label>
+    </header>
+    <section class="filters" aria-label="Log filters">
+      <label>Application<select id="application"><option value="">All applications</option></select></label>
+      <label>Component<select id="component"><option value="">All components</option></select></label>
+      <label>Severity<select id="severity"><option value="">All severities</option><option>debug</option><option>info</option><option>warning</option><option>error</option></select></label>
+      <label>Correlation ID<input id="correlation" /></label>
+      <label class="search">Search<input id="query" type="search" placeholder="Message or details" /></label>
+    </section>
+    <main><div id="empty" role="status">No matching log entries.</div><ol id="records" aria-live="polite"></ol></main>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>

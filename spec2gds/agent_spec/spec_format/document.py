@@ -27,7 +27,6 @@ from spec2gds.agent_spec.spec_format.ir import (
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
 from spec2gds.agent_spec.spec_format.source_edits import format_wire_range
 
-
 A2UI_PROTOCOL_VERSION = "v0.9"
 A2UI_CATALOG_ID = "urn:spec2gds:a2ui:document:v1"
 DOCUMENT_SCHEMA_VERSION = "spec2gds.document.v1"

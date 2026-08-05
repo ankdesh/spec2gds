@@ -16,6 +16,7 @@
     "@spec2gds/circuit-react": "file:../../circuit-designer/packages/react",
     "@spec2gds/document-a2ui-react": "file:../../circuit-designer/packages/document-a2ui-react",
     "@spec2gds/document-core": "file:../../circuit-designer/packages/document-core",
+    "@spec2gds/observability": "file:../../circuit-designer/packages/observability",
     "assistant-stream": "^0.3.30",
     "lucide-react": "^0.468.0",
     "react": "18.3.1",

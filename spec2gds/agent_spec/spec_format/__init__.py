@@ -6,7 +6,6 @@ proposals.  The HTTP composition root and browser client are intentionally
 available from their dedicated modules instead of being imported eagerly.
 """
 
-from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.actions import (
     ActionDefinition,
     ActionExecution,
@@ -19,6 +18,7 @@ from spec2gds.agent_spec.spec_format.actions import (
     ChangeProposal,
     create_reference_registry,
 )
+from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.ir import (
     AbstractionDefinitionIR,
     BusDefinitionIR,

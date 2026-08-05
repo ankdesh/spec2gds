@@ -1,15 +1,13 @@
 """IEEE 1685-2022 validation and the narrow project-owned V1 profile."""
 
 import functools
-import re
 import typing
 from pathlib import Path
 
 import lxml.etree as etree
 import pyEDAA.IPXACT
 
-from spec2gds.agent_spec.spec_format.models import DocumentKind, ID_PATTERN, validate_vlnv
-
+from spec2gds.agent_spec.spec_format.models import ID_PATTERN, DocumentKind, validate_vlnv
 
 IPXACT_NAMESPACE: str = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
 XML_NAMESPACE: str = "http://www.w3.org/XML/1998/namespace"

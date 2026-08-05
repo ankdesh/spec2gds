@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import dataclasses
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -7,6 +9,7 @@ from typing import Any
 import pytest
 from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
+from spec2gds_runtime import LogSettings
 
 from spec2gds_assistant.agents.circuit_editor import CircuitEditingAgent
 from spec2gds_assistant.agents.context import CircuitContextProcessor, SpecContextProcessor
@@ -73,7 +76,6 @@ def test_environment_defaults_are_local_and_use_gpt_4o_mini(
         "ASSISTANT_WEB_DIST_PATH",
         "SPEC2GDS_SERVICE_CONFIG",
         "AI_ASSISTANT_URL",
-        "EXTERNAL_ASSISTANT_URL",
     ):
         monkeypatch.delenv(name, raising=False)
     configured = Settings.from_env()
@@ -147,6 +149,28 @@ async def test_agent_uses_structured_output_and_returns_review_artifact(
     assert client.responses.request["model"] == "gpt-4o-mini"
     assert client.responses.request["text_format"] is CircuitProposalDraft
     assert client.responses.request["store"] is False
+
+
+async def test_agent_logs_owned_openai_request_and_response_boundaries(
+    tmp_path: Path,
+    circuit_snapshot: dict[str, Any],
+) -> None:
+    draft = CircuitProposalDraft.model_validate({
+        "supported": False, "title": "Unsupported", "summary": "No change",
+        "rationale": "Outside scope", "assumptions": [],
+        "unsupported_reason": "Not supported", "operations": [],
+    })
+    log_file = tmp_path / "combined.jsonl"
+    configured = dataclasses.replace(
+        settings(tmp_path),
+        logging=LogSettings(True, "debug", log_file, 100_000, "127.0.0.1", 4300),
+    )
+    await CircuitEditingAgent(configured, client=FakeOpenAI(draft)).propose(
+        CircuitAgentRequest(user_request="Inspect this circuit.", snapshot=circuit_snapshot)
+    )
+    records = [json.loads(line) for line in log_file.read_text(encoding="utf-8").splitlines()]
+    assert [record["event"] for record in records] == ["request", "response"]
+    assert "Inspect this circuit." in json.dumps(records[0]["details"])
 
 
 async def test_agent_requires_an_api_key_without_an_injected_client(
@@ -399,7 +423,7 @@ def test_every_spec_operation_variant_decodes() -> None:
     ]
 
 
-def test_spec_component_ports_reject_the_legacy_shape_and_invalid_custom_kind() -> None:
+def test_spec_component_ports_reject_unknown_shape_and_invalid_custom_kind() -> None:
     ref = spec_context()["target"]
     envelope = {
         "supported": True,
@@ -414,7 +438,7 @@ def test_spec_component_ports_reject_the_legacy_shape_and_invalid_custom_kind() 
             {
                 **envelope,
                 "operations": [{
-                    "operation_id": "legacy_port",
+                    "operation_id": "invalid_port",
                     "type": "upsert_component_port",
                     "component": ref,
                     "port": {
