@@ -41,8 +41,16 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
             f"Circuit document: {document_id}",
             f"Revision: {revision}",
             f"Label: {document.get('label', document_id)}",
+            f"Design: {design.get('id')} ({design.get('label', design.get('id'))})",
             "",
-            "Available component definitions (only these may be instantiated):",
+            "CIRCUIT OBJECT MODEL:",
+            "- A component definition is a reusable type in components[].",
+            "- An instance is a placed use of a component definition in design.instances[].",
+            "- A component terminal is a reusable pin on every instance of that definition.",
+            "- A boundary terminal is a top-level design port, not a component pin.",
+            "- A net connects instance terminals and/or boundary terminals.",
+            "",
+            "COMPONENT DEFINITIONS (exact current JSON; copy the complete object when updating):",
         ]
         for value in components:
             if not isinstance(value, dict):
@@ -67,9 +75,29 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
                     "  - parameters: "
                     + json.dumps(parameters, sort_keys=True, separators=(",", ":"))
                 )
+            lines.append(
+                "  - complete definition: "
+                + json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+            )
+            appearance = value.get("appearance")
+            properties = appearance.get("properties") if isinstance(appearance, dict) else None
+            if isinstance(properties, dict):
+                lines.append(
+                    "  - model-output appearance.properties: "
+                    + json.dumps(
+                        [
+                            {"name": name, "value": property_value}
+                            for name, property_value in sorted(properties.items())
+                        ],
+                        ensure_ascii=False,
+                        separators=(",", ":"),
+                    )
+                )
+        if not components:
+            lines.append("- (none)")
 
         instances = design.get("instances")
-        lines.extend(["", "Instances:"])
+        lines.extend(["", "INSTANCES (exact current JSON):"])
         if isinstance(instances, list):
             for instance in instances:
                 if isinstance(instance, dict):
@@ -83,19 +111,52 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
                             separators=(",", ":"),
                         )
                     )
+                    lines.append(
+                        "  - complete instance: "
+                        + json.dumps(
+                            instance,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+                    parameter_values = instance.get("parameter_values", {})
+                    if isinstance(parameter_values, dict):
+                        lines.append(
+                            "  - model-output parameter_values: "
+                            + json.dumps(
+                                [
+                                    {"name": name, "value": value}
+                                    for name, value in sorted(parameter_values.items())
+                                ],
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            )
+                        )
+        if not instances:
+            lines.append("- (none)")
 
         boundary_terminals = design.get("boundary_terminals")
-        lines.extend(["", "Boundary terminals:"])
+        lines.extend(["", "BOUNDARY TERMINALS / TOP-LEVEL PORTS (exact current JSON):"])
         if isinstance(boundary_terminals, list):
             for terminal in boundary_terminals:
                 if isinstance(terminal, dict):
                     lines.append(
                         f"- {terminal.get('id')}: direction={terminal.get('direction')}, "
-                        f"category={terminal.get('category')}, width={terminal.get('width')}"
+                        f"category={terminal.get('category')}, width={terminal.get('width')}; "
+                        "complete terminal="
+                        + json.dumps(
+                            terminal,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
                     )
+        if not boundary_terminals:
+            lines.append("- (none)")
 
         nets = design.get("nets")
-        lines.extend(["", "Nets and endpoints:"])
+        lines.extend(["", "NETS AND ENDPOINTS (exact current JSON):"])
         if isinstance(nets, list):
             for net in nets:
                 if not isinstance(net, dict):
@@ -108,6 +169,83 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
                         separators=(",", ":"),
                     )
                 )
+        if not nets:
+            lines.append("- (none)")
+
+        component_by_id = {
+            str(value.get("id")): value
+            for value in components
+            if isinstance(value, dict) and value.get("id")
+        }
+        lines.extend([
+            "",
+            "VALID ENDPOINT CATALOG (use only these exact existing IDs):",
+        ])
+        endpoint_count = 0
+        if isinstance(instances, list):
+            for instance in instances:
+                if not isinstance(instance, dict):
+                    continue
+                instance_id = str(instance.get("id", ""))
+                component = component_by_id.get(str(instance.get("component_id", "")))
+                terminals = component.get("terminals") if isinstance(component, dict) else None
+                if not isinstance(terminals, list):
+                    continue
+                for terminal in terminals:
+                    if not isinstance(terminal, dict):
+                        continue
+                    endpoint_count += 1
+                    lines.append(
+                        "- instance endpoint "
+                        f"{instance_id}.{terminal.get('id')}: "
+                        f"direction={terminal.get('direction')}, width={terminal.get('width')}; "
+                        "payload="
+                        + json.dumps(
+                            {
+                                "kind": "instance",
+                                "instance_id": instance_id,
+                                "terminal_id": terminal.get("id"),
+                                "slice": None,
+                            },
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+        if isinstance(boundary_terminals, list):
+            for terminal in boundary_terminals:
+                if not isinstance(terminal, dict):
+                    continue
+                endpoint_count += 1
+                lines.append(
+                    f"- boundary endpoint {terminal.get('id')}: "
+                    f"direction={terminal.get('direction')}, width={terminal.get('width')}; "
+                    "payload="
+                    + json.dumps(
+                        {
+                            "kind": "boundary",
+                            "terminal_id": terminal.get("id"),
+                            "slice": None,
+                        },
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    )
+                )
+        if not endpoint_count:
+            lines.append("- (none; add a component terminal or boundary terminal first)")
+
+        lines.extend([
+            "",
+            "SEMANTIC EDITING FACTS:",
+            "- Existing IDs above are authoritative and must be reused exactly.",
+            "- New IDs must be unique lowercase slugs matching existing naming style.",
+            "- Adding a component definition does not place it; add_instance places one use.",
+            "- Adding a component pin requires update_component with the full definition.",
+            "- Adding a top-level port requires add_boundary_terminal.",
+            "- In model output, parameter_values and appearance.properties are lists of {name,value}; serialization converts them to maps for Circuit Designer.",
+            "- A new net carries one or more endpoints in create_net; later endpoints use connect_endpoint.",
+            "- Endpoint slice is null for the whole terminal; otherwise use {lsb,width} within a numeric width.",
+            "- Input/output direction is viewed at the component. A boundary input is a source into the design.",
+        ])
 
         warnings: list[str] = []
         lines.extend(["", "Circuit Designer SVG:"])
@@ -205,6 +343,14 @@ class SpecContextProcessor(ContextProcessor[SpecAgentRequest]):
             "",
             "EXISTING REFERENCES ALLOWED IN TYPED OPERATIONS:",
             json.dumps(references or {}, ensure_ascii=False, sort_keys=True, indent=2),
+            "",
+            "PLAIN-LANGUAGE TASK MAPPING:",
+            "- On a component target, create/add a port means upsert_component_port.",
+            "- On a design target, create/add a component means upsert_instance using an available component reference.",
+            "- On a design target, connect ports/nets means upsert_connection; physical wires use kind=ad_hoc.",
+            "- For design connections, use only port/interface names listed on the referenced components; never invent endpoints.",
+            "- An ad_hoc connection uses port_endpoints only; an interface connection uses interface_endpoints only.",
+            "- Creating a new top-level component or design is outside this entity-bound context.",
         ]
         if context.conversation_summary:
             lines.extend(["", "OLDER CONVERSATION SUMMARY:", context.conversation_summary])

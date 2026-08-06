@@ -155,7 +155,10 @@ uv run spec2gds-ai-assistant
 
 The AI Assistant is optional and does not sit on either editor's critical path.
 It checks the configured Spec and Circuit health endpoints when its workspace
-chooser opens. See [ai-assistant/README.md](ai-assistant/README.md).
+chooser opens. Circuit chats can prepare reviewed logical proposals for
+component definitions and instances, top-level ports, nets, and endpoint
+connections; Spec chats remain bound to one existing entity. See
+[ai-assistant/README.md](ai-assistant/README.md).
 
 ## Verify changes
 

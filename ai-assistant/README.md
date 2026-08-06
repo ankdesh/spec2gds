@@ -65,12 +65,26 @@ sequenceDiagram
 Conversation does not mutate source. A user must request a proposal and accept
 its preview. The owning API performs the final revision and validation checks.
 
+Circuit Designer chats can propose logical component definitions, placed
+instances, component pins, top-level design ports, nets, and endpoint
+connections. The Assistant maps short requests such as “add a component,”
+“create an input port,” and “connect these ports” to typed Circuit Designer
+operations. Existing semantic IDs and the endpoint catalog in the current
+snapshot are authoritative. Geometry, routes, labels, and layout are not
+AI-authored.
+
 Spec Editor chats are bound to one existing entity. They can propose metadata,
 component-instance, and editor-profiled port changes. Port proposals use the
 same Wire, Transactional, and packed Structured families as the editor. Port
 names and families remain fixed, and ports on components with internal designs
 remain read-only. Specification renaming and top-level entity creation are not
 part of the entity-bound assistant workflow.
+
+For design connections, available component references include their exact
+ports and interfaces. Ad-hoc connections use port endpoints, while interface
+connections use bus-interface endpoints; the Assistant does not invent missing
+endpoint names or propose connections when directions or interfaces are
+incompatible.
 
 Spec and Circuit service URLs must match the allowlists derived from the shared
 registry. `SPEC_SERVICE_ALLOWLIST` and `CIRCUIT_SERVICE_ALLOWLIST` can override

@@ -313,16 +313,16 @@ def _agent_card(settings: Settings) -> AgentCard:
         skills=[
             AgentSkill(
                 id="propose_circuit_changes",
-                name="Propose circuit instance and connectivity changes",
+                name="Propose circuit component and connectivity changes",
                 description=(
                     "Translate a high-level request into reviewable Circuit "
-                    "Designer instance and net operations."
+                    "Designer component, instance, top-level port, and net operations."
                 ),
-                tags=["circuit", "instances", "nets", "review"],
+                tags=["circuit", "components", "ports", "nets", "review"],
                 examples=[
                     (
-                        "Add five instances of block_a in parallel and fan out "
-                        "the output of source_b to them."
+                        "Add an input port, place a consumer component, and connect "
+                        "them with a new net."
                     )
                 ],
                 input_modes=[

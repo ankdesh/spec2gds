@@ -171,7 +171,7 @@ def build_assistant_context(revision: SpecRevision, target: EntityRef) -> dict[s
             "shared_narrative": [_jsonable(item) for item in linked if not _narrative_is_writable(item, target)],
         },
         "available_references": {
-            "components": [_identity(item) for item in revision.components],
+            "components": [_jsonable(item) for item in revision.components],
             "designs": [_identity(item) for item in revision.designs],
             "bus_definitions": [_identity(item) for item in revision.bus_definitions],
             "abstraction_definitions": [_identity(item) for item in revision.abstraction_definitions],
@@ -638,13 +638,36 @@ def _reject_unknown_keys(value: dict[str, typing.Any], allowed: set[str], label:
 
 
 def _connection(value: dict[str, typing.Any]) -> ConnectionIR:
+    kind = str(value.get("kind", ""))
+    interface_endpoints = value.get("interface_endpoints", [])
+    port_endpoints = value.get("port_endpoints", [])
+    external_ports = value.get("external_ports", [])
+    hierarchy_interfaces = value.get("hierarchy_interfaces", [])
+    if kind == "interface":
+        if port_endpoints or external_ports:
+            raise ValueError("An interface connection cannot contain port endpoints.")
+        if len(interface_endpoints) < 2:
+            raise ValueError(
+                "An interface connection requires at least two interface endpoints."
+            )
+    elif kind == "ad_hoc":
+        if interface_endpoints or hierarchy_interfaces:
+            raise ValueError("An ad-hoc connection cannot contain interface endpoints.")
+        if len(port_endpoints) + len(external_ports) < 2:
+            raise ValueError(
+                "An ad-hoc connection requires at least two port endpoints."
+            )
+    else:
+        raise ValueError("Connection kind must be interface or ad_hoc.")
     return ConnectionIR(
         name=str(value["name"]),
-        kind=typing.cast(typing.Any, value["kind"]),
-        interface_endpoints=tuple(InterfaceEndpointIR(**item) for item in value.get("interface_endpoints", [])),
-        port_endpoints=tuple(PortEndpointIR(**item) for item in value.get("port_endpoints", [])),
-        external_ports=tuple(str(item) for item in value.get("external_ports", [])),
-        hierarchy_interfaces=tuple(str(item) for item in value.get("hierarchy_interfaces", [])),
+        kind=typing.cast(typing.Any, kind),
+        interface_endpoints=tuple(
+            InterfaceEndpointIR(**item) for item in interface_endpoints
+        ),
+        port_endpoints=tuple(PortEndpointIR(**item) for item in port_endpoints),
+        external_ports=tuple(str(item) for item in external_ports),
+        hierarchy_interfaces=tuple(str(item) for item in hierarchy_interfaces),
     )
 
 

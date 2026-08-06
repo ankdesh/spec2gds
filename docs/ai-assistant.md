@@ -44,6 +44,43 @@ the service URL, document ID, entity kind, and entity ID. The AI Assistant also
 exposes an advanced manual Spec connection form when those identifiers are
 already known.
 
+## Circuit editing profile
+
+Circuit chats receive a semantic snapshot, an exact endpoint catalog, and an
+optional rendering. The semantic snapshot is authoritative; SVG and PNG are
+visual aids. The context distinguishes four commonly confused objects:
+
+- A component definition is a reusable type.
+- An instance places one use of a component definition in the design.
+- A component terminal is a pin repeated on every instance of its definition.
+- A boundary terminal is a top-level design port.
+
+The Assistant can propose local component definitions, component instances,
+component-terminal updates, boundary terminals, nets, and endpoint connections.
+For example, “add a component” normally places an instance of an available
+definition, “add an input port” creates a boundary terminal, and “connect A to
+B” creates a net containing both endpoints. If the user explicitly requests a
+new component type, the proposal can add its definition before placing it.
+
+Updates to component definitions, instances, boundary terminals, and nets are
+complete replacements rather than partial patches. The prompt therefore
+includes exact current JSON for copy-forward fields and orders dependent
+operations so definitions and terminals exist before instances and nets refer
+to them. Layout, routes, and geometry remain outside AI-authored proposals.
+
+Both proposal models are kept within the OpenAI Structured Outputs JSON Schema
+subset: object variants use `anyOf` rather than the unsupported `oneOf`, and
+arbitrary parameter/property maps are presented as key/value lists to the model
+before being normalized back to the owning API's map representation.
+
+Design-bound Spec context includes each available component's exact ports and
+bus interfaces, not only its VLNV. The proposal schema keeps interface
+connections and ad-hoc port connections as separate shapes. Interface
+connections may contain only interface endpoints; ad-hoc connections may
+contain only internal/external port endpoints. The agent must return an
+unsupported result when the referenced components do not expose compatible,
+named endpoints instead of inventing a port or interface.
+
 ## Entity editing profile
 
 Entity metadata and design component instances use the same semantic values as

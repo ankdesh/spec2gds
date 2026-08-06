@@ -66,7 +66,7 @@ class CircuitEditingAgentExecutor(AgentExecutor):
             await updater.add_artifact(
                 [
                     new_data_part(
-                        result.model_dump(mode="json"),
+                        result.model_dump(mode="json", exclude_none=True),
                         media_type="application/vnd.spec2gds.circuit-proposal+json",
                     )
                 ],

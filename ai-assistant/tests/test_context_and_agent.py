@@ -11,10 +11,20 @@ from openai.lib._pydantic import to_strict_json_schema
 from pydantic import ValidationError
 from spec2gds_runtime import LogSettings
 
-from spec2gds_assistant.agents.circuit_editor import CircuitEditingAgent
-from spec2gds_assistant.agents.context import CircuitContextProcessor, SpecContextProcessor
-from spec2gds_assistant.agents.spec_editor import SpecEditingAgent
 from spec2gds_assistant.a2a_agent import _explicit_spec_proposal_intent
+from spec2gds_assistant.agents.circuit_editor import (
+    INSTRUCTIONS as CIRCUIT_INSTRUCTIONS,
+)
+from spec2gds_assistant.agents.circuit_editor import (
+    CircuitEditingAgent,
+)
+from spec2gds_assistant.agents.context import CircuitContextProcessor, SpecContextProcessor
+from spec2gds_assistant.agents.spec_editor import (
+    PROPOSAL_INSTRUCTIONS as SPEC_PROPOSAL_INSTRUCTIONS,
+)
+from spec2gds_assistant.agents.spec_editor import (
+    SpecEditingAgent,
+)
 from spec2gds_assistant.config import Settings
 from spec2gds_assistant.models import (
     CircuitAgentRequest,
@@ -101,11 +111,138 @@ def test_context_processor_describes_semantic_circuit(circuit_snapshot: dict[str
     )
     assert processed.document_id == "fixture_simple"
     assert processed.revision == "1"
-    assert "Available component definitions" in processed.text
+    assert "COMPONENT DEFINITIONS" in processed.text
+    assert "CIRCUIT OBJECT MODEL" in processed.text
+    assert "complete definition" in processed.text
     assert "producer_0: component=producer" in processed.text
     assert "terminal data: direction=output" in processed.text
+    assert "VALID ENDPOINT CATALOG" in processed.text
+    assert "instance endpoint producer_0.data" in processed.text
+    assert '"instance_id":"producer_0"' in processed.text
+    assert "add_boundary_terminal" in processed.text
     assert 'instance ids=["producer_0"]' in processed.text
     assert 'net ids=["data_net"]' in processed.text
+
+
+def test_circuit_prompt_maps_simple_requests_to_supported_operations() -> None:
+    assert '"create/add/place a component"' in CIRCUIT_INSTRUCTIONS
+    assert "add_component followed by add_instance" in CIRCUIT_INSTRUCTIONS
+    assert "add_boundary_terminal" in CIRCUIT_INSTRUCTIONS
+    assert "create_net with all requested endpoints" in CIRCUIT_INSTRUCTIONS
+    assert "VALID ENDPOINT CATALOG" in CIRCUIT_INSTRUCTIONS
+
+
+def test_circuit_draft_supports_components_ports_and_connections() -> None:
+    draft = CircuitProposalDraft.model_validate(
+        {
+            "supported": True,
+            "title": "Add and connect a block",
+            "summary": "Define, place, expose, and connect one block.",
+            "rationale": "Covers the common logical editing operations.",
+            "assumptions": [],
+            "unsupported_reason": None,
+            "operations": [
+                {
+                    "operation_id": "add_filter_definition",
+                    "type": "add_component",
+                    "component": {
+                        "id": "filter",
+                        "label": "Filter",
+                        "origin": "local",
+                        "editable": True,
+                        "terminals": [
+                            {
+                                "id": "data_in",
+                                "label": "Data in",
+                                "direction": "input",
+                                "width": 8,
+                                "category": "port",
+                            }
+                        ],
+                        "parameters": [],
+                        "appearance": {
+                            "renderer_key": "default",
+                            "properties": [],
+                        },
+                    },
+                },
+                {
+                    "operation_id": "place_filter",
+                    "type": "add_instance",
+                    "instance": {
+                        "id": "filter_0",
+                        "label": "Filter 0",
+                        "component_id": "filter",
+                        "parameter_values": [],
+                    },
+                },
+                {
+                    "operation_id": "add_data_input",
+                    "type": "add_boundary_terminal",
+                    "terminal": {
+                        "id": "data_in",
+                        "label": "Data in",
+                        "direction": "input",
+                        "width": 8,
+                        "category": "port",
+                    },
+                },
+                {
+                    "operation_id": "connect_data_input",
+                    "type": "create_net",
+                    "net": {
+                        "id": "data_in_net",
+                        "label": "Data input",
+                        "endpoints": [
+                            {
+                                "kind": "boundary",
+                                "terminal_id": "data_in",
+                                "slice": None,
+                            },
+                            {
+                                "kind": "instance",
+                                "instance_id": "filter_0",
+                                "terminal_id": "data_in",
+                                "slice": None,
+                            },
+                        ],
+                    },
+                },
+            ],
+        }
+    )
+    serialized = draft.model_dump(mode="json", exclude_none=True)
+    assert [operation["type"] for operation in serialized["operations"]] == [
+        "add_component",
+        "add_instance",
+        "add_boundary_terminal",
+        "create_net",
+    ]
+    assert serialized["operations"][0]["component"]["appearance"]["properties"] == {}
+    assert serialized["operations"][1]["instance"]["parameter_values"] == {}
+
+
+def test_circuit_proposal_schema_has_no_open_objects() -> None:
+    """Circuit response schema stays within OpenAI's supported JSON Schema subset."""
+    schema = to_strict_json_schema(CircuitProposalDraft)
+    open_objects: list[str] = []
+    one_of_paths: list[str] = []
+
+    def visit(value: object, path: str = "$") -> None:
+        if isinstance(value, dict):
+            if value.get("type") == "object" and value.get("additionalProperties") is not False:
+                open_objects.append(path)
+            if "oneOf" in value:
+                one_of_paths.append(path)
+            for key, child in value.items():
+                visit(child, f"{path}.{key}")
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                visit(child, f"{path}[{index}]")
+
+    visit(schema)
+    assert open_objects == []
+    assert one_of_paths == []
 
 
 async def test_agent_uses_structured_output_and_returns_review_artifact(
@@ -248,6 +385,14 @@ def test_spec_context_processor_labels_write_and_read_boundaries() -> None:
     assert '"custom_kind": "demo_service"' in processed.text
     assert "OLDER CONVERSATION SUMMARY" in processed.text
     assert "Keep the APB interface" in processed.text
+    assert "PLAIN-LANGUAGE TASK MAPPING" in processed.text
+    assert "upsert_component_port" in processed.text
+
+
+def test_spec_prompt_maps_simple_entity_bound_requests() -> None:
+    assert '"create/add a port" means upsert_component_port' in SPEC_PROPOSAL_INSTRUCTIONS
+    assert '"create/add a component" means upsert_instance' in SPEC_PROPOSAL_INSTRUCTIONS
+    assert '"create a net" means upsert_connection' in SPEC_PROPOSAL_INSTRUCTIONS
 
 
 async def test_spec_agent_decodes_structured_proposal_for_review(tmp_path: Path) -> None:
@@ -292,14 +437,17 @@ async def test_spec_agent_decodes_structured_proposal_for_review(tmp_path: Path)
 
 
 def test_spec_proposal_schema_has_no_open_objects() -> None:
-    """OpenAI Structured Outputs requires additionalProperties=false everywhere."""
+    """Spec response schema stays within OpenAI's supported JSON Schema subset."""
     schema = to_strict_json_schema(SpecProposalDraft)
     open_objects: list[str] = []
+    one_of_paths: list[str] = []
 
     def visit(value: object, path: str = "$") -> None:
         if isinstance(value, dict):
             if value.get("type") == "object" and value.get("additionalProperties") is not False:
                 open_objects.append(path)
+            if "oneOf" in value:
+                one_of_paths.append(path)
             for key, child in value.items():
                 visit(child, f"{path}.{key}")
         elif isinstance(value, list):
@@ -308,6 +456,7 @@ def test_spec_proposal_schema_has_no_open_objects() -> None:
 
     visit(schema)
     assert open_objects == []
+    assert one_of_paths == []
 
 
 def test_explicit_proposal_language_is_distinct_from_exploration() -> None:
@@ -390,7 +539,19 @@ def test_every_spec_operation_variant_decodes() -> None:
         {"type": "upsert_instance", "design": design, "instance": {"name": "u0", "component_vlnv": "v:l:c:1"}},
         {"type": "delete_instance", "design": design, "instance_name": "u0"},
         {"type": "reorder_instances", "design": design, "instance_names": ["u0"]},
-        {"type": "upsert_connection", "design": design, "connection": {"name": "link", "kind": "interface", "interface_endpoints": [], "port_endpoints": [], "external_ports": [], "hierarchy_interfaces": []}},
+        {
+            "type": "upsert_connection",
+            "design": design,
+            "connection": {
+                "name": "link",
+                "kind": "interface",
+                "interface_endpoints": [
+                    {"instance_name": "u0", "interface_name": "apb"},
+                    {"instance_name": "u1", "interface_name": "apb"},
+                ],
+                "hierarchy_interfaces": [],
+            },
+        },
         {"type": "delete_connection", "design": design, "connection_name": "link"},
         {"type": "reorder_connections", "design": design, "kind": "interface", "connection_names": ["link"]},
         {"type": "set_internal_design", "component": ref, "internal_design": design},
@@ -465,5 +626,41 @@ def test_spec_component_ports_reject_unknown_shape_and_invalid_custom_kind() -> 
                         "custom_kind": None,
                     },
                 }],
+            }
+        )
+
+
+def test_spec_connections_reject_mixed_endpoint_families() -> None:
+    design = {
+        **spec_context()["target"],
+        "entity_kind": "design",
+        "entity_id": "design-demo",
+    }
+    with pytest.raises(ValidationError, match="interface_endpoints|extra_forbidden"):
+        SpecProposalDraft.model_validate(
+            {
+                "supported": True,
+                "title": "Invalid ad-hoc connection",
+                "summary": "Mix endpoint families.",
+                "rationale": "Regression coverage.",
+                "assumptions": [],
+                "unsupported_reason": None,
+                "operations": [
+                    {
+                        "operation_id": "invalid_connection",
+                        "type": "upsert_connection",
+                        "design": design,
+                        "connection": {
+                            "name": "link",
+                            "kind": "ad_hoc",
+                            "interface_endpoints": [
+                                {"instance_name": "u0", "interface_name": "port1"},
+                                {"instance_name": "u1", "interface_name": "port1"},
+                            ],
+                            "port_endpoints": [],
+                            "external_ports": [],
+                        },
+                    }
+                ],
             }
         )

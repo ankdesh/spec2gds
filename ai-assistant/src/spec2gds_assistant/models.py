@@ -1,8 +1,15 @@
 from __future__ import annotations
 
-from typing import Annotated, Any, Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 
 class StrictModel(BaseModel):
@@ -27,23 +34,176 @@ class BoundaryEndpoint(StrictModel):
     slice: Slice | None
 
 
-NetEndpoint = Annotated[
-    InstanceEndpoint | BoundaryEndpoint,
-    Field(discriminator="kind"),
-]
+NetEndpoint = InstanceEndpoint | BoundaryEndpoint
+
+
+class CircuitTerminalDefinition(StrictModel):
+    id: str
+    label: str
+    direction: Literal["input", "output", "inout"]
+    width: int | str
+    category: Literal["port", "interface"] = "port"
+
+
+class CircuitStringParameterDefinition(StrictModel):
+    id: str
+    label: str
+    type: Literal["string"]
+    default: str
+
+
+class CircuitNumberParameterDefinition(StrictModel):
+    id: str
+    label: str
+    type: Literal["number"]
+    default: float
+    minimum: float | None = None
+    maximum: float | None = None
+
+
+class CircuitBooleanParameterDefinition(StrictModel):
+    id: str
+    label: str
+    type: Literal["boolean"]
+    default: bool
+
+
+class CircuitEnumParameterDefinition(StrictModel):
+    id: str
+    label: str
+    type: Literal["enum"]
+    default: str
+    values: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_default(self) -> "CircuitEnumParameterDefinition":
+        if self.default not in self.values:
+            raise ValueError("An enum parameter default must be one of its values.")
+        return self
+
+
+CircuitParameterDefinition = (
+    CircuitStringParameterDefinition
+    | CircuitNumberParameterDefinition
+    | CircuitBooleanParameterDefinition
+    | CircuitEnumParameterDefinition
+)
+
+
+class CircuitAppearanceProperty(StrictModel):
+    """Structured-output-safe representation of one renderer property."""
+
+    name: str
+    value: str | float | bool | None
+
+
+class CircuitComponentAppearance(StrictModel):
+    renderer_key: str
+    properties: list[CircuitAppearanceProperty]
+
+    @field_validator("properties", mode="before")
+    @classmethod
+    def decode_property_map(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return [{"name": name, "value": item} for name, item in value.items()]
+        return value
+
+    @field_serializer("properties")
+    def encode_property_map(
+        self, value: list[CircuitAppearanceProperty]
+    ) -> dict[str, str | float | bool | None]:
+        return {item.name: item.value for item in value}
+
+    @model_validator(mode="after")
+    def validate_unique_properties(self) -> "CircuitComponentAppearance":
+        names = [item.name for item in self.properties]
+        if len(names) != len(set(names)):
+            raise ValueError("Renderer property names must be unique.")
+        return self
+
+
+class CircuitComponentDefinition(StrictModel):
+    id: str
+    label: str
+    origin: Literal["local", "builtin", "provider"]
+    editable: bool
+    terminals: list[CircuitTerminalDefinition]
+    parameters: list[CircuitParameterDefinition]
+    appearance: CircuitComponentAppearance
+
+
+class CircuitBoundaryTerminal(StrictModel):
+    id: str
+    label: str
+    direction: Literal["input", "output", "inout"]
+    width: int | str
+    category: Literal["port", "interface"] = "port"
+
+
+class CircuitParameterAssignment(StrictModel):
+    """Structured-output-safe representation of one instance parameter value."""
+
+    name: str
+    value: str | float | bool
 
 
 class CircuitInstance(StrictModel):
     id: str
     label: str
     component_id: str
-    parameter_values: dict[str, str | float | bool]
+    parameter_values: list[CircuitParameterAssignment]
+
+    @field_validator("parameter_values", mode="before")
+    @classmethod
+    def decode_parameter_map(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return [{"name": name, "value": item} for name, item in value.items()]
+        return value
+
+    @field_serializer("parameter_values")
+    def encode_parameter_map(
+        self, value: list[CircuitParameterAssignment]
+    ) -> dict[str, str | float | bool]:
+        return {item.name: item.value for item in value}
+
+    @model_validator(mode="after")
+    def validate_unique_parameter_values(self) -> "CircuitInstance":
+        names = [item.name for item in self.parameter_values]
+        if len(names) != len(set(names)):
+            raise ValueError("Instance parameter names must be unique.")
+        return self
 
 
 class CircuitNet(StrictModel):
     id: str
     label: str
-    endpoints: list[NetEndpoint]
+    endpoints: list[NetEndpoint] = Field(min_length=1)
+
+
+class AddComponentOperation(StrictModel):
+    operation_id: str
+    type: Literal["add_component"]
+    component: CircuitComponentDefinition
+
+    @model_validator(mode="after")
+    def validate_local_component(self) -> "AddComponentOperation":
+        if self.component.origin != "local" or not self.component.editable:
+            raise ValueError("New component definitions must be local and editable.")
+        return self
+
+
+class UpdateComponentOperation(StrictModel):
+    operation_id: str
+    type: Literal["update_component"]
+    component: CircuitComponentDefinition
+    cascade: bool
+
+
+class RemoveComponentOperation(StrictModel):
+    operation_id: str
+    type: Literal["remove_component"]
+    component_id: str
+    cascade: bool
 
 
 class AddInstanceOperation(StrictModel):
@@ -62,6 +222,26 @@ class RemoveInstanceOperation(StrictModel):
     operation_id: str
     type: Literal["remove_instance"]
     instance_id: str
+    cascade: bool
+
+
+class AddBoundaryTerminalOperation(StrictModel):
+    operation_id: str
+    type: Literal["add_boundary_terminal"]
+    terminal: CircuitBoundaryTerminal
+
+
+class UpdateBoundaryTerminalOperation(StrictModel):
+    operation_id: str
+    type: Literal["update_boundary_terminal"]
+    terminal: CircuitBoundaryTerminal
+    cascade: bool
+
+
+class RemoveBoundaryTerminalOperation(StrictModel):
+    operation_id: str
+    type: Literal["remove_boundary_terminal"]
+    terminal_id: str
     cascade: bool
 
 
@@ -97,17 +277,22 @@ class DisconnectEndpointOperation(StrictModel):
     endpoint: NetEndpoint
 
 
-CircuitOperation = Annotated[
-    AddInstanceOperation
+CircuitOperation = (
+    AddComponentOperation
+    | UpdateComponentOperation
+    | RemoveComponentOperation
+    | AddInstanceOperation
     | UpdateInstanceOperation
     | RemoveInstanceOperation
+    | AddBoundaryTerminalOperation
+    | UpdateBoundaryTerminalOperation
+    | RemoveBoundaryTerminalOperation
     | CreateNetOperation
     | UpdateNetOperation
     | DeleteNetOperation
     | ConnectEndpointOperation
-    | DisconnectEndpointOperation,
-    Field(discriminator="type"),
-]
+    | DisconnectEndpointOperation
+)
 
 
 class CircuitProposalDraft(StrictModel):
@@ -266,12 +451,11 @@ class SpecStructuredComponentPortValue(StrictModel):
     direction: Literal["in", "out", "inout"]
 
 
-SpecComponentPortValue = Annotated[
+SpecComponentPortValue = (
     SpecWireComponentPortValue
     | SpecTransactionalComponentPortValue
-    | SpecStructuredComponentPortValue,
-    Field(discriminator="family"),
-]
+    | SpecStructuredComponentPortValue
+)
 
 
 class SpecPortMapValue(StrictModel):
@@ -315,13 +499,27 @@ class SpecPortEndpointValue(StrictModel):
     port_name: str
 
 
-class SpecConnectionValue(StrictModel):
+class SpecInterfaceConnectionValue(StrictModel):
     name: str
-    kind: Literal["interface", "ad_hoc"]
-    interface_endpoints: list[SpecInterfaceEndpointValue]
+    kind: Literal["interface"]
+    interface_endpoints: list[SpecInterfaceEndpointValue] = Field(min_length=2)
+    hierarchy_interfaces: list[str]
+
+
+class SpecAdHocConnectionValue(StrictModel):
+    name: str
+    kind: Literal["ad_hoc"]
     port_endpoints: list[SpecPortEndpointValue]
     external_ports: list[str]
-    hierarchy_interfaces: list[str]
+
+    @model_validator(mode="after")
+    def validate_endpoint_count(self) -> "SpecAdHocConnectionValue":
+        if len(self.port_endpoints) + len(self.external_ports) < 2:
+            raise ValueError("An ad-hoc connection requires at least two port endpoints.")
+        return self
+
+
+SpecConnectionValue = SpecInterfaceConnectionValue | SpecAdHocConnectionValue
 
 
 SpecBusClearField = Literal[

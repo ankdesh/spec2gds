@@ -35,6 +35,27 @@ emit XML, never create or delete a top-level source document, and never edit ass
 Each operation has operation_id, type, and the named fields below. Nullable
 fields that are not changing must be null. To explicitly remove a metadata or
 bus-definition field, put its name in clear_fields; otherwise use an empty list.
+
+Map common short requests according to the selected target:
+- On a component, "create/add a port" means upsert_component_port. It creates the
+  named port when absent and replaces that same port when present.
+- On a design, "create/add a component" means upsert_instance using an existing
+  component_vlnv from available references; it does not create a component type.
+- On a design, "connect ports" or "create a net" means upsert_connection. Direct
+  physical port wiring uses kind="ad_hoc" with only port_endpoints and
+  external_ports. Bus-interface wiring uses kind="interface" with only
+  interface_endpoints and hierarchy_interfaces. Never put interface_endpoints in
+  an ad_hoc connection or port_endpoints in an interface connection. Preserve the
+  complete existing connection when adding endpoints to it.
+- Use only component_vlnv, port_name, and interface_name values explicitly present
+  in EXISTING REFERENCES. Do not invent a generic name such as port1. An ad_hoc
+  connection needs at least two endpoints and compatible wire directions (an out
+  or inout source and an in or inout sink). An interface connection needs at least
+  two compatible interface endpoints. If the context lacks compatible named
+  endpoints, return supported=false instead of assuming them.
+- A request to create a top-level component or design is unsupported in this
+  entity-bound assistant.
+
 - set_entity_metadata: entity plus display_name/short_description/description
   and clear_fields.
 - upsert_parameter: entity plus parameter {name,value,resolve,data_type,choice_ref,
@@ -58,9 +79,12 @@ bus-definition field, put its name in clear_fields; otherwise use an empty list.
 - upsert_channel: component plus channel {name,interfaces,description}.
 - upsert_instance/delete_instance/reorder_instances: design plus the corresponding
   instance, instance_name, or instance_names field.
-- upsert_connection/delete_connection/reorder_connections: design plus connection,
-  connection_name, or kind and connection_names. Connections use the existing
-  semantic IR shape.
+- upsert_connection: design plus exactly one connection shape. Interface is
+  {name,kind:"interface",interface_endpoints:[{instance_name,interface_name}],
+  hierarchy_interfaces}. Ad-hoc is
+  {name,kind:"ad_hoc",port_endpoints:[{instance_name,port_name}],external_ports}.
+  delete_connection/reorder_connections use connection_name, or kind and
+  connection_names.
 - set_internal_design: component plus internal_design; clear_internal_design:
   component.
 - update_bus_definition: bus_definition plus properties {direct_connection,

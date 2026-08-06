@@ -8,8 +8,10 @@ from pathlib import Path
 import fastapi
 import pytest
 
-from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
+from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
 from spec2gds.agent_spec.spec_format.cli import main as package_cli
+from spec2gds.agent_spec.spec_format.models import EntityRef
+from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
 from spec2gds.agent_spec.spec_format.v1_api import (
     ActionInputRequest,
     AssistantLaunchRequest,
@@ -20,7 +22,6 @@ from spec2gds.agent_spec.spec_format.v1_api import (
     TransactionRequest,
     create_app,
 )
-from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
 
 
 def _endpoints() -> dict[str, object]:
@@ -462,6 +463,13 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
         opened["document_id"], "component", "component_leaf"
     )
     assert context["target"] == target
+    leaf_reference = next(
+        item
+        for item in context["available_references"]["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    assert {port["name"] for port in leaf_reference["ports"]} >= {"irq", "irq_in"}
+    assert {interface["name"] for interface in leaf_reference["interfaces"]} == {"link"}
     assert any(
         item["entity_kind"] == "design"
         for item in context["read_only"]["dependency_refs"]
@@ -526,6 +534,7 @@ def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Pa
         for item in opened["components"]
         if item["ref"]["entity_id"] == "component_leaf"
     )
+    design = opened["designs"][0]["ref"]
     bus = opened["bus_definitions"][0]["ref"]
     crossing = SpecChangeProposal(
         proposal_id="proposal_crossing",
@@ -578,6 +587,34 @@ def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Pa
             }
         )
         assert endpoints["assistant_proposal_preview"](forbidden)["status"] == "invalid"
+
+    mixed_connection = crossing.model_copy(
+        update={
+            "proposal_id": "proposal_mixed_connection",
+            "target": EntityRef.model_validate(design),
+            "operations": [
+                {
+                    "operation_id": "connect_wrong_endpoint_family",
+                    "type": "upsert_connection",
+                    "design": design,
+                    "connection": {
+                        "name": "invalid_link",
+                        "kind": "ad_hoc",
+                        "interface_endpoints": [
+                            {"instance_name": "leaf0", "interface_name": "link"},
+                            {"instance_name": "leaf1", "interface_name": "link"},
+                        ],
+                        "port_endpoints": [],
+                        "external_ports": [],
+                        "hierarchy_interfaces": [],
+                    },
+                }
+            ],
+        }
+    )
+    mixed_preview = endpoints["assistant_proposal_preview"](mixed_connection)
+    assert mixed_preview["status"] == "invalid"
+    assert "cannot contain interface endpoints" in mixed_preview["diagnostics"][0]
 
     stale = crossing.model_copy(
         update={
