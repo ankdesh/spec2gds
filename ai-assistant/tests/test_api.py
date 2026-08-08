@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from spec2gds_assistant.api import create_api_router
 from spec2gds_assistant.circuit_client import normalize_circuit_base_url
@@ -78,6 +78,7 @@ class FakeSpecClient:
         entity_id: str,
     ) -> dict[str, Any]:
         return {
+            "scope": "entity",
             "document_id": document_id,
             "source_revision_hash": "sha256:base",
             "target": {
@@ -88,6 +89,25 @@ class FakeSpecClient:
             "writable": {"entity_refs": [], "sections": []},
             "read_only": {},
             "available_references": {},
+            "diagnostics": [],
+        }
+
+    async def document_context(
+        self,
+        _base: str,
+        document_id: str,
+    ) -> dict[str, Any]:
+        return {
+            "scope": "document",
+            "document_id": document_id,
+            "source_revision_hash": "sha256:base",
+            "target": None,
+            "rendered_context": {
+                "document_id": document_id,
+                "source_revision_hash": "sha256:base",
+                "target": None,
+                "text": "Complete specification context",
+            },
             "diagnostics": [],
         }
 
@@ -290,6 +310,84 @@ def test_spec_launch_preview_and_immediate_apply_flow(
     applied = client.post(
         f"/api/threads/{thread['id']}/spec/proposals",
         json={"proposal_id": "proposal_spec"},
+    )
+    assert applied.status_code == 200
+    assert applied.json()["review"]["state"] == "applied"
+    assert spec.applied == artifact
+
+
+def test_document_spec_launch_previews_and_applies_top_level_creation(
+    tmp_path: Path,
+    circuit_snapshot: dict[str, Any],
+) -> None:
+    database = AssistantDatabase(tmp_path / "assistant.db")
+    database.initialize()
+    spec = FakeSpecClient()
+    app = FastAPI()
+    app.include_router(
+        create_api_router(
+            database=database,
+            circuit_client=FakeCircuitClient(circuit_snapshot),  # type: ignore[arg-type]
+            spec_client=spec,  # type: ignore[arg-type]
+        )
+    )
+    client = TestClient(app)
+    response = client.post(
+        "/api/spec/document/launch",
+        json={
+            "base_url": "http://127.0.0.1:8000",
+            "document_id": "spec_demo",
+        },
+    )
+    assert response.status_code == 201
+    thread = response.json()["thread"]
+    assert thread["domain"] == "spec"
+    assert thread["binding_scope"] == "document"
+    assert thread["entity_kind"] is None
+    assert thread["entity_id"] is None
+
+    context = client.get(f"/api/threads/{thread['id']}/spec/context")
+    assert context.status_code == 200
+    assert context.json()["context"]["scope"] == "document"
+
+    artifact = {
+        "kind": "spec_change_proposal",
+        "schema_version": "1.0",
+        "proposal_id": "create_design",
+        "document_id": "spec_demo",
+        "scope": "document",
+        "target": None,
+        "base_source_revision_hash": "sha256:base",
+        "title": "Create replicated design",
+        "summary": "Add ten component instances.",
+        "rationale": "Requested design structure.",
+        "assumptions": [],
+        "operations": [
+            {
+                "operation_id": "create_replicated_design",
+                "type": "create_entity",
+                "kind": "design",
+                "name": "replicated",
+                "entity_id": "design_replicated_fixed",
+                "instances": [
+                    {
+                        "name": f"asd1_{index}",
+                        "component_vlnv": "spec2gds.local:work:asd1:1.0",
+                    }
+                    for index in range(1, 11)
+                ],
+            }
+        ],
+    }
+    preview = client.post(
+        f"/api/threads/{thread['id']}/spec/preview",
+        json={"proposal_id": artifact["proposal_id"], "artifact": artifact},
+    )
+    assert preview.status_code == 200
+    assert preview.json()["review"]["state"] == "ready"
+    applied = client.post(
+        f"/api/threads/{thread['id']}/spec/proposals",
+        json={"proposal_id": artifact["proposal_id"]},
     )
     assert applied.status_code == 200
     assert applied.json()["review"]["state"] == "applied"

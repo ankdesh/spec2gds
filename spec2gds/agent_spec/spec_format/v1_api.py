@@ -33,6 +33,7 @@ from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationE
 from spec2gds.agent_spec.spec_format.assistant import (
     SpecChangeProposal,
     build_assistant_context,
+    build_document_assistant_context,
     preview_assistant_proposal,
 )
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
@@ -390,6 +391,26 @@ def create_app() -> typing.Any:
             "target": _jsonable(target),
         }
 
+    @app.post("/assistant/launch/document")
+    def launch_document_assistant() -> dict[str, typing.Any]:
+        """Launch a fresh document-bound chat for the active specification."""
+        session = active()
+        urls = service_urls()
+        query = urlencode(
+            {
+                "service_base_url": urls["spec_editor"]["service_url"],
+                "document_id": session.revision.document_id,
+            }
+        )
+        return {
+            "assistant_url": (
+                f"{urls['ai_assistant']['service_url']}/launch/spec-document?{query}"
+            ),
+            "document_id": session.revision.document_id,
+            "source_revision_hash": session.revision.source_revision_hash,
+            "scope": "document",
+        }
+
     @app.post("/circuit-designer/launch")
     def launch_circuit(request: CircuitLaunchRequest) -> dict[str, typing.Any]:
         """Project one direct-port design, publish it, and return its browser URL."""
@@ -440,6 +461,16 @@ def create_app() -> typing.Any:
         except (TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @app.get("/assistant/context/document")
+    def assistant_document_context(document_id: str) -> dict[str, typing.Any]:
+        """Return immutable document-wide context for a read-only Spec chat."""
+        if document_id != active().revision.document_id:
+            raise fastapi.HTTPException(
+                status_code=409,
+                detail="A different .spec document is active.",
+            )
+        return build_document_assistant_context(active().revision)
+
     @app.post("/assistant/proposals/preview")
     def assistant_proposal_preview(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
         """Validate and project an assistant proposal without persisting a draft."""
@@ -485,6 +516,7 @@ def create_app() -> typing.Any:
         applied_at = datetime.now(UTC).isoformat()
         decision = AssistantChangeDecision(
             proposal_id=proposal.proposal_id,
+            scope=proposal.scope,
             target=proposal.target,
             base_source_revision_hash=proposal.base_source_revision_hash,
             result_source_revision_hash=revision.source_revision_hash,
@@ -500,7 +532,11 @@ def create_app() -> typing.Any:
             state,
             session,
             origin="assistant",
-            affected_entities=[proposal.target.model_dump(mode="json")],
+            affected_entities=(
+                [proposal.target.model_dump(mode="json")]
+                if proposal.target is not None
+                else []
+            ),
         )
         return {
             "status": "applied",
@@ -790,7 +826,17 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             entity_kind = str(raw.get("kind", ""))
             if entity_kind not in {"component", "design"}:
                 raise ValueError("create_entity kind must be component or design.")
-            operations.append(CreateEntity(typing.cast(typing.Any, entity_kind), str(raw.get("name", ""))))
+            instances = raw.get("instances", [])
+            if not isinstance(instances, list):
+                raise ValueError("create_entity instances must be a list.")
+            operations.append(
+                CreateEntity(
+                    typing.cast(typing.Any, entity_kind),
+                    str(raw.get("name", "")),
+                    str(raw["entity_id"]) if raw.get("entity_id") else None,
+                    tuple(InstanceIR(**item) for item in instances),
+                )
+            )
         elif kind == "set_document_title":
             operations.append(SetDocumentTitle(str(raw.get("title", ""))))
         elif kind == "set_entity_metadata":

@@ -48,6 +48,8 @@ class CreateEntity:
 
     kind: typing.Literal["component", "design"]
     name: str
+    entity_id: str | None = None
+    instances: tuple[InstanceIR, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -435,7 +437,16 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
     vlnv = f"spec2gds.local:work:{name}:1.0"
     if any(item.kind == operation.kind and item.vlnv == vlnv for item in package.manifest.documents):
         raise ValueError(f"A {operation.kind.replace('_', ' ')} named {name} already exists.")
-    entity_id = new_entity_id(f"{operation.kind}_{name}")
+    entity_id = operation.entity_id or new_entity_id(f"{operation.kind}_{name}")
+    if not ID_PATTERN.fullmatch(entity_id):
+        raise ValueError("Entity ID must be an XML-compatible identifier.")
+    if any(item.entity_id == entity_id for item in package.manifest.documents):
+        raise ValueError(f"Entity ID already exists: {entity_id}")
+    if operation.kind == "component" and operation.instances:
+        raise ValueError("Only designs may define component instances.")
+    instance_names = [item.name for item in operation.instances]
+    if len(instance_names) != len(set(instance_names)):
+        raise ValueError("Design component instance names must be unique.")
     root_name = ipxact.ROOT_NAMES[operation.kind]
     root = etree.Element(_q(root_name), nsmap={"ipxact": ipxact.IPXACT_NAMESPACE})
     root.set(f"{{{ipxact.XML_NAMESPACE}}}id", entity_id)
@@ -446,6 +457,8 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
         ("version", "1.0"),
     ):
         etree.SubElement(root, _q(field)).text = value
+    for instance in operation.instances:
+        _upsert_instance(root, instance)
     package.add_document(operation.kind, _serialize(root))
     if operation.kind == "design":
         reference = EntityRef(

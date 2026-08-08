@@ -4,9 +4,12 @@ The specification editor uses a sticky application bar so document operations
 remain available while the unified specification scrolls. The active package
 name appears in the bar; hover it to inspect the full server-local path.
 The upper-right **AI Assistant ↗** button uses the shared service registry and
-opens the Assistant with the Spec workspace selected. Use an entity's **More
-actions → Explore with AI Assistant** command when a fully entity-bound chat is
-required.
+opens an Assistant chat bound to an immutable snapshot of the complete active
+specification. It may propose a new top-level component or design, including
+initial instances. Existing entities remain read-only from this document scope.
+Use an entity's **More actions → Explore with AI Assistant** command when a
+reviewed proposal should change that existing entity.
+The toolbar button is disabled until a specification is open.
 
 ## Application menus
 

@@ -348,6 +348,7 @@ class ProcessedContext(StrictModel):
     document_id: str
     revision: str
     warnings: list[str]
+    scope: Literal["document", "entity"] | None = None
 
 
 class SpecEntityRef(StrictModel):
@@ -363,6 +364,7 @@ class SpecEntityRef(StrictModel):
 
 
 SpecOperationType = Literal[
+    "create_entity",
     "set_entity_metadata",
     "upsert_parameter",
     "delete_parameter",
@@ -671,6 +673,23 @@ class DeleteChannelOperation(StrictModel):
     name: str
 
 
+class CreateEntityOperation(StrictModel):
+    operation_id: str
+    type: Literal["create_entity"]
+    kind: Literal["component", "design"]
+    name: str = Field(pattern=r"^[A-Za-z_][A-Za-z0-9_.-]*$")
+    instances: list[SpecInstanceValue]
+
+    @model_validator(mode="after")
+    def validate_instances(self) -> "CreateEntityOperation":
+        if self.kind == "component" and self.instances:
+            raise ValueError("A new component cannot contain design instances.")
+        names = [item.name for item in self.instances]
+        if len(names) != len(set(names)):
+            raise ValueError("New design instance names must be unique.")
+        return self
+
+
 class UpsertInstanceOperation(StrictModel):
     operation_id: str
     type: Literal["upsert_instance"]
@@ -784,7 +803,8 @@ class SetNarrativeEntityLinksOperation(StrictModel):
 
 
 SpecProposalOperation = (
-    SetEntityMetadataOperation
+    CreateEntityOperation
+    | SetEntityMetadataOperation
     | UpsertParameterOperation
     | DeleteParameterOperation
     | UpsertComponentPortOperation
@@ -837,13 +857,20 @@ class SpecProposalArtifact(StrictModel):
     schema_version: Literal["1.0"] = "1.0"
     proposal_id: str
     document_id: str
-    target: SpecEntityRef
+    scope: Literal["document", "entity"] = "entity"
+    target: SpecEntityRef | None = None
     base_source_revision_hash: str
     title: str
     summary: str
     rationale: str
     assumptions: list[str]
     operations: list[dict[str, Any]]
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "SpecProposalArtifact":
+        if (self.scope == "entity") != (self.target is not None):
+            raise ValueError("Spec proposal scope and target do not match.")
+        return self
 
 
 class SpecAgentRequest(StrictModel):

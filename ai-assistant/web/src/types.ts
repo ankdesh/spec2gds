@@ -2,7 +2,6 @@ import type {
   CircuitDiff,
   CircuitDocument,
   CircuitOperationBatch,
-  Diagnostic,
 } from "@spec2gds/circuit-core";
 import type { DocumentSectionData, EntityRef } from "@spec2gds/document-core";
 
@@ -16,6 +15,7 @@ export interface AssistantThread {
   document_id: string | null;
   entity_kind: EntityRef["entity_kind"] | null;
   entity_id: string | null;
+  binding_scope: "document" | "entity" | null;
   include_png: boolean;
   conversation_summary: string | null;
   summary_message_count: number;
@@ -73,7 +73,8 @@ export interface SpecProposalArtifact {
   schema_version: "1.0";
   proposal_id: string;
   document_id: string;
-  target: EntityRef;
+  scope: "document" | "entity";
+  target: EntityRef | null;
   base_source_revision_hash: string;
   title: string;
   summary: string;
@@ -109,7 +110,7 @@ export interface ProposalReview {
   base_document: CircuitDocument | DocumentSectionData[] | null;
   candidate: CircuitDocument | DocumentSectionData[] | null;
   diff: CircuitDiff | SpecDiffEntry[] | null;
-  diagnostics: Diagnostic[] | Record<string, unknown> | null;
+  diagnostics: unknown;
   submitted_proposal_id: string | null;
   created_at: string;
   updated_at: string;

@@ -233,6 +233,43 @@ class AssistantDatabase:
             ).fetchone()
         return self._thread(row) if row else None
 
+    def bind_spec_document(
+        self,
+        thread_id: str,
+        *,
+        base_url: str,
+        document_id: str,
+    ) -> dict[str, Any] | None:
+        """Permanently bind one chat to one complete Spec document."""
+        with self._connect() as connection:
+            current = connection.execute(
+                "SELECT * FROM threads WHERE id = ?", (thread_id,)
+            ).fetchone()
+            if current is None:
+                return None
+            existing = current["service_base_url"]
+            if existing and (
+                current["domain"] != "spec"
+                or existing != base_url
+                or current["document_id"] != document_id
+                or current["entity_kind"] is not None
+                or current["entity_id"] is not None
+            ):
+                raise ValueError("This chat is already bound to a different target.")
+            connection.execute(
+                """
+                UPDATE threads
+                SET domain = 'spec', service_base_url = ?, circuit_base_url = NULL,
+                    document_id = ?, entity_kind = NULL, entity_id = NULL, updated_at = ?
+                WHERE id = ?
+                """,
+                (base_url, document_id, utc_now(), thread_id),
+            )
+            row = connection.execute(
+                "SELECT * FROM threads WHERE id = ?", (thread_id,)
+            ).fetchone()
+        return self._thread(row) if row else None
+
     def delete_thread(self, thread_id: str) -> bool:
         with self._connect() as connection:
             cursor = connection.execute(
@@ -491,6 +528,15 @@ class AssistantDatabase:
         return " ".join(fragment.strip() for fragment in fragments if fragment.strip())
 
     def _thread(self, row: sqlite3.Row) -> dict[str, Any]:
+        binding_scope = None
+        if row["document_id"] is not None:
+            binding_scope = (
+                "entity"
+                if row["domain"] == "spec"
+                and row["entity_kind"] is not None
+                and row["entity_id"] is not None
+                else "document"
+            )
         return {
             "id": row["id"],
             "title": row["title"],
@@ -501,6 +547,7 @@ class AssistantDatabase:
             "document_id": row["document_id"],
             "entity_kind": row["entity_kind"],
             "entity_id": row["entity_id"],
+            "binding_scope": binding_scope,
             "include_png": bool(row["include_png"]),
             "conversation_summary": row["conversation_summary"],
             "summary_message_count": int(row["summary_message_count"]),

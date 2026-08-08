@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pydantic
 
 from spec2gds.agent_spec.activities.contracts import (
@@ -71,7 +73,7 @@ class SpecTextContextRenderer:
 
     definition = ContextRendererDefinition(
         renderer_id="reference.spec_text_context",
-        version="1.0.0",
+        version="1.1.0",
         title="Specification text context",
         scopes=ActivityScopes(
             document=True,
@@ -95,6 +97,24 @@ class SpecTextContextRenderer:
         ]
         if context.target is None:
             entities = context.spec.high.entities().all()
+            semantic_ir = {
+                "manifest": context.spec.low.manifest.model_dump(mode="json"),
+                "components": [
+                    _jsonable(item) for item in context.spec.low.components
+                ],
+                "designs": [
+                    _jsonable(item) for item in context.spec.low.designs
+                ],
+                "bus_definitions": [
+                    _jsonable(item)
+                    for item in context.spec.low.bus_definitions
+                ],
+                "abstraction_definitions": [
+                    _jsonable(item)
+                    for item in context.spec.low.abstraction_definitions
+                ],
+                "narrative": context.spec.low.narrative.model_dump(mode="json"),
+            }
             lines.extend(
                 [
                     "",
@@ -106,6 +126,9 @@ class SpecTextContextRenderer:
                     "",
                     "NARRATIVE TEXT:",
                     context.spec.high.text.all().plain_text() or "(none)",
+                    "",
+                    "SEMANTIC SPECIFICATION (READ-ONLY):",
+                    json.dumps(semantic_ir, ensure_ascii=False, sort_keys=True, indent=2),
                 ]
             )
         else:
@@ -141,3 +164,8 @@ def register_extensions(registry: SpecExtensionRegistry) -> None:
     """Register the built-in examples through the same public plugin hook as teams."""
     registry.register_activity(specification_summary)
     registry.register_context_renderer(SpecTextContextRenderer())
+
+
+def _jsonable(value: object) -> object:
+    """Serialize one typed dataclass IR value without exposing source XML."""
+    return pydantic.TypeAdapter(type(value)).dump_python(value, mode="json")

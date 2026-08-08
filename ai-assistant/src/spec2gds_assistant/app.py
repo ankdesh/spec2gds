@@ -31,7 +31,11 @@ from .a2a_agent import (
 )
 from .agents.circuit_editor import CircuitEditingAgent
 from .agents.spec_editor import SpecEditingAgent
-from .api import create_api_router, create_bound_spec_thread
+from .api import (
+    create_api_router,
+    create_bound_spec_document_thread,
+    create_bound_spec_thread,
+)
 from .circuit_client import CircuitDesignerClient, CircuitServiceError
 from .config import Settings
 from .database import AssistantDatabase
@@ -226,6 +230,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=400, detail=str(reason)) from reason
         except SpecServiceError as reason:
             raise HTTPException(status_code=reason.status_code, detail=reason.detail) from reason
+        return RedirectResponse(url=f"/?thread={thread['id']}", status_code=303)
+
+    @app.get("/launch/spec-document", include_in_schema=False)
+    async def launch_spec_document(service_base_url: str, document_id: str):
+        """Create a fresh chat bound to the active Spec document."""
+        from fastapi import HTTPException
+        from fastapi.responses import RedirectResponse
+
+        try:
+            thread = await create_bound_spec_document_thread(
+                database,
+                spec_client,
+                base_url=service_base_url,
+                document_id=document_id,
+            )
+        except ValueError as reason:
+            raise HTTPException(status_code=400, detail=str(reason)) from reason
+        except SpecServiceError as reason:
+            raise HTTPException(
+                status_code=reason.status_code,
+                detail=reason.detail,
+            ) from reason
         return RedirectResponse(url=f"/?thread={thread['id']}", status_code=303)
 
     @app.get("/launch/circuit", include_in_schema=False)

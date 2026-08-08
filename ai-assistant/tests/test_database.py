@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 import sqlite3
+from pathlib import Path
 
 import pytest
 
@@ -73,6 +73,7 @@ def test_spec_binding_and_running_conversation_summary(tmp_path: Path) -> None:
         entity_id="component_leaf",
     )
     assert bound and bound["domain"] == "spec"
+    assert bound["binding_scope"] == "entity"
     assert bound["entity_id"] == "component_leaf"
     for index in range(13):
         database.append_message(
@@ -86,6 +87,21 @@ def test_spec_binding_and_running_conversation_summary(tmp_path: Path) -> None:
     assert context["summarized_message_count"] == 5
     assert "message text 0" in context["summary"]
     assert len(context["recent_messages"]) == 8
+
+
+def test_document_spec_binding_has_no_entity_target(tmp_path: Path) -> None:
+    database = AssistantDatabase(tmp_path / "assistant.db")
+    database.initialize()
+    thread = database.create_thread(thread_id="thread_document", domain="spec")
+    bound = database.bind_spec_document(
+        thread["id"],
+        base_url="http://127.0.0.1:8000",
+        document_id="spec_demo",
+    )
+    assert bound
+    assert bound["binding_scope"] == "document"
+    assert bound["entity_kind"] is None
+    assert bound["entity_id"] is None
 
 
 def test_existing_circuit_database_migrates_additively(tmp_path: Path) -> None:

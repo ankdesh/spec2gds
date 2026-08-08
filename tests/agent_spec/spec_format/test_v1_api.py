@@ -377,6 +377,19 @@ def test_editor_launches_ai_assistant_with_configured_url_override(
     assert preferred["assistant_url"].startswith("http://127.0.0.1:4400/launch/spec?")
     assert preferred["target"] == component
 
+    document_launch = endpoints["launch_document_assistant"]()
+    assert document_launch["assistant_url"].startswith(
+        "http://127.0.0.1:4400/launch/spec-document?"
+    )
+    assert document_launch["document_id"] == opened["document_id"]
+    assert document_launch["scope"] == "document"
+
+    context = endpoints["assistant_document_context"](opened["document_id"])
+    assert context["scope"] == "document"
+    assert context["target"] is None
+    assert context["rendered_context"]["snapshot_id"].startswith("sha256:")
+    assert "SEMANTIC SPECIFICATION" in context["rendered_context"]["text"]
+
 
 def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> None:
     app = create_app()
@@ -392,6 +405,7 @@ def test_production_v1_api_has_no_heading_block_or_odt_route_dependency() -> Non
 def test_server_and_editor_commands_forward_development_options(monkeypatch, capsys) -> None:
     """Keep the documented public commands wired to the shared app factory."""
     import uvicorn
+
     import spec2gds.agent_spec.api.__main__ as production_entry
 
     calls: list[tuple[str, dict[str, object]]] = []
@@ -524,6 +538,83 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
     assert endpoints["assistant_changes"]()["assistant_changes"] == changes
 
 
+def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path) -> None:
+    package_path = tmp_path / "assistant-document.spec"
+    write_test_package(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    component = next(
+        item for item in opened["components"]
+        if item["ref"]["entity_id"] == "component_leaf"
+    )
+    proposal = SpecChangeProposal(
+        proposal_id="proposal_replicated_design",
+        document_id=opened["document_id"],
+        scope="document",
+        target=None,
+        base_source_revision_hash=opened["source_revision_hash"],
+        title="Create replicated design",
+        summary="Add ten instances of the existing leaf component.",
+        rationale="Exercise document-scoped creation as one atomic change.",
+        assumptions=[],
+        operations=[
+            {
+                "operation_id": "create_replicated_design",
+                "type": "create_entity",
+                "kind": "design",
+                "name": "replicated_leaf",
+                "entity_id": "design_replicated_leaf_fixed",
+                "instances": [
+                    {
+                        "name": f"leaf_{index}",
+                        "component_vlnv": component["vlnv"],
+                    }
+                    for index in range(1, 11)
+                ],
+            }
+        ],
+    )
+
+    context = endpoints["assistant_document_context"](opened["document_id"])
+    assert context["scope"] == "document"
+    assert context["writable"]["document_operations"] == ["create_entity"]
+    before = endpoints["document_snapshot"]()["source_revision_hash"]
+    preview = endpoints["assistant_proposal_preview"](proposal)
+    assert preview["status"] == "valid"
+    assert preview["candidate_source_revision_hash"] != before
+    assert endpoints["document_snapshot"]()["source_revision_hash"] == before
+    assert preview["diff"]
+    assert "replicated_leaf" in str(preview["candidate_sections"])
+
+    applied = endpoints["assistant_proposal_apply"](proposal)
+    assert applied["status"] == "applied"
+    reopened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    design = next(
+        item for item in reopened["designs"]
+        if item["ref"]["entity_id"] == "design_replicated_leaf_fixed"
+    )
+    assert len(design["instances"]) == 10
+    assert {item["component_vlnv"] for item in design["instances"]} == {
+        component["vlnv"]
+    }
+
+    forbidden = proposal.model_copy(
+        update={
+            "proposal_id": "proposal_forbidden_document_edit",
+            "base_source_revision_hash": reopened["source_revision_hash"],
+            "operations": [
+                {
+                    "operation_id": "edit_existing",
+                    "type": "set_entity_metadata",
+                    "entity": component["ref"],
+                    "description": "Not permitted from document scope.",
+                }
+            ],
+        }
+    )
+    rejected = endpoints["assistant_proposal_preview"](forbidden)
+    assert rejected["status"] == "invalid"
+    assert "may only create top-level" in rejected["diagnostics"][0]
 def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Path) -> None:
     package_path = tmp_path / "assistant-boundary.spec"
     write_test_package(package_path)

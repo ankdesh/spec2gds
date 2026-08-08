@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
 from spec2gds_assistant.agents.circuit_editor import CircuitEditingAgent
 from spec2gds_assistant.app import create_app
@@ -91,6 +91,53 @@ def test_circuit_launch_creates_a_bound_chat(
         thread = client.get(f"/api/threads/{thread_id}").json()
     assert thread["domain"] == "circuit"
     assert thread["document_id"] == "demo"
+
+
+def test_spec_document_launch_creates_a_read_only_bound_chat(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_document_context(
+        *_: object,
+    ) -> dict[str, object]:
+        return {
+            "scope": "document",
+            "document_id": "demo",
+            "source_revision_hash": "sha256:base",
+        }
+
+    monkeypatch.setattr(
+        "spec2gds_assistant.spec_client.SpecEditorClient.document_context",
+        fake_document_context,
+    )
+    app = create_app(
+        Settings(
+            host="127.0.0.1",
+            port=4200,
+            database_path=tmp_path / "assistant.db",
+            openai_api_key=None,
+            openai_model="gpt-4o-mini",
+            web_dist_path=tmp_path / "missing",
+            circuit_request_timeout_seconds=5,
+        )
+    )
+
+    with TestClient(app) as client:
+        response = client.get(
+            "/launch/spec-document",
+            params={
+                "service_base_url": "http://127.0.0.1:8000",
+                "document_id": "demo",
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        thread_id = response.headers["location"].split("thread=")[1]
+        thread = client.get(f"/api/threads/{thread_id}").json()
+    assert thread["domain"] == "spec"
+    assert thread["binding_scope"] == "document"
+    assert thread["document_id"] == "demo"
+    assert thread["entity_id"] is None
 
 
 def test_app_serves_built_web_assets_before_a2a_tenant_routes(

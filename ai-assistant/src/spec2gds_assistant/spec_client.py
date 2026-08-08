@@ -62,6 +62,18 @@ class SpecEditorClient:
             },
         )
 
+    async def document_context(
+        self,
+        base_url: str,
+        document_id: str,
+    ) -> dict[str, Any]:
+        """Read versioned document-wide context from the owning Spec service."""
+        return await self._request(
+            "GET",
+            f"{self.normalize(base_url)}/assistant/context/document",
+            params={"document_id": document_id},
+        )
+
     async def preview(self, base_url: str, proposal: dict[str, Any]) -> dict[str, Any]:
         return await self._request(
             "POST",

@@ -30,10 +30,13 @@ form. Set `SPEC2GDS_SERVICE_CONFIG` to use another registry.
 
 When creating a chat directly in the AI Assistant, first choose **Circuit
 Designer** or **Spec Editor**. Circuit chats accept a Circuit Designer service
-URL and document ID. For Spec chats, the recommended flow from an entity in
-Spec Editor is **Options → More actions… → Explore with AI Assistant**. This
-supplies the document and entity identity automatically. A manual Spec
-connection form is also available for known document/entity IDs.
+URL and document ID. The Spec Editor toolbar opens a chat with the complete
+active specification as context. It can propose a new top-level component or
+design, including initial instances that reference existing component VLNVs.
+To change an existing entity, use its **Options → More actions… → Explore with
+AI Assistant** command; it supplies the document and entity identity
+automatically. A manual entity connection form is also available for known
+identifiers.
 
 The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
 SQLite database defaults to `data/assistant.db`.
@@ -64,6 +67,9 @@ sequenceDiagram
 
 Conversation does not mutate source. A user must request a proposal and accept
 its preview. The owning API performs the final revision and validation checks.
+If an owning editor rejects a preview, the review card shows its returned error
+codes, messages, and affected element, operation, or path so the next proposal
+can address the concrete failure.
 
 Circuit Designer chats can propose logical component definitions, placed
 instances, component pins, top-level design ports, nets, and endpoint
@@ -73,12 +79,14 @@ operations. Existing semantic IDs and the endpoint catalog in the current
 snapshot are authoritative. Geometry, routes, labels, and layout are not
 AI-authored.
 
-Spec Editor chats are bound to one existing entity. They can propose metadata,
-component-instance, and editor-profiled port changes. Port proposals use the
-same Wire, Transactional, and packed Structured families as the editor. Port
-names and families remain fixed, and ports on components with internal designs
-remain read-only. Specification renaming and top-level entity creation are not
-part of the entity-bound assistant workflow.
+Document-bound Spec Editor chats can propose only a new top-level component or
+design. A new design may include all requested initial instances as one atomic
+operation; each instance must use the exact VLNV of an existing component.
+Existing entities remain read-only in that scope. Entity-bound chats can propose
+metadata, component-instance, and editor-profiled port changes. Port proposals
+use the same Wire, Transactional, and packed Structured families as the editor.
+Port names and families remain fixed, and ports on components with internal
+designs remain read-only. Specification renaming remains outside both workflows.
 
 For design connections, available component references include their exact
 ports and interfaces. Ad-hoc connections use port endpoints, while interface

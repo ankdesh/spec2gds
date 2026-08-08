@@ -372,6 +372,14 @@ button { color: inherit; }
 .proposal-details pre { max-height: 210px; overflow: auto; padding: 10px; background: #172722; border-radius: 7px; color: #d9e8e2; font-size: 10px; }
 .proposal-card > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; background: #f8faf7; border-top: 1px solid var(--line); }
 .proposal-warning { display: flex; align-items: center; gap: 7px; margin: 0; padding: 13px 18px; color: #8c4c25; background: #fff5e6; border-top: 1px solid #f1dfc4; font-size: 12px; }
+.proposal-rejection { padding: 14px 18px; color: #783e22; background: #fff5e6; border-top: 1px solid #f1dfc4; font-size: 12px; }
+.proposal-rejection-title { display: flex; align-items: center; gap: 7px; }
+.proposal-rejection p { margin: 9px 0 0; }
+.proposal-rejection ul { display: grid; gap: 8px; margin: 11px 0 0; padding: 0; list-style: none; }
+.proposal-rejection li { display: grid; grid-template-columns: minmax(90px, 150px) minmax(0, 1fr); gap: 3px 8px; padding: 9px 10px; background: rgba(255,255,255,.68); border: 1px solid #efd9ba; border-radius: 7px; }
+.proposal-rejection li code { color: #7d351f; font-size: 11px; font-weight: 750; overflow-wrap: anywhere; }
+.proposal-rejection li span { min-width: 0; overflow-wrap: anywhere; }
+.proposal-rejection li small { grid-column: 2; color: #8b6c5b; overflow-wrap: anywhere; }
 .proposal-sent { border-color: #93c6b7; }
 .proposal-applied { border-color: #76b59f; }
 .proposal-discarded { opacity: .68; }

@@ -316,6 +316,14 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
     if (path === "/artifacts") return json({ artifacts: [] });
     if (path === "/proposals") return json({ proposals: [] });
     if (path === "/assistant/changes") return json({ assistant_changes: [] });
+    if (path === "/assistant/launch/document") {
+      return json({
+        assistant_url: "http://127.0.0.1:4200/launch/spec-document?document_id=editor_test",
+        document_id: documentId,
+        source_revision_hash: state.currentRevision,
+        scope: "document",
+      });
+    }
     if (path === "/circuit-designer/launch") {
       const body = request.postDataJSON() as { entity_kind: string; entity_id: string };
       state.circuits.push(body);
@@ -401,7 +409,7 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
 
 test("opens the configured AI Assistant from the top bar", async ({ page }) => {
   await mockEditorApi(page);
-  await page.goto("/");
+  await openSample(page);
   await page.evaluate(() => {
     (window as Window & { openedAssistantUrl?: string }).open = ((url?: string | URL) => {
       (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl = String(url);
@@ -412,7 +420,7 @@ test("opens the configured AI Assistant from the top bar", async ({ page }) => {
   await page.getByRole("button", { name: /AI Assistant/ }).click();
   await expect.poll(() => page.evaluate(
     () => (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl,
-  )).toBe("http://127.0.0.1:4200/?workspace=spec");
+  )).toBe("http://127.0.0.1:4200/launch/spec-document?document_id=editor_test");
 });
 
 test("supports keyboard menu navigation and restores trigger focus", async ({ page }) => {

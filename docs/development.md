@@ -108,10 +108,11 @@ scripts/serve-all.sh start
 scripts/serve-all.sh stop
 ```
 
-The script tracks process groups with PID files in `logs/serve-all/`; `stop`
-only signals those tracked groups. Each service writes to a separate log in the
-same directory. The script deliberately does not install dependencies or own
-the longer-term service monitoring mechanism.
+The script tracks process groups with PID files in `logs/serve-all/`. Each
+service writes to a separate log in the same directory. The `stop` command also
+uses `lsof` to terminate untracked listeners on the default service ports
+`8000`, `4100`, `4180`, and `4200`. The script deliberately does not install
+dependencies or own the longer-term service monitoring mechanism.
 
 ## Change rules
 

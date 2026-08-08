@@ -208,6 +208,13 @@ export interface AssistantLaunch {
   target: EntityRef;
 }
 
+export interface AssistantDocumentLaunch {
+  assistant_url: string;
+  document_id: string;
+  source_revision_hash: string;
+  scope: "document";
+}
+
 export interface HostedServiceLocation {
   service_url: string;
   ui_url: string;
@@ -331,6 +338,12 @@ export class SpecEditorHttpClient {
         entity_kind: ref.entity_kind,
         entity_id: ref.entity_id,
       }),
+    });
+  }
+
+  launchDocumentAssistant(): Promise<AssistantDocumentLaunch> {
+    return this.request("/assistant/launch/document", {
+      method: "POST",
     });
   }
 

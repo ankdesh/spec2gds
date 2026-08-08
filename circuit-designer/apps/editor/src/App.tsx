@@ -64,7 +64,6 @@ export default function App() {
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
-  const [assistantUrl, setAssistantUrl] = useState("http://127.0.0.1:4200");
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
   const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
 
@@ -75,7 +74,6 @@ export default function App() {
   useEffect(() => {
     void client.getServiceDirectory()
       .then((directory) => {
-        setAssistantUrl(directory.services.ai_assistant.ui_url);
         setBrowserLogger(new BrowserLogger(`${import.meta.env.DEV ? "/api" : ""}/logs/events`, directory.logging));
       })
       .catch(() => undefined);
@@ -289,6 +287,29 @@ export default function App() {
     }
   };
 
+  const launchDocumentAssistant = async () => {
+    if (launchingAssistant || !snapshot) return;
+    const pendingWindow = window.open("about:blank", "_blank");
+    if (pendingWindow) {
+      pendingWindow.opener = null;
+      pendingWindow.document.title = "Opening AI Assistant…";
+      pendingWindow.document.body.textContent = "Connecting to the active specification…";
+    }
+    setLaunchingAssistant(true);
+    setError("");
+    try {
+      const launch = await client.launchDocumentAssistant();
+      if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
+      else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
+      setNotice(`Opened a read-only AI Assistant chat for ${launch.document_id}.`);
+    } catch (caught) {
+      pendingWindow?.close();
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setLaunchingAssistant(false);
+    }
+  };
+
   const refreshExternalChange = async () => {
     setLoading(true);
     setError("");
@@ -405,13 +426,14 @@ export default function App() {
     <div className="app-shell">
       <EditorMenuBar
         activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
-        assistantUrl={assistantUrl}
         diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length}
+        launchingAssistant={launchingAssistant}
         launchingCircuit={launchingCircuit}
         loading={loading}
         onCreate={createDocument}
         onError={setError}
         onOpen={openDocument}
+        onOpenAssistant={launchDocumentAssistant}
         onOpenCircuit={launchCircuitDesigner}
         onViewChange={setView}
         path={path}
@@ -545,11 +567,16 @@ function ActivityView({
           {activity.assistant_changes.slice().reverse().map((value) => {
             const item = record(value);
             const target = record(item.target);
+            const documentScope = text(item.scope) === "document";
             const operations = Array.isArray(item.operations) ? item.operations : [];
             return (
               <article className="activity-item" key={text(item.proposal_id)}>
                 <span className="status status--succeeded">accepted</span>
-                <strong>{text(target.entity_kind, "entity")} · {text(target.entity_id)}</strong>
+                <strong>
+                  {documentScope
+                    ? "document · top-level creation"
+                    : `${text(target.entity_kind, "entity")} · ${text(target.entity_id)}`}
+                </strong>
                 <small>{text(item.proposal_id)}</small>
                 <p>{operations.length} applied {operations.length === 1 ? "operation" : "operations"}</p>
               </article>

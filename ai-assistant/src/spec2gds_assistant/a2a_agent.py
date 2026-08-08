@@ -254,7 +254,7 @@ class SpecEditingAgentExecutor(AgentExecutor):
                 if isinstance(messages, list):
                     recent_messages = [item for item in messages if isinstance(item, dict)]
         if spec_context is None:
-            raise ValueError("Attach the selected Spec entity context before asking the Spec agent.")
+            raise ValueError("Attach Spec document or entity context before asking the Spec agent.")
         if not user_request:
             raise ValueError("A Spec exploration request is required.")
         return SpecAgentRequest(
@@ -270,7 +270,10 @@ class SpecEditingAgentExecutor(AgentExecutor):
 def _explicit_spec_proposal_intent(user_request: str) -> bool:
     return bool(
         re.search(
-            r"\b(prepare|create|generate|make|turn\s+this\s+into)\b.{0,30}\bproposal\b|\bpropose\s+(the\s+)?changes?\b",
+            r"\b(prepare|create|generate|make|turn\s+this\s+into)\b.{0,30}\bproposal\b"
+            r"|\bpropose\s+(the\s+)?changes?\b"
+            r"|^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?"
+            r"(?:add|create|make|generate|update(?!\s+me\b)|change|rename|set|connect|remove|delete)\b",
             user_request,
             flags=re.IGNORECASE,
         )

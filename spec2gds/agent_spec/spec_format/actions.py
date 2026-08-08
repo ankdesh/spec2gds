@@ -170,13 +170,20 @@ class AssistantChangeDecision(StrictModel):
     """Minimal accepted assistant decision persisted with package activity."""
 
     proposal_id: str
-    target: EntityRef
+    scope: typing.Literal["document", "entity"] = "entity"
+    target: EntityRef | None = None
     base_source_revision_hash: str
     result_source_revision_hash: str
     operations_digest: str
     operations: tuple[dict[str, typing.Any], ...]
     decision: typing.Literal["accepted"] = "accepted"
     applied_at: str
+
+    @pydantic.model_validator(mode="after")
+    def _scope(self) -> "AssistantChangeDecision":
+        if (self.scope == "entity") != (self.target is not None):
+            raise ValueError("Assistant decision scope and target do not match.")
+        return self
 
 
 class _ActivityState(StrictModel):

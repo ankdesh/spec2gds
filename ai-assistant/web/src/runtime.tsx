@@ -59,10 +59,11 @@ class DomainAwareA2AClient extends A2AClient {
 
   private async withDomainContext(message: A2AMessage): Promise<A2AMessage> {
     const { thread, context } = await this.getContext();
-    const proposalRequested = thread.domain === "spec" && message.parts.some((part) => {
-      const text = (part as { text?: string }).text ?? "";
-      return /\b(prepare|create|generate|make|turn\s+this\s+into)\b.{0,30}\bproposal\b|\bpropose\s+(the\s+)?changes?\b/i.test(text);
-    });
+    const proposalRequested = thread.domain === "spec"
+      && message.parts.some((part) => {
+        const text = (part as { text?: string }).text ?? "";
+        return /\b(prepare|create|generate|make|turn\s+this\s+into)\b.{0,30}\bproposal\b|\bpropose\s+(the\s+)?changes?\b|^\s*(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?(?:add|create|make|generate|update(?!\s+me\b)|change|rename|set|connect|remove|delete)\b/i.test(text);
+      });
     return {
       ...message,
       parts: [

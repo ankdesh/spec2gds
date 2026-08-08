@@ -7,6 +7,7 @@ PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 STATE_DIR="${PROJECT_ROOT}/logs/serve-all"
 
 SERVICES=(spec-editor circuit-designer ai-assistant)
+DEFAULT_PORTS=(8000 4100 4180 4200)
 
 usage() {
   echo "Usage: scripts/serve-all.sh {start|stop}"
@@ -115,7 +116,7 @@ start_all() {
     fi
   done
   if [[ ${failed} -ne 0 ]]; then
-    stop_all
+    stop_tracked_services
     return 1
   fi
 
@@ -124,12 +125,64 @@ start_all() {
   echo "AI Assistant:     http://127.0.0.1:4200"
 }
 
-stop_all() {
-  mkdir -p "${STATE_DIR}"
+stop_tracked_services() {
   local name
   for name in "${SERVICES[@]}"; do
     stop_service "${name}"
   done
+}
+
+stop_default_port_listeners() {
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "lsof is not available; cannot check for untracked service listeners." >&2
+    return 1
+  fi
+
+  local -A targets=()
+  local port pid
+  for port in "${DEFAULT_PORTS[@]}"; do
+    while IFS= read -r pid; do
+      if [[ "${pid}" =~ ^[0-9]+$ ]]; then
+        targets["${pid}"]="${targets["${pid}"]:-}${port} "
+      fi
+    done < <(lsof -nP -t -iTCP:"${port}" -sTCP:LISTEN 2>/dev/null)
+  done
+
+  if [[ ${#targets[@]} -eq 0 ]]; then
+    echo "No services are listening on the default ports."
+    return 0
+  fi
+
+  for pid in "${!targets[@]}"; do
+    echo "Stopping PID ${pid} listening on port(s) ${targets["${pid}"]% }."
+    kill -TERM "${pid}" 2>/dev/null || true
+  done
+
+  local attempt running
+  for attempt in {1..50}; do
+    running=0
+    for pid in "${!targets[@]}"; do
+      if kill -0 "${pid}" 2>/dev/null; then
+        running=1
+        break
+      fi
+    done
+    [[ ${running} -eq 0 ]] && break
+    sleep 0.1
+  done
+
+  for pid in "${!targets[@]}"; do
+    if kill -0 "${pid}" 2>/dev/null; then
+      echo "PID ${pid} did not stop gracefully; forcing it to stop."
+      kill -KILL "${pid}" 2>/dev/null || true
+    fi
+  done
+}
+
+stop_all() {
+  mkdir -p "${STATE_DIR}"
+  stop_tracked_services
+  stop_default_port_listeners
 }
 
 case "${1:-}" in

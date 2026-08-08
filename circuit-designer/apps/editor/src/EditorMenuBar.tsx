@@ -8,9 +8,9 @@ type MenuId = "file" | "edit" | "circuit" | "help";
 type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | null;
 
 interface EditorMenuBarProps {
-  assistantUrl: string;
   activityCount: number;
   diagnosticCount: number;
+  launchingAssistant: boolean;
   launchingCircuit: boolean;
   loading: boolean;
   path: string;
@@ -19,6 +19,7 @@ interface EditorMenuBarProps {
   onCreate: (path: string, title: string) => Promise<boolean>;
   onError: (message: string) => void;
   onOpen: (path: string) => Promise<boolean>;
+  onOpenAssistant: () => Promise<void>;
   onOpenCircuit: (entityKind: "component" | "design", entityId: string) => Promise<void>;
   onViewChange: (view: EditorView) => void;
 }
@@ -338,9 +339,9 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
 }
 
 export default function EditorMenuBar({
-  assistantUrl,
   activityCount,
   diagnosticCount,
+  launchingAssistant,
   launchingCircuit,
   loading,
   path,
@@ -349,6 +350,7 @@ export default function EditorMenuBar({
   onCreate,
   onError,
   onOpen,
+  onOpenAssistant,
   onOpenCircuit,
   onViewChange,
 }: EditorMenuBarProps) {
@@ -447,13 +449,6 @@ export default function EditorMenuBar({
     if (opened) opened.opener = null;
   };
 
-  const openAssistant = () => {
-    const target = new URL(assistantUrl, window.location.href);
-    target.searchParams.set("workspace", "spec");
-    const opened = window.open(target, "_blank", "noopener,noreferrer");
-    if (opened) opened.opener = null;
-  };
-
   return (
     <>
       <header className="app-header" ref={rootRef}>
@@ -538,8 +533,13 @@ export default function EditorMenuBar({
         </nav>
 
         <div className="app-header__utilities">
-          <button className="assistant-launch" onClick={openAssistant} type="button">
-            AI Assistant <span aria-hidden="true">↗</span>
+          <button
+            className="assistant-launch"
+            disabled={!snapshot || launchingAssistant}
+            onClick={() => { void onOpenAssistant(); }}
+            type="button"
+          >
+            {launchingAssistant ? "Opening…" : "AI Assistant"} <span aria-hidden="true">↗</span>
           </button>
           <div className="active-document" title={path || "No server-local package is open"}>
             <span className={snapshot ? "active-document__status" : "active-document__status active-document__status--idle"} />

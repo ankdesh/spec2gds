@@ -104,6 +104,15 @@ def test_reference_extensions_register_invoke_and_render() -> None:
     assert rendered.snapshot_id == snapshot.manifest.snapshot_id
     assert "DEPENDENCIES" in rendered.text
 
+    document_rendered = render_context(
+        registry,
+        "reference.spec_text_context",
+        ActivitySnapshot.create(revision()),
+    )
+    assert document_rendered.target is None
+    assert "SEMANTIC SPECIFICATION" in document_rendered.text
+    assert '"components"' in document_rendered.text
+
     harness = ActivityTestHarness(registry)
     assert harness.invoke("reference.spec_summary", snapshot) == result
 

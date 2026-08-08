@@ -298,18 +298,76 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
 
 
 class SpecContextProcessor(ContextProcessor[SpecAgentRequest]):
-    """Describe an entity-bound semantic Spec context without exposing XML."""
+    """Describe document- or entity-bound Spec context without exposing XML."""
 
     def process(self, context: SpecAgentRequest) -> ProcessedContext:
         value = context.context
         document_id = str(value.get("document_id", ""))
         revision = str(value.get("source_revision_hash", ""))
+        scope = str(value.get("scope", "entity"))
         target = value.get("target")
         writable = value.get("writable")
         read_only = value.get("read_only")
         references = value.get("available_references")
-        if not document_id or not revision or not isinstance(target, dict):
-            raise ValueError("Spec context requires document, revision, and target identity.")
+        if not document_id or not revision:
+            raise ValueError("Spec context requires document and revision identity.")
+        if scope == "document":
+            rendered = value.get("rendered_context")
+            if not isinstance(rendered, dict):
+                raise ValueError("Document Spec context requires a rendered context.")
+            if (
+                rendered.get("document_id") != document_id
+                or rendered.get("source_revision_hash") != revision
+                or rendered.get("target") is not None
+                or not isinstance(rendered.get("text"), str)
+            ):
+                raise ValueError("Rendered document context identity does not match its binding.")
+            lines = [
+                f"Spec document: {document_id}",
+                f"Source revision: {revision}",
+                "Scope: complete specification",
+                "WRITABLE BOUNDARY: create new top-level components or designs only.",
+                "A new design may include initial instances of existing components, using "
+                "their exact VLNV values from the semantic specification below.",
+                "All existing entities and their contents are read-only in this scope.",
+                "",
+                str(rendered["text"]),
+            ]
+            if isinstance(references, dict):
+                lines.extend(
+                    [
+                        "",
+                        "EXISTING REFERENCES (copy exact identities and VLNV values):",
+                        json.dumps(references, ensure_ascii=False, sort_keys=True, indent=2),
+                    ]
+                )
+            if context.conversation_summary:
+                lines.extend(["", "OLDER CONVERSATION SUMMARY:", context.conversation_summary])
+            if context.recent_messages:
+                lines.extend(
+                    [
+                        "",
+                        "RECENT CONVERSATION (oldest to newest):",
+                        json.dumps(
+                            context.recent_messages,
+                            ensure_ascii=False,
+                            sort_keys=True,
+                            indent=2,
+                        ),
+                    ]
+                )
+            warnings = [
+                str(item) for item in value.get("diagnostics", []) if isinstance(item, str)
+            ]
+            return ProcessedContext(
+                text="\n".join(lines),
+                document_id=document_id,
+                revision=revision,
+                warnings=warnings,
+                scope="document",
+            )
+        if scope != "entity" or not isinstance(target, dict):
+            raise ValueError("Entity Spec context requires a target identity.")
         if not isinstance(writable, dict) or not isinstance(read_only, dict):
             raise ValueError("Spec context requires writable and read-only sections.")
 
@@ -366,4 +424,5 @@ class SpecContextProcessor(ContextProcessor[SpecAgentRequest]):
             document_id=document_id,
             revision=revision,
             warnings=warnings,
+            scope="entity",
         )

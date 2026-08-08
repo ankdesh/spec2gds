@@ -56,6 +56,11 @@ class SpecBindingRequest(ApiModel):
     entity_id: str
 
 
+class SpecDocumentBindingRequest(ApiModel):
+    base_url: str
+    document_id: str
+
+
 class PreviewRequest(ApiModel):
     proposal_id: str
     message_id: str | None = None
@@ -129,6 +134,25 @@ def create_api_router(
                 document_id=body.document_id,
                 entity_kind=body.entity_kind,
                 entity_id=body.entity_id,
+            )
+        except ValueError as reason:
+            raise HTTPException(status_code=400, detail=str(reason)) from reason
+        except SpecServiceError as reason:
+            raise _spec_http_exception(reason) from reason
+        return {"thread": thread}
+
+    @router.post("/spec/document/launch", status_code=status.HTTP_201_CREATED)
+    async def launch_spec_document_thread(
+        body: SpecDocumentBindingRequest,
+        repository: AssistantDatabase = Depends(db),
+    ) -> dict[str, Any]:
+        client = _require_spec_client(spec_client)
+        try:
+            thread = await create_bound_spec_document_thread(
+                repository,
+                client,
+                base_url=body.base_url,
+                document_id=body.document_id,
             )
         except ValueError as reason:
             raise HTTPException(status_code=400, detail=str(reason)) from reason
@@ -315,11 +339,15 @@ def create_api_router(
         repository: AssistantDatabase = Depends(db),
     ) -> dict[str, Any]:
         client = _require_spec_client(spec_client)
-        base_url, document_id, entity_kind, entity_id = _spec_binding(thread)
+        base_url, document_id = _spec_connection(thread)
         try:
-            context = await client.context(
-                base_url, document_id, entity_kind, entity_id
-            )
+            if thread.get("binding_scope") == "document":
+                context = await client.document_context(base_url, document_id)
+            else:
+                _, _, entity_kind, entity_id = _spec_entity_binding(thread)
+                context = await client.context(
+                    base_url, document_id, entity_kind, entity_id
+                )
         except SpecServiceError as reason:
             raise _spec_http_exception(reason) from reason
         current_revision = context.get("source_revision_hash")
@@ -409,17 +437,32 @@ def create_api_router(
         repository: AssistantDatabase = Depends(db),
     ) -> dict[str, Any]:
         client = _require_spec_client(spec_client)
-        base_url, document_id, entity_kind, entity_id = _spec_binding(thread)
+        base_url, document_id = _spec_connection(thread)
         artifact = body.artifact
         target = artifact.get("target")
-        if artifact.get("kind") != "spec_change_proposal" or not isinstance(target, dict):
+        scope = artifact.get("scope", "entity")
+        if artifact.get("kind") != "spec_change_proposal":
             raise HTTPException(status_code=400, detail="A typed Spec proposal is required.")
-        if (
-            artifact.get("document_id") != document_id
-            or target.get("entity_kind") != entity_kind
-            or target.get("entity_id") != entity_id
-        ):
+        if artifact.get("document_id") != document_id:
             raise HTTPException(status_code=400, detail="Proposal targets a different Spec chat binding.")
+        if thread.get("binding_scope") == "document":
+            if scope != "document" or target is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail="A document-bound chat requires a document-scoped proposal.",
+                )
+        else:
+            _, _, entity_kind, entity_id = _spec_entity_binding(thread)
+            if (
+                scope != "entity"
+                or not isinstance(target, dict)
+                or target.get("entity_kind") != entity_kind
+                or target.get("entity_id") != entity_id
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Proposal targets a different Spec chat binding.",
+                )
         for previous in repository.list_reviews(thread["id"]):
             if previous["proposal_id"] != body.proposal_id and previous["state"] in {"draft", "ready", "invalid"}:
                 repository.upsert_review(
@@ -580,7 +623,7 @@ def create_api_router(
         if review["state"] != "ready":
             raise HTTPException(status_code=409, detail="Only a ready proposal can be applied.")
         client = _require_spec_client(spec_client)
-        base_url, _, _, _ = _spec_binding(thread)
+        base_url, _ = _spec_connection(thread)
         try:
             applied = await client.apply(base_url, review["artifact"])
         except SpecServiceError as reason:
@@ -622,7 +665,16 @@ def _binding(thread: dict[str, Any]) -> tuple[str, str]:
     return base_url, document_id
 
 
-def _spec_binding(thread: dict[str, Any]) -> tuple[str, str, str, str]:
+def _spec_connection(thread: dict[str, Any]) -> tuple[str, str]:
+    values = (thread.get("service_base_url"), thread.get("document_id"))
+    if thread.get("domain") != "spec" or any(
+        not isinstance(value, str) for value in values
+    ):
+        raise HTTPException(status_code=409, detail="Connect this chat to a Spec first.")
+    return typing.cast(tuple[str, str], values)
+
+
+def _spec_entity_binding(thread: dict[str, Any]) -> tuple[str, str, str, str]:
     values = (
         thread.get("service_base_url"),
         thread.get("document_id"),
@@ -670,6 +722,29 @@ async def create_bound_spec_thread(
         document_id=document_id,
         entity_kind=entity_kind,
         entity_id=entity_id,
+    )
+    assert bound is not None
+    return bound
+
+
+async def create_bound_spec_document_thread(
+    database: AssistantDatabase,
+    spec_client: SpecEditorClient,
+    *,
+    base_url: str,
+    document_id: str,
+) -> dict[str, Any]:
+    """Create a document-bound thread after validating document-wide Spec context."""
+    normalized = spec_client.normalize(base_url)
+    await spec_client.document_context(normalized, document_id)
+    thread = database.create_thread(
+        title=f"Specification · {document_id}",
+        domain="spec",
+    )
+    bound = database.bind_spec_document(
+        thread["id"],
+        base_url=normalized,
+        document_id=document_id,
     )
     assert bound is not None
     return bound

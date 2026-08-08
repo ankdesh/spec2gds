@@ -29,6 +29,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
 
 import { ApiError, assistantApi } from "./api";
+import { normalizeReviewDiagnostics } from "./diagnostics";
 import { useAssistantApp } from "./runtime";
 import type {
   AssistantThread,
@@ -130,6 +131,7 @@ function Conversation() {
     setError,
   } = useAssistantApp();
   const thread = threads[threadId];
+  const documentSpec = thread?.domain === "spec" && thread.binding_scope === "document";
 
   useEffect(() => {
     if (!threadId) return;
@@ -177,7 +179,9 @@ function Conversation() {
                 <ComposerPrimitive.Input
                   className="composer-input"
                   placeholder={thread.domain === "spec"
-                    ? "Explore the selected specification…"
+                    ? documentSpec
+                      ? "Explore the active specification…"
+                      : "Explore the selected specification entity…"
                     : "Describe the circuit change you want to propose…"}
                   aria-label={thread.domain === "spec" ? "Spec exploration request" : "Circuit edit request"}
                 />
@@ -197,7 +201,9 @@ function Conversation() {
               )}
               <small>
                 {thread.domain === "spec"
-                  ? "Explore freely. A typed change is created only when you request a proposal."
+                  ? documentSpec
+                    ? "You can propose a new top-level component or design. Existing entities remain read-only."
+                    : "Explore freely. A typed change is created only when you request a proposal."
                   : "The agent creates a proposal. Nothing reaches Circuit Designer until you review and send it."}
               </small>
             </ThreadPrimitive.ViewportFooter>
@@ -231,7 +237,9 @@ function DomainHeader({
           {!thread?.document_id
             ? "Choose a workspace"
             : thread.domain === "spec"
-              ? "Spec exploration agent"
+              ? thread.binding_scope === "document"
+                ? "Spec document exploration agent"
+                : "Spec entity exploration agent"
               : "Circuit editing agent"}
         </span>
         <h1>{thread?.document_id ? thread.title : "Connect AI Assistant"}</h1>
@@ -552,27 +560,34 @@ function ConnectSpec({
 
 function Welcome({ thread }: { thread: AssistantThread }) {
   if (thread.domain === "spec") {
+    const documentScope = thread.binding_scope === "document";
     return (
       <div className="welcome">
         <span className="welcome-icon"><Bot size={26} /></span>
-        <h2>Explore {thread.entity_id}</h2>
+        <h2>Explore {documentScope ? thread.document_id : thread.entity_id}</h2>
         <p>
-          Discuss intent, interfaces, internal structure, and connected context. The agent will not create a formal change until you ask for a proposal.
+          {documentScope
+            ? "Discuss the complete specification and propose new top-level components or designs. Every change is previewed before apply; existing entities remain read-only here."
+            : "Discuss intent, interfaces, internal structure, and connected context. The agent will not create a formal change until you ask for a proposal."}
         </p>
         <div className="suggestion-grid">
           <ThreadPrimitive.Suggestion
-            prompt="Explain this entity's current role, connections, and design constraints."
+            prompt={documentScope
+              ? "Summarize this specification's architecture, main entities, and design constraints."
+              : "Explain this entity's current role, connections, and design constraints."}
             method="replace"
             autoSend
           >
             Explain the current design
           </ThreadPrimitive.Suggestion>
           <ThreadPrimitive.Suggestion
-            prompt="Explore alternatives for improving this entity without preparing a proposal yet."
+            prompt={documentScope
+              ? "Add a top-level design named replicated_asd1 with 10 instances of the existing component asd1."
+              : "Explore alternatives for improving this entity without preparing a proposal yet."}
             method="replace"
             autoSend
           >
-            Explore improvement ideas
+            {documentScope ? "Create a replicated design" : "Explore improvement ideas"}
           </ThreadPrimitive.Suggestion>
         </div>
       </div>
@@ -665,11 +680,7 @@ function ProposalCard({
 }) {
   const { setReview, setError } = useAssistantApp();
   const [busy, setBusy] = useState(false);
-  const diagnostics = Array.isArray(review.diagnostics)
-    ? review.diagnostics
-    : review.diagnostics
-      ? [review.diagnostics]
-      : [];
+  const diagnostics = normalizeReviewDiagnostics(review.diagnostics);
   const isSpec = review.artifact.kind === "spec_change_proposal";
   const canReview =
     review.state === "ready" &&
@@ -755,9 +766,34 @@ function ProposalCard({
         </details>
       </div>
       {review.state === "invalid" && (
-        <p className="proposal-warning">
-          <CircleAlert size={16} /> {isSpec ? "Spec Editor" : "Circuit Designer"} rejected this preview. Ask the agent for a corrected proposal.
-        </p>
+        <section className="proposal-rejection" aria-label="Preview rejection details" role="alert">
+          <div className="proposal-rejection-title">
+            <CircleAlert size={17} />
+            <strong>{isSpec ? "Spec Editor" : "Circuit Designer"} rejected this preview</strong>
+          </div>
+          {diagnostics.length > 0 ? (
+            <ul>
+              {diagnostics.map((item, index) => (
+                <li key={`${item.code}:${item.element_key ?? item.path ?? index}`}>
+                  <code>{item.code}</code>
+                  <span>{item.message}</span>
+                  {(item.element_key || item.path || item.operation_id) && (
+                    <small>
+                      {[
+                        item.element_key && `Element: ${item.element_key}`,
+                        item.path && `Path: ${item.path}`,
+                        item.operation_id && `Operation: ${item.operation_id}`,
+                      ].filter(Boolean).join(" · ")}
+                    </small>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>No detailed diagnostics were returned by the owning editor.</p>
+          )}
+          <p>Ask the agent for a corrected proposal using these details.</p>
+        </section>
       )}
       {review.state === "stale" && (
         <p className="proposal-warning">

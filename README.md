@@ -58,8 +58,10 @@ format.
 
 The editors expose **AI Assistant ↗** in their upper-right toolbar. Circuit
 Designer opens a chat already bound to the active circuit. Spec Editor opens
-the Spec workspace; use an entity's **Options → More actions… → Explore with AI
-Assistant** when the chat should be bound to that exact entity.
+a chat bound to the complete active specification. That document chat can
+propose new top-level components or designs (including a design's initial
+instances); use an entity's **Options → More actions… → Explore with AI
+Assistant** when a reviewed change should target an existing entity.
 
 ## Run the specification editor
 
@@ -119,15 +121,18 @@ Spec Editor, Circuit Designer service and UI, and AI Assistant together:
 scripts/serve-all.sh start
 ```
 
-Stop only the processes tracked by that launcher with:
+Stop the tracked processes and any other services listening on the same default
+ports with:
 
 ```bash
 scripts/serve-all.sh stop
 ```
 
 The launcher uses the default ports from `config/services.json` and writes its
-PID files and per-service logs under `logs/serve-all/`. Set `OPENAI_API_KEY`
-before starting if the AI Assistant should make OpenAI requests.
+PID files and per-service logs under `logs/serve-all/`. Its `stop` command also
+uses `lsof` to clean up untracked listeners on ports `8000`, `4100`, `4180`, and
+`4200`. Set `OPENAI_API_KEY` before starting if the AI Assistant should make
+OpenAI requests.
 
 ## Build specification Activities
 

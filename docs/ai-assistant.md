@@ -6,21 +6,32 @@ a separate FastAPI/A2A service with a React client and its own `uv` environment.
 
 ## Specification editor connection
 
-The specification editor owns the source and the integration contract:
+The specification editor owns the source and both integration scopes:
 
-1. `POST /assistant/launch` returns a URL for a fresh entity-bound chat.
-2. The AI Assistant reads `GET /assistant/context` from the editor service.
-3. A requested typed proposal is sent to `/assistant/proposals/preview`.
-4. Only an explicitly accepted, current proposal is sent to
+1. `POST /assistant/launch/document` returns a URL for a fresh chat bound to the
+   active document.
+2. `POST /assistant/launch` returns a URL for a fresh entity-bound chat.
+3. The AI Assistant reads the corresponding document or entity context from
+   the editor service.
+4. A document- or entity-bound typed proposal is sent to
+   `/assistant/proposals/preview`.
+5. Only an explicitly accepted, current proposal is sent to
    `/assistant/proposals/apply`.
-5. The editor backend revalidates ownership, the source revision, IP-XACT, and
+6. The editor backend revalidates ownership, the source revision, IP-XACT, and
    the spec2gds editing profile before committing atomically.
 
-Discussion and draft generation never write the `.spec` package. A chat stays
-bound to one existing component, design, protocol definition, or narrative
-block. Document-level specification renaming and top-level component/design
-creation are intentionally deferred until a document-bound assistant entry
-point is designed.
+Rejected previews retain and display the owning editor's diagnostic codes,
+messages, and affected element, operation, or path instead of only reporting a
+generic rejection.
+
+Discussion never writes the `.spec` package. A toolbar chat receives
+document-scoped context rendered from a deterministic full-source Activity
+snapshot. It may propose `create_entity` for a new top-level component or design;
+a design can carry its initial component instances in the same atomic operation.
+All existing entities are read-only in document scope. An entity chat stays bound
+to one existing component, design, protocol definition, or narrative block and
+retains the review-gated proposal workflow. Document-level specification
+renaming remains outside the Assistant editing profile.
 
 ## Choosing the owning application
 
@@ -34,8 +45,9 @@ The chooser reads the shared service directory and probes the owning APIs. It
 shows their availability and pre-fills the resolved service URLs. Circuit
 Designer's toolbar bypasses the manual form by calling `/launch/circuit` with
 the active document; the Assistant validates that document before creating the
-bound chat. Spec Editor's top button selects the Spec workspace, while its
-entity action creates the fully bound Spec chat.
+bound chat. Spec Editor's top button similarly creates a validated,
+document-bound chat with top-level creation capability. Its entity action
+creates an editable, entity-bound Spec chat.
 
 Circuit Designer chats are connected manually using the circuit service URL
 and document ID. Spec Editor chats should normally be opened from an entity's

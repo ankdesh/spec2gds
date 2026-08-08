@@ -9,6 +9,7 @@ from spec2gds_runtime import StructuredLogger
 
 from ..config import Settings
 from ..models import (
+    CreateEntityOperation,
     SpecAgentRequest,
     SpecEntityRef,
     SpecProposalArtifact,
@@ -18,25 +19,38 @@ from .context import SpecContextProcessor
 
 EXPLORATION_INSTRUCTIONS = """\
 You are a hardware specification design partner. Explore the user's idea using the
-selected entity's semantic IR, linked narrative, owned internal design, and the
-read-only relationship context. Explain concrete implications, alternatives, and
-open assumptions. Do not emit XML or claim that a change was applied. Do not create
-a formal operation proposal unless the request explicitly asks for one.
+provided immutable semantic specification context. The context states whether it
+covers the complete document or one selected entity. Explain concrete
+implications, alternatives, and open assumptions. Do not emit XML or claim that a
+change was applied. Create a formal operation proposal only when the request asks
+for a concrete change.
 """
 
 
 PROPOSAL_INSTRUCTIONS = """\
-Prepare a safe reviewable proposal for one existing .spec entity. Stay strictly
-inside the WRITABLE BOUNDARY. Surrounding and shared context is read-only. Reuse
+Prepare a safe reviewable proposal for the scope stated in context. Stay strictly
+inside its WRITABLE BOUNDARY. Surrounding and shared context is read-only. Reuse
 exact entity IDs, VLNV values, instance names, interface names, port names, and
 narrative block IDs from context. Never change vendor/library/name/version, never
 emit XML, never create or delete a top-level source document, and never edit assets.
+
+For document scope, the only supported operation is create_entity:
+- To add a component, use kind="component", its requested XML-compatible name,
+  and instances=[].
+- To add a design, use kind="design" and include all requested initial component
+  instances in the same operation. Every instance needs a unique name and an exact
+  component_vlnv copied from EXISTING REFERENCES. A phrase such as "asd 1" may
+  refer to the uniquely matching existing component named "asd1"; still emit its
+  exact VLNV from context. If the user requests 10 instances, emit exactly 10
+  instances with clear unique names such as asd1_1 through asd1_10.
+- Existing entities remain read-only from document scope. Do not emit entity-bound
+  operations alongside create_entity.
 
 Each operation has operation_id, type, and the named fields below. Nullable
 fields that are not changing must be null. To explicitly remove a metadata or
 bus-definition field, put its name in clear_fields; otherwise use an empty list.
 
-Map common short requests according to the selected target:
+For entity scope, map common short requests according to the selected target:
 - On a component, "create/add a port" means upsert_component_port. It creates the
   named port when absent and replaces that same port when present.
 - On a design, "create/add a component" means upsert_instance using an existing
@@ -53,9 +67,11 @@ Map common short requests according to the selected target:
   or inout source and an in or inout sink). An interface connection needs at least
   two compatible interface endpoints. If the context lacks compatible named
   endpoints, return supported=false instead of assuming them.
-- A request to create a top-level component or design is unsupported in this
-  entity-bound assistant.
+- A request to create a top-level component or design requires document scope.
 
+- create_entity: kind (component/design), name, and instances. Components require
+  an empty instances list. Designs may contain initial instances using exact
+  existing component VLNV values.
 - set_entity_metadata: entity plus display_name/short_description/description
   and clear_fields.
 - upsert_parameter: entity plus parameter {name,value,resolve,data_type,choice_ref,
@@ -185,10 +201,30 @@ class SpecEditingAgent:
             raise RuntimeError("The model did not return a Spec proposal.")
         if not draft.supported:
             return draft
-        target = SpecEntityRef.model_validate(request.context.get("target"))
+        if processed.scope == "document" and any(
+            not isinstance(operation, CreateEntityOperation)
+            for operation in draft.operations
+        ):
+            return SpecProposalDraft(
+                supported=False,
+                title=draft.title,
+                summary=draft.summary,
+                rationale=draft.rationale,
+                assumptions=draft.assumptions,
+                unsupported_reason=(
+                    "Document-level chats may only create top-level components or designs."
+                ),
+                operations=[],
+            )
+        target = (
+            SpecEntityRef.model_validate(request.context.get("target"))
+            if processed.scope == "entity"
+            else None
+        )
         return SpecProposalArtifact(
             proposal_id=f"proposal_{uuid4().hex}",
             document_id=processed.document_id,
+            scope=processed.scope or "entity",
             target=target,
             base_source_revision_hash=processed.revision,
             title=draft.title,
@@ -205,7 +241,11 @@ def _operation_payload(operation: object) -> dict[str, object]:
         raise TypeError("Spec proposal operations must be typed models.")
     value = operation.model_dump(mode="json", exclude_none=True)  # type: ignore[attr-defined]
     operation_type = value.get("type")
-    if operation_type == "set_entity_metadata":
+    if operation_type == "create_entity":
+        value["entity_id"] = (
+            f"{value['kind']}_{value['name']}_{uuid4().hex}"
+        )
+    elif operation_type == "set_entity_metadata":
         for field in value.pop("clear_fields", []):
             value[str(field)] = None
     elif operation_type == "update_bus_definition":

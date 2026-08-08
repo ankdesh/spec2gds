@@ -15,6 +15,12 @@ import typing
 import lxml.etree as etree
 import pydantic
 
+from spec2gds.agent_spec.activities.reference import register_extensions
+from spec2gds.agent_spec.activities.registry import (
+    SpecExtensionRegistry,
+    render_context,
+)
+from spec2gds.agent_spec.activities.snapshot import ActivitySnapshot
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.document import DocumentSection, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import (
@@ -31,6 +37,7 @@ from spec2gds.agent_spec.spec_format.source_edits import (
 )
 from spec2gds.agent_spec.spec_format.transactions import (
     ClearInternalDesign,
+    CreateEntity,
     DeleteConnection,
     DeleteInstance,
     DeleteNarrativeBlock,
@@ -56,6 +63,7 @@ SUPPORTED_TARGET_KINDS = {
 }
 
 SUPPORTED_OPERATION_TYPES = {
+    "create_entity",
     "set_entity_metadata",
     "upsert_parameter",
     "delete_parameter",
@@ -93,7 +101,8 @@ class SpecChangeProposal(pydantic.BaseModel):
     kind: typing.Literal["spec_change_proposal"] = "spec_change_proposal"
     proposal_id: str = pydantic.Field(min_length=1)
     document_id: str
-    target: EntityRef
+    scope: typing.Literal["document", "entity"] = "entity"
+    target: EntityRef | None = None
     base_source_revision_hash: str
     title: str
     summary: str
@@ -103,10 +112,16 @@ class SpecChangeProposal(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_identity(self) -> "SpecChangeProposal":
-        if self.target.document_id != self.document_id:
-            raise ValueError("Proposal target must belong to proposal document_id.")
-        if self.target.entity_kind not in SUPPORTED_TARGET_KINDS:
-            raise ValueError(f"Unsupported assistant target: {self.target.entity_kind}")
+        if self.scope == "document":
+            if self.target is not None:
+                raise ValueError("Document-scoped proposals cannot carry an entity target.")
+        else:
+            if self.target is None:
+                raise ValueError("Entity-scoped proposals require a target.")
+            if self.target.document_id != self.document_id:
+                raise ValueError("Proposal target must belong to proposal document_id.")
+            if self.target.entity_kind not in SUPPORTED_TARGET_KINDS:
+                raise ValueError(f"Unsupported assistant target: {self.target.entity_kind}")
         return self
 
     def operations_digest(self) -> str:
@@ -155,6 +170,7 @@ def build_assistant_context(revision: SpecRevision, target: EntityRef) -> dict[s
     usages = _entity_usages(revision, target)
     return {
         "schema_version": "spec2gds.assistant-context.v1",
+        "scope": "entity",
         "document_id": revision.document_id,
         "source_revision_hash": revision.source_revision_hash,
         "target": target.model_dump(mode="json"),
@@ -175,6 +191,40 @@ def build_assistant_context(revision: SpecRevision, target: EntityRef) -> dict[s
             "designs": [_identity(item) for item in revision.designs],
             "bus_definitions": [_identity(item) for item in revision.bus_definitions],
             "abstraction_definitions": [_identity(item) for item in revision.abstraction_definitions],
+        },
+        "diagnostics": list(revision.diagnostics),
+    }
+
+
+def build_document_assistant_context(revision: SpecRevision) -> dict[str, typing.Any]:
+    """Return document-wide context with a narrow top-level creation boundary."""
+    snapshot = ActivitySnapshot.create(revision)
+    registry = SpecExtensionRegistry()
+    register_extensions(registry)
+    rendered = render_context(registry, "reference.spec_text_context", snapshot)
+    return {
+        "schema_version": "spec2gds.assistant-context.v1",
+        "scope": "document",
+        "document_id": revision.document_id,
+        "source_revision_hash": revision.source_revision_hash,
+        "target": None,
+        "rendered_context": rendered.model_dump(mode="json"),
+        "writable": {
+            "document_operations": ["create_entity"],
+            "entity": None,
+            "owned_internal_design": None,
+            "entity_refs": [],
+            "sections": [],
+            "linked_narrative": [],
+        },
+        "read_only": {"existing_entities": True},
+        "available_references": {
+            "components": [_identity(item) for item in revision.components],
+            "designs": [_identity(item) for item in revision.designs],
+            "bus_definitions": [_identity(item) for item in revision.bus_definitions],
+            "abstraction_definitions": [
+                _identity(item) for item in revision.abstraction_definitions
+            ],
         },
         "diagnostics": list(revision.diagnostics),
     }
@@ -220,13 +270,24 @@ def preview_assistant_proposal(
 
 def compile_assistant_operations(
     revision: SpecRevision,
-    target: EntityRef,
+    target: EntityRef | None,
     raw_operations: list[dict[str, typing.Any]],
 ) -> tuple[EditOperation, ...]:
     """Validate ownership and compile typed JSON operations to transaction objects."""
-    revision.resolve(target)
+    if target is not None:
+        revision.resolve(target)
     roots: dict[str, tuple[str, etree._Element]] = {}
     deferred: list[EditOperation] = []
+    planned_component_vlnvs = {
+        f"spec2gds.local:work:{str(raw.get('name', '')).strip()}:1.0"
+        for raw in raw_operations
+        if isinstance(raw, dict)
+        and raw.get("type") == "create_entity"
+        and raw.get("kind") == "component"
+    }
+    available_component_vlnvs = {
+        item.vlnv for item in revision.components
+    } | planned_component_vlnvs
 
     def root_for(reference: EntityRef) -> etree._Element:
         _assert_document_ref(revision, reference)
@@ -256,7 +317,29 @@ def compile_assistant_operations(
         _reject_unknown_keys(raw, _allowed_keys(operation_type), operation_type)
         _assert_operation_owned(revision, target, raw)
 
-        if operation_type == "set_entity_metadata":
+        if operation_type == "create_entity":
+            entity_kind = str(raw.get("kind", ""))
+            if entity_kind not in {"component", "design"}:
+                raise ValueError("create_entity kind must be component or design.")
+            instances = tuple(
+                InstanceIR(**item) for item in _list(raw, "instances")
+            )
+            if any(
+                item.component_vlnv not in available_component_vlnvs
+                for item in instances
+            ):
+                raise ValueError(
+                    "Design instances must use an existing or proposed component VLNV."
+                )
+            deferred.append(
+                CreateEntity(
+                    typing.cast(typing.Any, entity_kind),
+                    str(raw.get("name", "")),
+                    str(raw.get("entity_id", "")),
+                    instances,
+                )
+            )
+        elif operation_type == "set_entity_metadata":
             reference = _ref(raw["entity"])
             _set_metadata(root_for(reference), raw)
         elif operation_type == "upsert_parameter":
@@ -341,6 +424,7 @@ def compile_assistant_operations(
 def _allowed_keys(kind: str) -> set[str]:
     common = {"type", "operation_id"}
     shapes = {
+        "create_entity": {"kind", "name", "entity_id", "instances"},
         "set_entity_metadata": {"entity", "display_name", "short_description", "description"},
         "upsert_parameter": {"entity", "parameter"},
         "delete_parameter": {"entity", "name"},
@@ -370,8 +454,18 @@ def _allowed_keys(kind: str) -> set[str]:
     return common | shapes[kind]
 
 
-def _assert_operation_owned(revision: SpecRevision, target: EntityRef, operation: dict[str, typing.Any]) -> None:
+def _assert_operation_owned(
+    revision: SpecRevision,
+    target: EntityRef | None,
+    operation: dict[str, typing.Any],
+) -> None:
     kind = str(operation["type"])
+    if target is None:
+        if kind != "create_entity":
+            raise ValueError(
+                "Document-scoped proposals may only create top-level components or designs."
+            )
+        return
     direct_keys = {
         "set_entity_metadata": "entity",
         "upsert_parameter": "entity",
@@ -502,8 +596,13 @@ def _all_narrative_ids(revision: SpecRevision) -> set[str]:
     return result
 
 
-def _proposal_sections(revision: SpecRevision, target: EntityRef) -> list[dict[str, typing.Any]]:
+def _proposal_sections(
+    revision: SpecRevision,
+    target: EntityRef | None,
+) -> list[dict[str, typing.Any]]:
     projection = build_document_projection(revision)
+    if target is None:
+        return [section.model_dump(mode="json") for section in projection.sections]
     keys = {_ref_key(item) for item in _writable_refs(revision, target)}
     result = [
         section.model_dump(mode="json")
@@ -523,7 +622,11 @@ def _proposal_sections(revision: SpecRevision, target: EntityRef) -> list[dict[s
     return result
 
 
-def _invalid_preview(revision: SpecRevision, target: EntityRef, *diagnostics: str) -> dict[str, typing.Any]:
+def _invalid_preview(
+    revision: SpecRevision,
+    target: EntityRef | None,
+    *diagnostics: str,
+) -> dict[str, typing.Any]:
     return {
         "status": "invalid",
         "diagnostics": list(diagnostics),

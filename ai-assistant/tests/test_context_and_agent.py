@@ -328,6 +328,7 @@ def spec_context() -> dict[str, Any]:
         "entity_id": "component-demo",
     }
     return {
+        "scope": "entity",
         "document_id": "demo",
         "source_revision_hash": "sha256:base",
         "target": target,
@@ -387,12 +388,110 @@ def test_spec_context_processor_labels_write_and_read_boundaries() -> None:
     assert "Keep the APB interface" in processed.text
     assert "PLAIN-LANGUAGE TASK MAPPING" in processed.text
     assert "upsert_component_port" in processed.text
+    assert processed.scope == "entity"
+
+
+def test_document_spec_context_exposes_only_top_level_creation() -> None:
+    processed = SpecContextProcessor().process(
+        SpecAgentRequest(
+            user_request="Summarize the architecture.",
+            context={
+                "scope": "document",
+                "document_id": "demo",
+                "source_revision_hash": "sha256:base",
+                "target": None,
+                "rendered_context": {
+                    "document_id": "demo",
+                    "source_revision_hash": "sha256:base",
+                    "target": None,
+                    "text": "SEMANTIC SPECIFICATION\ncomponent:timer",
+                },
+                "available_references": {
+                    "components": [
+                        {
+                            "name": "timer",
+                            "vlnv": "spec2gds.local:work:timer:1.0",
+                        }
+                    ]
+                },
+                "diagnostics": [],
+            },
+        )
+    )
+    assert processed.scope == "document"
+    assert "WRITABLE BOUNDARY: create new top-level components or designs only" in processed.text
+    assert "existing entities and their contents are read-only" in processed.text
+    assert "EXISTING REFERENCES" in processed.text
+    assert "spec2gds.local:work:timer:1.0" in processed.text
+    assert "component:timer" in processed.text
+
+
+async def test_document_spec_context_creates_design_proposal_with_initial_instances(
+    tmp_path: Path,
+) -> None:
+    draft = SpecProposalDraft.model_validate(
+        {
+            "supported": True,
+            "title": "Create a replicated design",
+            "summary": "Add ten instances of asd1.",
+            "rationale": "The requested top-level design groups the replicas.",
+            "assumptions": ["The phrase asd 1 refers to the unique asd1 component."],
+            "unsupported_reason": None,
+            "operations": [
+                {
+                    "operation_id": "create_replicated_design",
+                    "type": "create_entity",
+                    "kind": "design",
+                    "name": "asd1_array",
+                    "instances": [
+                        {
+                            "name": f"asd1_{index}",
+                            "component_vlnv": "spec2gds.local:work:asd1:1.0",
+                        }
+                        for index in range(1, 11)
+                    ],
+                }
+            ],
+        }
+    )
+    client = FakeSpecOpenAI(draft)
+    result = await SpecEditingAgent(
+        settings(tmp_path), client=client  # type: ignore[arg-type]
+    ).respond(
+        SpecAgentRequest(
+            user_request="Add a design with 10 instances of asd 1.",
+            proposal_requested=True,
+            context={
+                "scope": "document",
+                "document_id": "demo",
+                "source_revision_hash": "sha256:base",
+                "target": None,
+                "rendered_context": {
+                    "document_id": "demo",
+                    "source_revision_hash": "sha256:base",
+                    "target": None,
+                    "text": (
+                        "COMPONENT asd1\n"
+                        "VLNV: spec2gds.local:work:asd1:1.0"
+                    ),
+                },
+                "diagnostics": [],
+            },
+        )
+    )
+    assert not isinstance(result, str)
+    assert result.scope == "document"
+    assert result.target is None
+    assert result.operations[0]["type"] == "create_entity"
+    assert len(result.operations[0]["instances"]) == 10
+    assert str(result.operations[0]["entity_id"]).startswith("design_asd1_array_")
 
 
 def test_spec_prompt_maps_simple_entity_bound_requests() -> None:
     assert '"create/add a port" means upsert_component_port' in SPEC_PROPOSAL_INSTRUCTIONS
     assert '"create/add a component" means upsert_instance' in SPEC_PROPOSAL_INSTRUCTIONS
     assert '"create a net" means upsert_connection' in SPEC_PROPOSAL_INSTRUCTIONS
+    assert "the only supported operation is create_entity" in SPEC_PROPOSAL_INSTRUCTIONS
 
 
 async def test_spec_agent_decodes_structured_proposal_for_review(tmp_path: Path) -> None:
@@ -462,6 +561,10 @@ def test_spec_proposal_schema_has_no_open_objects() -> None:
 def test_explicit_proposal_language_is_distinct_from_exploration() -> None:
     assert _explicit_spec_proposal_intent("Turn this into a proposal.")
     assert _explicit_spec_proposal_intent("Please propose the changes we discussed.")
+    assert _explicit_spec_proposal_intent("Add a design with 10 instances of asd 1.")
+    assert _explicit_spec_proposal_intent("Create a component named timer.")
+    assert _explicit_spec_proposal_intent("Could you please make a design named cluster?")
+    assert not _explicit_spec_proposal_intent("Update me on the current architecture.")
     assert not _explicit_spec_proposal_intent("Explore three possible interface designs.")
 
 
@@ -491,6 +594,12 @@ def test_every_spec_operation_variant_decodes() -> None:
         "options": [],
     }
     operations = [
+        {
+            "type": "create_entity",
+            "kind": "design",
+            "name": "new_design",
+            "instances": [{"name": "u0", "component_vlnv": "v:l:c:1"}],
+        },
         {"type": "set_entity_metadata", "entity": ref, "description": "Text"},
         {"type": "upsert_parameter", "entity": ref, "parameter": {"name": "DEPTH", "value": "4"}},
         {"type": "delete_parameter", "entity": ref, "name": "DEPTH"},
