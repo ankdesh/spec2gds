@@ -13,6 +13,8 @@ flowchart TB
         SA --> TX["Validated transactions"]
         TX --> SP["Deterministic .spec package"]
         SA --> AS["Actions and artifact sidecar"]
+        IR --> SNAP["Immutable Activity snapshot"]
+        SNAP --> SDK["High/low read SDK"]
     end
 
     subgraph Circuit["Circuit design system"]
@@ -46,6 +48,21 @@ flowchart TB
 The service processes are local reference implementations. They have no user
 authentication and should bind to trusted loopback interfaces unless a secure
 deployment layer is added.
+
+## Activity extension boundary
+
+The public Activity SDK is separate from the current execution host. A
+deterministic Activity snapshot embeds a complete source-only `.spec` revision;
+Activities and Context Renderers select data through explicit high- and
+low-level read APIs. Activity definitions and results contain no queue,
+process, HTTP, database, workspace, or monitoring settings. This permits the
+launch mechanism to change without changing team plugins or snapshot/result
+formats.
+
+Activities return reports and staged artifacts immediately. Any source edits
+are typed proposals and still cross the ordinary revision-checked review
+boundary. Extension code never receives a mutable package or live editor
+session.
 
 ## Specification package
 

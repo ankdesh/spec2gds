@@ -1,9 +1,9 @@
 """Acceptance tests for the V1.1 deterministic source-package foundation."""
 
 import json
-from pathlib import Path
 import tempfile
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -61,7 +61,15 @@ def test_save_load_and_repack_are_byte_deterministic() -> None:
             entries = archive.infolist()
             assert entries[0].filename == "mimetype"
             assert entries[0].compress_type == zipfile.ZIP_STORED
-            assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
+        assert all(entry.date_time == (1980, 1, 1, 0, 0, 0) for entry in entries)
+
+
+def test_in_memory_package_round_trip_is_byte_deterministic() -> None:
+    package = build_test_package()
+    encoded = package.to_bytes()
+    restored = SpecPackage.from_bytes(encoded)
+    assert restored.to_bytes() == encoded
+    assert restored.source_hash() == package.source_hash()
 
 
 def test_activity_is_excluded_from_source_hash_but_not_from_package_validation() -> None:

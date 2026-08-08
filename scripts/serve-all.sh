@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+
+set -u
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
+STATE_DIR="${PROJECT_ROOT}/logs/serve-all"
+
+SERVICES=(spec-editor circuit-designer ai-assistant)
+
+usage() {
+  echo "Usage: scripts/serve-all.sh {start|stop}"
+}
+
+pid_file() {
+  echo "${STATE_DIR}/$1.pid"
+}
+
+log_file() {
+  echo "${STATE_DIR}/$1.log"
+}
+
+tracked_pid() {
+  local file
+  file="$(pid_file "$1")"
+  if [[ -f "${file}" ]]; then
+    tr -d '[:space:]' < "${file}"
+  fi
+}
+
+is_running() {
+  local pid
+  pid="$(tracked_pid "$1")"
+  [[ "${pid}" =~ ^[0-9]+$ ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+start_service() {
+  local name="$1"
+  local workdir="$2"
+  shift 2
+
+  if is_running "${name}"; then
+    echo "${name} is already running (PID $(tracked_pid "${name}"))."
+    return 0
+  fi
+
+  rm -f "$(pid_file "${name}")"
+  : > "$(log_file "${name}")"
+
+  (
+    cd -- "${workdir}" || exit 1
+    exec setsid "$@"
+  ) >> "$(log_file "${name}")" 2>&1 &
+
+  local pid=$!
+  echo "${pid}" > "$(pid_file "${name}")"
+  echo "Started ${name} (PID ${pid}); log: $(log_file "${name}")"
+}
+
+stop_service() {
+  local name="$1"
+  local pid
+  pid="$(tracked_pid "${name}")"
+
+  if [[ ! "${pid}" =~ ^[0-9]+$ ]]; then
+    rm -f "$(pid_file "${name}")"
+    echo "${name} is not tracked."
+    return 0
+  fi
+
+  if ! kill -0 "${pid}" 2>/dev/null; then
+    rm -f "$(pid_file "${name}")"
+    echo "${name} is already stopped."
+    return 0
+  fi
+
+  # Each service is started in its own process group. Signal the group so npm
+  # and uv child processes are stopped along with the tracked launcher.
+  kill -TERM -- "-${pid}" 2>/dev/null || kill -TERM "${pid}" 2>/dev/null || true
+
+  local attempt
+  for attempt in {1..50}; do
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      break
+    fi
+    sleep 0.1
+  done
+
+  if kill -0 "${pid}" 2>/dev/null; then
+    kill -KILL -- "-${pid}" 2>/dev/null || kill -KILL "${pid}" 2>/dev/null || true
+  fi
+  rm -f "$(pid_file "${name}")"
+  echo "Stopped ${name}."
+}
+
+start_all() {
+  command -v uv >/dev/null 2>&1 || { echo "uv is required." >&2; return 1; }
+  command -v npm >/dev/null 2>&1 || { echo "npm is required." >&2; return 1; }
+  command -v setsid >/dev/null 2>&1 || { echo "setsid is required." >&2; return 1; }
+
+  mkdir -p "${STATE_DIR}"
+
+  start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
+  start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev
+  start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" uv run spec2gds-ai-assistant
+
+  # Catch immediate failures such as missing dependencies or occupied ports.
+  sleep 1
+  local failed=0
+  local name
+  for name in "${SERVICES[@]}"; do
+    if ! is_running "${name}"; then
+      echo "${name} failed to start; see $(log_file "${name}")." >&2
+      failed=1
+    fi
+  done
+  if [[ ${failed} -ne 0 ]]; then
+    stop_all
+    return 1
+  fi
+
+  echo "Spec Editor:      http://127.0.0.1:8000/editor"
+  echo "Circuit Designer: http://127.0.0.1:4180"
+  echo "AI Assistant:     http://127.0.0.1:4200"
+}
+
+stop_all() {
+  mkdir -p "${STATE_DIR}"
+  local name
+  for name in "${SERVICES[@]}"; do
+    stop_service "${name}"
+  done
+}
+
+case "${1:-}" in
+  start)
+    start_all
+    ;;
+  stop)
+    stop_all
+    ;;
+  *)
+    usage >&2
+    exit 2
+    ;;
+esac

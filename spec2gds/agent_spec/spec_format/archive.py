@@ -1,6 +1,7 @@
 """Deterministic custom ZIP package support for the V1 `.spec` format."""
 
 import copy
+import io
 import json
 import os
 import pathlib
@@ -99,8 +100,15 @@ class SpecPackage:
         package_path = pathlib.Path(path)
         if not package_path.exists():
             raise FileNotFoundError(path)
+        package = cls.from_bytes(package_path.read_bytes())
+        package.path = str(package_path)
+        return package
+
+    @classmethod
+    def from_bytes(cls, data: bytes) -> "SpecPackage":
+        """Load a validated V1 package from immutable in-memory bytes."""
         try:
-            with zipfile.ZipFile(package_path, "r") as archive:
+            with zipfile.ZipFile(io.BytesIO(data), "r") as archive:
                 names = archive.namelist()
                 if len(names) != len(set(names)):
                     raise SpecValidationError(["ZIP package contains duplicate entries."])
@@ -135,7 +143,7 @@ class SpecPackage:
                 }
         except zipfile.BadZipFile as exc:
             raise SpecValidationError([f"Invalid .spec ZIP package: {exc}"]) from exc
-        package = cls(manifest=manifest, narrative=narrative, files=files, path=str(package_path))
+        package = cls(manifest=manifest, narrative=narrative, files=files)
         package.require_valid()
         return package
 
@@ -311,6 +319,19 @@ class SpecPackage:
         if not destination_value:
             raise ValueError("A destination path is required for a new .spec package.")
         destination = pathlib.Path(destination_value)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        os.close(fd)
+        try:
+            pathlib.Path(temporary_name).write_bytes(self.to_bytes())
+            os.replace(temporary_name, destination)
+            self.path = str(destination)
+        finally:
+            if os.path.exists(temporary_name):
+                os.remove(temporary_name)
+
+    def to_bytes(self) -> bytes:
+        """Return the validated package as deterministic ZIP bytes."""
         self.require_valid()
         entries: dict[str, bytes] = {
             "mimetype": MIMETYPE.encode("ascii"),
@@ -320,19 +341,12 @@ class SpecPackage:
         }
         for entry_path in entries:
             _safe_entry_path(entry_path)
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        fd, temporary_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
-        os.close(fd)
-        try:
-            with zipfile.ZipFile(temporary_name, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
-                archive.writestr(_zip_info("mimetype", zipfile.ZIP_STORED), entries.pop("mimetype"))
-                for entry_path in sorted(entries):
-                    archive.writestr(_zip_info(entry_path, zipfile.ZIP_DEFLATED), entries[entry_path])
-            os.replace(temporary_name, destination)
-            self.path = str(destination)
-        finally:
-            if os.path.exists(temporary_name):
-                os.remove(temporary_name)
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            archive.writestr(_zip_info("mimetype", zipfile.ZIP_STORED), entries.pop("mimetype"))
+            for entry_path in sorted(entries):
+                archive.writestr(_zip_info(entry_path, zipfile.ZIP_DEFLATED), entries[entry_path])
+        return output.getvalue()
 
     def unpack(self, destination: str) -> None:
         """Write an unpacked package tree after validating its source contents."""

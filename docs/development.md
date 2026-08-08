@@ -4,6 +4,7 @@
 
 ```text
 spec2gds/agent_spec/spec_format/   .spec model, SpecIR, transactions, actions, API
+spec2gds/agent_spec/activities/    Activity snapshots, read SDK, contracts, registry
 spec2gds/agent_spec/importers/     PDF, Word, and ODT import
 circuit-designer/schema/           canonical Circuit Designer JSON Schema
 circuit-designer/packages/core/    contracts, validation, operations, drafts, export
@@ -42,8 +43,9 @@ Focused checks:
 
 ```bash
 uv run python -m pytest tests/agent_spec/spec_format -q
+uv run python -m pytest tests/agent_spec/activities -q
 uv run python -m pytest tests/agent_spec/importers -q
-uv run python -m py_compile spec2gds/agent_spec/spec_format/*.py
+uv run python -m py_compile spec2gds/agent_spec/spec_format/*.py spec2gds/agent_spec/activities/*.py
 ```
 
 ## TypeScript environment
@@ -94,6 +96,22 @@ cd web
 npm install
 npm run build
 ```
+
+## Combined local launcher
+
+Once the root, Circuit Designer, and AI Assistant dependencies are installed,
+run all three development services with their default settings from the
+repository root:
+
+```bash
+scripts/serve-all.sh start
+scripts/serve-all.sh stop
+```
+
+The script tracks process groups with PID files in `logs/serve-all/`; `stop`
+only signals those tracked groups. Each service writes to a separate log in the
+same directory. The script deliberately does not install dependencies or own
+the longer-term service monitoring mechanism.
 
 ## Change rules
 

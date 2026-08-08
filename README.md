@@ -110,6 +110,38 @@ by spec2gds. Circuit Designer remains wire-only: unused transactional and
 structured ports are reported as omitted, while a design that connects either
 family is rejected with a validation diagnostic.
 
+## Run all local services
+
+After installing the Python and Node.js dependencies described below, start the
+Spec Editor, Circuit Designer service and UI, and AI Assistant together:
+
+```bash
+scripts/serve-all.sh start
+```
+
+Stop only the processes tracked by that launcher with:
+
+```bash
+scripts/serve-all.sh stop
+```
+
+The launcher uses the default ports from `config/services.json` and writes its
+PID files and per-service logs under `logs/serve-all/`. Set `OPENAI_API_KEY`
+before starting if the AI Assistant should make OpenAI requests.
+
+## Build specification Activities
+
+Python teams can build host-neutral Activities against a deterministic, full
+source snapshot. Activity code selects information through the stable
+`context.spec.high` query API or the detailed typed `context.spec.low` API, and
+returns a validated report, artifacts, and optional review-gated source
+proposals. It never reads or mutates the live editor session.
+
+The public contracts live in `spec2gds.agent_spec.activities`. See the
+[Activity Snapshot v1 format](docs/activity-snapshot-v1.md) and
+[Activity SDK guide](docs/activity-sdk.md). The SDK intentionally does not
+choose a queue, worker process, storage service, or monitoring mechanism.
+
 For frontend work:
 
 ```bash

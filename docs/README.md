@@ -14,14 +14,18 @@ Read in this order:
    and intentionally unavailable commands.
 4. [Service configuration](service-configuration.md) — shared IP/port registry,
    discovery, and cross-application launch behavior.
-5. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
+5. [Activity snapshot](activity-snapshot-v1.md) — deterministic full-source
+   input boundary for specification consumers.
+6. [Activity SDK](activity-sdk.md) — two-level read API, plugin contracts,
+   registry, results, and Context Renderers.
+7. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
    boundary, and proposal contracts.
-6. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+8. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
    browser viewer.
-7. [Code quality](code-quality.md) — commenting and unused-code review gates.
-8. [Sample application method](sample-apps.md) — how to build one representative
+9. [Code quality](code-quality.md) — commenting and unused-code review gates.
+10. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-9. [Development guide](development.md) — setup, commands, checks, and where code
+11. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule
