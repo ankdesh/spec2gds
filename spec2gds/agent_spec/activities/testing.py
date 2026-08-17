@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from spec2gds.agent_spec.activities.contracts import ActivityResult, RenderedContext
+from spec2gds.agent_spec.activities.contracts import (
+    ActivityResult,
+    ActivityWorkspaceWriter,
+    RenderedContext,
+)
 from spec2gds.agent_spec.activities.registry import (
     SpecExtensionRegistry,
     invoke_activity,
@@ -20,6 +24,7 @@ class ActivityTestHarness:
     """Build snapshots and invoke registered extensions without choosing a host."""
 
     registry: SpecExtensionRegistry
+    workspace: ActivityWorkspaceWriter | None = None
 
     def snapshot(
         self,
@@ -29,7 +34,7 @@ class ActivityTestHarness:
         return ActivitySnapshot.create(revision, target)
 
     def invoke(self, activity_id: str, snapshot: ActivitySnapshot) -> ActivityResult:
-        return invoke_activity(self.registry, activity_id, snapshot)
+        return invoke_activity(self.registry, activity_id, snapshot, self.workspace)
 
     def render(self, renderer_id: str, snapshot: ActivitySnapshot) -> RenderedContext:
         return render_context(self.registry, renderer_id, snapshot)

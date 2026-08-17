@@ -2084,6 +2084,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "jsonschema" },
     { name = "lxml" },
     { name = "pydantic" },
@@ -2115,6 +2116,7 @@ requires-dist = [
     { name = "docling", marker = "extra == 'document-import'", specifier = ">=2.114.0" },
     { name = "docling-slim", extras = ["format-opendocument"], marker = "extra == 'document-import'", specifier = ">=2.114.0" },
     { name = "fastapi", specifier = ">=0.116.0" },
+    { name = "jinja2", specifier = ">=3.1.6" },
     { name = "jsonschema", specifier = ">=4.25.0" },
     { name = "lxml", specifier = ">=6.1.1" },
     { name = "openai", marker = "extra == 'document-import'", specifier = ">=2.46.0" },

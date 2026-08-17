@@ -147,6 +147,19 @@ The public contracts live in `spec2gds.agent_spec.activities`. See the
 [Activity SDK guide](docs/activity-sdk.md). The SDK intentionally does not
 choose a queue, worker process, storage service, or monitoring mechanism.
 
+The deterministic `systemc.generate_at_skeleton` Activity generates a
+structural C++17/SystemC TLM 2.0 AT project for one selected design. It preserves
+reachable hierarchy, creates supported initiator/target socket bindings, and
+publishes a managed project under
+`generated/systemc-at/<document-id>/<design-id>/`. The caller supplies a
+`LocalActivityWorkspace(Path("generated"))`; the Activity returns a typed report
+and JSON report artifact. Phase one has no LLM dependency or inferred
+performance behavior. Packaged Jinja2 templates format normalized render
+contexts while all topology and naming decisions remain in deterministic
+Python code. See the [SystemC AT Activity guide](docs/systemc-at-activity.md)
+for invocation, supported topology, template constraints, and build
+instructions.
+
 For frontend work:
 
 ```bash

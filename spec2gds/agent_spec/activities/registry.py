@@ -17,6 +17,7 @@ from spec2gds.agent_spec.activities.contracts import (
     ActivityResult,
     ActivityScopes,
     ActivitySelectionContext,
+    ActivityWorkspaceWriter,
     BaseActivity,
     ContextRenderContext,
     ContextRenderer,
@@ -134,6 +135,7 @@ def activity(
     report_model: type[pydantic.BaseModel],
     artifact_roles: tuple[str, ...] = (),
     may_propose_changes: bool = False,
+    requires_workspace_output: bool = False,
     availability: AvailabilityFunction | None = None,
 ) -> typing.Callable[[ActivityFunction], FunctionActivity]:
     """Decorate a plain function as a fully described Activity."""
@@ -149,6 +151,7 @@ def activity(
                 report_schema=report_model.model_json_schema(),
                 artifact_roles=artifact_roles,
                 may_propose_changes=may_propose_changes,
+                requires_workspace_output=requires_workspace_output,
             ),
             report_model=report_model,
             function=function,
@@ -199,6 +202,7 @@ def invoke_activity(
     registry: SpecExtensionRegistry,
     activity_id: str,
     snapshot: ActivitySnapshot,
+    workspace: ActivityWorkspaceWriter | None = None,
 ) -> ActivityResult:
     """Direct reference invocation used by tests and future host adapters."""
     extension = registry.activity(activity_id)
@@ -208,11 +212,14 @@ def invoke_activity(
     )
     if not availability.available:
         raise ValueError("Activity is unavailable: " + "; ".join(availability.diagnostics))
+    if extension.definition.requires_workspace_output and workspace is None:
+        raise ValueError("Activity requires a workspace output writer.")
     context = ActivityContext(
         snapshot=snapshot.manifest,
         spec=spec,
         outputs=ActivityOutputWriter(),
         cancellation=NeverCancelled(),
+        workspace=workspace,
     )
     result = ActivityResult.model_validate(extension.run(context).model_dump(mode="python"))
     return _validate_result(extension, snapshot, result)

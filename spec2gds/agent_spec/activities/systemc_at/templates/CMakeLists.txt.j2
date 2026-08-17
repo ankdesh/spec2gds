@@ -1,0 +1,16 @@
+cmake_minimum_required(VERSION 3.12)
+project({{ project }}_systemc_at LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    add_compile_options(-Wall -Wextra)
+endif()
+
+find_package(SystemCLanguage REQUIRED)
+
+add_executable({{ project }}_systemc_at src/main.cpp)
+target_include_directories({{ project }}_systemc_at PRIVATE include)
+target_link_libraries({{ project }}_systemc_at PRIVATE SystemC::systemc)

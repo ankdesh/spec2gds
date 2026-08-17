@@ -102,6 +102,33 @@ The output writer constructs validated, portable artifacts from bytes, text,
 JSON, files, or a deterministically zipped directory. Plugins declare semantic
 roles; the eventual host chooses durable storage and artifact IDs.
 
+An Activity that must publish a persistent generated tree declares
+`requires_workspace_output=True`. The invoking host supplies an
+`ActivityWorkspaceWriter` through `ActivityContext.workspace`; the Activity
+submits only relative paths and in-memory bytes. `LocalActivityWorkspace`
+provides the direct local implementation. It atomically replaces only folders
+carrying a matching ownership manifest, so extension code never receives an
+unrestricted filesystem root.
+
+Direct invocation passes this capability explicitly:
+
+```python
+from pathlib import Path
+
+from spec2gds.agent_spec.activities import LocalActivityWorkspace, invoke_activity
+
+result = invoke_activity(
+    registry,
+    "acme.code_generator",
+    snapshot,
+    LocalActivityWorkspace(Path("generated")),
+)
+```
+
+Activities without `requires_workspace_output` remain host-neutral and require
+no workspace argument. A required workspace that is not supplied is rejected
+before the Activity runs.
+
 ## Source proposals
 
 An Activity cannot mutate SpecIR. An Activity that declares

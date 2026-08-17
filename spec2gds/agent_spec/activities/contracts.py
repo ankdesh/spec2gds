@@ -58,6 +58,7 @@ class ActivityDefinition(StrictModel):
     report_schema: dict[str, typing.Any]
     artifact_roles: tuple[str, ...] = ()
     may_propose_changes: bool = False
+    requires_workspace_output: bool = False
 
     @pydantic.field_validator("activity_id")
     @classmethod
@@ -213,6 +214,46 @@ class NeverCancelled:
         return None
 
 
+class WorkspaceFile(StrictModel):
+    """One deterministic file published through a host-owned workspace."""
+
+    path: str
+    sha256: str
+    size: int
+
+    @pydantic.field_validator("path")
+    @classmethod
+    def _path(cls, value: str) -> str:
+        return validate_safe_path(value)
+
+
+class PublishedDirectory(StrictModel):
+    """Validated description of one directory committed by a workspace host."""
+
+    relative_path: str
+    tree_sha256: str
+    files: tuple[WorkspaceFile, ...]
+
+    @pydantic.field_validator("relative_path")
+    @classmethod
+    def _relative_path(cls, value: str) -> str:
+        return validate_safe_path(value)
+
+
+class ActivityWorkspaceWriter(typing.Protocol):
+    """Sandboxed host capability for atomically publishing generated files."""
+
+    def replace_directory(
+        self,
+        *,
+        relative_path: str,
+        files: typing.Mapping[str, bytes],
+        generator_id: str,
+        document_id: str,
+        design_id: str,
+    ) -> PublishedDirectory: ...
+
+
 class ActivityOutputWriter:
     """Host-neutral convenience API for constructing validated artifacts."""
 
@@ -339,6 +380,7 @@ class ActivityContext:
     spec: SpecAccess
     outputs: ActivityOutputWriter
     cancellation: CancellationToken
+    workspace: ActivityWorkspaceWriter | None = None
 
     @property
     def target(self) -> EntityRef | None:

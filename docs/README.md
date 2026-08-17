@@ -18,14 +18,16 @@ Read in this order:
    input boundary for specification consumers.
 6. [Activity SDK](activity-sdk.md) — two-level read API, plugin contracts,
    registry, results, and Context Renderers.
-7. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
+7. [SystemC AT Activity](systemc-at-activity.md) — deterministic structural
+   SystemC generation, workspace publishing, and supported topology.
+8. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
    boundary, and proposal contracts.
-8. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+9. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
    browser viewer.
-9. [Code quality](code-quality.md) — commenting and unused-code review gates.
-10. [Sample application method](sample-apps.md) — how to build one representative
+10. [Code quality](code-quality.md) — commenting and unused-code review gates.
+11. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-11. [Development guide](development.md) — setup, commands, checks, and where code
+12. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule

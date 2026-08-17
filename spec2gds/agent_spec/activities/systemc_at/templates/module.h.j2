@@ -1,0 +1,58 @@
+#ifndef {{ guard }}
+#define {{ guard }}
+
+{% for include in includes %}
+{{ include }}
+{% endfor %}
+
+class {{ class_name }} : public sc_core::sc_module {
+public:
+{% for socket in sockets %}
+    tlm_utils::{{ socket.type }}<{{ class_name }}> {{ socket.name }};
+{% endfor %}
+{% if sockets %}
+
+{% endif %}
+    explicit {{ class_name }}(sc_core::sc_module_name name)
+        : {{ initializers | join(",\n          ") }}
+    {
+{% for statement in constructor_statements %}
+        {{ statement }}
+{% endfor %}
+    }
+{% if private_members or has_target_callback or has_initiator_callback %}
+
+private:
+{% for member in private_members %}
+    {{ member.class_name }} {{ member.member_name }};
+{% endfor %}
+{% if private_members and (has_target_callback or has_initiator_callback) %}
+
+{% endif %}
+{% if has_target_callback %}
+    tlm::tlm_sync_enum nb_transport_fw(
+        tlm::tlm_generic_payload& /*transaction*/,
+        tlm::tlm_phase& phase,
+        sc_core::sc_time& delay)
+    {
+        if (phase == tlm::BEGIN_REQ) {
+            phase = tlm::END_REQ;
+            delay += sc_core::sc_time(10, sc_core::SC_NS);
+            return tlm::TLM_UPDATED;
+        }
+        return tlm::TLM_ACCEPTED;
+    }
+{% endif %}
+{% if has_initiator_callback %}
+    tlm::tlm_sync_enum nb_transport_bw(
+        tlm::tlm_generic_payload& /*transaction*/,
+        tlm::tlm_phase& /*phase*/,
+        sc_core::sc_time& /*delay*/)
+    {
+        return tlm::TLM_ACCEPTED;
+    }
+{% endif %}
+{% endif %}
+};
+
+#endif  // {{ guard }}

@@ -1,0 +1,22 @@
+# {{ design_vlnv }} SystemC AT skeleton
+
+This deterministic project contains structural SystemC modules and TLM 2.0
+two-phase AT socket bindings generated from the selected Spec design. It has no
+traffic, functional behavior, performance queues, or waveform tracing.
+
+## Build
+
+Install SystemC 2.3.3, then point CMake at its installation prefix:
+
+```bash
+cmake -S . -B build -DCMAKE_PREFIX_PATH=/path/to/systemc-dist
+cmake --build build
+```
+
+## Run
+
+```bash
+./build/{{ project }}_systemc_at
+```
+
+The empty simulation runs for 10 cycles at 10 ns per cycle.

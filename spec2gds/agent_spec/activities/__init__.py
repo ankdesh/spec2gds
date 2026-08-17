@@ -8,13 +8,16 @@ from spec2gds.agent_spec.activities.contracts import (
     ActivityOutputWriter,
     ActivityResult,
     ActivityScopes,
+    ActivityWorkspaceWriter,
     ArtifactOutput,
     BaseActivity,
     ContextRenderContext,
     ContextRenderer,
     ContextRendererDefinition,
+    PublishedDirectory,
     RenderedContext,
     SpecChangeProposalDraft,
+    WorkspaceFile,
 )
 from spec2gds.agent_spec.activities.host import (
     ActivityCatalog,
@@ -48,6 +51,7 @@ from spec2gds.agent_spec.activities.view import (
     TextBlockView,
     TextQuery,
 )
+from spec2gds.agent_spec.activities.workspace import LocalActivityWorkspace
 
 __all__ = [
     "ACTIVITY_SNAPSHOT_MIMETYPE",
@@ -62,6 +66,7 @@ __all__ = [
     "ActivityResult",
     "ActivityResultSink",
     "ActivityScopes",
+    "ActivityWorkspaceWriter",
     "ActivitySnapshot",
     "ActivitySnapshotManifest",
     "ActivityTestHarness",
@@ -74,8 +79,10 @@ __all__ = [
     "EntitySummary",
     "ExtensionDiagnostic",
     "HighLevelSpecApi",
+    "LocalActivityWorkspace",
     "LowLevelSpecApi",
     "Query",
+    "PublishedDirectory",
     "RenderedContext",
     "SnapshotFactory",
     "SpecAccess",
@@ -83,6 +90,7 @@ __all__ = [
     "SpecExtensionRegistry",
     "TextBlockView",
     "TextQuery",
+    "WorkspaceFile",
     "activity",
     "activity_availability",
     "invoke_activity",
