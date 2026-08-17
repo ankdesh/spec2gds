@@ -160,6 +160,18 @@ Python code. See the [SystemC AT Activity guide](docs/systemc-at-activity.md)
 for invocation, supported topology, template constraints, and build
 instructions.
 
+The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
+compile-only scaffold for any selected design. It emits one reusable module per
+reachable component, preserves component-owned hierarchy, connects supported
+ad-hoc physical wire nets, and publishes a managed project under
+`generated/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
+compile-safe defaults; no functional RTL, clocks, resets, parameters, or
+testbench are inferred. Bus interfaces, non-wire ports, symbolic ranges, and
+unsupported net shapes are rejected during preflight. See the
+[RTL Generation Activity guide](docs/rtl-generation-activity.md) for the exact
+source profile, report contract, invocation, and required Verilator 5.x lint
+workflow.
+
 For frontend work:
 
 ```bash
@@ -211,6 +223,9 @@ connections; Spec chats remain bound to one existing entity. See
 [ai-assistant/README.md](ai-assistant/README.md).
 
 ## Verify changes
+
+Install Verilator 5.x and GNU Make before running the Python suite; RTL Activity
+tests execute the generated `make lint` target without a skip.
 
 ```bash
 uv run python -m pytest -q

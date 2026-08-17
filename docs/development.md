@@ -27,6 +27,9 @@ untracked machine-specific registry.
 
 Use `uv`; do not install project packages into the system interpreter.
 
+The deterministic RTL Activity tests also require GNU Make and Verilator 5.x
+on `PATH`. This is a required external toolchain check, not an optional test.
+
 ```bash
 uv sync
 uv run python -m pytest -q
@@ -44,6 +47,7 @@ Focused checks:
 ```bash
 uv run python -m pytest tests/agent_spec/spec_format -q
 uv run python -m pytest tests/agent_spec/activities -q
+uv run python -m pytest tests/agent_spec/activities/rtl -q
 uv run python -m pytest tests/agent_spec/importers -q
 uv run python -m py_compile spec2gds/agent_spec/spec_format/*.py spec2gds/agent_spec/activities/*.py
 ```

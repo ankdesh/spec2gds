@@ -1,0 +1,16 @@
+# {{ design_vlnv }} RTL scaffold
+
+This deterministic SystemVerilog 2017 project contains only module boundaries,
+instance hierarchy, direct wire connections, and compile-safe leaf defaults.
+It is not a functional hardware implementation, and every file is replaced on
+regeneration.
+
+## Verify
+
+Install Verilator 5.x and GNU Make, then run:
+
+```bash
+make lint
+```
+
+The selected top module is `{{ top_module }}`.
