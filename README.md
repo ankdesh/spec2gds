@@ -108,9 +108,12 @@ boundary objects. Components that own an internal design continue to open that
 internal design instead.
 
 The current editor intentionally accepts the narrow IP-XACT profile authored
-by spec2gds. Circuit Designer remains wire-only: unused transactional and
-structured ports are reported as omitted, while a design that connects either
-family is rejected with a validation diagnostic.
+by spec2gds. To keep the document focused, it does not display bus interfaces,
+port maps, channels, interface connections, or bus/abstraction protocol
+definitions; existing values remain preserved in the `.spec` source. Circuit
+Designer remains wire-only: unused transactional and structured ports are
+reported as omitted, while a design that connects either family is rejected
+with a validation diagnostic.
 
 ## Run all local services
 

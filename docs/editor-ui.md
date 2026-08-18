@@ -64,8 +64,9 @@ heading. Narrative subheadings and table captions do not receive this control.
 Overview contains narrative content when present plus the disabled Launch
 activity placeholder; internal document IDs, revision hashes, and entity counts
 are intentionally omitted. The Designs and Components groups add their
-respective creation command. Protocol entities keep More actions but do not
-offer circuit launch.
+respective creation command. Bus interfaces, their port maps and channels,
+interface connections, and bus/abstraction protocol definitions remain in the
+source package but are omitted from the editor document for now.
 
 ## Direct editing lifecycle
 
@@ -103,7 +104,8 @@ phase does not add arbitrary IP-XACT import, VLNV editing, entity deletion,
 port rename/delete, port-family conversion, bus-interface creation,
 composite-boundary editing, detailed TLM modeling, structured subports, undo
 history, Find, Save As, recent-file persistence, session closing, or activity
-launching.
+launching. Existing bus and protocol content is preserved when a package is
+opened or edited even though it is not rendered in the editor.
 
 Circuit Designer remains a physical-wire view. A launch reports and omits
 unused transactional and structured ports. If a design connection references a

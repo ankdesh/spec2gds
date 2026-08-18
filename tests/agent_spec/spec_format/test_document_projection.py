@@ -20,7 +20,9 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
     assert projection.sections[0].title == "Overview"
     assert projection.sections[0].facts == []
     level_one_titles = [section.title for section in projection.sections if section.level == 1]
-    assert level_one_titles[:4] == ["Overview", "Designs", "Components", "Protocols"]
+    assert level_one_titles[:3] == ["Overview", "Designs", "Components"]
+    assert "Protocols" not in level_one_titles
+    assert projection.summary == "3 components · 3 designs"
     assert [entry.section_id for entry in projection.toc] == [
         section.section_id for section in projection.sections
     ]
@@ -37,14 +39,22 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
     }
     assert {
         "component_ports",
+        "design_instances",
+        "ad_hoc_connections",
+    }.issubset(table_kinds)
+    assert {
         "bus_interfaces",
         "port_maps",
-        "design_instances",
         "interface_connections",
-        "ad_hoc_connections",
+        "channels",
         "bus_properties",
         "abstraction_ports",
-    }.issubset(table_kinds)
+    }.isdisjoint(table_kinds)
+    assert {
+        section.entity_ref.entity_kind
+        for section in projection.sections
+        if section.entity_ref
+    }.isdisjoint({"bus_definition", "abstraction_definition"})
     port_tables_by_section = [
         [table for table in section.tables if table.kind == "component_ports"]
         for section in component_sections
@@ -56,6 +66,19 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
         for component in SpecRevision.from_package(build_test_package()).components
     )
     assert sorted(len(tables[0].rows) for tables in port_tables_by_section) == expected_counts
+
+
+def test_editor_projection_does_not_remove_bus_protocol_data_from_source_revision() -> None:
+    revision = SpecRevision.from_package(build_test_package())
+
+    assert revision.bus_definitions
+    assert revision.abstraction_definitions
+    assert any(component.interfaces for component in revision.components)
+    assert any(
+        connection.kind == "interface"
+        for design in revision.designs
+        for connection in design.connections
+    )
 
 
 def test_document_cells_retain_schema_identity_and_presence() -> None:
@@ -71,7 +94,6 @@ def test_document_cells_retain_schema_identity_and_presence() -> None:
     assert cells
     assert all(cell.schema_path.startswith("/") for cell in cells)
     assert any(cell.presence == "absent" and cell.value is None for cell in cells)
-    assert any(cell.presence == "defaulted" for cell in cells)
     assert any(cell.kind == "reference" for cell in cells)
 
 

@@ -48,6 +48,9 @@ adds or edits all three leaf-component port families. The visible specification
 title is stored separately so renaming it does not migrate IDs or references.
 Bus interfaces, detailed TLM protocol modeling, structured subports, identity
 migration, port deletion, and composite boundaries remain separate workflows.
+Existing bus interfaces, port maps, channels, interface connections, and
+bus/abstraction definitions are preserved in the package but hidden from the
+editor document until those workflows are ready.
 
 ## Open a specification in Circuit Designer
 

@@ -123,6 +123,8 @@ projections and clients; they do not mutate model objects directly.
 
 - One active `.spec` document per Spec API process.
 - Circuit service sessions disappear on restart.
+- The specification editor omits bus interfaces, interface connections, and
+  bus/abstraction definitions while retaining them in the `.spec` source.
 - The initial adapter projects direct physical ports and ad-hoc connections;
   bus interfaces remain in the specification source.
 - Imported PDF, Word, and ODT files become narrative source; optional model

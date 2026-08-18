@@ -31,6 +31,18 @@ A2UI_PROTOCOL_VERSION = "v0.9"
 A2UI_CATALOG_ID = "urn:spec2gds:a2ui:document:v1"
 DOCUMENT_SCHEMA_VERSION = "spec2gds.document.v1"
 
+# Bus/protocol modeling remains part of SpecRevision and the projection builders
+# below, but it is outside the current editor workflow. Keep the visibility rule
+# at the final presentation boundary so source parsing and future UI support stay
+# intact while the editor remains focused on components, ports, and direct wiring.
+_EDITOR_HIDDEN_ENTITY_KINDS = frozenset({"bus_definition", "abstraction_definition"})
+_EDITOR_HIDDEN_TABLE_KINDS = frozenset({
+    "bus_interfaces",
+    "channels",
+    "interface_connections",
+    "port_maps",
+})
+
 CellKind = typing.Literal["text", "multiline", "boolean", "integer", "expression", "enum", "reference"]
 CellPresence = typing.Literal["explicit", "defaulted", "absent"]
 
@@ -718,6 +730,23 @@ def _split_narrative(blocks: list[NarrativeBlock]) -> tuple[list[NarrativeBlock]
     return overview, attached, cross_cutting
 
 
+def _editor_sections(sections: list[DocumentSection]) -> list[DocumentSection]:
+    """Hide source-supported bus/protocol details from the focused editor UI."""
+    visible: list[DocumentSection] = []
+    for section in sections:
+        if section.section_id == "protocols":
+            continue
+        if section.entity_ref and section.entity_ref.entity_kind in _EDITOR_HIDDEN_ENTITY_KINDS:
+            continue
+        visible.append(section.model_copy(update={
+            "tables": [
+                table for table in section.tables
+                if table.kind not in _EDITOR_HIDDEN_TABLE_KINDS
+            ],
+        }))
+    return visible
+
+
 def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     """Build the deterministic unified document from one validated revision."""
     roots = _document_roots(revision)
@@ -829,11 +858,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             narrative=[block.model_dump(mode="json") for block in cross_cutting],
         ))
 
+    sections = _editor_sections(sections)
+
     return DocumentProjection(
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
         title=revision.narrative.title or revision.document_id.replace("_", " ").title(),
-        summary=f"{len(revision.components)} components · {len(revision.designs)} designs · {len(revision.bus_definitions) + len(revision.abstraction_definitions)} protocol definitions",
+        summary=f"{len(revision.components)} components · {len(revision.designs)} designs",
         toc=[TocEntry(section_id=section.section_id, title=section.title, level=section.level) for section in sections],
         sections=sections,
     )
