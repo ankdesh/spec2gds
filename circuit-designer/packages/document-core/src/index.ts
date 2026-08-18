@@ -49,6 +49,47 @@ export interface DocumentFact {
   reference_anchor: string;
 }
 
+export type SectionValidationStatus = "verified" | "warnings" | "unverified" | "errors";
+
+export interface SectionDiagnostic {
+  code: string;
+  message: string;
+  line: number | null;
+  column: number | null;
+  blocking: boolean;
+}
+
+export interface EntityContentSection {
+  section_id: string;
+  section_type: "text" | "ports" | "sv";
+  type_version: number;
+  title: string;
+  owner: EntityRef;
+  payload: { content?: string; media_type?: string; source_path?: string; count?: number };
+  editable: boolean;
+  deletable: boolean;
+  validation_status: SectionValidationStatus;
+  diagnostics: SectionDiagnostic[];
+}
+
+export interface PersistedEntitySection {
+  section_id: string;
+  section_type: "sv";
+  type_version: number;
+  title: string;
+  owner: EntityRef;
+  media_type: "text/x-systemverilog";
+  source_path: string;
+  source_sha256: string;
+  content: string;
+}
+
+export interface AvailableSectionType {
+  section_type: "sv";
+  type_version: number;
+  title: string;
+}
+
 export interface NarrativeBlock {
   block_id: string;
   type: "section" | "paragraph" | "list" | "table" | "image" | "entity_link" | "live_view";
@@ -79,6 +120,8 @@ export interface DocumentSectionData {
   facts: DocumentFact[];
   tables: DocumentTable[];
   narrative: NarrativeBlock[];
+  content_sections: EntityContentSection[];
+  available_section_types: AvailableSectionType[];
 }
 
 export interface TocEntry {
@@ -172,11 +215,30 @@ export type EditorTransactionOperation =
     component: EntityRef;
     name: string;
     port: ComponentPortUpdateInput;
+  }
+  | {
+    type: "upsert_entity_section";
+    owner: EntityRef;
+    section_type: "sv";
+    type_version: 1;
+    section_id?: string;
+    payload: { content: string };
+  }
+  | {
+    type: "delete_entity_section";
+    owner: EntityRef;
+    section_type: "sv";
+    section_id?: string;
   };
 
 export interface TransactionResult {
   committed: true;
   snapshot: DocumentSnapshot;
+  section_validation: Array<{
+    section_id: string;
+    status: SectionValidationStatus;
+    diagnostics: SectionDiagnostic[];
+  }>;
 }
 
 export interface DocumentSnapshot {
@@ -191,6 +253,8 @@ export interface DocumentSnapshot {
   component_compositions: ComponentComposition[];
   narrative: { title: string; blocks: NarrativeBlock[] };
   diagnostics: { source: string[]; artifacts: string[] };
+  entity_sections: PersistedEntitySection[];
+  section_validation: TransactionResult["section_validation"];
 }
 
 export interface CircuitDesignerLaunch {

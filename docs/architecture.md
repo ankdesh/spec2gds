@@ -74,6 +74,7 @@ flowchart LR
     P --> N["document/document.json<br/>typed narrative"]
     P --> X["ipxact/...<br/>IEEE 1685-2022 source"]
     P --> A["assets/...<br/>content-addressed media"]
+    P --> E["annotations/entity-sections/...<br/>indexed typed bodies"]
     P --> H["activity/...<br/>execution history"]
     H --> S[".spec.artifacts/<br/>large generated artifacts"]
 ```
@@ -81,6 +82,10 @@ flowchart LR
 `SpecPackage` validates and writes the container. `SpecRevision` is the
 immutable semantic view. `SpecEditTransaction` is the write boundary. A source
 revision hash prevents a stale client from overwriting newer work.
+
+Component/design content is projected through the typed section registry.
+Existing text and ports are IP-XACT adapters; optional SystemVerilog bodies are
+digest-indexed annotation files. See [Entity sections](entity-sections.md).
 
 ## Circuit document
 

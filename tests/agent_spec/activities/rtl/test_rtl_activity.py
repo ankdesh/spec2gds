@@ -17,10 +17,12 @@ from spec2gds.agent_spec.activities import (
     invoke_activity,
 )
 from spec2gds.agent_spec.activities.rtl import register_extensions
-from spec2gds.agent_spec.activities.rtl.codegen import _render_template
+from spec2gds.agent_spec.activities.rtl.codegen import _render_template, generate_project
+from spec2gds.agent_spec.activities.view import SpecAccess
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.models import ComponentComposition, EntityRef
+from spec2gds.agent_spec.spec_format.sections import upsert_systemverilog_section
 from spec2gds.agent_spec.spec_format.testing import _xml, build_test_package
 
 
@@ -262,7 +264,7 @@ def test_activity_generates_hierarchy_report_warnings_and_name_map(tmp_path: Pat
     definition = registry.activity("rtl.generate").definition
     availability = activity_availability(registry, "rtl.generate", snapshot)
 
-    assert definition.version == "1.0.0"
+    assert definition.version == "1.1.0"
     assert definition.scopes.entity_kinds == ("design",)
     assert definition.requires_workspace_output
     assert availability.available
@@ -351,6 +353,38 @@ def test_internal_design_uses_owning_component_as_top(tmp_path: Path) -> None:
     assert result.report["instance_count"] == 1
     assert not (output / "rtl/designs").exists()
     assert (output / "rtl/components/cluster.sv").is_file()
+
+
+def test_sv_bodies_render_after_structure_with_logic_ports_and_v2_provenance() -> None:
+    package = _rtl_package()
+    initial = SpecRevision.from_package(package)
+    unit = initial.by_vlnv("component", "spec2gds.example:demo:unit:1.0")
+    cluster = initial.by_vlnv("component", "spec2gds.example:demo:cluster:1.0")
+    internal = next(item for item in initial.designs if item.ref.entity_id == "design_cluster_internal")
+    upsert_systemverilog_section(package, unit.ref, "assign dout = din;\nassign pad = 'z;\n")
+    component_body = upsert_systemverilog_section(package, cluster.ref, "logic component_marker;\n")
+    design_body = upsert_systemverilog_section(package, internal.ref, "logic design_marker;\n")
+
+    source = SpecRevision.from_package(package)
+    target = source.entry_designs()[0]
+    project = generate_project(SpecAccess(source, target.ref), target.ref)
+    unit_source = project.files["rtl/components/unit.sv"].decode()
+    cluster_source = project.files["rtl/components/cluster.sv"].decode()
+    manifest = json.loads(project.files["generation-manifest.json"])
+
+    assert "output logic [7:0] dout" in unit_source
+    assert "inout wire pad" in unit_source
+    assert "assign dout = '0;" not in unit_source
+    assert "assign dout = din;" in unit_source
+    assert cluster_source.index("unit u0") < cluster_source.index("logic component_marker")
+    assert cluster_source.index("logic component_marker") < cluster_source.index("logic design_marker")
+    assert f'`line 1 "{component_body.source_path}" 0' in cluster_source
+    assert f'`line 1 "{design_body.source_path}" 0' in cluster_source
+    assert manifest["schema_version"] == "spec2gds.rtl-generation.v2"
+    assert {item["section_id"] for item in manifest["source_sections"]} >= {
+        component_body.section_id,
+        design_body.section_id,
+    }
 
 
 @pytest.mark.parametrize(

@@ -112,6 +112,13 @@ For entity scope, map common short requests according to the selected target:
   group,direction,initiative,presence,width,bus_width.
 - narrative operations use block/block_id/block_ids/parent_block_id/index/entity_refs
   and the current typed narrative block shape.
+- upsert_entity_section creates or completely replaces the selected component or
+  design's singleton SystemVerilog body. Use owner, section_type="sv",
+  type_version=1, preserve section_id when one exists, and payload {content}.
+  The content is module-body SystemVerilog only: never emit module/endmodule,
+  `include, or `line. delete_entity_section uses owner, section_type="sv", and
+  the existing section_id. Preserve the complete existing source unless the user
+  explicitly asks for a replacement or deletion.
 
 For narrative block options, return a list of {key,value}; it is normalized to
 the document's options object after parsing. List every material assumption. If

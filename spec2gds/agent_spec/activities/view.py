@@ -22,6 +22,7 @@ from spec2gds.agent_spec.spec_format.models import (
     SpecManifest,
     StrictModel,
 )
+from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 
 class EntitySummary(StrictModel):
@@ -194,6 +195,15 @@ class LowLevelSpecApi:
     @property
     def narrative(self) -> NarrativeDocument:
         return self._revision.narrative
+
+    @property
+    def entity_sections(self) -> tuple[EntitySectionIR, ...]:
+        return self._revision.entity_sections
+
+    def entity_sections_for(
+        self, reference: EntityRef, section_type: str | None = None
+    ) -> tuple[EntitySectionIR, ...]:
+        return self._revision.entity_sections_for(reference, section_type)
 
     @property
     def components(self) -> tuple[ComponentIR, ...]:

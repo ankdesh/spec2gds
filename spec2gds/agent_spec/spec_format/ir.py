@@ -19,6 +19,7 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeDocument,
     SpecManifest,
 )
+from spec2gds.agent_spec.spec_format.sections import EntitySectionIR, load_entity_sections
 
 _INTERFACE_ROLES = ("initiator", "target", "system", "monitor")
 
@@ -180,6 +181,7 @@ class SpecRevision:
     abstraction_definitions: tuple[AbstractionDefinitionIR, ...]
     assets: tuple[AssetEntry, ...]
     annotations: tuple[AnnotationIR, ...]
+    entity_sections: tuple[EntitySectionIR, ...]
     diagnostics: tuple[str, ...]
     _manifest_json: str
     _narrative_json: str
@@ -238,6 +240,7 @@ class SpecRevision:
                 for path, data in sorted(package.files.items())
                 if path.startswith("annotations/")
             ),
+            entity_sections=load_entity_sections(manifest, package.files),
             diagnostics=(),
             _manifest_json=_canonical_json(manifest),
             _narrative_json=_canonical_json(narrative),
@@ -353,6 +356,17 @@ class SpecRevision:
             if any(reference == entity for reference in refs):
                 matches.append(block)
         return tuple(matches)
+
+    def entity_sections_for(
+        self, entity: EntityRef, section_type: str | None = None
+    ) -> tuple[EntitySectionIR, ...]:
+        """Return persisted sections owned by one component or design."""
+        self.resolve(entity)
+        return tuple(
+            item for item in self.entity_sections
+            if item.owner == entity
+            and (section_type is None or item.section_type == section_type)
+        )
 
     def dependency_closure(self, target: ComponentIR | DesignIR | EntityRef) -> tuple[EntityRef, ...]:
         """Return stable source references reachable from a component or design."""

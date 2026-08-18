@@ -390,6 +390,8 @@ SpecOperationType = Literal[
     "delete_narrative_block",
     "reorder_narrative_blocks",
     "set_narrative_entity_links",
+    "upsert_entity_section",
+    "delete_entity_section",
 ]
 
 
@@ -802,6 +804,28 @@ class SetNarrativeEntityLinksOperation(StrictModel):
     entity_refs: list[SpecEntityRef]
 
 
+class SpecSystemVerilogPayload(StrictModel):
+    content: str = Field(max_length=262_144)
+
+
+class UpsertEntitySectionOperation(StrictModel):
+    operation_id: str
+    type: Literal["upsert_entity_section"]
+    owner: SpecEntityRef
+    section_type: Literal["sv"]
+    type_version: Literal[1] = 1
+    section_id: str | None = None
+    payload: SpecSystemVerilogPayload
+
+
+class DeleteEntitySectionOperation(StrictModel):
+    operation_id: str
+    type: Literal["delete_entity_section"]
+    owner: SpecEntityRef
+    section_type: Literal["sv"]
+    section_id: str | None = None
+
+
 SpecProposalOperation = (
     CreateEntityOperation
     | SetEntityMetadataOperation
@@ -829,6 +853,8 @@ SpecProposalOperation = (
     | DeleteNarrativeBlockOperation
     | ReorderNarrativeBlocksOperation
     | SetNarrativeEntityLinksOperation
+    | UpsertEntitySectionOperation
+    | DeleteEntitySectionOperation
 )
 
 

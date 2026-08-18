@@ -405,6 +405,25 @@ export default function App() {
           `Port ${name} updated and saved automatically.`,
         );
       },
+      async upsertEntitySection(ref: EntityRef, content: string, sectionId?: string) {
+        await commitEditorOperations(
+          [{
+            type: "upsert_entity_section",
+            owner: ref,
+            section_type: "sv",
+            type_version: 1,
+            section_id: sectionId,
+            payload: { content },
+          }],
+          "SystemVerilog section validated and saved automatically.",
+        );
+      },
+      async deleteEntitySection(ref: EntityRef, sectionId?: string) {
+        await commitEditorOperations(
+          [{ type: "delete_entity_section", owner: ref, section_type: "sv", section_id: sectionId }],
+          "SystemVerilog section deleted and saved automatically.",
+        );
+      },
       portEditingAvailability(ref: EntityRef) {
         const composite = snapshot.component_compositions.some(
           (composition) => composition.component.entity_id === ref.entity_id,
@@ -421,12 +440,17 @@ export default function App() {
 
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
+  const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
+    result.diagnostics.map((item) =>
+      `${result.section_id} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
+    ),
+  ) ?? [];
 
   return (
     <div className="app-shell">
       <EditorMenuBar
         activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
-        diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length}
+        diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length + sectionDiagnostics.length}
         launchingAssistant={launchingAssistant}
         launchingCircuit={launchingCircuit}
         loading={loading}
@@ -460,7 +484,7 @@ export default function App() {
           <ActivityView activity={activity} onRefresh={refreshActivity} onReview={reviewProposal} />
         )}
         {!loading && view === "diagnostics" && (
-          <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} />
+          <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} sections={sectionDiagnostics} />
         )}
         {!loading && !batch && !error && (
           <div className="empty-state">
@@ -606,18 +630,31 @@ function UtilityPanel({
   );
 }
 
-function DiagnosticsView({ source, artifacts }: { source: string[]; artifacts: string[] }) {
+function DiagnosticsView({
+  source,
+  artifacts,
+  sections,
+}: {
+  source: string[];
+  artifacts: string[];
+  sections: string[];
+}) {
+  const count = source.length + artifacts.length + sections.length;
   return (
     <div className="utility-page utility-page--narrow">
       <header className="utility-heading">
         <div><p className="utility-kicker">Validation status</p><h1>Diagnostics</h1></div>
-        <span className={source.length + artifacts.length ? "health health--warning" : "health"}>
-          {source.length + artifacts.length ? "Needs attention" : "Source valid"}
+        <span className={count ? "health health--warning" : "health"}>
+          {count ? "Needs attention" : "Source valid"}
         </span>
       </header>
       <UtilityPanel title="Source package" count={source.length}>
         {source.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
         {!source.length && <p className="diagnostic diagnostic--ok">No source diagnostics.</p>}
+      </UtilityPanel>
+      <UtilityPanel title="Entity sections" count={sections.length}>
+        {sections.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
+        {!sections.length && <p className="diagnostic diagnostic--ok">No entity-section diagnostics.</p>}
       </UtilityPanel>
       <UtilityPanel title="Artifact sidecar" count={artifacts.length}>
         {artifacts.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}

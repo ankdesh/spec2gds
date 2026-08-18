@@ -20,10 +20,21 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeBlock,
     new_entity_id,
 )
+from spec2gds.agent_spec.spec_format.sections import (
+    SECTION_TYPES,
+    delete_entity_section,
+    delete_sections_for_owner,
+    upsert_systemverilog_section,
+)
 from spec2gds.agent_spec.spec_format.source_edits import (
     add_component_port,
     set_entity_metadata,
     update_component_port,
+    upsert_component_port,
+)
+from spec2gds.agent_spec.spec_format.sv_validation import (
+    SectionValidation,
+    validate_revision_sections,
 )
 
 
@@ -251,6 +262,26 @@ class RemoveAsset:
     asset_id: str
 
 
+@dataclass(frozen=True)
+class UpsertEntitySection:
+    """Create or replace one registered entity section."""
+
+    owner: EntityRef
+    section_type: str
+    payload: typing.Mapping[str, typing.Any]
+    section_id: str | None = None
+    type_version: int = 1
+
+
+@dataclass(frozen=True)
+class DeleteEntitySection:
+    """Delete one registered entity section from an owner."""
+
+    owner: EntityRef
+    section_type: str
+    section_id: str | None = None
+
+
 EditOperation = typing.Union[
     UpsertDocumentXml,
     DeleteDocument,
@@ -275,6 +306,8 @@ EditOperation = typing.Union[
     SetNarrativeEntityLinks,
     AddAsset,
     RemoveAsset,
+    UpsertEntitySection,
+    DeleteEntitySection,
 ]
 
 
@@ -302,7 +335,29 @@ class SpecEditTransaction:
         except (KeyError, ValueError, SpecValidationError, etree.LxmlError) as exc:
             diagnostics = exc.diagnostics if isinstance(exc, SpecValidationError) else (str(exc),)
             return EditResult(revision=None, diagnostics=tuple(diagnostics))
-        return EditResult(revision=next_revision, diagnostics=())
+        updated_owners = {
+            operation.owner
+            for operation in self.operations
+            if isinstance(operation, UpsertEntitySection) and operation.section_type == "sv"
+        }
+        updated_ids = {
+            item.section_id for owner in updated_owners
+            for item in next_revision.entity_sections_for(owner, "sv")
+        }
+        section_validation = validate_revision_sections(next_revision, updated_ids)
+        if any(item.blocking for item in section_validation):
+            messages = tuple(
+                diagnostic.message
+                for result in section_validation
+                for diagnostic in result.diagnostics
+                if diagnostic.blocking
+            )
+            return EditResult(
+                revision=None,
+                diagnostics=messages or ("SystemVerilog validation failed.",),
+                section_validation=section_validation,
+            )
+        return EditResult(revision=next_revision, diagnostics=(), section_validation=section_validation)
 
 
 @dataclass(frozen=True)
@@ -311,6 +366,7 @@ class EditResult:
 
     revision: SpecRevision | None
     diagnostics: tuple[str, ...]
+    section_validation: tuple[SectionValidation, ...] = ()
 
     @property
     def succeeded(self) -> bool:
@@ -407,6 +463,42 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         package.add_asset(operation.asset_id, operation.data, operation.media_type, operation.extension)
     elif isinstance(operation, RemoveAsset):
         _remove_asset(package, operation.asset_id)
+    elif isinstance(operation, UpsertEntitySection):
+        definition = SECTION_TYPES.get(operation.section_type)
+        if definition is None or operation.type_version != definition.version:
+            raise ValueError(
+                f"Unsupported entity section type/version: {operation.section_type}@{operation.type_version}"
+            )
+        if operation.owner.entity_kind not in definition.entity_kinds:
+            raise ValueError(f"Section type {operation.section_type} cannot attach to {operation.owner.entity_kind}.")
+        payload = definition.payload_validator(operation.payload)
+        if operation.section_type == "sv":
+            upsert_systemverilog_section(package, operation.owner, typing.cast(str, payload), operation.section_id)
+        elif operation.section_type == "text":
+            root = _editable_entity_root(package, operation.owner)
+            set_entity_metadata(
+                root,
+                display_name=_text(root, "displayName") or None,
+                short_description=_text(root, "shortDescription") or None,
+                description=typing.cast(str, payload),
+            )
+            package.add_document(typing.cast(DocumentKind, operation.owner.entity_kind), _serialize(root))
+        elif operation.section_type == "ports":
+            root = _editable_component_root(package, operation.owner)
+            model = _child(root, "model")
+            ports = _child(model, "ports") if model is not None else None
+            if ports is not None and model is not None:
+                model.remove(ports)
+            for value in typing.cast(list[typing.Any], payload):
+                if not isinstance(value, dict):
+                    raise ValueError("Every ports payload item must be an object.")
+                upsert_component_port(root, value)
+            package.add_document("component", _serialize(root))
+    elif isinstance(operation, DeleteEntitySection):
+        definition = SECTION_TYPES.get(operation.section_type)
+        if definition is None or not definition.deletable:
+            raise ValueError(f"Section type {operation.section_type} is not deletable.")
+        delete_entity_section(package, operation.owner, operation.section_type, operation.section_id)
     else:  # pragma: no cover - protects this dispatcher when the union grows.
         raise TypeError(f"Unsupported edit operation: {type(operation).__name__}")
 
@@ -423,6 +515,7 @@ def _delete_document(package: SpecPackage, ref: EntityRef) -> None:
     entry = next((item for item in package.manifest.documents if item.entity_id == ref.entity_id and item.kind == ref.entity_kind), None)
     if entry is None:
         raise KeyError(f"Unknown document entity: {ref.entity_id}")
+    delete_sections_for_owner(package, ref)
     package.files.pop(entry.path, None)
     package.manifest = package.manifest.model_copy(
         update={"documents": [item for item in package.manifest.documents if item.entity_id != ref.entity_id]}

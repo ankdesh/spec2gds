@@ -12,24 +12,26 @@ Read in this order:
    scenarios.
 3. [Specification editor UI](editor-ui.md) — menus, shortcuts, section options,
    and intentionally unavailable commands.
-4. [Service configuration](service-configuration.md) — shared IP/port registry,
+4. [Entity sections](entity-sections.md) — extensible content registry,
+   SystemVerilog storage, validation, editing, and RTL semantics.
+5. [Service configuration](service-configuration.md) — shared IP/port registry,
    discovery, and cross-application launch behavior.
-5. [Activity snapshot](activity-snapshot-v1.md) — deterministic full-source
+6. [Activity snapshot](activity-snapshot-v1.md) — deterministic full-source
    input boundary for specification consumers.
-6. [Activity SDK](activity-sdk.md) — two-level read API, plugin contracts,
+7. [Activity SDK](activity-sdk.md) — two-level read API, plugin contracts,
    registry, results, and Context Renderers.
-7. [SystemC AT Activity](systemc-at-activity.md) — deterministic structural
+8. [SystemC AT Activity](systemc-at-activity.md) — deterministic structural
    SystemC generation, workspace publishing, and supported topology.
-8. [RTL Generation Activity](rtl-generation-activity.md) — deterministic
+9. [RTL Generation Activity](rtl-generation-activity.md) — deterministic
    SystemVerilog scaffolding, direct-wire validation, and Verilator checks.
-9. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
+10. [AI Assistant](ai-assistant.md) — entity-bound editor integration, review
    boundary, and proposal contracts.
-10. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+11. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
    browser viewer.
-11. [Code quality](code-quality.md) — commenting and unused-code review gates.
-12. [Sample application method](sample-apps.md) — how to build one representative
+12. [Code quality](code-quality.md) — commenting and unused-code review gates.
+13. [Sample application method](sample-apps.md) — how to build one representative
    application through the entire system.
-13. [Development guide](development.md) — setup, commands, checks, and where code
+14. [Development guide](development.md) — setup, commands, checks, and where code
    belongs.
 
 ## Documentation rule

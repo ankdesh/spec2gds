@@ -81,7 +81,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         assert len(snapshot["entry_designs"]) == 2
         a2ui = endpoints["document_a2ui"]()
         assert a2ui["protocol_version"] == "v0.9"
-        assert a2ui["catalog_id"] == "urn:spec2gds:a2ui:document:v1"
+        assert a2ui["catalog_id"] == "urn:spec2gds:a2ui:document:v2"
         assert a2ui["source_revision_hash"] == snapshot["source_revision_hash"]
 
         design_id = snapshot["entry_designs"][0]["ref"]["entity_id"]

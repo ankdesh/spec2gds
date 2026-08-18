@@ -9,6 +9,8 @@ import tempfile
 import typing
 import zipfile
 
+import pydantic
+
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.models import (
     MIMETYPE,
@@ -23,6 +25,7 @@ from spec2gds.agent_spec.spec_format.models import (
     sha256_digest,
     validate_safe_path,
 )
+from spec2gds.agent_spec.spec_format.sections import load_entity_sections
 
 _FIXED_ZIP_DATE: tuple[int, int, int, int, int, int] = (1980, 1, 1, 0, 0, 0)
 _REQUIRED_PATHS: set[str] = {"mimetype", "manifest.json", "document/document.json"}
@@ -303,6 +306,11 @@ class SpecPackage:
         for path in annotation_paths:
             if not any(path.startswith(prefix) for prefix in annotation_prefixes):
                 diagnostics.append(f"Annotation path {path} is not owned by a registered annotation schema.")
+
+        try:
+            load_entity_sections(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid entity sections: {exc}")
 
         diagnostics.extend(_reference_diagnostics(self.manifest, self.files))
         return sorted(set(diagnostics))

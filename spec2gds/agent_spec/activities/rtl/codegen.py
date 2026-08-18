@@ -17,10 +17,11 @@ from spec2gds.agent_spec.spec_format.ir import (
     PortIR,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
+from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "rtl.generate"
-GENERATOR_VERSION = "1.0.0"
-GENERATION_SCHEMA = "spec2gds.rtl-generation.v1"
+GENERATOR_VERSION = "1.1.0"
+GENERATION_SCHEMA = "spec2gds.rtl-generation.v2"
 
 _TEMPLATES = Environment(
     loader=PackageLoader("spec2gds.agent_spec.activities.rtl", "templates"),
@@ -324,6 +325,7 @@ class GeneratedProject:
     unconnected_port_count: int
     warnings: tuple[str, ...]
     name_mappings: tuple[NameMapping, ...]
+    source_sections: tuple[dict[str, str], ...]
 
 
 @dataclass(frozen=True)
@@ -361,6 +363,7 @@ class _Analysis:
     designs: tuple[_DesignAnalysis, ...]
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
+    sections_by_owner: dict[str, EntitySectionIR]
 
 
 @dataclass(frozen=True)
@@ -400,6 +403,8 @@ class _RtlModule:
     nets: tuple[_RtlNet, ...]
     instances: tuple[_RtlInstance, ...]
     leaf: bool
+    component_sv: EntitySectionIR | None = None
+    design_sv: EntitySectionIR | None = None
 
 
 class _IdentifierPool:
@@ -431,6 +436,11 @@ class _Analyzer:
         self.errors: list[str] = []
         self.warnings: list[str] = []
         self.shapes: dict[tuple[str, str], _PortShape] = {}
+        self.sections_by_owner = {
+            item.owner.entity_id: item
+            for item in spec.low.entity_sections
+            if item.section_type == "sv"
+        }
 
     def analyze(self, target: EntityRef) -> _Analysis:
         entity = self.spec.low.resolve(target)
@@ -442,6 +452,7 @@ class _Analyzer:
                 designs=(),
                 errors=("RTL generation requires a selected design.",),
                 warnings=(),
+                sections_by_owner={},
             )
 
         root_owner = self.owner_by_design_id.get(entity.ref.entity_id)
@@ -477,6 +488,8 @@ class _Analyzer:
         design_analyses = tuple(
             self._analyze_design(design, owner) for design, owner in design_pairs.values()
         )
+        for item in design_analyses:
+            self._validate_active_body_names(item)
         return _Analysis(
             target=entity,
             root_owner=root_owner,
@@ -484,14 +497,46 @@ class _Analyzer:
             designs=design_analyses,
             errors=tuple(sorted(set(self.errors))),
             warnings=tuple(sorted(set(self.warnings))),
+            sections_by_owner=self.sections_by_owner,
         )
 
+    def _validate_active_body_names(self, analysis: _DesignAnalysis) -> None:
+        """Require source names to survive unchanged when a body can reference them."""
+        component_section = self.sections_by_owner.get(analysis.owner.ref.entity_id) if analysis.owner else None
+        design_section = self.sections_by_owner.get(analysis.design.ref.entity_id)
+        active = any(item is not None and item.content.strip() for item in (component_section, design_section))
+        if not active:
+            return
+        names: list[tuple[str, str]] = []
+        if analysis.owner is not None:
+            names.extend(("port", item.name) for item in analysis.owner.ports)
+        names.extend(("instance", item.name) for item in analysis.design.instances)
+        names.extend(("connection", item.name) for item in analysis.design.connections)
+        seen: dict[str, str] = {}
+        for kind, name in names:
+            if not _is_plain_identifier(name):
+                self.errors.append(
+                    f"Design {analysis.design.vlnv} {kind} name {name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
+                )
+            previous = seen.get(name)
+            if previous is not None:
+                self.errors.append(
+                    f"Design {analysis.design.vlnv} {kind} name {name!r} collides with a {previous} in the module namespace."
+                )
+            else:
+                seen[name] = kind
+
     def _validate_component(self, component: ComponentIR) -> None:
+        section = self.sections_by_owner.get(component.ref.entity_id)
         for interface in component.interfaces:
             self.errors.append(
                 f"Component {component.vlnv} declares unsupported bus interface {interface.name}."
             )
         for port in component.ports:
+            if section is not None and section.content.strip() and not _is_plain_identifier(port.name):
+                self.errors.append(
+                    f"Component {component.vlnv} port {port.name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
+                )
             if port.style != "wire":
                 self.errors.append(
                     f"Component {component.vlnv} port {port.name} is {port.style}; only wire ports are supported."
@@ -681,6 +726,7 @@ class _Normalizer:
             nets=(),
             instances=(),
             leaf=True,
+            component_sv=self.analysis.sections_by_owner.get(component.ref.entity_id),
         )
 
     def _structural_module(
@@ -764,6 +810,11 @@ class _Normalizer:
             nets=tuple(nets),
             instances=tuple(instances),
             leaf=False,
+            component_sv=(
+                self.analysis.sections_by_owner.get(owner.ref.entity_id)
+                if owner is not None else None
+            ),
+            design_sv=self.analysis.sections_by_owner.get(analysis.design.ref.entity_id),
         )
 
     def _ports(self, component: ComponentIR | None) -> tuple[_RtlPort, ...]:
@@ -841,6 +892,17 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
         "wrapper_generated": wrapper_generated,
         "warnings": list(warnings),
         "name_mappings": [item.as_json() for item in mappings],
+        "source_sections": [
+            {
+                "section_id": section.section_id,
+                "sha256": section.source_sha256,
+                "source_path": section.source_path,
+                "output_path": module.file_path,
+            }
+            for module in modules
+            for section in (module.component_sv, module.design_sv)
+            if section is not None
+        ],
         "files": inventory,
     }
     files["generation-manifest.json"] = _json_bytes(manifest)
@@ -856,16 +918,22 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
         unconnected_port_count=len(warnings),
         warnings=warnings,
         name_mappings=mappings,
+        source_sections=tuple(manifest["source_sections"]),
     )
 
 
 def _render_module(module: _RtlModule) -> str:
+    body_sections = tuple(
+        item for item in (module.component_sv, module.design_sv)
+        if item is not None and item.content.strip()
+    )
+    has_body = bool(body_sections)
     unused_inputs = tuple(
         port.name for port in module.ports if module.leaf and port.direction in {"in", "inout"}
     )
     direction = {"in": "input", "out": "output", "inout": "inout"}
     port_lines = tuple(
-        f"    {direction[port.direction]} wire"
+        f"    {direction[port.direction]} {'wire' if port.direction == 'inout' or not has_body else 'logic'}"
         f"{f' {port.range_text}' if port.range_text else ''} {port.name}"
         for port in module.ports
     )
@@ -885,7 +953,7 @@ def _render_module(module: _RtlModule) -> str:
     default_assignments = tuple(
         f"    assign {port.name} = {'\'0' if port.direction == 'out' else '\'z'};"
         for port in module.ports
-        if module.leaf and port.direction in {"out", "inout"}
+        if module.leaf and not has_body and port.direction in {"out", "inout"}
     )
     module_declaration = f"module {module.name};"
     if port_lines:
@@ -897,6 +965,13 @@ def _render_module(module: _RtlModule) -> str:
         sections.append("\n".join(net_lines))
     if instance_blocks:
         sections.append("\n\n".join(instance_blocks))
+    for item in body_sections:
+        sections.append(
+            f"    // {item.title} section: {item.section_id}\n"
+            f"`line 1 \"{item.source_path}\" 0\n"
+            f"{item.content.rstrip()}\n"
+            f"`line 1 \"{module.file_path}\" 0"
+        )
     if default_assignments:
         sections.append("\n".join(default_assignments))
     if unused_inputs:
@@ -939,6 +1014,10 @@ def _identifier(value: str) -> str:
     if candidate in _SV_KEYWORDS:
         candidate = f"{candidate}_rtl"
     return candidate
+
+
+def _is_plain_identifier(value: str) -> bool:
+    return bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_$]*", value)) and value not in _SV_KEYWORDS
 
 
 def _json_bytes(value: object) -> bytes:

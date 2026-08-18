@@ -97,6 +97,13 @@ with their required IP-XACT type definition maintained internally. Save
 validates and persists the complete change, while Cancel discards the
 browser-only draft.
 
+Components and designs also expose **Options → Add section → SystemVerilog**.
+The optional singleton is an IEEE 1800-2017 module body, edited with CodeMirror
+and validated with Verilator 5.x when available. Saved bodies render inline;
+Edit preserves rejected/stale drafts and Delete requires confirmation. See the
+[entity sections guide](docs/entity-sections.md) for package layout, API, limits,
+validation, and extension instructions.
+
 The **Circuit** menu lists available designs and components. Eligible document
 sections also expose **Options → Open circuit** beside their headings, while
 **Options → More actions** opens the entity action workflow. The server exposes
@@ -164,12 +171,13 @@ for invocation, supported topology, template constraints, and build
 instructions.
 
 The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
-compile-only scaffold for any selected design. It emits one reusable module per
+project for any selected design. It emits one reusable module per
 reachable component, preserves component-owned hierarchy, connects supported
 ad-hoc physical wire nets, and publishes a managed project under
 `generated/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
-compile-safe defaults; no functional RTL, clocks, resets, parameters, or
-testbench are inferred. Bus interfaces, non-wire ports, symbolic ranges, and
+compile-safe defaults unless explicit component/design SV bodies provide
+behavior; no clocks, resets, parameters, or testbench are inferred. Bus
+interfaces, non-wire ports, symbolic ranges, and
 unsupported net shapes are rejected during preflight. See the
 [RTL Generation Activity guide](docs/rtl-generation-activity.md) for the exact
 source profile, report contract, invocation, and required Verilator 5.x lint

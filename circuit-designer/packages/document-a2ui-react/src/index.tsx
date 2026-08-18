@@ -15,6 +15,17 @@ import {
   type A2uiMessage,
 } from "@a2ui/web_core/v0_9";
 import { z } from "zod";
+import { basicSetup } from "codemirror";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
+import { StreamLanguage } from "@codemirror/language";
+import { setDiagnostics, type Diagnostic } from "@codemirror/lint";
+import { verilog } from "@codemirror/legacy-modes/mode/verilog";
+import {
+  SPEC_DOCUMENT_CATALOG_ID,
+  type PersistedEntitySectionType,
+} from "./entity-section-registry";
+export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./entity-section-registry";
 
 import type {
   A2UIDocumentBatch,
@@ -26,12 +37,12 @@ import type {
   DocumentTable,
   EntityMetadataInput,
   EntityRef,
+  EntityContentSection,
   NarrativeBlock as NarrativeBlockData,
   TocEntry,
   TransactionalPortKind,
 } from "@spec2gds/document-core";
 
-export const SPEC_DOCUMENT_CATALOG_ID = "urn:spec2gds:a2ui:document:v1";
 export const SPEC_ENTITY_ACTION_EVENT = "spec2gds:entity-action";
 export const SPEC_OPEN_CIRCUIT_EVENT = "spec2gds:open-circuit";
 
@@ -47,6 +58,8 @@ export interface SpecDocumentEditController {
   updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput): Promise<void>;
   addComponentPort(ref: EntityRef, value: ComponentPortInput): Promise<void>;
   updateComponentPort(ref: EntityRef, name: string, value: ComponentPortUpdateInput): Promise<void>;
+  upsertEntitySection(ref: EntityRef, content: string, sectionId?: string): Promise<void>;
+  deleteEntitySection(ref: EntityRef, sectionId?: string): Promise<void>;
   portEditingAvailability(ref: EntityRef): { enabled: boolean; reason: string };
 }
 
@@ -139,6 +152,11 @@ const SpecSectionApi = {
 const SpecTableApi = {
   name: "SpecTable",
   schema: z.object({ table: z.custom<DocumentTable>() }),
+};
+
+const SpecEntitySectionApi = {
+  name: "SpecEntitySection",
+  schema: z.object({ section: z.custom<EntityContentSection>() }),
 };
 
 const NarrativeBlockApi = {
@@ -310,6 +328,7 @@ function SectionOptionsMenu({
   onEditDetails,
   onAddInstance,
   onAddPort,
+  onAddSystemVerilog,
   instanceAvailability,
   portAvailability,
 }: {
@@ -318,6 +337,7 @@ function SectionOptionsMenu({
   onEditDetails?: () => void;
   onAddInstance?: () => void;
   onAddPort?: (family: ComponentPortInput["family"]) => void;
+  onAddSystemVerilog?: () => void;
   instanceAvailability?: { enabled: boolean; reason: string };
   portAvailability?: { enabled: boolean; reason: string };
 }) {
@@ -481,6 +501,18 @@ function SectionOptionsMenu({
               {!portAvailability?.enabled && <small>Composite</small>}
             </button>
           ))}
+          {onAddSystemVerilog && (
+            <button
+              onClick={() => {
+                close(true);
+                onAddSystemVerilog();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              Add section → SystemVerilog
+            </button>
+          )}
           {circuitRef && (
             <button
               onClick={() => {
@@ -569,7 +601,8 @@ type SectionEditMode = ""
   | "metadata"
   | "add-wire-port"
   | "add-transactional-port"
-  | "add-structured-port";
+  | "add-structured-port"
+  | "add-sv";
 
 interface SectionEditState {
   section: DocumentSectionData;
@@ -785,6 +818,91 @@ function EntityMetadataForm({ state }: { state: SectionEditState }) {
   );
 }
 
+function SystemVerilogCodeEditor({
+  value,
+  onChange,
+  diagnostics = [],
+}: {
+  value: string;
+  onChange(value: string): void;
+  diagnostics?: EntityContentSection["diagnostics"];
+}) {
+  const host = useRef<HTMLDivElement>(null);
+  const view = useRef<EditorView | null>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  useEffect(() => {
+    if (!host.current) return;
+    const instance = new EditorView({
+      parent: host.current,
+      state: EditorState.create({
+        doc: value,
+        extensions: [
+          basicSetup,
+          StreamLanguage.define(verilog),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
+    });
+    view.current = instance;
+    return () => {
+      view.current = null;
+      instance.destroy();
+    };
+  }, []);
+  useEffect(() => {
+    const instance = view.current;
+    if (!instance) return;
+    const mapped: Diagnostic[] = diagnostics.map((item) => {
+      const lineNumber = Math.min(Math.max(item.line ?? 1, 1), instance.state.doc.lines);
+      const line = instance.state.doc.line(lineNumber);
+      const from = Math.min(line.to, line.from + Math.max((item.column ?? 1) - 1, 0));
+      return {
+        from,
+        to: Math.min(line.to, from + 1),
+        severity: item.blocking ? "error" : "warning",
+        message: `${item.code}: ${item.message}`,
+      };
+    });
+    instance.dispatch(setDiagnostics(instance.state, mapped));
+  }, [diagnostics]);
+  return <div className="spec-sv-code-editor" ref={host} />;
+}
+
+function NewSystemVerilogForm({ state }: { state: SectionEditState }) {
+  const [draft, setDraft] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!state.controller || !state.section.entity_ref) return;
+    setBusy(true);
+    setError("");
+    try {
+      await state.controller.upsertEntitySection(state.section.entity_ref, draft);
+      state.cancel();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="spec-inline-editor spec-sv-editor-form" onSubmit={submit}>
+      <label>SystemVerilog module body</label>
+      <SystemVerilogCodeEditor onChange={setDraft} value={draft} />
+      <small>Declarations, assignments, procedural blocks, tasks, functions, and assertions are accepted.</small>
+      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+      <div className="spec-edit-actions">
+        <button disabled={busy} type="submit">{busy ? "Validating…" : "Add section"}</button>
+        <button disabled={busy} onClick={state.cancel} type="button">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 const SpecSection = createComponentImplementation(
   SpecSectionApi,
   ({ props, buildChild }) => {
@@ -844,6 +962,10 @@ const SpecSection = createComponentImplementation(
               onAddPort={section.entity_ref?.entity_kind === "component" && coordinator.controller
                 ? (family) => begin(`add-${family}-port`)
                 : undefined}
+              onAddSystemVerilog={coordinator.controller
+                && (section.available_section_types ?? []).some((item) => item.section_type === "sv")
+                ? () => begin("add-sv")
+                : undefined}
               onCreate={coordinator.controller && ["components", "designs"].includes(section.section_id)
                 ? (kind) => begin(kind === "component" ? "create-component" : "create-design")
                 : undefined}
@@ -855,6 +977,7 @@ const SpecSection = createComponentImplementation(
           {mode === "create-component" && <EntityCreationForm kind="component" state={editState} />}
           {mode === "create-design" && <EntityCreationForm kind="design" state={editState} />}
           {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
+          {mode === "add-sv" && <NewSystemVerilogForm state={editState} />}
           {mode === "metadata"
             ? <EntityMetadataForm state={editState} />
             : sectionText && <p className="spec-section-text">{sectionText}</p>}
@@ -867,6 +990,105 @@ const SpecSection = createComponentImplementation(
           {renderChildren(props.children, buildChild)}
         </section>
       </SectionEditContext.Provider>
+    );
+  },
+);
+
+function SystemVerilogSectionRenderer({ section }: { section: EntityContentSection }) {
+  const coordinator = useContext(EditCoordinatorContext);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(section.payload.content ?? "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const editorId = `${section.section_id}-source`;
+  const cancel = () => {
+    coordinator.finishEditor(editorId);
+    setEditing(false);
+    setError("");
+  };
+  const save = async () => {
+    if (!coordinator.controller) return;
+    setBusy(true);
+    setError("");
+    try {
+      await coordinator.controller.upsertEntitySection(section.owner, draft, section.section_id);
+      cancel();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    if (!coordinator.controller || !window.confirm("Delete this SystemVerilog section?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await coordinator.controller.deleteEntitySection(section.owner, section.section_id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <section className="spec-entity-section spec-sv-section" aria-labelledby={`${section.section_id}-title`}>
+      <header>
+        <div>
+          <h4 id={`${section.section_id}-title`}>{section.title}</h4>
+          <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
+            {section.validation_status}
+          </span>
+        </div>
+        {!editing && coordinator.controller && (
+          <div className="spec-edit-actions">
+            <button onClick={() => {
+              if (coordinator.requestEditor(editorId)) {
+                setDraft(section.payload.content ?? "");
+                setEditing(true);
+              }
+            }} type="button">Edit</button>
+            <button disabled={busy} onClick={() => void remove()} type="button">Delete</button>
+          </div>
+        )}
+      </header>
+      {editing ? (
+        <div className="spec-sv-editor-form">
+          <SystemVerilogCodeEditor diagnostics={section.diagnostics} onChange={setDraft} value={draft} />
+          <div className="spec-edit-actions">
+            <button disabled={busy} onClick={() => void save()} type="button">{busy ? "Validating…" : "Save"}</button>
+            <button disabled={busy} onClick={cancel} type="button">Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <pre className="spec-sv-source"><code>{section.payload.content || "// Empty SystemVerilog body"}</code></pre>
+      )}
+      {section.diagnostics.length > 0 && (
+        <ul className="spec-section-diagnostics">
+          {section.diagnostics.map((item, index) => (
+            <li key={`${item.code}-${index}`}>
+              <code>{item.code}</code> {item.message}
+              {item.line ? ` (line ${item.line}${item.column ? `:${item.column}` : ""})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+    </section>
+  );
+}
+
+export const ENTITY_SECTION_RENDERERS = {
+  sv: SystemVerilogSectionRenderer,
+} satisfies Record<PersistedEntitySectionType, React.ComponentType<{ section: EntityContentSection }>>;
+
+const SpecEntitySection = createComponentImplementation(
+  SpecEntitySectionApi,
+  ({ props }) => {
+    const section = props.section as EntityContentSection;
+    const Renderer = ENTITY_SECTION_RENDERERS[section.section_type as keyof typeof ENTITY_SECTION_RENDERERS];
+    return Renderer ? <Renderer section={section} /> : (
+      <div className="spec-render-error" role="alert">Unsupported section type: {section.section_type}</div>
     );
   },
 );
@@ -1535,7 +1757,7 @@ function NarrativeExploreButton({ block, documentId }: { block: NarrativeBlockDa
 
 export const specDocumentCatalog = new Catalog(
   SPEC_DOCUMENT_CATALOG_ID,
-  [SpecDocument, SpecSection, SpecTable, NarrativeBlock, EntityLink, LiveView],
+  [SpecDocument, SpecSection, SpecTable, SpecEntitySection, NarrativeBlock, EntityLink, LiveView],
 );
 
 export function createDocumentMessageProcessor(batch: A2UIDocumentBatch) {

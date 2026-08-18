@@ -781,6 +781,77 @@
   font-size: 0.76rem;
 }
 
+.spec-entity-section {
+  margin: 1.2rem 0;
+  padding: 1rem;
+  border: 1px solid #d7ddd9;
+  border-radius: 0.5rem;
+  background: #fbfcfb;
+}
+
+.spec-entity-section > header,
+.spec-entity-section > header > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.spec-entity-section h4 {
+  margin: 0;
+}
+
+.spec-validation-badge {
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: #e7ece9;
+  color: #39443f;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.spec-validation-badge--verified { background: #dbf1e7; color: #145a42; }
+.spec-validation-badge--warnings,
+.spec-validation-badge--unverified { background: #fff1c9; color: #745500; }
+.spec-validation-badge--errors { background: #fde0e0; color: #8a2020; }
+
+.spec-sv-source {
+  max-height: 28rem;
+  overflow: auto;
+  padding: 0.85rem;
+  border-radius: 0.35rem;
+  background: #17201d;
+  color: #eff8f4;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.spec-sv-editor-form {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 0.65rem;
+  width: 100%;
+}
+
+.spec-sv-code-editor {
+  overflow: hidden;
+  border: 1px solid #aebbb5;
+  border-radius: 0.35rem;
+  background: white;
+}
+
+.spec-sv-code-editor .cm-editor { min-height: 14rem; max-height: 32rem; }
+.spec-sv-code-editor .cm-scroller { overflow: auto; }
+
+.spec-section-diagnostics {
+  margin: 0.7rem 0 0;
+  padding-left: 1.2rem;
+  color: #6b4e00;
+  font-size: 0.75rem;
+}
+
 @media (max-width: 800px) {
   .spec-document {
     display: block;

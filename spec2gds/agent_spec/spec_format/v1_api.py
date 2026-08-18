@@ -51,6 +51,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
 from spec2gds.agent_spec.spec_format.transactions import (
     AddAsset,
     AddComponentPort,
@@ -59,6 +60,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     CreateEntity,
     DeleteConnection,
     DeleteDocument,
+    DeleteEntitySection,
     DeleteInstance,
     DeleteNarrativeBlock,
     RemoveAsset,
@@ -76,6 +78,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     UpdateComponentPort,
     UpsertConnection,
     UpsertDocumentXml,
+    UpsertEntitySection,
     UpsertInstance,
     UpsertNarrativeBlock,
     WirePortInput,
@@ -308,9 +311,16 @@ def create_app() -> typing.Any:
         if result.succeeded and result.revision is not None:
             active().commit_revision(result.revision)
             _publish_source_event(state, active(), origin="editor", affected_entities=[])
-            return {"committed": True, "snapshot": _snapshot(active())}
+            return {
+                "committed": True,
+                "snapshot": _snapshot(active()),
+                "section_validation": [item.as_json() for item in result.section_validation],
+            }
         status = 409 if any("Stale" in item or "stale" in item for item in result.diagnostics) else 422
-        raise fastapi.HTTPException(status_code=status, detail={"diagnostics": list(result.diagnostics)})
+        raise fastapi.HTTPException(status_code=status, detail={
+            "diagnostics": list(result.diagnostics),
+            "section_validation": [item.as_json() for item in result.section_validation],
+        })
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -903,6 +913,23 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             operations.append(ReorderNarrativeBlocks(tuple(raw["block_ids"]), raw.get("parent_block_id")))
         elif kind == "set_narrative_entity_links":
             operations.append(SetNarrativeEntityLinks(str(raw["block_id"]), tuple(EntityRef.model_validate(item) for item in raw["entity_refs"])))
+        elif kind == "upsert_entity_section":
+            payload = raw.get("payload")
+            if not isinstance(payload, dict):
+                raise ValueError("upsert_entity_section requires a typed payload object.")
+            operations.append(UpsertEntitySection(
+                owner=entity(raw["owner"]),
+                section_type=str(raw.get("section_type", "")),
+                payload=payload,
+                section_id=str(raw["section_id"]) if raw.get("section_id") else None,
+                type_version=int(raw.get("type_version", 1)),
+            ))
+        elif kind == "delete_entity_section":
+            operations.append(DeleteEntitySection(
+                owner=entity(raw["owner"]),
+                section_type=str(raw.get("section_type", "")),
+                section_id=str(raw["section_id"]) if raw.get("section_id") else None,
+            ))
         elif kind == "remove_asset":
             operations.append(RemoveAsset(str(raw["asset_id"])))
         else:
@@ -982,8 +1009,9 @@ def _reject_operation_fields(value: dict[str, typing.Any], allowed: set[str], la
 def _snapshot(session: V1Session) -> dict[str, typing.Any]:
     """Build the single payload from which every editor view is rendered."""
     revision = session.revision
+    section_validation = validate_revision_sections(revision)
     return {
-        "schema_version": "spec2gds.snapshot.v1",
+        "schema_version": "spec2gds.snapshot.v2",
         "document_id": revision.document_id,
         "source_revision_hash": revision.source_revision_hash,
         "components": [_jsonable(item) for item in revision.components],
@@ -994,6 +1022,8 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
         "component_compositions": [_jsonable(item) for item in revision.manifest.component_compositions],
         "narrative": _jsonable(revision.narrative),
         "assets": [_jsonable(item) for item in revision.assets],
+        "entity_sections": [_jsonable(item) for item in revision.entity_sections],
+        "section_validation": [item.as_json() for item in section_validation],
         "diagnostics": {"source": list(revision.diagnostics), "artifacts": list(session.activity.artifact_diagnostics())},
     }
 

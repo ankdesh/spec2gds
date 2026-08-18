@@ -39,6 +39,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     ClearInternalDesign,
     CreateEntity,
     DeleteConnection,
+    DeleteEntitySection,
     DeleteInstance,
     DeleteNarrativeBlock,
     EditOperation,
@@ -50,6 +51,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     SpecEditTransaction,
     UpsertConnection,
     UpsertDocumentXml,
+    UpsertEntitySection,
     UpsertInstance,
     UpsertNarrativeBlock,
 )
@@ -89,6 +91,8 @@ SUPPORTED_OPERATION_TYPES = {
     "delete_narrative_block",
     "reorder_narrative_blocks",
     "set_narrative_entity_links",
+    "upsert_entity_section",
+    "delete_entity_section",
 }
 
 
@@ -241,6 +245,7 @@ def preview_assistant_proposal(
         return {
             "status": "stale",
             "diagnostics": ["Proposal base source revision is stale."],
+            "section_validation": [],
             "base_source_revision_hash": revision.source_revision_hash,
             "candidate_source_revision_hash": None,
             "current_sections": _proposal_sections(revision, proposal.target),
@@ -253,12 +258,15 @@ def preview_assistant_proposal(
         return _invalid_preview(revision, proposal.target, str(exc))
     result = SpecEditTransaction(revision.source_revision_hash, operations).apply(revision)
     if not result.succeeded or result.revision is None:
-        return _invalid_preview(revision, proposal.target, *result.diagnostics)
+        preview = _invalid_preview(revision, proposal.target, *result.diagnostics)
+        preview["section_validation"] = [item.as_json() for item in result.section_validation]
+        return preview
     current = _proposal_sections(revision, proposal.target)
     candidate = _proposal_sections(result.revision, proposal.target)
     return {
         "status": "valid",
         "diagnostics": [],
+        "section_validation": [item.as_json() for item in result.section_validation],
         "base_source_revision_hash": revision.source_revision_hash,
         "candidate_source_revision_hash": result.revision.source_revision_hash,
         "current_sections": current,
@@ -408,6 +416,21 @@ def compile_assistant_operations(
             deferred.append(ReorderNarrativeBlocks(tuple(_strings(raw, "block_ids")), typing.cast(str | None, raw.get("parent_block_id"))))
         elif operation_type == "set_narrative_entity_links":
             deferred.append(SetNarrativeEntityLinks(str(raw["block_id"]), tuple(_ref(item) for item in _list(raw, "entity_refs"))))
+        elif operation_type == "upsert_entity_section":
+            payload = _mapping(raw, "payload")
+            deferred.append(UpsertEntitySection(
+                owner=_ref(raw["owner"]),
+                section_type=str(raw["section_type"]),
+                payload=payload,
+                section_id=str(raw["section_id"]) if raw.get("section_id") else None,
+                type_version=int(raw.get("type_version", 1)),
+            ))
+        elif operation_type == "delete_entity_section":
+            deferred.append(DeleteEntitySection(
+                owner=_ref(raw["owner"]),
+                section_type=str(raw["section_type"]),
+                section_id=str(raw["section_id"]) if raw.get("section_id") else None,
+            ))
 
     xml_operations: list[EditOperation] = []
     for entity_id in sorted(roots):
@@ -450,6 +473,8 @@ def _allowed_keys(kind: str) -> set[str]:
         "delete_narrative_block": {"block_id"},
         "reorder_narrative_blocks": {"block_ids", "parent_block_id"},
         "set_narrative_entity_links": {"block_id", "entity_refs"},
+        "upsert_entity_section": {"owner", "section_type", "section_id", "type_version", "payload"},
+        "delete_entity_section": {"owner", "section_type", "section_id"},
     }
     return common | shapes[kind]
 
@@ -488,6 +513,8 @@ def _assert_operation_owned(
         "set_abstraction_bus_type": "abstraction_definition",
         "upsert_abstraction_port": "abstraction_definition",
         "delete_abstraction_port": "abstraction_definition",
+        "upsert_entity_section": "owner",
+        "delete_entity_section": "owner",
     }
     if kind in direct_keys:
         reference = _ref(operation[direct_keys[kind]])
@@ -630,6 +657,7 @@ def _invalid_preview(
     return {
         "status": "invalid",
         "diagnostics": list(diagnostics),
+        "section_validation": [],
         "base_source_revision_hash": revision.source_revision_hash,
         "candidate_source_revision_hash": None,
         "current_sections": _proposal_sections(revision, target),

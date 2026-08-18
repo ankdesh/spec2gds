@@ -56,6 +56,9 @@ heading. Narrative subheadings and table captions do not receive this control.
   port as a row and exposes an Edit action per supported row. New-port drafts
   also appear inside this table. Port names and families stay fixed after
   creation.
+- Components and designs provide **Add section → SystemVerilog** while their
+  optional singleton is absent. Saved source appears inline with validation
+  status, source diagnostics, CodeMirror editing, and confirmed deletion.
 - Every section shows disabled **Launch activity — Coming soon** so the planned
   workflow has a stable location without implying that it already runs.
 - Entity-backed sections provide **More actions**, which opens the existing
@@ -80,6 +83,11 @@ candidate package, and saves it atomically. Cancel discards the local draft.
 Validation failures leave the draft visible. If the source revision is stale,
 the editor refreshes the hash and preserves entered values for review and
 retry.
+
+SystemVerilog drafts may be empty and are limited to 256 KiB. The server checks
+portable module-body rules and runs Verilator 5.x in generated context when
+available. Missing-tool and unsupported-profile results are saved as
+`unverified`; blocking syntax and safety diagnostics leave the draft intact.
 
 All port families have a required immutable Name plus optional Display name and
 Description. Wire ports have an `in`, `out`, or `inout` direction and one

@@ -25,11 +25,13 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.sections import SECTION_TYPES
 from spec2gds.agent_spec.spec_format.source_edits import format_wire_range
+from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
 
 A2UI_PROTOCOL_VERSION = "v0.9"
-A2UI_CATALOG_ID = "urn:spec2gds:a2ui:document:v1"
-DOCUMENT_SCHEMA_VERSION = "spec2gds.document.v1"
+A2UI_CATALOG_ID = "urn:spec2gds:a2ui:document:v2"
+DOCUMENT_SCHEMA_VERSION = "spec2gds.document.v2"
 
 # Bus/protocol modeling remains part of SpecRevision and the projection builders
 # below, but it is outside the current editor workflow. Keep the visibility rule
@@ -101,6 +103,45 @@ class DocumentFact(pydantic.BaseModel):
     reference_anchor: str = ""
 
 
+class SectionDiagnostic(pydantic.BaseModel):
+    """One source-located validation result for an entity section."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    code: str
+    message: str
+    line: int | None = None
+    column: int | None = None
+    blocking: bool = False
+
+
+class EntityContentSection(pydantic.BaseModel):
+    """Typed content projected through the central section registry."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    section_id: str
+    section_type: str
+    type_version: int
+    title: str
+    owner: EntityRef
+    payload: dict[str, typing.Any]
+    editable: bool
+    deletable: bool
+    validation_status: typing.Literal["verified", "warnings", "unverified", "errors"] = "unverified"
+    diagnostics: list[SectionDiagnostic] = pydantic.Field(default_factory=list)
+
+
+class AvailableSectionType(pydantic.BaseModel):
+    """A singleton section type that may be added to this entity."""
+
+    model_config = pydantic.ConfigDict(extra="forbid")
+
+    section_type: str
+    type_version: int
+    title: str
+
+
 class DocumentSection(pydantic.BaseModel):
     """One ordered heading in the generated document."""
 
@@ -114,6 +155,8 @@ class DocumentSection(pydantic.BaseModel):
     facts: list[DocumentFact] = pydantic.Field(default_factory=list)
     tables: list[DocumentTable] = pydantic.Field(default_factory=list)
     narrative: list[dict[str, typing.Any]] = pydantic.Field(default_factory=list)
+    content_sections: list[EntityContentSection] = pydantic.Field(default_factory=list)
+    available_section_types: list[AvailableSectionType] = pydantic.Field(default_factory=list)
 
 
 class TocEntry(pydantic.BaseModel):
@@ -747,6 +790,71 @@ def _editor_sections(sections: list[DocumentSection]) -> list[DocumentSection]:
     return visible
 
 
+def _content_sections(
+    revision: SpecRevision,
+    owner: EntityRef,
+    root: etree._Element,
+    *,
+    port_count: int | None = None,
+) -> tuple[list[EntityContentSection], list[AvailableSectionType]]:
+    """Project adapter-backed and persisted content in registry order."""
+    values = [
+        EntityContentSection(
+            section_id=f"section_text_{owner.entity_id}",
+            section_type="text",
+            type_version=1,
+            title=SECTION_TYPES["text"].title,
+            owner=owner,
+            payload={"content": _text(root, "description")},
+            editable=True,
+            deletable=False,
+            validation_status="verified",
+        )
+    ]
+    if port_count is not None:
+        values.append(EntityContentSection(
+            section_id=f"section_ports_{owner.entity_id}",
+            section_type="ports",
+            type_version=1,
+            title=SECTION_TYPES["ports"].title,
+            owner=owner,
+            payload={"count": port_count},
+            editable=True,
+            deletable=False,
+            validation_status="verified",
+        ))
+    persisted = revision.entity_sections_for(owner)
+    validation = {
+        item.section_id: item for item in validate_revision_sections(
+            revision, {item.section_id for item in persisted}
+        )
+    }
+    values.extend(EntityContentSection(
+        section_id=item.section_id,
+        section_type=item.section_type,
+        type_version=item.type_version,
+        title=item.title,
+        owner=item.owner,
+        payload={"content": item.content, "media_type": item.media_type, "source_path": item.source_path},
+        editable=SECTION_TYPES[item.section_type].editable,
+        deletable=SECTION_TYPES[item.section_type].deletable,
+        validation_status=typing.cast(typing.Any, validation[item.section_id].status) if item.section_id in validation else "unverified",
+        diagnostics=[SectionDiagnostic(**diagnostic.as_json()) for diagnostic in validation[item.section_id].diagnostics]
+        if item.section_id in validation else [],
+    ) for item in persisted)
+    values.sort(key=lambda item: SECTION_TYPES[item.section_type].order)
+    present = {item.section_type for item in values}
+    available = [AvailableSectionType(
+        section_type=definition.section_type,
+        type_version=definition.version,
+        title=definition.title,
+    ) for definition in SECTION_TYPES.values()
+        if definition.persisted and owner.entity_kind in definition.entity_kinds
+        and definition.section_type not in present]
+    available.sort(key=lambda item: SECTION_TYPES[item.section_type].order)
+    return values, available
+
+
 def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     """Build the deterministic unified document from one validated revision."""
     roots = _document_roots(revision)
@@ -779,6 +887,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     ]
     for design in ordered_designs:
         root = roots[design.ref.entity_id]
+        content_sections, available_section_types = _content_sections(revision, design.ref, root)
         sections.append(DocumentSection(
             section_id=_anchor("design", design.ref.entity_id),
             title=design.vlnv.split(":")[-2],
@@ -788,12 +897,17 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             facts=_identity_facts(root, design.vlnv),
             tables=_design_tables(design, root, anchors_by_vlnv),
             narrative=[block.model_dump(mode="json") for block in attached.pop(design.ref.entity_id, [])],
+            content_sections=content_sections,
+            available_section_types=available_section_types,
         ))
 
     sections.append(DocumentSection(section_id="components", title="Components", level=1, eyebrow="Reusable hardware"))
     composition = {mapping.component.entity_id: mapping.internal_design.entity_id for mapping in revision.manifest.component_compositions}
     for component in revision.components:
         root = roots[component.ref.entity_id]
+        content_sections, available_section_types = _content_sections(
+            revision, component.ref, root, port_count=len(component.ports)
+        )
         facts = _identity_facts(root, component.vlnv)
         if component.ref.entity_id in composition:
             design_id = composition[component.ref.entity_id]
@@ -812,6 +926,8 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             facts=facts,
             tables=_component_tables(component, root, anchors_by_vlnv),
             narrative=[block.model_dump(mode="json") for block in attached.pop(component.ref.entity_id, [])],
+            content_sections=content_sections,
+            available_section_types=available_section_types,
         ))
 
     sections.append(DocumentSection(section_id="protocols", title="Protocols", level=1, eyebrow="Bus and abstraction definitions"))
@@ -900,10 +1016,20 @@ def build_a2ui_batch(projection: DocumentProjection) -> A2UIDocumentBatch:
                 "block": copy.deepcopy(block),
                 "documentId": projection.document_id,
             })
+        for content_section in section.content_sections:
+            if content_section.section_type != "sv":
+                continue
+            component_id = f"entity-section-{_slug(content_section.section_id)}"
+            child_ids.append(component_id)
+            components.append({
+                "id": component_id,
+                "component": "SpecEntitySection",
+                "section": content_section.model_dump(mode="json"),
+            })
         components.append({
             "id": section_component_id,
             "component": "SpecSection",
-            "section": section.model_copy(update={"tables": [], "narrative": []}).model_dump(mode="json"),
+            "section": section.model_copy(update={"tables": [], "narrative": [], "content_sections": []}).model_dump(mode="json"),
             "children": child_ids,
         })
     components.append({

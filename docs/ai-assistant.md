@@ -109,6 +109,12 @@ Description. An upsert is a complete value, so unchanged fields must be copied
 from context. Family conversion is rejected, and ports on components owning an
 internal design are read-only just as they are in the direct editor.
 
+Component/design context also includes the complete SystemVerilog body up to
+the 256 KiB package limit. Entity-bound proposals may create/replace it with
+`upsert_entity_section` or remove it with `delete_entity_section`. Preview and
+acceptance use the same portable checks and Verilator validation as human
+edits, including blocking diagnostics and `unverified` fallback warnings.
+
 ## Naming and configuration
 
 Run the service with `uv run spec2gds-ai-assistant`. The editor uses the shared

@@ -9,7 +9,7 @@ const compositeRef = { document_id: documentId, entity_id: "component_subsystem"
 const busRef = { document_id: documentId, entity_id: "bus_control", entity_kind: "bus_definition" };
 
 const snapshot = {
-  schema_version: "1.0",
+  schema_version: "spec2gds.snapshot.v2",
   document_id: documentId,
   source_revision_hash: revision,
   components: [
@@ -23,6 +23,8 @@ const snapshot = {
   component_compositions: [{ component: compositeRef, internal_design: designRef }],
   narrative: { title: "Editor Test", blocks: [] },
   diagnostics: { source: [], artifacts: [] },
+  entity_sections: [],
+  section_validation: [],
 };
 
 function section(
@@ -30,7 +32,13 @@ function section(
   title: string,
   level: number,
   entityRef: object | null,
-  options: { eyebrow?: string; facts?: object[]; tables?: object[]; children?: string[] } = {},
+  options: {
+    eyebrow?: string;
+    facts?: object[];
+    tables?: object[];
+    children?: string[];
+    availableSectionTypes?: object[];
+  } = {},
 ) {
   return {
     id: `section-${id}`,
@@ -44,6 +52,12 @@ function section(
       facts: options.facts ?? [],
       tables: options.tables ?? [],
       narrative: [],
+      content_sections: [],
+      available_section_types: options.availableSectionTypes ?? (
+        entityRef && ["component", "design"].includes((entityRef as { entity_kind?: string }).entity_kind ?? "")
+          ? [{ section_type: "sv", type_version: 1, title: "SystemVerilog" }]
+          : []
+      ),
     },
     children: options.children ?? [],
   };
@@ -160,7 +174,7 @@ const compositePortTable = {
 
 const batch = {
   protocol_version: "v0.9",
-  catalog_id: "urn:spec2gds:a2ui:document:v1",
+  catalog_id: "urn:spec2gds:a2ui:document:v2",
   surface_id: "spec-document-editor-test",
   source_revision_hash: revision,
   messages: [
@@ -168,7 +182,7 @@ const batch = {
       version: "v0.9",
       createSurface: {
         surfaceId: "spec-document-editor-test",
-        catalogId: "urn:spec2gds:a2ui:document:v1",
+        catalogId: "urn:spec2gds:a2ui:document:v2",
       },
     },
     {
@@ -178,7 +192,27 @@ const batch = {
         components: [
           section("overview", "Overview", 1, null),
           section("designs", "Designs", 1, null),
-          section("design-design_top", "Processor", 2, designRef, { eyebrow: "Entry design" }),
+          section("design-design_top", "Processor", 2, designRef, {
+            eyebrow: "Entry design",
+            children: ["entity-section-design-top-sv"],
+            availableSectionTypes: [],
+          }),
+          {
+            id: "entity-section-design-top-sv",
+            component: "SpecEntitySection",
+            section: {
+              section_id: "section_sv_design_top",
+              section_type: "sv",
+              type_version: 1,
+              title: "SystemVerilog",
+              owner: designRef,
+              payload: { content: "logic saved_marker;\n", media_type: "text/x-systemverilog" },
+              editable: true,
+              deletable: true,
+              validation_status: "verified",
+              diagnostics: [],
+            },
+          },
           section("components", "Components", 1, null),
           section("component-component_timer", "Timer", 2, componentRef, {
             facts: componentFacts,
@@ -435,6 +469,52 @@ test("supports keyboard menu navigation and restores trigger focus", async ({ pa
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu", { name: "Edit" })).toBeHidden();
   await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeFocused();
+});
+
+test("adds, edits, and deletes SystemVerilog sections with preserved typed operations", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+
+  const timer = page.locator("#component-component_timer");
+  await timer.locator(".spec-options-trigger").click();
+  await page.getByRole("menuitem", { name: "Add section → SystemVerilog" }).click();
+  const newEditor = timer.locator(".cm-content");
+  await expect(newEditor).toBeVisible();
+  await newEditor.fill("assign irq = 1'b0;\n");
+  await timer.getByRole("button", { name: "Add section", exact: true }).click();
+  await expect.poll(() => state.transactions.length).toBe(1);
+  expect(state.transactions[0]?.operations).toEqual([{
+    type: "upsert_entity_section",
+    owner: componentRef,
+    section_type: "sv",
+    type_version: 1,
+    payload: { content: "assign irq = 1'b0;\n" },
+  }]);
+
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Edit", exact: true }).click();
+  const savedEditor = design.locator(".cm-content");
+  await savedEditor.fill("logic edited_marker;\n");
+  await design.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => state.transactions.length).toBe(2);
+  expect(state.transactions[1]?.operations).toEqual([{
+    type: "upsert_entity_section",
+    owner: designRef,
+    section_type: "sv",
+    type_version: 1,
+    section_id: "section_sv_design_top",
+    payload: { content: "logic edited_marker;\n" },
+  }]);
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await design.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect.poll(() => state.transactions.length).toBe(3);
+  expect(state.transactions[2]?.operations).toEqual([{
+    type: "delete_entity_section",
+    owner: designRef,
+    section_type: "sv",
+    section_id: "section_sv_design_top",
+  }]);
 });
 
 test("edits the persisted specification name without changing the stable identity", async ({ page }) => {

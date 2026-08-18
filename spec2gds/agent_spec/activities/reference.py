@@ -113,6 +113,9 @@ class SpecTextContextRenderer:
                     _jsonable(item)
                     for item in context.spec.low.abstraction_definitions
                 ],
+                "entity_sections": [
+                    _jsonable(item) for item in context.spec.low.entity_sections
+                ],
                 "narrative": context.spec.low.narrative.model_dump(mode="json"),
             }
             lines.extend(

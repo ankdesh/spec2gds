@@ -16,7 +16,7 @@ def _projection():
 def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> None:
     projection = _projection()
 
-    assert projection.schema_version == "spec2gds.document.v1"
+    assert projection.schema_version == "spec2gds.document.v2"
     assert projection.sections[0].title == "Overview"
     assert projection.sections[0].facts == []
     level_one_titles = [section.title for section in projection.sections if section.level == 1]

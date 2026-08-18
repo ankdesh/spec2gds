@@ -37,13 +37,24 @@ class RtlNameMapping(pydantic.BaseModel):
     rtl_name: str
 
 
+class RtlSourceSection(pydantic.BaseModel):
+    """One persisted SV body consumed into a generated module."""
+
+    model_config = pydantic.ConfigDict(extra="forbid", frozen=True)
+
+    section_id: str
+    sha256: str
+    source_path: str
+    output_path: str
+
+
 class RtlGenerationReport(pydantic.BaseModel):
     """Stable report describing one published RTL project."""
 
     model_config = pydantic.ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: typing.Literal["spec2gds.rtl-generation-report.v1"] = (
-        "spec2gds.rtl-generation-report.v1"
+    schema_version: typing.Literal["spec2gds.rtl-generation-report.v2"] = (
+        "spec2gds.rtl-generation-report.v2"
     )
     generator_id: str
     generator_version: str
@@ -61,6 +72,7 @@ class RtlGenerationReport(pydantic.BaseModel):
     unconnected_port_count: int
     warnings: tuple[str, ...]
     name_mappings: tuple[RtlNameMapping, ...]
+    source_sections: tuple[RtlSourceSection, ...]
     tree_sha256: str
     files: tuple[WorkspaceFile, ...]
 
@@ -129,6 +141,7 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
         unconnected_port_count=project.unconnected_port_count,
         warnings=project.warnings,
         name_mappings=tuple(RtlNameMapping(**item.as_json()) for item in project.name_mappings),
+        source_sections=tuple(RtlSourceSection(**item) for item in project.source_sections),
         tree_sha256=published.tree_sha256,
         files=published.files,
     )

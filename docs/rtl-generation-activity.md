@@ -1,10 +1,11 @@
 # Deterministic RTL Generation Activity
 
-`rtl.generate` version `1.0.0` generates a compile-only SystemVerilog 2017
+`rtl.generate` version `1.1.0` generates a SystemVerilog 2017
 scaffold for one selected design. It preserves reachable component hierarchy,
 emits one reusable module per component definition, and translates direct
 physical wire connections. It does not call an LLM, inspect narrative intent,
-mutate the specification, infer clocks or resets, or generate functional RTL.
+mutate the specification or infer clocks and resets. It incorporates explicit
+component/design SystemVerilog body sections when present.
 
 ## Supported source profile
 
@@ -37,6 +38,13 @@ and are persisted in the generation report.
 Leaf modules declare ANSI `wire` ports. Outputs are tied to `'0`, inouts are
 tied to `'z`, and input/inout values are consumed by an `_unused_ok` sink so
 the scaffold passes strict lint without pretending to implement behavior.
+
+With a non-whitespace SV body, the module instead declares inputs/outputs as
+`logic` and inouts as `wire`, removes automatic leaf output/inout tie-offs, and
+expects the body to drive required outputs. Generated nets and instances appear
+first, followed by the component body and then the owned/design body. Line
+mappings retain the stored section path in diagnostics. Missing or whitespace
+bodies keep the original scaffold behavior.
 
 Composite modules contain only child instances and structural nets. An
 unconnected child input is tied to `'0`; unconnected child outputs and inouts
@@ -94,7 +102,8 @@ generated/rtl/<document-id>/<design-id>/
 The `designs/` file is omitted when the selected internal design uses its
 owning component module as the top. The Activity also returns a typed report and
 the `rtl.generation_report` JSON artifact with provenance, counts, warnings,
-name mappings, file hashes, and the generated tree digest.
+name mappings, consumed section IDs/digests/output locations, file hashes, and
+the generated tree digest. The generation manifest and report schemas are V2.
 
 The directory is fully generator-owned. A rerun atomically replaces it only
 when its manifest matches the generator, document, and design. Do not add
