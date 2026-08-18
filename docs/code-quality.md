@@ -7,6 +7,13 @@ Comments should explain why a constraint exists rather than repeat syntax.
 Generated bundles, generated schemas, dependencies, and routine test setup are
 not hand-commented.
 
+Every production Python module starts with a module docstring that tells a new
+reader what boundary the file owns. Public services and non-obvious algorithms
+also carry docstrings. Large collections of data-only Pydantic models may use
+section comments and a module-level reading guide instead of repeating each
+field name in a class docstring; the strict field declarations remain the
+authoritative wire contract.
+
 Python code must pass Ruff's unused/import checks and Vulture's high-confidence
 dead-code scan:
 

@@ -1,4 +1,4 @@
-"""HTTP client for the local Spec Editor assistant contract."""
+"""Validated async client for the local specification editor's owning API."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from spec2gds_runtime import StructuredLogger
 
 
 class SpecServiceError(RuntimeError):
+    """Carry an owning-service status code and response body to API handlers."""
     def __init__(self, status_code: int, detail: object) -> None:
         super().__init__(str(detail))
         self.status_code = status_code
@@ -17,6 +18,7 @@ class SpecServiceError(RuntimeError):
 
 
 def normalize_spec_base_url(base_url: str, allowlist: tuple[str, ...]) -> str:
+    """Validate and canonicalize a Spec API URL against the startup allowlist."""
     normalized = base_url.strip().rstrip("/")
     parsed = urlparse(normalized)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
@@ -30,7 +32,7 @@ def normalize_spec_base_url(base_url: str, allowlist: tuple[str, ...]) -> str:
 
 
 class SpecEditorClient:
-    """Validated Spec API client with optional boundary-level diagnostics."""
+    """Load Spec context and delegate preview/apply to the authoritative API."""
 
     def __init__(
         self,
@@ -43,6 +45,7 @@ class SpecEditorClient:
         self.logger = logger
 
     def normalize(self, base_url: str) -> str:
+        """Apply this client's configured allowlist to a caller-supplied URL."""
         return normalize_spec_base_url(base_url, self.allowlist)
 
     async def context(
@@ -52,6 +55,7 @@ class SpecEditorClient:
         entity_kind: str,
         entity_id: str,
     ) -> dict[str, Any]:
+        """Read versioned context for one selected source entity."""
         return await self._request(
             "GET",
             f"{self.normalize(base_url)}/assistant/context",
@@ -75,6 +79,7 @@ class SpecEditorClient:
         )
 
     async def preview(self, base_url: str, proposal: dict[str, Any]) -> dict[str, Any]:
+        """Validate a proposal against current source without committing it."""
         return await self._request(
             "POST",
             f"{self.normalize(base_url)}/assistant/proposals/preview",
@@ -82,6 +87,7 @@ class SpecEditorClient:
         )
 
     async def apply(self, base_url: str, proposal: dict[str, Any]) -> dict[str, Any]:
+        """Commit an explicitly accepted proposal through the owning Spec API."""
         return await self._request(
             "POST",
             f"{self.normalize(base_url)}/assistant/proposals/apply",

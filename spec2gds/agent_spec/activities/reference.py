@@ -89,6 +89,7 @@ class SpecTextContextRenderer:
     )
 
     def render(self, context: ContextRenderContext) -> RenderedContext:
+        """Render a compact entity inventory and linked narrative for one snapshot."""
         document = context.spec.high.document
         lines = [
             f"Spec document: {document['document_id']}",

@@ -153,6 +153,7 @@ class StructuredLogger:
         exception: BaseException | None = None,
         timestamp: str | None = None,
     ) -> None:
+        """Redact and append one structured event when logging is enabled."""
         if not self.settings.enabled or (severity == "debug" and self.settings.level != "debug"):
             return
         record: dict[str, Any] = {

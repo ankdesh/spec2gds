@@ -57,6 +57,7 @@ class SnapshotScope(StrictModel):
     target: EntityRef | None = None
 
     def model_post_init(self, _: object) -> None:
+        """Reject a target whose document identity differs from the snapshot."""
         if self.kind not in {"document", "entity"}:
             raise ValueError("Snapshot scope kind must be document or entity.")
         if (self.kind == "entity") != (self.target is not None):
@@ -73,6 +74,7 @@ class ActivitySnapshotManifest(StrictModel):
     dependency_closure: tuple[EntityRef, ...] = ()
 
     def model_post_init(self, _: object) -> None:
+        """Cross-check manifest identity, scope, and source revision metadata."""
         if self.schema_version != ACTIVITY_SNAPSHOT_SCHEMA:
             raise ValueError("Unsupported Activity snapshot schema version.")
         if not SHA256_PATTERN.fullmatch(self.snapshot_id):
@@ -174,6 +176,7 @@ class ActivitySnapshot:
 
     @property
     def target(self) -> EntityRef | None:
+        """Expose the optional entity target recorded by the snapshot scope."""
         return self.manifest.scope.target
 
     def to_bytes(self) -> bytes:

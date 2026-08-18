@@ -1,3 +1,11 @@
+"""Strict wire models shared by Assistant agents, routes, and owner clients.
+
+Read this file in sections: Circuit values and operations come first, followed
+by their proposal envelope; Spec context values and operations come second,
+followed by the Spec proposal envelope. The small data-only classes mirror JSON
+contracts, so their field names are intentionally not restated in docstrings.
+"""
+
 from __future__ import annotations
 
 from typing import Any, Literal
@@ -13,6 +21,7 @@ from pydantic import (
 
 
 class StrictModel(BaseModel):
+    """Reject unknown fields so model output cannot silently change a contract."""
     model_config = ConfigDict(extra="forbid")
 
 
@@ -34,6 +43,9 @@ class BoundaryEndpoint(StrictModel):
     slice: Slice | None
 
 
+# Circuit Designer represents reusable component pins and top-level boundary
+# ports with distinct endpoint shapes. The discriminator keeps model-generated
+# JSON unambiguous before it reaches the owning service.
 NetEndpoint = InstanceEndpoint | BoundaryEndpoint
 
 
@@ -77,6 +89,7 @@ class CircuitEnumParameterDefinition(StrictModel):
 
     @model_validator(mode="after")
     def validate_default(self) -> "CircuitEnumParameterDefinition":
+        """Require the declared default to be one of the advertised choices."""
         if self.default not in self.values:
             raise ValueError("An enum parameter default must be one of its values.")
         return self
@@ -104,6 +117,7 @@ class CircuitComponentAppearance(StrictModel):
     @field_validator("properties", mode="before")
     @classmethod
     def decode_property_map(cls, value: object) -> object:
+        """Accept owner-style maps and expose list entries to Structured Outputs."""
         if isinstance(value, dict):
             return [{"name": name, "value": item} for name, item in value.items()]
         return value
@@ -112,10 +126,12 @@ class CircuitComponentAppearance(StrictModel):
     def encode_property_map(
         self, value: list[CircuitAppearanceProperty]
     ) -> dict[str, str | float | bool | None]:
+        """Restore Circuit Designer's keyed property map on serialization."""
         return {item.name: item.value for item in value}
 
     @model_validator(mode="after")
     def validate_unique_properties(self) -> "CircuitComponentAppearance":
+        """Prevent list-form model output from collapsing duplicate map keys."""
         names = [item.name for item in self.properties]
         if len(names) != len(set(names)):
             raise ValueError("Renderer property names must be unique.")
@@ -156,6 +172,7 @@ class CircuitInstance(StrictModel):
     @field_validator("parameter_values", mode="before")
     @classmethod
     def decode_parameter_map(cls, value: object) -> object:
+        """Accept owner-style maps and expose list entries to Structured Outputs."""
         if isinstance(value, dict):
             return [{"name": name, "value": item} for name, item in value.items()]
         return value
@@ -164,10 +181,12 @@ class CircuitInstance(StrictModel):
     def encode_parameter_map(
         self, value: list[CircuitParameterAssignment]
     ) -> dict[str, str | float | bool]:
+        """Restore Circuit Designer's keyed parameter map on serialization."""
         return {item.name: item.value for item in value}
 
     @model_validator(mode="after")
     def validate_unique_parameter_values(self) -> "CircuitInstance":
+        """Prevent list-form model output from collapsing duplicate parameter IDs."""
         names = [item.name for item in self.parameter_values]
         if len(names) != len(set(names)):
             raise ValueError("Instance parameter names must be unique.")
@@ -187,6 +206,7 @@ class AddComponentOperation(StrictModel):
 
     @model_validator(mode="after")
     def validate_local_component(self) -> "AddComponentOperation":
+        """Restrict Assistant-created definitions to editable local components."""
         if self.component.origin != "local" or not self.component.editable:
             raise ValueError("New component definitions must be local and editable.")
         return self
@@ -277,6 +297,9 @@ class DisconnectEndpointOperation(StrictModel):
     endpoint: NetEndpoint
 
 
+# Every operation is a complete, typed command understood by Circuit Designer.
+# Update variants intentionally carry replacement values instead of loose
+# patches so omitted fields cannot be erased accidentally.
 CircuitOperation = (
     AddComponentOperation
     | UpdateComponentOperation
@@ -308,6 +331,7 @@ class CircuitProposalDraft(StrictModel):
 
     @model_validator(mode="after")
     def validate_supported_shape(self) -> "CircuitProposalDraft":
+        """Keep supported status, operations, and rejection reason consistent."""
         if self.supported and not self.operations:
             raise ValueError("A supported proposal must contain at least one operation.")
         if not self.supported and self.operations:
@@ -344,6 +368,7 @@ class CircuitAgentRequest(StrictModel):
 
 
 class ProcessedContext(StrictModel):
+    """Deterministic agent prompt text plus provenance used for proposal guards."""
     text: str
     document_id: str
     revision: str
@@ -363,6 +388,8 @@ class SpecEntityRef(StrictModel):
     ]
 
 
+# Spec operations mirror the public source-edit vocabulary. Identity and
+# revision checks are still performed by the Spec API during preview/apply.
 SpecOperationType = Literal[
     "create_entity",
     "set_entity_metadata",
@@ -437,6 +464,7 @@ class SpecTransactionalComponentPortValue(StrictModel):
 
     @model_validator(mode="after")
     def validate_custom_kind(self) -> "SpecTransactionalComponentPortValue":
+        """Require a custom label exactly when transactional kind is custom."""
         custom_name = (self.custom_kind or "").strip()
         if self.kind == "custom" and not custom_name:
             raise ValueError("A custom transactional port requires a custom kind name.")
@@ -518,6 +546,7 @@ class SpecAdHocConnectionValue(StrictModel):
 
     @model_validator(mode="after")
     def validate_endpoint_count(self) -> "SpecAdHocConnectionValue":
+        """Reject source connections that cannot connect at least two endpoints."""
         if len(self.port_endpoints) + len(self.external_ports) < 2:
             raise ValueError("An ad-hoc connection requires at least two port endpoints.")
         return self
@@ -684,6 +713,7 @@ class CreateEntityOperation(StrictModel):
 
     @model_validator(mode="after")
     def validate_instances(self) -> "CreateEntityOperation":
+        """Allow initial instances only when creating a top-level design."""
         if self.kind == "component" and self.instances:
             raise ValueError("A new component cannot contain design instances.")
         names = [item.name for item in self.instances]
@@ -826,6 +856,8 @@ class DeleteEntitySectionOperation(StrictModel):
     section_id: str | None = None
 
 
+# Keep this union explicit: Pydantic uses it to produce the Structured Outputs
+# schema, and the Spec API uses the resulting discriminator to select an edit.
 SpecProposalOperation = (
     CreateEntityOperation
     | SetEntityMetadataOperation
@@ -869,6 +901,7 @@ class SpecProposalDraft(StrictModel):
 
     @model_validator(mode="after")
     def validate_supported_shape(self) -> "SpecProposalDraft":
+        """Keep supported status, operations, and rejection reason consistent."""
         if self.supported and not self.operations:
             raise ValueError("A supported proposal requires at least one operation.")
         if not self.supported and self.operations:
@@ -894,6 +927,7 @@ class SpecProposalArtifact(StrictModel):
 
     @model_validator(mode="after")
     def validate_scope(self) -> "SpecProposalArtifact":
+        """Require a target only for entity-scoped proposal artifacts."""
         if (self.scope == "entity") != (self.target is not None):
             raise ValueError("Spec proposal scope and target do not match.")
         return self

@@ -17,19 +17,25 @@ class SnapshotFactory(typing.Protocol):
         self,
         revision: SpecRevision,
         target: EntityRef | None = None,
-    ) -> ActivitySnapshot: ...
+    ) -> ActivitySnapshot:
+        """Capture one revision and optional entity target as a portable snapshot."""
+        ...
 
 
 class ActivityCatalog(typing.Protocol):
     """Discover definitions without depending on how Activities are launched."""
 
-    def activities(self) -> tuple[ActivityDefinition, ...]: ...
+    def activities(self) -> tuple[ActivityDefinition, ...]:
+        """List available Activity definitions in stable catalog order."""
+        ...
 
 
 class ActivityInvoker(typing.Protocol):
     """Invoke one Activity without prescribing queue, process, or transport."""
 
-    def invoke(self, activity_id: str, snapshot: ActivitySnapshot) -> ActivityResult: ...
+    def invoke(self, activity_id: str, snapshot: ActivitySnapshot) -> ActivityResult:
+        """Run a named Activity against the supplied immutable snapshot."""
+        ...
 
 
 class ActivityResultSink(typing.Protocol):
@@ -40,4 +46,6 @@ class ActivityResultSink(typing.Protocol):
         definition: ActivityDefinition,
         snapshot: ActivitySnapshot,
         result: ActivityResult,
-    ) -> None: ...
+    ) -> None:
+        """Persist or forward one already validated Activity result."""
+        ...

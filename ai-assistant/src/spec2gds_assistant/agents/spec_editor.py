@@ -128,6 +128,7 @@ supported=false.
 
 
 class SpecEditingAgent:
+    """Explore Spec context or produce source operations for explicit changes."""
     def __init__(
         self,
         settings: Settings,
@@ -143,6 +144,7 @@ class SpecEditingAgent:
     async def respond(
         self, request: SpecAgentRequest
     ) -> str | SpecProposalArtifact | SpecProposalDraft:
+        """Return exploration text or a revision-bound, reviewable proposal."""
         processed = self.context_processor.process(request)
         client = self._client
         if client is None:

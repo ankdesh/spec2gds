@@ -1,3 +1,9 @@
+"""Render owner-provided semantic snapshots into deterministic model context.
+
+Processors do not call OpenAI and do not mutate source. They make exact IDs,
+writable boundaries, and copy-forward values visible to the proposal agents.
+"""
+
 from __future__ import annotations
 
 import json
@@ -22,6 +28,7 @@ class CircuitContextProcessor(ContextProcessor[CircuitAgentRequest]):
     """Describe one semantic snapshot and its Circuit Designer SVG."""
 
     def process(self, context: CircuitAgentRequest) -> ProcessedContext:
+        """Validate and render exact Circuit objects, endpoints, and revision data."""
         snapshot = context.snapshot
         revision = str(snapshot.get("revision", ""))
         document = snapshot.get("document")
@@ -301,6 +308,7 @@ class SpecContextProcessor(ContextProcessor[SpecAgentRequest]):
     """Describe document- or entity-bound Spec context without exposing XML."""
 
     def process(self, context: SpecAgentRequest) -> ProcessedContext:
+        """Validate and render the Spec scope, writable boundary, and semantic data."""
         value = context.context
         document_id = str(value.get("document_id", ""))
         revision = str(value.get("source_revision_hash", ""))

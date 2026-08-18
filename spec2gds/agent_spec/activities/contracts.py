@@ -43,6 +43,7 @@ class ActivityScopes(StrictModel):
         return self
 
     def supports(self, target: EntityRef | None) -> bool:
+        """Return whether this definition accepts the document or entity target."""
         return self.document if target is None else target.entity_kind in self.entity_kinds
 
 
@@ -198,9 +199,13 @@ class CancellationToken(typing.Protocol):
     """Minimal cooperative cancellation port supplied by any future host."""
 
     @property
-    def cancelled(self) -> bool: ...
+    def cancelled(self) -> bool:
+        """Report whether the host has requested cooperative cancellation."""
+        ...
 
-    def raise_if_cancelled(self) -> None: ...
+    def raise_if_cancelled(self) -> None:
+        """Raise the host-specific cancellation exception when requested."""
+        ...
 
 
 class NeverCancelled:
@@ -208,9 +213,11 @@ class NeverCancelled:
 
     @property
     def cancelled(self) -> bool:
+        """Remain false for direct invocations that have no cancelling host."""
         return False
 
     def raise_if_cancelled(self) -> None:
+        """Do nothing because this token can never be cancelled."""
         return None
 
 
@@ -251,7 +258,9 @@ class ActivityWorkspaceWriter(typing.Protocol):
         generator_id: str,
         document_id: str,
         design_id: str,
-    ) -> PublishedDirectory: ...
+    ) -> PublishedDirectory:
+        """Atomically replace one validated, generator-owned relative directory."""
+        ...
 
 
 class ActivityOutputWriter:
@@ -266,6 +275,7 @@ class ActivityOutputWriter:
         data: bytes,
         source_entities: tuple[EntityRef, ...] = (),
     ) -> ArtifactOutput:
+        """Wrap immutable bytes with validated name, size, digest, and provenance."""
         content = bytes(data)
         return ArtifactOutput(
             role=role,
@@ -286,6 +296,7 @@ class ActivityOutputWriter:
         media_type: str = "text/plain",
         source_entities: tuple[EntityRef, ...] = (),
     ) -> ArtifactOutput:
+        """Create a UTF-8 text artifact through the common byte path."""
         return self.add_bytes(
             role=role,
             name=name,
@@ -302,6 +313,7 @@ class ActivityOutputWriter:
         value: typing.Any,
         source_entities: tuple[EntityRef, ...] = (),
     ) -> ArtifactOutput:
+        """Serialize a deterministic, human-readable JSON artifact."""
         data = (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
         return self.add_bytes(
             role=role,
@@ -320,6 +332,7 @@ class ActivityOutputWriter:
         name: str | None = None,
         source_entities: tuple[EntityRef, ...] = (),
     ) -> ArtifactOutput:
+        """Read one local file into a portable artifact envelope."""
         source = Path(path)
         if not source.is_file():
             raise FileNotFoundError(source)
@@ -339,6 +352,7 @@ class ActivityOutputWriter:
         name: str,
         source_entities: tuple[EntityRef, ...] = (),
     ) -> ArtifactOutput:
+        """Package a directory as a byte-for-byte deterministic ZIP artifact."""
         source = Path(path)
         if not source.is_dir():
             raise NotADirectoryError(source)
@@ -369,6 +383,7 @@ class ActivitySelectionContext:
 
     @property
     def target(self) -> EntityRef | None:
+        """Expose the selected entity, or ``None`` for document scope."""
         return self.snapshot.scope.target
 
 
@@ -384,6 +399,7 @@ class ActivityContext:
 
     @property
     def target(self) -> EntityRef | None:
+        """Expose the selected entity, or ``None`` for document scope."""
         return self.snapshot.scope.target
 
 
@@ -396,6 +412,7 @@ class ContextRenderContext:
 
     @property
     def target(self) -> EntityRef | None:
+        """Expose the selected entity, or ``None`` for document scope."""
         return self.snapshot.scope.target
 
 
@@ -405,9 +422,13 @@ class Activity(typing.Protocol):
     definition: ActivityDefinition
     report_model: type[pydantic.BaseModel]
 
-    def availability(self, context: ActivitySelectionContext) -> ActivityAvailability: ...
+    def availability(self, context: ActivitySelectionContext) -> ActivityAvailability:
+        """Run a read-only preflight before allocating outputs or a workspace."""
+        ...
 
-    def run(self, context: ActivityContext) -> ActivityResult: ...
+    def run(self, context: ActivityContext) -> ActivityResult:
+        """Execute the Activity against an immutable snapshot context."""
+        ...
 
 
 class BaseActivity:
@@ -417,6 +438,7 @@ class BaseActivity:
     report_model: type[pydantic.BaseModel]
 
     def availability(self, context: ActivitySelectionContext) -> ActivityAvailability:
+        """Accept supported scopes; subclasses may add domain preflight checks."""
         if not self.definition.scopes.supports(context.target):
             return ActivityAvailability(
                 available=False,
@@ -430,4 +452,6 @@ class ContextRenderer(typing.Protocol):
 
     definition: ContextRendererDefinition
 
-    def render(self, context: ContextRenderContext) -> RenderedContext: ...
+    def render(self, context: ContextRenderContext) -> RenderedContext:
+        """Render deterministic text from an immutable snapshot context."""
+        ...

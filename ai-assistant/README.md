@@ -1,8 +1,8 @@
 # Optional AI Assistant
 
-This local application provides entity-bound conversations and reviewed change
-proposals for the Spec Editor and Circuit Designer. Both editors remain fully
-usable when it is stopped.
+This local application provides document- or entity-bound conversations and
+reviewed change proposals for the Spec Editor and Circuit Designer. Both
+editors remain fully usable when it is stopped.
 
 ## Run
 
@@ -41,6 +41,10 @@ identifiers.
 The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
 SQLite database defaults to `data/assistant.db`.
 
+The API serves the production frontend from `web/dist`, which is why the setup
+above runs `npm run build`. `npm run dev` uses port `4201` only for frontend
+development and does not replace the API/A2A service on port `4200`.
+
 Unified logging uses the root `config/services.json`. Set
 `SPEC2GDS_LOGGING=ON` and optionally `SPEC2GDS_LOG_LEVEL=debug` before starting
 the service to include Assistant activity in the shared log. Debug mode records
@@ -56,7 +60,7 @@ sequenceDiagram
     participant Agent as A2A agent
     participant Owner as Spec or Circuit API
 
-    User->>UI: Open entity-bound chat
+    User->>UI: Open document- or entity-bound chat
     UI->>Agent: Message + current context
     Agent->>Owner: Read semantic snapshot
     Agent-->>UI: Discussion or typed proposal
@@ -106,6 +110,7 @@ them. The reference deployment has no user authentication.
 | `ASSISTANT_HOST` | `127.0.0.1` |
 | `ASSISTANT_PORT` | `4200` |
 | `ASSISTANT_DATABASE_PATH` | `data/assistant.db` |
+| `ASSISTANT_WEB_DIST_PATH` | `web/dist` |
 | `CIRCUIT_REQUEST_TIMEOUT_SECONDS` | `30` |
 | `SPEC_REQUEST_TIMEOUT_SECONDS` | `30` |
 | `SPEC_SERVICE_ALLOWLIST` | local Spec API origins on port `8000` |

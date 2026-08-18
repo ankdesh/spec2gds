@@ -51,3 +51,9 @@ recommended route because it can bind the exact IP-XACT entity.
 The same button in Circuit Designer sends the active document ID and configured
 Circuit API URL to `/launch/circuit`; the Assistant validates the document and
 opens a new circuit-bound chat directly.
+
+The combined `scripts/serve-all.sh` launcher starts services with these
+resolved settings, but its printed links and its untracked-listener cleanup are
+limited to the tracked default ports. When using a custom registry, use that
+registry's URLs and stop any custom-port listener through its owning process if
+it is not represented by a launcher PID file.

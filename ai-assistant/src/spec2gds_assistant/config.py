@@ -1,3 +1,10 @@
+"""Resolve Assistant settings from the shared registry and environment.
+
+Treat ``config/services.json`` as the default source of cross-service
+addresses. Environment variables are deployment overrides, not a second
+independent configuration system.
+"""
+
 from __future__ import annotations
 
 import json
@@ -37,6 +44,7 @@ class Settings:
 
     @classmethod
     def from_env(cls) -> "Settings":
+        """Build one immutable settings snapshot for application startup."""
         project_root = Path(__file__).resolve().parents[2]
         config_path = _service_config_path(project_root)
         services = _service_urls(config_path)

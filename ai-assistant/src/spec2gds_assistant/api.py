@@ -1,3 +1,10 @@
+"""Expose conversation, binding, proposal-preview, and review HTTP routes.
+
+The router persists Assistant-owned conversation state but never writes a
+circuit or specification directly. Preview and apply always cross the owning
+service so its revision and domain validation remain authoritative.
+"""
+
 from __future__ import annotations
 
 import base64
@@ -17,21 +24,25 @@ from .spec_client import SpecEditorClient, SpecServiceError
 
 
 class ApiModel(BaseModel):
+    """Base request model that rejects misspelled or unsupported JSON fields."""
     model_config = ConfigDict(extra="forbid")
 
 
 class CreateThreadRequest(ApiModel):
+    """Request body for creating a user-visible conversation thread."""
     local_id: str | None = None
     title: str = "New circuit chat"
     domain: Literal["circuit", "spec"] = "circuit"
 
 
 class UpdateThreadRequest(ApiModel):
+    """Request body for changing mutable thread presentation settings."""
     title: str | None = None
     include_png: bool | None = None
 
 
 class MessageRequest(ApiModel):
+    """Request body for appending or replacing one conversation message."""
     id: str
     parent_id: str | None = None
     role: str
@@ -39,11 +50,13 @@ class MessageRequest(ApiModel):
 
 
 class CircuitBindingRequest(ApiModel):
+    """Connect an unbound thread to one Circuit Designer document."""
     base_url: str
     document_id: str
 
 
 class SpecBindingRequest(ApiModel):
+    """Connect an unbound thread to one editable Spec entity."""
     base_url: str
     document_id: str
     entity_kind: Literal[
@@ -57,21 +70,25 @@ class SpecBindingRequest(ApiModel):
 
 
 class SpecDocumentBindingRequest(ApiModel):
+    """Connect an unbound thread to a complete Spec document context."""
     base_url: str
     document_id: str
 
 
 class PreviewRequest(ApiModel):
+    """Spec proposal artifact submitted for owning-service preview."""
     proposal_id: str
     message_id: str | None = None
     artifact: dict[str, Any]
 
 
 class SubmitProposalRequest(ApiModel):
+    """Identify a stored Circuit proposal for submission."""
     proposal_id: str
 
 
 class ReviewStateRequest(ApiModel):
+    """Requested lifecycle state for an Assistant-owned review record."""
     state: Literal["draft", "invalid", "ready", "stale", "discarded", "applied"]
 
 
@@ -81,14 +98,17 @@ def create_api_router(
     circuit_client: CircuitDesignerClient,
     spec_client: SpecEditorClient | None = None,
 ) -> APIRouter:
+    """Build the Assistant REST router around injected storage and clients."""
     router = APIRouter(prefix="/api")
 
     def db() -> AssistantDatabase:
+        """Expose the injected database through FastAPI dependency resolution."""
         return database
 
     def require_thread(
         thread_id: str, repository: AssistantDatabase = Depends(db)
     ) -> dict[str, Any]:
+        """Resolve a thread or convert absence into an HTTP 404 response."""
         thread = repository.get_thread(thread_id)
         if thread is None:
             raise HTTPException(status_code=404, detail="Unknown assistant thread.")
@@ -96,6 +116,7 @@ def create_api_router(
 
     @router.get("/health")
     async def health() -> dict[str, str]:
+        """Report process health without probing downstream owner services."""
         return {"status": "ok"}
 
     @router.get("/threads")

@@ -1,3 +1,10 @@
+"""Compose the AI Assistant's FastAPI, A2A, storage, and web layers.
+
+This is the process-level composition root. Domain proposal logic lives in the
+agents, persistence routes live in :mod:`api`, and owning-editor calls live in
+the client modules.
+"""
+
 from __future__ import annotations
 
 import asyncio
@@ -43,6 +50,7 @@ from .spec_client import SpecEditorClient, SpecServiceError
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+    """Create a fully wired application without starting a network listener."""
     settings = settings or Settings.from_env()
     logger = StructuredLogger("ai-assistant", settings.logging) if settings.logging else None
     database = AssistantDatabase(settings.database_path)
@@ -71,6 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        """Initialize durable stores and close their resources on shutdown."""
         database.initialize()
         await task_store.initialize()
         if logger:

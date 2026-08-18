@@ -291,6 +291,7 @@ class NameMapping:
     rtl_name: str
 
     def as_json(self) -> dict[str, str]:
+        """Return the source-to-generated identifier mapping for reports."""
         return {
             "kind": self.kind,
             "scope": self.scope,
@@ -308,6 +309,7 @@ class ProjectDiagnostics:
 
     @property
     def messages(self) -> tuple[str, ...]:
+        """Flatten blocking errors and non-blocking warnings for availability."""
         return (*self.errors, *self.warnings)
 
 
@@ -357,6 +359,7 @@ class _DesignAnalysis:
 
 @dataclass(frozen=True)
 class _Analysis:
+    """Validated source graph consumed by the rendering-only normalization pass."""
     target: DesignIR
     root_owner: ComponentIR | None
     components: tuple[ComponentIR, ...]
@@ -408,10 +411,12 @@ class _RtlModule:
 
 
 class _IdentifierPool:
+    """Allocate legal, deterministic identifiers without cross-scope collisions."""
     def __init__(self, used: set[str] | None = None) -> None:
         self.used = set(used or ())
 
     def allocate(self, source: str, stable_key: str) -> str:
+        """Allocate a legal name with a stable hash suffix on collision."""
         base = _identifier(source)
         candidate = base
         suffix = hashlib.sha256(stable_key.encode("utf-8")).hexdigest()[:8]
@@ -424,6 +429,7 @@ class _IdentifierPool:
 
 
 class _Analyzer:
+    """Traverse reachable SpecIR and collect every blocking RTL diagnostic."""
     def __init__(self, spec: SpecAccess) -> None:
         self.spec = spec
         self.components_by_vlnv = {item.vlnv: item for item in spec.low.components}
@@ -443,6 +449,7 @@ class _Analyzer:
         }
 
     def analyze(self, target: EntityRef) -> _Analysis:
+        """Analyze the complete reachable hierarchy before any file is rendered."""
         entity = self.spec.low.resolve(target)
         if not isinstance(entity, DesignIR):
             return _Analysis(
@@ -650,6 +657,7 @@ class _Analyzer:
 
 
 class _Normalizer:
+    """Convert validated SpecIR into simple values accepted by Jinja templates."""
     def __init__(self, analysis: _Analysis) -> None:
         self.analysis = analysis
         self.mappings: list[NameMapping] = []
@@ -659,6 +667,7 @@ class _Normalizer:
         self.design_analysis = {item.design.ref.entity_id: item for item in analysis.designs}
 
     def normalize(self) -> tuple[tuple[_RtlModule, ...], str, bool]:
+        """Build rendering-only modules and select the generated top."""
         for component in self.analysis.components:
             source_name = component.vlnv.split(":")[2]
             module_name = self._allocate(

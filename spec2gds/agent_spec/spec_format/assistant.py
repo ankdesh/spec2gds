@@ -116,6 +116,7 @@ class SpecChangeProposal(pydantic.BaseModel):
 
     @pydantic.model_validator(mode="after")
     def validate_identity(self) -> "SpecChangeProposal":
+        """Require entity targets only for entity-scoped proposal envelopes."""
         if self.scope == "document":
             if self.target is not None:
                 raise ValueError("Document-scoped proposals cannot carry an entity target.")
@@ -129,6 +130,7 @@ class SpecChangeProposal(pydantic.BaseModel):
         return self
 
     def operations_digest(self) -> str:
+        """Hash canonical operations for review and persistence provenance."""
         encoded = json.dumps(
             self.operations,
             ensure_ascii=False,

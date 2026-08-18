@@ -34,6 +34,68 @@ The two editors have different source-of-truth rules:
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
 
+## Prerequisites
+
+Install these tools before setting up the repository:
+
+- Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/);
+- Node.js 24 or newer (including npm);
+- `setsid`, which the combined launcher uses to manage process groups;
+- `lsof`, which the launcher uses when stopping untracked default-port
+  listeners; and
+- GNU Make and Verilator 5.x when running the complete Python/RTL test suite.
+
+`uv` creates and manages a root `.venv` and a separate
+`ai-assistant/.venv`; do not install either project into the system Python.
+The combined `scripts/serve-all.sh` launcher targets Linux or WSL because it
+uses `setsid` and other Unix process-management commands.
+
+## Set up and run everything
+
+From a clean checkout, install both Python projects and both JavaScript
+workspaces. The Assistant service serves the built files in `web/dist`, so its
+web build is part of setup even when you plan to use only the combined
+launcher.
+
+```bash
+# Root Spec Editor, Activities, and shared Python runtime
+uv sync
+
+# Circuit service plus the Spec Editor and Circuit Designer frontends
+cd circuit-designer
+npm install
+cd ..
+
+# Optional AI Assistant API and its production web bundle
+cd ai-assistant
+uv sync
+cd web
+npm install
+npm run build
+cd ../..
+```
+
+To enable model-backed Assistant replies, export an API key before launch.
+Without it, the Spec Editor and Circuit Designer still run and the Assistant
+can open, but proposal generation reports that the key is missing.
+
+```bash
+export OPENAI_API_KEY="..."  # optional
+scripts/serve-all.sh start
+```
+
+Open the Spec Editor at <http://127.0.0.1:8000/editor>, Circuit Designer at
+<http://127.0.0.1:4180>, and the AI Assistant at
+<http://127.0.0.1:4200>. Logs and PID files are under `logs/serve-all/`.
+
+```bash
+scripts/serve-all.sh stop
+```
+
+The commands above use the tracked defaults in `config/services.json`. See
+[Service configuration](docs/service-configuration.md) before using different
+addresses or ports.
+
 ## Configure service addresses
 
 All three applications read [`config/services.json`](config/services.json).
@@ -63,7 +125,7 @@ propose new top-level components or designs (including a design's initial
 instances); use an entity's **Options → More actions… → Explore with AI
 Assistant** when a reviewed change should target an existing entity.
 
-## Run the specification editor
+## Run only the specification editor
 
 Python development uses `uv` and the repository virtual environment.
 
@@ -122,10 +184,10 @@ Designer remains wire-only: unused transactional and structured ports are
 reported as omitted, while a design that connects either family is rejected
 with a validation diagnostic.
 
-## Run all local services
+## Combined launcher details
 
-After installing the Python and Node.js dependencies described below, start the
-Spec Editor, Circuit Designer service and UI, and AI Assistant together:
+After completing [the setup above](#set-up-and-run-everything), start the Spec
+Editor, Circuit Designer service and UI, and AI Assistant together:
 
 ```bash
 scripts/serve-all.sh start
@@ -138,11 +200,11 @@ ports with:
 scripts/serve-all.sh stop
 ```
 
-The launcher uses the default ports from `config/services.json` and writes its
-PID files and per-service logs under `logs/serve-all/`. Its `stop` command also
-uses `lsof` to clean up untracked listeners on ports `8000`, `4100`, `4180`, and
-`4200`. Set `OPENAI_API_KEY` before starting if the AI Assistant should make
-OpenAI requests.
+Each service reads its address from `config/services.json`; the launcher's
+displayed URLs and untracked-listener cleanup cover the tracked default ports
+`8000`, `4100`, `4180`, and `4200`. It writes PID files and per-service logs
+under `logs/serve-all/`. Set `OPENAI_API_KEY` before starting if the AI
+Assistant should make OpenAI requests.
 
 ## Build specification Activities
 
@@ -198,7 +260,7 @@ npm run dev:editor
 Open <http://127.0.0.1:4190>. Rebuild the Python-packaged editor with
 `npm run build:editor` before committing UI changes.
 
-## Run Circuit Designer
+## Run only Circuit Designer
 
 Node.js 24 or newer is required.
 
@@ -216,21 +278,28 @@ To use **Open circuit** from the specification editor, run both services. The
 default Spec API (`8000`) and Circuit service (`4100`) already use compatible
 settings from `config/services.json`.
 
-## Optional AI Assistant
+## Run only the optional AI Assistant
 
 ```bash
 cd ai-assistant
 uv sync
-cd web && npm install && cd ..
+cd web
+npm install
+npm run build
+cd ..
 export OPENAI_API_KEY="..."
 uv run spec2gds-ai-assistant
 ```
+
+Open <http://127.0.0.1:4200>. The production service reads the frontend from
+`web/dist`, so repeat `npm run build` after changing Assistant web code.
 
 The AI Assistant is optional and does not sit on either editor's critical path.
 It checks the configured Spec and Circuit health endpoints when its workspace
 chooser opens. Circuit chats can prepare reviewed logical proposals for
 component definitions and instances, top-level ports, nets, and endpoint
-connections; Spec chats remain bound to one existing entity. See
+connections. Spec chats can be bound either to the complete document for
+top-level creation or to one existing entity for focused edits. See
 [ai-assistant/README.md](ai-assistant/README.md).
 
 ## Verify changes

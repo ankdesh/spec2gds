@@ -31,10 +31,13 @@ class ActivityTestHarness:
         revision: SpecRevision,
         target: EntityRef | None = None,
     ) -> ActivitySnapshot:
+        """Capture a test revision through the same public snapshot contract."""
         return ActivitySnapshot.create(revision, target)
 
     def invoke(self, activity_id: str, snapshot: ActivitySnapshot) -> ActivityResult:
+        """Invoke a registered Activity with the harness workspace capability."""
         return invoke_activity(self.registry, activity_id, snapshot, self.workspace)
 
     def render(self, renderer_id: str, snapshot: ActivitySnapshot) -> RenderedContext:
+        """Render snapshot context through a registered deterministic renderer."""
         return render_context(self.registry, renderer_id, snapshot)

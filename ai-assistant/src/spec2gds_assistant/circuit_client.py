@@ -1,3 +1,5 @@
+"""Validated async client for the Circuit Designer owning service."""
+
 from __future__ import annotations
 
 import ipaddress
@@ -9,6 +11,7 @@ from spec2gds_runtime import StructuredLogger
 
 
 class CircuitServiceError(RuntimeError):
+    """Carry an owning-service status code and response body to API handlers."""
     def __init__(self, status_code: int, detail: Any) -> None:
         super().__init__(f"Circuit Designer request failed with status {status_code}.")
         self.status_code = status_code
@@ -18,6 +21,7 @@ class CircuitServiceError(RuntimeError):
 def normalize_circuit_base_url(
     value: str, allowlist: tuple[str, ...] = ()
 ) -> str:
+    """Validate and canonicalize a Circuit API URL against the startup allowlist."""
     parsed = urlsplit(value.strip())
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("Circuit Designer URL must use http or https.")
@@ -42,6 +46,7 @@ def normalize_circuit_base_url(
 
 
 class CircuitDesignerClient:
+    """Read circuit context and submit proposals through the public Circuit API."""
     def __init__(
         self,
         timeout_seconds: float = 30,
@@ -53,14 +58,17 @@ class CircuitDesignerClient:
         self.logger = logger
 
     def normalize(self, base_url: str) -> str:
+        """Apply this client's configured allowlist to a caller-supplied URL."""
         return normalize_circuit_base_url(base_url, self.allowlist)
 
     async def snapshot(self, base_url: str, document_id: str) -> dict[str, Any]:
+        """Read the authoritative semantic snapshot for one circuit document."""
         return await self._json(
             "GET", self._document_url(base_url, document_id)
         )
 
     async def png(self, base_url: str, document_id: str) -> bytes:
+        """Request an optional PNG visual aid for model context."""
         response = await self._request(
             "POST",
             f"{self._document_url(base_url, document_id)}/exports",
@@ -70,6 +78,7 @@ class CircuitDesignerClient:
         return response.content
 
     async def svg(self, base_url: str, document_id: str) -> str:
+        """Request an optional SVG visual aid for model context."""
         response = await self._request(
             "POST",
             f"{self._document_url(base_url, document_id)}/exports",
@@ -81,6 +90,7 @@ class CircuitDesignerClient:
     async def preview(
         self, base_url: str, document_id: str, batch: dict[str, Any]
     ) -> dict[str, Any]:
+        """Ask Circuit Designer to validate operations without committing them."""
         return await self._json(
             "POST",
             f"{self._document_url(base_url, document_id)}/operations/preview",
@@ -90,6 +100,7 @@ class CircuitDesignerClient:
     async def submit_proposal(
         self, base_url: str, document_id: str, proposal: dict[str, Any]
     ) -> dict[str, Any]:
+        """Submit a reviewed proposal to the owning Circuit service."""
         return await self._json(
             "POST",
             f"{self._document_url(base_url, document_id)}/proposals",

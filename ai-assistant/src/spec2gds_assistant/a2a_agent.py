@@ -1,3 +1,10 @@
+"""Bridge Assistant domain agents to the A2A task and artifact protocol.
+
+Executors unpack semantic context attached by the web/API layer, report task
+progress, and publish typed proposal artifacts. They do not preview or apply
+the proposal against an owning editor.
+"""
+
 from __future__ import annotations
 
 import json
@@ -36,6 +43,7 @@ class CircuitEditingAgentExecutor(AgentExecutor):
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        """Translate one Circuit A2A message into progress and proposal events."""
         task = context.current_task
         if task is None:
             task = new_task_from_user_message(context.message)
@@ -100,6 +108,7 @@ class CircuitEditingAgentExecutor(AgentExecutor):
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        """Mark the referenced Circuit proposal task as cooperatively cancelled."""
         task_id = context.task_id
         context_id = context.context_id
         if not task_id or not context_id:
@@ -171,6 +180,7 @@ class SpecEditingAgentExecutor(AgentExecutor):
         self.agent = agent
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Translate one Spec A2A message into exploration or proposal events."""
         task = context.current_task
         if task is None:
             task = new_task_from_user_message(context.message)
@@ -221,6 +231,7 @@ class SpecEditingAgentExecutor(AgentExecutor):
             await updater.failed(new_text_message(str(reason), context_id=task.context_id, task_id=task.id))
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Mark the referenced Spec task as cooperatively cancelled."""
         if not context.task_id or not context.context_id:
             return
         updater = TaskUpdater(event_queue, context.task_id, context.context_id)
@@ -298,7 +309,9 @@ class CombinedEditingAgentExecutor(AgentExecutor):
         return self.circuit
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Delegate execution according to the semantic context attachment."""
         await self._delegate(context).execute(context, event_queue)
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
+        """Delegate cancellation to the same domain executor as execution."""
         await self._delegate(context).cancel(context, event_queue)

@@ -148,11 +148,13 @@ class _Module:
 
 
 class _NamePool:
+    """Allocate stable C++ class and header names for one generation run."""
     def __init__(self) -> None:
         self._class_names: set[str] = set()
         self._header_stems: set[str] = set()
 
     def module_names(self, *, kind: str, path: tuple[str, ...]) -> tuple[str, str]:
+        """Allocate one unique C++ class name and matching header stem."""
         raw = f"{kind}_{'_'.join(path)}"
         class_name = self._unique(_pascal(raw), raw, self._class_names)
         header_stem = self._unique(_slug(raw), raw, self._header_stems)
@@ -171,6 +173,7 @@ class _NamePool:
 
 
 class _Generator:
+    """Validate topology and build the hierarchy rendered by the templates."""
     def __init__(self, spec: SpecAccess) -> None:
         self.spec = spec
         self.components_by_vlnv = {item.vlnv: item for item in spec.low.components}
@@ -178,6 +181,7 @@ class _Generator:
         self.diagnostics: list[str] = []
 
     def validate(self, design: DesignIR) -> tuple[str, ...]:
+        """Collect all reachable topology diagnostics without publishing files."""
         self._build_design_module(
             design=design,
             owner_component=None,
@@ -189,6 +193,7 @@ class _Generator:
         return tuple(sorted(set(self.diagnostics)))
 
     def build(self, design: DesignIR) -> _Module:
+        """Build the normalized module tree after successful preflight."""
         module = self._build_design_module(
             design=design,
             owner_component=None,

@@ -35,6 +35,7 @@ class SectionDiagnostic:
         self.blocking = blocking
 
     def as_json(self) -> dict[str, object]:
+        """Serialize one diagnostic for API and document projections."""
         return {
             "code": self.code, "message": self.message, "line": self.line,
             "column": self.column, "blocking": self.blocking,
@@ -52,9 +53,11 @@ class SectionValidation:
 
     @property
     def blocking(self) -> bool:
+        """Report whether any diagnostic prevents the candidate from saving."""
         return any(item.blocking for item in self.diagnostics)
 
     def as_json(self) -> dict[str, object]:
+        """Serialize aggregate validation status and ordered diagnostics."""
         return {
             "section_id": self.section_id,
             "status": self.status,

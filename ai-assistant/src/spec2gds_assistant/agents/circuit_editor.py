@@ -1,3 +1,5 @@
+"""Generate typed, reviewable Circuit Designer proposals with OpenAI."""
+
 from __future__ import annotations
 
 from uuid import uuid4
@@ -83,6 +85,7 @@ unsupported_reason=null, and at least one operation.
 
 
 class CircuitEditingAgent:
+    """Turn deterministic circuit context and a user request into operations."""
     def __init__(
         self,
         settings: Settings,
@@ -98,6 +101,7 @@ class CircuitEditingAgent:
     async def propose(
         self, request: CircuitAgentRequest
     ) -> CircuitProposalArtifact | CircuitProposalDraft:
+        """Generate a guarded proposal artifact, or an unsupported draft."""
         processed = self.context_processor.process(request)
         client = self._client
         if client is None:

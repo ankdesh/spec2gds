@@ -190,53 +190,67 @@ class LowLevelSpecApi:
 
     @property
     def manifest(self) -> SpecManifest:
+        """Expose immutable package identity and document-entry metadata."""
         return self._revision.manifest
 
     @property
     def narrative(self) -> NarrativeDocument:
+        """Expose the immutable typed narrative document."""
         return self._revision.narrative
 
     @property
     def entity_sections(self) -> tuple[EntitySectionIR, ...]:
+        """Expose all indexed extension sections in deterministic order."""
         return self._revision.entity_sections
 
     def entity_sections_for(
         self, reference: EntityRef, section_type: str | None = None
     ) -> tuple[EntitySectionIR, ...]:
+        """Select extension sections owned by an entity and optional type."""
         return self._revision.entity_sections_for(reference, section_type)
 
     @property
     def components(self) -> tuple[ComponentIR, ...]:
+        """Expose concrete component IR values in manifest order."""
         return self._revision.components
 
     @property
     def designs(self) -> tuple[DesignIR, ...]:
+        """Expose concrete design IR values in manifest order."""
         return self._revision.designs
 
     @property
     def bus_definitions(self) -> tuple[BusDefinitionIR, ...]:
+        """Expose concrete bus-definition IR values in manifest order."""
         return self._revision.bus_definitions
 
     @property
     def abstraction_definitions(self) -> tuple[AbstractionDefinitionIR, ...]:
+        """Expose concrete abstraction-definition IR values in manifest order."""
         return self._revision.abstraction_definitions
 
     def resolve(self, reference: EntityRef) -> SemanticEntity:
+        """Resolve a stable reference to its concrete immutable IR value."""
         return self._revision.resolve(reference)
 
     def entry_designs(self) -> tuple[DesignIR, ...]:
+        """Return the designs declared as package entry points."""
         return self._revision.entry_designs()
 
     def internal_design(self, reference: ComponentIR | EntityRef) -> DesignIR | None:
+        """Return the design composing a component, when one is assigned."""
         return self._revision.internal_design(reference)
 
     def connections(self, reference: DesignIR | EntityRef) -> tuple[typing.Any, ...]:
+        """Return all typed connections owned by one design."""
         return self._revision.connections(reference)
 
     def dependencies(self, reference: ComponentIR | DesignIR | EntityRef) -> tuple[EntityRef, ...]:
+        """Return the transitive component/design dependency closure."""
         return self._revision.dependency_closure(reference)
 
     def narrative_blocks_for(self, reference: EntityRef) -> tuple[NarrativeBlock, ...]:
+        """Return narrative blocks that directly link to an entity."""
         return self._revision.narrative_blocks_for(reference)
 
 

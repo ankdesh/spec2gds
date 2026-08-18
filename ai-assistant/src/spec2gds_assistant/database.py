@@ -1,3 +1,9 @@
+"""Persist Assistant conversations and proposal reviews in local SQLite.
+
+This database owns chat metadata only. Circuit and Spec content remains in the
+owning applications and is referenced through validated binding identifiers.
+"""
+
 from __future__ import annotations
 
 import json
@@ -9,16 +15,19 @@ from uuid import uuid4
 
 
 def utc_now() -> str:
+    """Return the canonical timestamp representation stored in SQLite rows."""
     return datetime.now(UTC).isoformat()
 
 
 class AssistantDatabase:
+    """Synchronous repository for threads, messages, and review records."""
     """Small SQLite repository for assistant-ui threads and review artifacts."""
 
     def __init__(self, path: Path) -> None:
         self.path = path
 
     def initialize(self) -> None:
+        """Create the schema idempotently before the application serves traffic."""
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._connect() as connection:
             connection.executescript(
@@ -89,6 +98,7 @@ class AssistantDatabase:
             )
 
     def list_threads(self, *, include_archived: bool = True) -> list[dict[str, Any]]:
+        """Return threads newest-first, optionally excluding archived records."""
         query = "SELECT * FROM threads"
         parameters: tuple[object, ...] = ()
         if not include_archived:
@@ -106,6 +116,7 @@ class AssistantDatabase:
         title: str = "New circuit chat",
         domain: str = "circuit",
     ) -> dict[str, Any]:
+        """Create an unbound thread with a stable caller or server-generated ID."""
         if domain not in {"circuit", "spec"}:
             raise ValueError("Thread domain must be circuit or spec.")
         now = utc_now()
@@ -125,6 +136,7 @@ class AssistantDatabase:
         return self._thread(row)
 
     def get_thread(self, thread_id: str) -> dict[str, Any] | None:
+        """Return one API-ready thread mapping, or ``None`` when absent."""
         with self._connect() as connection:
             row = connection.execute(
                 "SELECT * FROM threads WHERE id = ?", (thread_id,)
@@ -139,6 +151,7 @@ class AssistantDatabase:
         status: str | None = None,
         include_png: bool | None = None,
     ) -> dict[str, Any] | None:
+        """Update supplied presentation fields and preserve all omitted values."""
         assignments: list[str] = []
         values: list[object] = []
         if title is not None:
@@ -168,6 +181,7 @@ class AssistantDatabase:
     def bind_circuit(
         self, thread_id: str, *, base_url: str, document_id: str
     ) -> dict[str, Any] | None:
+        """Permanently bind an unbound thread to one Circuit document."""
         with self._connect() as connection:
             current = connection.execute(
                 "SELECT * FROM threads WHERE id = ?", (thread_id,)
@@ -271,6 +285,7 @@ class AssistantDatabase:
         return self._thread(row) if row else None
 
     def delete_thread(self, thread_id: str) -> bool:
+        """Delete a thread; foreign-key cascades remove messages and reviews."""
         with self._connect() as connection:
             cursor = connection.execute(
                 "DELETE FROM threads WHERE id = ?", (thread_id,)
@@ -278,6 +293,7 @@ class AssistantDatabase:
         return cursor.rowcount > 0
 
     def list_messages(self, thread_id: str) -> list[dict[str, Any]]:
+        """Return one thread's messages in deterministic authored order."""
         with self._connect() as connection:
             rows = connection.execute(
                 """
@@ -298,6 +314,7 @@ class AssistantDatabase:
         role: str,
         content: object,
     ) -> dict[str, Any]:
+        """Append a message and refresh the compact conversation summary."""
         now = utc_now()
         with self._connect() as connection:
             connection.execute(
@@ -331,6 +348,7 @@ class AssistantDatabase:
     def update_message(
         self, thread_id: str, message_id: str, *, role: str, content: object
     ) -> dict[str, Any] | None:
+        """Replace message role/content and refresh summary bookkeeping."""
         with self._connect() as connection:
             connection.execute(
                 """
@@ -354,6 +372,7 @@ class AssistantDatabase:
         return self._message(row) if row else None
 
     def delete_message(self, thread_id: str, message_id: str) -> bool:
+        """Delete one owned message and refresh summary bookkeeping."""
         with self._connect() as connection:
             cursor = connection.execute(
                 "DELETE FROM messages WHERE id = ? AND thread_id = ?",
@@ -388,6 +407,7 @@ class AssistantDatabase:
         diagnostics: object | None = None,
         submitted_proposal_id: str | None = None,
     ) -> dict[str, Any]:
+        """Insert or replace the latest preview and lifecycle state of a proposal."""
         now = utc_now()
         values = (
             proposal_id,
@@ -434,6 +454,7 @@ class AssistantDatabase:
     def get_review(
         self, thread_id: str, proposal_id: str
     ) -> dict[str, Any] | None:
+        """Return one review only when it belongs to the requested thread."""
         with self._connect() as connection:
             row = connection.execute(
                 """
@@ -445,6 +466,7 @@ class AssistantDatabase:
         return self._review(row) if row else None
 
     def list_reviews(self, thread_id: str) -> list[dict[str, Any]]:
+        """Return a thread's reviews in deterministic creation order."""
         with self._connect() as connection:
             rows = connection.execute(
                 """

@@ -22,24 +22,28 @@ class ServiceEndpoint:
 
     @property
     def url(self) -> str:
+        """Render the endpoint as a normalized absolute URL."""
         path = f"/{self.base_path.strip('/')}" if self.base_path.strip("/") else ""
         return f"{self.scheme}://{self.host}:{self.port}{path}"
 
 
 @dataclass(frozen=True, slots=True)
 class HostedService:
+    """Pair a machine-facing API endpoint with its browser-facing UI."""
     service: ServiceEndpoint
     ui: ServiceEndpoint
 
 
 @dataclass(frozen=True, slots=True)
 class ServiceRegistry:
+    """Validated addresses and logging policy shared by every application."""
     spec_editor: HostedService
     circuit_designer: HostedService
     ai_assistant: HostedService
     logging: LogSettings
 
     def public_dict(self) -> dict[str, dict[str, str]]:
+        """Return the safe URL-only directory exposed to browser clients."""
         return {
             name: {"service_url": value.service.url, "ui_url": value.ui.url}
             for name, value in (

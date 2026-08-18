@@ -1,3 +1,5 @@
+"""Start the AI Assistant HTTP, A2A, and static-web application."""
+
 from __future__ import annotations
 
 import uvicorn
@@ -7,6 +9,7 @@ from .config import Settings
 
 
 def main() -> None:
+    """Load environment-backed settings and run the Uvicorn server."""
     settings = Settings.from_env()
     logger = StructuredLogger("ai-assistant", settings.logging) if settings.logging else None
     if logger:

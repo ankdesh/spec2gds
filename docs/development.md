@@ -26,6 +26,9 @@ startup. Use `SPEC2GDS_SERVICE_CONFIG=/absolute/path/services.json` for an
 untracked machine-specific registry.
 
 Use `uv`; do not install project packages into the system interpreter.
+Running `uv sync` creates the repository-local `.venv`. The AI Assistant is a
+separate Python project and creates `ai-assistant/.venv` when synchronized from
+that directory.
 
 The deterministic RTL Activity tests also require GNU Make and Verilator 5.x
 on `PATH`. This is a required external toolchain check, not an optional test.
@@ -103,20 +106,41 @@ npm run build
 
 ## Combined local launcher
 
-Once the root, Circuit Designer, and AI Assistant dependencies are installed,
-run all three development services with their default settings from the
-repository root:
+For a first-time setup from the repository root, install every runtime and
+build the static Assistant frontend:
+
+```bash
+uv sync
+
+cd circuit-designer
+npm install
+cd ..
+
+cd ai-assistant
+uv sync
+cd web
+npm install
+npm run build
+cd ../..
+```
+
+Then run all three services with their default settings from the repository
+root:
 
 ```bash
 scripts/serve-all.sh start
 scripts/serve-all.sh stop
 ```
 
-The script tracks process groups with PID files in `logs/serve-all/`. Each
+Set `OPENAI_API_KEY` before `start` to enable Assistant proposal generation; it
+is not required for the other two applications. The script tracks process
+groups with PID files in `logs/serve-all/`. Each
 service writes to a separate log in the same directory. The `stop` command also
 uses `lsof` to terminate untracked listeners on the default service ports
-`8000`, `4100`, `4180`, and `4200`. The script deliberately does not install
-dependencies or own the longer-term service monitoring mechanism.
+`8000`, `4100`, `4180`, and `4200`. Services read their bind configuration from
+`config/services.json`, while the displayed URLs and cleanup list describe the
+tracked defaults. The script deliberately does not install dependencies or own
+the longer-term service monitoring mechanism.
 
 ## Change rules
 

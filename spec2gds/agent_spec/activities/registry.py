@@ -46,6 +46,7 @@ class SpecExtensionRegistry:
 
     @property
     def diagnostics(self) -> tuple[ExtensionDiagnostic, ...]:
+        """Return immutable plugin-load failures without hiding valid plugins."""
         return tuple(self._diagnostics)
 
     def register_activity(self, extension: Activity) -> None:
@@ -65,22 +66,27 @@ class SpecExtensionRegistry:
         self._renderers[definition.renderer_id] = extension
 
     def activity(self, activity_id: str) -> Activity:
+        """Resolve one registered Activity or raise a descriptive key error."""
         if activity_id not in self._activities:
             raise KeyError(f"Unknown Activity: {activity_id}")
         return self._activities[activity_id]
 
     def context_renderer(self, renderer_id: str) -> ContextRenderer:
+        """Resolve one registered Context Renderer by its stable identifier."""
         if renderer_id not in self._renderers:
             raise KeyError(f"Unknown Context Renderer: {renderer_id}")
         return self._renderers[renderer_id]
 
     def activities(self) -> tuple[ActivityDefinition, ...]:
+        """Return Activity catalog metadata sorted by identifier."""
         return tuple(self._activities[key].definition for key in sorted(self._activities))
 
     def context_renderers(self) -> tuple[typing.Any, ...]:
+        """Return renderer catalog metadata sorted by identifier."""
         return tuple(self._renderers[key].definition for key in sorted(self._renderers))
 
     def add_diagnostic(self, import_path: str, reason: BaseException) -> None:
+        """Record one isolated extension-loading failure for host display."""
         self._diagnostics.append(
             ExtensionDiagnostic(import_path=import_path, message=f"{type(reason).__name__}: {reason}")
         )
@@ -116,12 +122,14 @@ class FunctionActivity(BaseActivity):
     availability_function: AvailabilityFunction | None = None
 
     def availability(self, context: ActivitySelectionContext) -> ActivityAvailability:
+        """Combine the base scope check with the decorated custom preflight."""
         base = super().availability(context)
         if not base.available or self.availability_function is None:
             return base
         return self.availability_function(context)
 
     def run(self, context: ActivityContext) -> ActivityResult:
+        """Delegate execution to the decorated Activity function."""
         return self.function(context)
 
 
