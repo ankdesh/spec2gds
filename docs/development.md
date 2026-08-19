@@ -137,7 +137,7 @@ is not required for the other two applications. The script tracks process
 groups with PID files in `logs/serve-all/`. Each
 service writes to a separate log in the same directory. The `stop` command also
 uses `lsof` to terminate untracked listeners on the default service ports
-`8000`, `4100`, `4180`, and `4200`. Services read their bind configuration from
+`6010` through `6014`. Services read their bind configuration from
 `config/services.json`, while the displayed URLs and cleanup list describe the
 tracked defaults. The script deliberately does not install dependencies or own
 the longer-term service monitoring mechanism.

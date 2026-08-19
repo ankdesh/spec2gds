@@ -280,6 +280,7 @@ const batch = {
 };
 
 type ApiState = {
+  activityExecutions: Array<Record<string, unknown>>;
   circuits: Array<{ entity_kind: string; entity_id: string }>;
   createdPaths: string[];
   createdTitles: string[];
@@ -291,6 +292,7 @@ type ApiState = {
 
 async function mockEditorApi(page: Page): Promise<ApiState> {
   const state: ApiState = {
+    activityExecutions: [],
     circuits: [],
     createdPaths: [],
     createdTitles: [],
@@ -308,9 +310,9 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
       return json({
         schema_version: 2,
         services: {
-          spec_editor: { service_url: "http://127.0.0.1:8000", ui_url: "http://127.0.0.1:8000/editor" },
-          circuit_designer: { service_url: "http://127.0.0.1:4100/api/circuit-designer/v1", ui_url: "http://127.0.0.1:4180" },
-          ai_assistant: { service_url: "http://127.0.0.1:4200", ui_url: "http://127.0.0.1:4200" },
+          spec_editor: { service_url: "http://127.0.0.1:6010", ui_url: "http://127.0.0.1:6010/editor" },
+          circuit_designer: { service_url: "http://127.0.0.1:6011/api/circuit-designer/v1", ui_url: "http://127.0.0.1:6012" },
+          ai_assistant: { service_url: "http://127.0.0.1:6013", ui_url: "http://127.0.0.1:6013" },
         },
         logging: { enabled: false, level: "info" },
       });
@@ -346,13 +348,13 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
       state.currentRevision = `sha256:edited-${state.transactions.length}`;
       return json({ committed: true, snapshot: { ...snapshot, source_revision_hash: state.currentRevision } });
     }
-    if (path === "/executions") return json({ executions: [] });
+    if (path === "/executions") return json({ executions: state.activityExecutions });
     if (path === "/artifacts") return json({ artifacts: [] });
     if (path === "/proposals") return json({ proposals: [] });
     if (path === "/assistant/changes") return json({ assistant_changes: [] });
     if (path === "/assistant/launch/document") {
       return json({
-        assistant_url: "http://127.0.0.1:4200/launch/spec-document?document_id=editor_test",
+        assistant_url: "http://127.0.0.1:6013/launch/spec-document?document_id=editor_test",
         document_id: documentId,
         source_revision_hash: state.currentRevision,
         scope: "document",
@@ -365,23 +367,50 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
         document_id: "circuit-test",
         entity_id: body.entity_id,
         entity_kind: body.entity_kind,
-        editor_url: "http://127.0.0.1:4180/?document_id=circuit-test",
+        editor_url: "http://127.0.0.1:6012/?document_id=circuit-test",
         reused_session: false,
         omitted_bus_items: [],
         omitted_ports: [],
       });
     }
-    if (/^\/entities\/[^/]+\/[^/]+\/actions$/.test(path)) {
-      return json({
-        actions: [{
-          action_id: "reference.snapshot_summary",
-          title: "Snapshot summary",
-          version: "1.0",
-          produced_artifact_roles: ["summary"],
-        }],
-      });
+    if (/^\/entities\/[^/]+\/[^/]+\/activities$/.test(path)) {
+      return json({ activities: [{
+        definition: {
+          activity_id: "rtl.generate",
+          version: "1.1.0",
+          title: "Generate RTL",
+          description: "Generate deterministic structural SystemVerilog modules and direct wiring.",
+          requires_workspace_output: true,
+          artifact_roles: ["rtl.generation_report"],
+        },
+        availability: { available: true, diagnostics: ["Warning: dut.clk is unconnected."] },
+      }] });
     }
-    if (path === "/events") {
+    if (/^\/entities\/[^/]+\/[^/]+\/activities\/rtl.generate\/executions$/.test(path)) {
+      const execution = {
+        execution_type: "activity",
+        execution_id: "activity_execution_test",
+        activity_id: "rtl.generate",
+        activity_version: "1.1.0",
+        status: "queued",
+        cancel_requested: false,
+        report: {},
+        diagnostics: [],
+      };
+      state.activityExecutions.push(execution);
+      return json(execution);
+    }
+    if (/^\/executions\/[^/]+\/cancel$/.test(path)) {
+      state.activityExecutions = state.activityExecutions.map((item) => ({
+        ...item,
+        cancel_requested: true,
+      }));
+      return json(state.activityExecutions[0]);
+    }
+    if (/^\/entities\/[^/]+\/[^/]+\/actions$/.test(path)) {
+      return json({ actions: [] });
+    }
+    if (path === "/events" || path === "/activity-events") {
       return route.fulfill({
         body: "",
         contentType: "text/event-stream",
@@ -454,7 +483,7 @@ test("opens the configured AI Assistant from the top bar", async ({ page }) => {
   await page.getByRole("button", { name: /AI Assistant/ }).click();
   await expect.poll(() => page.evaluate(
     () => (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl,
-  )).toBe("http://127.0.0.1:4200/launch/spec-document?document_id=editor_test");
+  )).toBe("http://127.0.0.1:6013/launch/spec-document?document_id=editor_test");
 });
 
 test("supports keyboard menu navigation and restores trigger focus", async ({ page }) => {
@@ -556,7 +585,7 @@ test("adds an available top-level component instance to the entry design", async
 });
 
 test("keeps Edit state-aware and provides working Copy and Select All", async ({ context, page }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:4190" });
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:6015" });
   await mockEditorApi(page);
   await openSample(page);
 
@@ -582,7 +611,7 @@ test("keeps Edit state-aware and provides working Copy and Select All", async ({
   await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() ?? "")).toContain("Processor");
 });
 
-test("launches grouped and section circuits while preserving entity actions", async ({ page }) => {
+test("launches circuits and queues a compatible design Activity", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
 
@@ -597,11 +626,21 @@ test("launches grouped and section circuits while preserving entity actions", as
   await expect(overview.getByText("Document ID", { exact: true })).toHaveCount(0);
   await expect(overview.getByText("Source revision", { exact: true })).toHaveCount(0);
   await overview.getByRole("button", { name: "Options" }).click();
-  await expect(overview.getByRole("menuitem", { name: /Launch activity Coming soon/ })).toBeDisabled();
+  await expect(overview.getByRole("menuitem", { name: /Launch activity/ })).toHaveCount(0);
   await expect(overview.getByRole("menuitem", { name: "Open circuit" })).toHaveCount(0);
   await expect(overview.getByRole("menuitem", { name: /More actions/ })).toHaveCount(0);
 
   const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("menuitem", { name: "Launch activity…" }).click();
+  const activityDialog = page.getByRole("dialog", { name: "Launch activity" });
+  await expect(activityDialog.getByText("Generate RTL", { exact: true })).toBeVisible();
+  await expect(activityDialog.getByText(/dut.clk is unconnected/)).toBeVisible();
+  await activityDialog.getByRole("button", { name: "Run" }).click();
+  await expect.poll(() => state.activityExecutions.length).toBe(1);
+  await expect(page.getByText("rtl.generate", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+
   await design.getByRole("button", { name: "Options" }).click();
   await design.getByRole("menuitem", { name: /More actions/ }).click();
   const actionDialog = page.getByRole("dialog", { name: /Actions for design_top/ });

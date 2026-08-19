@@ -66,7 +66,7 @@ class FakeSpecClient:
         self.apply_error: SpecServiceError | None = None
 
     def normalize(self, value: str) -> str:
-        if value != "http://127.0.0.1:8000":
+        if value != "http://127.0.0.1:6010":
             raise ValueError("not allowlisted")
         return value
 
@@ -152,7 +152,7 @@ def test_review_then_send_flow(
     connected = client.put(
         f"/api/threads/{thread['id']}/circuit",
         json={
-            "base_url": "http://127.0.0.1:4100/api/circuit-designer/v1",
+            "base_url": "http://127.0.0.1:6011/api/circuit-designer/v1",
             "document_id": "fixture_simple",
         },
     )
@@ -210,12 +210,12 @@ def test_review_then_send_flow(
 
 def test_circuit_services_require_loopback_or_explicit_configuration() -> None:
     assert normalize_circuit_base_url(
-        "http://localhost:4100/api/circuit-designer/v1/"
-    ) == "http://localhost:4100/api/circuit-designer/v1"
+        "http://localhost:6011/api/circuit-designer/v1/"
+    ) == "http://localhost:6011/api/circuit-designer/v1"
     for value in (
-        "https://localhost:4100/api/circuit-designer/v1",
+        "https://localhost:6011/api/circuit-designer/v1",
         "http://example.com/api/circuit-designer/v1",
-        "http://127.0.0.1:4100/wrong",
+        "http://127.0.0.1:6011/wrong",
     ):
         try:
             normalize_circuit_base_url(value)
@@ -223,22 +223,22 @@ def test_circuit_services_require_loopback_or_explicit_configuration() -> None:
             pass
         else:
             raise AssertionError(f"Expected URL to be rejected: {value}")
-    remote = "http://192.0.2.10:4100/api/circuit-designer/v1"
+    remote = "http://192.0.2.10:6011/api/circuit-designer/v1"
     assert normalize_circuit_base_url(remote, (remote,)) == remote
 
 
 def test_spec_service_must_be_allowlisted() -> None:
-    allowlist = ("http://127.0.0.1:8000",)
-    assert normalize_spec_base_url("http://127.0.0.1:8000/", allowlist) == allowlist[0]
+    allowlist = ("http://127.0.0.1:6010",)
+    assert normalize_spec_base_url("http://127.0.0.1:6010/", allowlist) == allowlist[0]
     for value in (
-        "http://localhost:8000",
-        "https://127.0.0.1:8000",
-        "http://example.com:8000",
-        "http://127.0.0.1:8000/arbitrary-path",
+        "http://localhost:6010",
+        "https://127.0.0.1:6010",
+        "http://example.com:6010",
+        "http://127.0.0.1:6010/arbitrary-path",
     ):
         with pytest.raises(ValueError):
             normalize_spec_base_url(value, allowlist)
-    remote = "http://192.0.2.10:8000"
+    remote = "http://192.0.2.10:6010"
     assert normalize_spec_base_url(remote, (remote,)) == remote
 
 
@@ -259,7 +259,7 @@ def test_spec_launch_preview_and_immediate_apply_flow(
     )
     client = TestClient(app)
     launch_body = {
-        "base_url": "http://127.0.0.1:8000",
+        "base_url": "http://127.0.0.1:6010",
         "document_id": "spec_demo",
         "entity_kind": "component",
         "entity_id": "component_leaf",
@@ -335,7 +335,7 @@ def test_document_spec_launch_previews_and_applies_top_level_creation(
     response = client.post(
         "/api/spec/document/launch",
         json={
-            "base_url": "http://127.0.0.1:8000",
+            "base_url": "http://127.0.0.1:6010",
             "document_id": "spec_demo",
         },
     )
@@ -413,7 +413,7 @@ def test_failed_spec_apply_disables_further_approval(
     thread = client.post(
         "/api/spec/launch",
         json={
-            "base_url": "http://127.0.0.1:8000",
+            "base_url": "http://127.0.0.1:6010",
             "document_id": "spec_demo",
             "entity_kind": "component",
             "entity_id": "component_leaf",

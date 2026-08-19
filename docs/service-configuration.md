@@ -4,13 +4,21 @@ The three applications share the tracked registry at
 [`config/services.json`](../config/services.json). It is the single default
 source for bind addresses, API base paths, and browser UI locations.
 
+`public_host` controls the hostname or IP address advertised to browsers.
+`"auto"` selects the machine's preferred LAN IPv4 address; set
+`SPEC2GDS_PUBLIC_HOST` to a resolvable hostname or explicit address when a WSL,
+VPN, container, or multi-interface host needs a different value. Endpoint
+`host` values are bind addresses and default to `0.0.0.0`.
+
 Each application has a `service` endpoint and a `ui` endpoint. Spec Editor and
 AI Assistant serve their UI from the same listener as their API. Circuit
-Designer uses two listeners: its REST service defaults to port `4100` and its
-Vite UI defaults to port `4180`.
+Designer uses two listeners: its REST service defaults to port `6011` and its
+Vite UI defaults to port `6012`.
 
-The schema also contains the unified logging policy and the loopback-only Log
-Viewer address. Logging has only two environment overrides:
+The default allocation is Spec Editor `6010`, Circuit API `6011`, Circuit UI
+`6012`, AI Assistant `6013`, and Log Viewer `6014`. Development-only Vite UIs
+use `6015` and `6016`. The schema also contains the unified logging policy.
+Logging has only two environment overrides:
 
 - `SPEC2GDS_LOGGING=ON|OFF`
 - `SPEC2GDS_LOG_LEVEL=info|debug`
@@ -18,6 +26,33 @@ Viewer address. Logging has only two environment overrides:
 The file path, maximum size, and viewer port are configuration-file-only. The
 single active file retains its newest complete entries when it reaches the
 limit; the logger does not create backup files.
+
+## Activity host
+
+The `activities` object configures the Spec Editor's background Activity host:
+
+```json
+{
+  "activities": {
+    "workspace_root": "../generated",
+    "extension_modules": []
+  }
+}
+```
+
+`workspace_root` is resolved relative to the configuration file. Generated RTL
+and SystemC projects are published below this root. The host also owns
+`.spec2gds/activity-jobs.sqlite3` and `.spec2gds/snapshots/` there; keep those
+files when restarting the service so queued and interrupted jobs can resume.
+Only one Activity executes at a time to serialize generators that may own the
+same output directory.
+
+`extension_modules` is an explicit list of `module:callable` registrations.
+Each callable receives the product Activity registry. Import and registration
+failures appear in `GET /activities` and in the Spec Editor launch dialog; they
+do not prevent the built-in `rtl.generate` and
+`systemc.generate_at_skeleton` Activities from loading. A service restart is
+required after changing either setting.
 
 Edit the complete JSON file when an address changes. A service restart is
 required afterward. Frontend development servers also read the file when they
@@ -31,6 +66,10 @@ Existing per-service environment variables remain higher-priority overrides:
   `CIRCUIT_DESIGNER_SERVICE_URL`, and `CIRCUIT_DESIGNER_UI_URL`
 - `ASSISTANT_HOST`, `ASSISTANT_PORT`, and `AI_ASSISTANT_URL`
 
+`SPEC2GDS_PUBLIC_HOST` is the shared advertised-host override. Bind overrides
+and URL overrides remain separate so a wildcard listener is never emitted as a
+browser destination.
+
 The Assistant derives its Spec and Circuit allowlists from the resolved
 registry. `SPEC_SERVICE_ALLOWLIST` and `CIRCUIT_SERVICE_ALLOWLIST` can further
 override those values. This permits a configured LAN IP while still rejecting
@@ -39,6 +78,8 @@ an arbitrary URL supplied by a browser request.
 ## Discovery and direct launch
 
 - Spec Editor exposes `GET /services`.
+- Spec Editor exposes `GET /activities`, entity-scoped availability endpoints,
+  durable execution endpoints, and `GET /activity-events` for live status.
 - Circuit Designer exposes `GET /api/circuit-designer/v1/services` and
   `/health`.
 - AI Assistant exposes `GET /api/services`, probes both owning services, and
@@ -57,3 +98,6 @@ resolved settings, but its printed links and its untracked-listener cleanup are
 limited to the tracked default ports. When using a custom registry, use that
 registry's URLs and stop any custom-port listener through its owning process if
 it is not represented by a launcher PID file.
+
+For LAN use, allow the selected ports through the server's host firewall and
+open the advertised URLs from the other systems.

@@ -1,7 +1,9 @@
 """V1.4 API/editor acceptance checks for the current deterministic format."""
 
 import inspect
+import json
 import tempfile
+import time
 import zipfile
 from pathlib import Path
 
@@ -13,12 +15,11 @@ from spec2gds.agent_spec.spec_format.cli import main as package_cli
 from spec2gds.agent_spec.spec_format.models import EntityRef
 from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
 from spec2gds.agent_spec.spec_format.v1_api import (
-    ActionInputRequest,
+    ActivityExecutionRequest,
     AssistantLaunchRequest,
     CircuitLaunchRequest,
     CreateDocumentRequest,
     OpenDocumentRequest,
-    ProposalRequest,
     TransactionRequest,
     create_app,
 )
@@ -34,7 +35,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     endpoints = _endpoints()
     assert "samples" not in endpoints
     services = endpoints["services"]()
-    assert services["services"]["ai_assistant"]["ui_url"] == "http://127.0.0.1:4200"
+    assert services["services"]["ai_assistant"]["ui_url"].endswith(":6013")
     assert services["services"]["circuit_designer"]["service_url"].endswith(
         "/api/circuit-designer/v1"
     )
@@ -85,27 +86,15 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         assert a2ui["source_revision_hash"] == snapshot["source_revision_hash"]
 
         design_id = snapshot["entry_designs"][0]["ref"]["entity_id"]
-        action = endpoints["action_execution"]("design", design_id, "reference.snapshot_summary", ActionInputRequest())
-        assert action["status"] == "succeeded"
-        artifact = endpoints["artifacts"]()["artifacts"][0]
-        assert endpoints["artifact_lineage"](artifact["artifact_id"])["lineage"][0]["artifact_id"] == artifact["artifact_id"]
-
-        proposal_execution = endpoints["action_execution"]("design", design_id, "reference.narrative_proposal", ActionInputRequest())
-        assert proposal_execution["status"] == "succeeded"
-        proposal = endpoints["proposals"]()["proposals"][0]
-        preview = endpoints["preview_proposal"](
-            proposal["proposal_id"], ProposalRequest(expected_source_revision_hash=snapshot["source_revision_hash"])
-        )
-        assert preview["valid"]
-        accepted = endpoints["accept_proposal"](
-            proposal["proposal_id"], ProposalRequest(expected_source_revision_hash=snapshot["source_revision_hash"])
-        )
-        assert accepted["committed"]
-        assert accepted["snapshot"]["source_revision_hash"] != snapshot["source_revision_hash"]
+        assert endpoints["entity_actions"]("design", design_id)["actions"] == []
+        catalog_ids = {item["activity_id"] for item in endpoints["activities"]()["activities"]}
+        assert catalog_ids == {"rtl.generate", "systemc.generate_at_skeleton"}
+        available = endpoints["entity_activities"]("design", design_id)["activities"]
+        assert {item["definition"]["activity_id"] for item in available} == catalog_ids
 
         reopened = endpoints["open_document"](OpenDocumentRequest(path=str(path)))
         assert len(reopened["entry_designs"]) == 2
-        assert len(endpoints["executions"]()["executions"]) == 2
+        assert endpoints["executions"]()["executions"] == []
         assert package_cli(["validate", "--container", str(path)]) == 0
 
 
@@ -130,6 +119,98 @@ def test_v1_api_rejects_stale_edits_and_unsupported_packages() -> None:
         assert rejected.value.status_code == 422
         assert "Unsupported package mimetype" in str(rejected.value.detail)
         assert opened["source_revision_hash"]
+
+
+def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) -> None:
+    """Run the product RTL Activity through the durable HTTP host contract."""
+    config_path = Path(__file__).parents[3] / "config" / "services.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["public_host"] = "127.0.0.1"
+    config["activities"]["workspace_root"] = str(tmp_path / "generated")
+    local_config = tmp_path / "services.json"
+    local_config.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.setenv("SPEC2GDS_SERVICE_CONFIG", str(local_config))
+
+    app = create_app()
+    endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    path = tmp_path / "activity.spec"
+    created = endpoints["create_document"](CreateDocumentRequest(
+        path=str(path),
+        document_id="activity_api",
+        title="Activity API",
+    ))
+    created = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=created["source_revision_hash"],
+        operations=[
+            {"type": "create_entity", "kind": "component", "name": "leaf"},
+            {"type": "create_entity", "kind": "design", "name": "top"},
+        ],
+    ))["snapshot"]
+    created = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=created["source_revision_hash"],
+        operations=[{
+            "type": "upsert_instance",
+            "design": created["designs"][0]["ref"],
+            "instance": {"name": "dut", "component_vlnv": created["components"][0]["vlnv"]},
+        }],
+    ))["snapshot"]
+    target = created["entry_designs"][0]["ref"]
+    available = endpoints["entity_activities"]("design", target["entity_id"])["activities"]
+    rtl = next(item for item in available if item["definition"]["activity_id"] == "rtl.generate")
+    assert rtl["availability"]["available"]
+
+    with pytest.raises(fastapi.HTTPException) as stale:
+        endpoints["launch_activity"](
+            "design",
+            target["entity_id"],
+            "rtl.generate",
+            ActivityExecutionRequest(expected_source_revision_hash="sha256:" + "0" * 64),
+        )
+    assert stale.value.status_code == 409
+
+    execution = endpoints["launch_activity"](
+        "design",
+        target["entity_id"],
+        "rtl.generate",
+        ActivityExecutionRequest(expected_source_revision_hash=created["source_revision_hash"]),
+    )
+    for _ in range(100):
+        execution = endpoints["execution"](execution["execution_id"])
+        if execution["status"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.02)
+    assert execution["status"] == "succeeded", execution
+    assert Path(execution["workspace_output_path"]).is_dir()
+    assert execution["artifact_ids"]
+    assert endpoints["artifacts"]()["artifacts"][0]["producer_action_id"] == "rtl.generate"
+
+    endpoints["open_document"](OpenDocumentRequest(path=str(path)))
+    persisted = endpoints["executions"]()["executions"]
+    assert any(item["execution_id"] == execution["execution_id"] for item in persisted)
+    app.state.activity_jobs.close()
+
+
+def test_v1_api_reports_extension_load_diagnostics(tmp_path: Path, monkeypatch) -> None:
+    config_path = Path(__file__).parents[3] / "config" / "services.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["activities"]["workspace_root"] = str(tmp_path / "generated")
+    config["activities"]["extension_modules"] = ["missing_activity_plugin:register"]
+    local_config = tmp_path / "services.json"
+    local_config.write_text(json.dumps(config), encoding="utf-8")
+    monkeypatch.setenv("SPEC2GDS_SERVICE_CONFIG", str(local_config))
+
+    app = create_app()
+    endpoints = {
+        route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")
+    }
+    catalog = endpoints["activities"]()
+    assert {item["activity_id"] for item in catalog["activities"]} == {
+        "rtl.generate",
+        "systemc.generate_at_skeleton",
+    }
+    assert len(catalog["diagnostics"]) == 1
+    assert "missing_activity_plugin" in str(catalog["diagnostics"][0])
+    app.state.activity_jobs.close()
 
 
 def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_path: Path) -> None:
@@ -326,7 +407,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
         published.append(document)
         return type("Launch", (), {
             "document_id": document["document_id"],
-            "editor_url": f"http://127.0.0.1:4180?document_id={document['document_id']}",
+            "editor_url": f"http://127.0.0.1:6012?document_id={document['document_id']}",
             "reused_session": False,
         })()
 
@@ -338,7 +419,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
 
     assert result["entity_id"] == "design_subsystem_internal"
     assert result["entity_kind"] == "design"
-    assert result["editor_url"].startswith("http://127.0.0.1:4180?document_id=")
+    assert result["editor_url"].startswith("http://127.0.0.1:6012?document_id=")
     assert result["omitted_bus_items"] == ["link0"]
     assert result["omitted_ports"] == []
     assert published[0]["protocol_version"] == "circuit-designer.v1"
@@ -410,6 +491,7 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
 
     calls: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **options: calls.append((app, options)))
+    monkeypatch.setenv("SPEC2GDS_PUBLIC_HOST", "design-host.test")
 
     production_entry.server_main(["--host", "0.0.0.0", "--port", "8080", "--reload"])
     production_entry.editor_main(["--port", "8765"])
@@ -421,12 +503,12 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
         ),
         (
             "spec2gds.agent_spec.spec_format.v1_api:create_app",
-                {"factory": True, "host": "127.0.0.1", "port": 8765, "reload": False, "access_log": False},
+                {"factory": True, "host": "0.0.0.0", "port": 8765, "reload": False, "access_log": False},
         ),
     ]
     output = capsys.readouterr().out
-    assert "spec2gds server: http://0.0.0.0:8080" in output
-    assert "spec2gds editor: http://127.0.0.1:8765/editor" in output
+    assert "spec2gds server: http://design-host.test:8080" in output
+    assert "spec2gds editor: http://design-host.test:8765/editor" in output
 
 
 def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path) -> None:

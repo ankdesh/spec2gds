@@ -9,7 +9,9 @@ const logger = new StructuredLogger("circuit-designer", loadObservabilityConfig(
 const service = new CircuitDesignerService({ serviceDirectory: resolvedServiceDirectory(), logger });
 logger.event({ component: "process", event: "starting", message: "Starting Circuit Designer service", details: { host, port } });
 await service.listen(port, host);
-console.log(`Circuit Designer v1 listening on http://${host}:${port}/api/circuit-designer/v1 (ephemeral memory)`);
+console.log(
+  `Circuit Designer v1 listening on ${resolvedServiceDirectory().services.circuit_designer.service_url} (ephemeral memory)`,
+);
 
 const shutdown = async (): Promise<void> => {
   logger.event({ component: "process", event: "stopping", message: "Stopping Circuit Designer service" });

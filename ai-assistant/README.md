@@ -20,8 +20,8 @@ export OPENAI_API_KEY="..."
 uv run spec2gds-ai-assistant
 ```
 
-Open <http://127.0.0.1:4200>. For frontend development, run `npm run dev` in
-`web/` and open <http://127.0.0.1:4201>.
+Open `http://SERVER_IP:6013`. For frontend development, run `npm run dev` in
+`web/` and open `http://SERVER_IP:6016`.
 
 The default hosted addresses come from `../config/services.json`. On opening
 an unbound chat, the Assistant probes the configured Spec and Circuit health
@@ -42,8 +42,8 @@ The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
 SQLite database defaults to `data/assistant.db`.
 
 The API serves the production frontend from `web/dist`, which is why the setup
-above runs `npm run build`. `npm run dev` uses port `4201` only for frontend
-development and does not replace the API/A2A service on port `4200`.
+above runs `npm run build`. `npm run dev` uses port `6016` only for frontend
+development and does not replace the API/A2A service on port `6013`.
 
 Unified logging uses the root `config/services.json`. Set
 `SPEC2GDS_LOGGING=ON` and optionally `SPEC2GDS_LOG_LEVEL=debug` before starting
@@ -107,15 +107,16 @@ them. The reference deployment has no user authentication.
 | Variable | Default |
 | --- | --- |
 | `OPENAI_MODEL` | `gpt-4o-mini` |
-| `ASSISTANT_HOST` | `127.0.0.1` |
-| `ASSISTANT_PORT` | `4200` |
+| `ASSISTANT_HOST` | `0.0.0.0` |
+| `ASSISTANT_PORT` | `6013` |
 | `ASSISTANT_DATABASE_PATH` | `data/assistant.db` |
 | `ASSISTANT_WEB_DIST_PATH` | `web/dist` |
 | `CIRCUIT_REQUEST_TIMEOUT_SECONDS` | `30` |
 | `SPEC_REQUEST_TIMEOUT_SECONDS` | `30` |
-| `SPEC_SERVICE_ALLOWLIST` | local Spec API origins on port `8000` |
+| `SPEC_SERVICE_ALLOWLIST` | configured public Spec API origin on port `6010` |
 | `CIRCUIT_SERVICE_ALLOWLIST` | configured Circuit API base URL |
 | `SPEC2GDS_SERVICE_CONFIG` | `../config/services.json` |
+| `SPEC2GDS_PUBLIC_HOST` | automatically detected LAN IPv4 address |
 
 ## Verify
 

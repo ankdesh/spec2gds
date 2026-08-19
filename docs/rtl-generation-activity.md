@@ -56,6 +56,27 @@ Names are based on IP-XACT names. Invalid characters and SystemVerilog keywords
 are normalized, collisions receive a stable hash suffix, and the complete name
 map is stored in both the report and ownership manifest.
 
+## Invoke from Spec Editor
+
+Open the target design in Spec Editor and choose **Options → More actions… →
+Launch activity…**. Select **Generate SystemVerilog RTL** and press **Run**.
+Preflight diagnostics remain visible in the dialog; unsupported designs cannot
+be queued, while unconnected instance ports are warnings and do not block the
+run.
+
+After enqueue, the editor opens the **Activity** tab. It restores active and
+completed jobs after refresh, receives live state changes, and offers
+**Cancel** while a job is queued or running. A completed report shows the top
+module, generated file count, warnings, originating source revision, and the
+absolute server output path. Run `make lint` from that path separately;
+`rtl.generate` performs generation only.
+
+The run always uses the immutable source snapshot created at enqueue time.
+Later editor changes do not alter it. On restart, queued jobs remain queued and
+interrupted running jobs are requeued from that snapshot. Terminal reports and
+artifacts are stored in the `.spec` package's Activity metadata without
+changing its source revision hash.
+
 ## Invoke from Python
 
 ```python

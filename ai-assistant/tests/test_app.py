@@ -37,7 +37,7 @@ def test_service_directory_reports_configured_health(
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",
@@ -68,7 +68,7 @@ def test_circuit_launch_creates_a_bound_chat(
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",
@@ -81,7 +81,7 @@ def test_circuit_launch_creates_a_bound_chat(
         response = client.get(
             "/launch/circuit",
             params={
-                "service_base_url": "http://127.0.0.1:4100/api/circuit-designer/v1",
+                "service_base_url": "http://127.0.0.1:6011/api/circuit-designer/v1",
                 "document_id": "demo",
             },
             follow_redirects=False,
@@ -113,7 +113,7 @@ def test_spec_document_launch_creates_a_read_only_bound_chat(
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",
@@ -126,7 +126,7 @@ def test_spec_document_launch_creates_a_read_only_bound_chat(
         response = client.get(
             "/launch/spec-document",
             params={
-                "service_base_url": "http://127.0.0.1:8000",
+                "service_base_url": "http://127.0.0.1:6010",
                 "document_id": "demo",
             },
             follow_redirects=False,
@@ -158,7 +158,7 @@ def test_app_serves_built_web_assets_before_a2a_tenant_routes(
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",
@@ -178,7 +178,7 @@ def test_app_exposes_health_and_a2a_agent_card(tmp_path: Path) -> None:
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",
@@ -239,7 +239,7 @@ def test_a2a_message_send_returns_a_typed_proposal_artifact(
     app = create_app(
         Settings(
             host="127.0.0.1",
-            port=4200,
+            port=6013,
             database_path=tmp_path / "assistant.db",
             openai_api_key=None,
             openai_model="gpt-4o-mini",

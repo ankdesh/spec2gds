@@ -41,7 +41,7 @@ is reported once to stderr, after which user operations continue normally.
 
 ## Browser viewer
 
-Start the read-only loopback viewer:
+Start the read-only viewer:
 
 ```bash
 uv run spec2gds-log-viewer
@@ -49,10 +49,12 @@ uv run spec2gds-log-viewer
 uv run spec2gds-log-viewer --no-open
 ```
 
-The default URL is <http://127.0.0.1:4300>. Filter by application, component,
+The default URL is `http://SERVER_IP:6014`; the command prints the detected or
+`SPEC2GDS_PUBLIC_HOST`-overridden address. Filter by application, component,
 severity, correlation ID, or arbitrary text. New records arrive live. Select a
 row to inspect its complete structured data. Debug, Info, Warning, and Error
 rows use purple, blue, amber, and red accents respectively, with visible text
 labels so meaning never depends on color alone.
 
-The viewer never clears or modifies the log and refuses non-loopback binding.
+The viewer never clears or modifies the log and binds to all interfaces by
+default, like the other local services.

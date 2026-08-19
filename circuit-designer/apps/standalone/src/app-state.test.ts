@@ -30,12 +30,12 @@ describe("standalone app state", () => {
 
   test("builds a directly bound AI Assistant circuit URL", () => {
     expect(assistantCircuitUrl(
-      "http://127.0.0.1:4200",
-      "http://127.0.0.1:4100/api/circuit-designer/v1",
+      "http://127.0.0.1:6013",
+      "http://127.0.0.1:6011/api/circuit-designer/v1",
       "design/top",
     )).toBe(
-      "http://127.0.0.1:4200/launch/circuit"
-      + "?service_base_url=http%3A%2F%2F127.0.0.1%3A4100%2Fapi%2Fcircuit-designer%2Fv1"
+      "http://127.0.0.1:6013/launch/circuit"
+      + "?service_base_url=http%3A%2F%2F127.0.0.1%3A6011%2Fapi%2Fcircuit-designer%2Fv1"
       + "&document_id=design%2Ftop",
     );
   });

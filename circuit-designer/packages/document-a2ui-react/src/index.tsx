@@ -45,8 +45,13 @@ import type {
 
 export const SPEC_ENTITY_ACTION_EVENT = "spec2gds:entity-action";
 export const SPEC_OPEN_CIRCUIT_EVENT = "spec2gds:open-circuit";
+export const SPEC_LAUNCH_ACTIVITY_EVENT = "spec2gds:launch-activity";
 
 export interface SpecOpenCircuitEventDetail {
+  entityRef: EntityRef;
+}
+
+export interface SpecLaunchActivityEventDetail {
   entityRef: EntityRef;
 }
 
@@ -322,6 +327,12 @@ function dispatchOpenCircuit(entityRef: EntityRef): void {
   }));
 }
 
+function dispatchLaunchActivity(entityRef: EntityRef): void {
+  window.dispatchEvent(new CustomEvent<SpecLaunchActivityEventDetail>(SPEC_LAUNCH_ACTIVITY_EVENT, {
+    detail: { entityRef },
+  }));
+}
+
 function SectionOptionsMenu({
   section,
   onCreate,
@@ -525,9 +536,18 @@ function SectionOptionsMenu({
               Open circuit
             </button>
           )}
-          <button disabled role="menuitem" type="button">
-            <span>Launch activity</span><small>Coming soon</small>
-          </button>
+          {section.entity_ref && (
+            <button
+              onClick={() => {
+                close(true);
+                dispatchLaunchActivity(section.entity_ref as EntityRef);
+              }}
+              role="menuitem"
+              type="button"
+            >
+              Launch activity…
+            </button>
+          )}
           {section.entity_ref && (
             <button
               onClick={() => {

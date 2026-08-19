@@ -316,6 +316,20 @@ export interface EntityAction {
   produced_artifact_roles: string[];
 }
 
+export interface ActivityDefinition {
+  activity_id: string;
+  version: string;
+  title: string;
+  description: string;
+  requires_workspace_output: boolean;
+  artifact_roles: string[];
+}
+
+export interface EntityActivity {
+  definition: ActivityDefinition;
+  availability: { available: boolean; diagnostics: string[] };
+}
+
 export class SpecEditorHttpError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -394,6 +408,10 @@ export class SpecEditorHttpClient {
     return `${this.baseUrl}/events`;
   }
 
+  activityEventsUrl(): string {
+    return `${this.baseUrl}/activity-events`;
+  }
+
   launchAssistant(ref: EntityRef): Promise<AssistantLaunch> {
     return this.request("/assistant/launch", {
       method: "POST",
@@ -431,6 +449,29 @@ export class SpecEditorHttpClient {
       proposals: proposals.proposals,
       assistant_changes: assistantChanges.assistant_changes,
     }));
+  }
+
+  listEntityActivities(ref: EntityRef): Promise<{ activities: EntityActivity[] }> {
+    return this.request(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities`);
+  }
+
+  launchEntityActivity(
+    ref: EntityRef,
+    activityId: string,
+    expectedSourceRevisionHash: string,
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      `/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities/${encodeURIComponent(activityId)}/executions`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ expected_source_revision_hash: expectedSourceRevisionHash }),
+      },
+    );
+  }
+
+  cancelExecution(executionId: string): Promise<Record<string, unknown>> {
+    return this.request(`/executions/${encodeURIComponent(executionId)}/cancel`, { method: "POST" });
   }
 
   listEntityActions(ref: EntityRef): Promise<{ actions: EntityAction[] }> {

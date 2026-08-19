@@ -30,6 +30,7 @@ import {
   summarizeFileDiagnostics,
 } from "./circuit-files";
 import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
+import { browserRandomUuid } from "./browser-id";
 import { BrowserLogger, type PublicLoggingConfig } from "@spec2gds/observability/browser";
 
 type Selection = { kind: "node" | "net"; id: string } | null;
@@ -42,23 +43,24 @@ type ServiceDirectory = {
   logging: PublicLoggingConfig;
 };
 
+const defaultHost = window.location.hostname;
 const defaultServices: ServiceDirectory = {
   schema_version: 2,
   services: {
     circuit_designer: {
-      service_url: "http://127.0.0.1:4100/api/circuit-designer/v1",
-      ui_url: "http://127.0.0.1:4180",
+      service_url: `http://${defaultHost}:6011/api/circuit-designer/v1`,
+      ui_url: `http://${defaultHost}:6012`,
     },
     ai_assistant: {
-      service_url: "http://127.0.0.1:4200",
-      ui_url: "http://127.0.0.1:4200",
+      service_url: `http://${defaultHost}:6013`,
+      ui_url: `http://${defaultHost}:6013`,
     },
   },
   logging: { enabled: false, level: "info" },
 };
-const operationId = (prefix: string) => `${prefix}_${crypto.randomUUID()}`;
+const operationId = (prefix: string) => `${prefix}_${browserRandomUuid()}`;
 const emptyDocument = () => createEmptyCircuitDocument(
-  `local_${crypto.randomUUID().replaceAll("-", "_")}`,
+  `local_${browserRandomUuid().replaceAll("-", "_")}`,
 );
 
 function endpointFromTerminal(terminalKey: string, lsb: number, width: number): NetEndpoint {

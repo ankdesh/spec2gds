@@ -45,9 +45,9 @@ flowchart TB
 | Spec-derived circuit | specification source | read-only circuit session | edit the `.spec`, then project again |
 | AI Assistant suggestion | user review | proposal record | explicit accept or reject |
 
-The service processes are local reference implementations. They have no user
-authentication and should bind to trusted loopback interfaces unless a secure
-deployment layer is added.
+The service processes bind to all interfaces by default so the editors can be
+used by multiple systems on the same intranet. Their service directory
+advertises one detected or configured LAN host.
 
 ## Activity extension boundary
 

@@ -55,7 +55,7 @@ export function loadObservabilityConfig(path = defaultConfigPath()): Observabili
   if (!Number.isInteger(maxBytes) || maxBytes < 1024) throw new Error("logging.max_bytes must be at least 1024.");
   const viewer = logging.viewer as Record<string, unknown> | undefined;
   const viewerHost = String(viewer?.host ?? "");
-  if (!["127.0.0.1", "localhost", "::1"].includes(viewerHost)) throw new Error("The log viewer must use a loopback host.");
+  if (!viewerHost) throw new Error("logging.viewer.host is required.");
   const viewerPort = Number(viewer?.port);
   if (!Number.isInteger(viewerPort) || viewerPort < 1 || viewerPort > 65535) throw new Error("logging.viewer.port is invalid.");
   return {

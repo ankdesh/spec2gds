@@ -211,6 +211,7 @@ def invoke_activity(
     activity_id: str,
     snapshot: ActivitySnapshot,
     workspace: ActivityWorkspaceWriter | None = None,
+    cancellation: CancellationToken | None = None,
 ) -> ActivityResult:
     """Direct reference invocation used by tests and future host adapters."""
     extension = registry.activity(activity_id)
@@ -226,7 +227,7 @@ def invoke_activity(
         snapshot=snapshot.manifest,
         spec=spec,
         outputs=ActivityOutputWriter(),
-        cancellation=NeverCancelled(),
+        cancellation=cancellation or NeverCancelled(),
         workspace=workspace,
     )
     result = ActivityResult.model_validate(extension.run(context).model_dump(mode="python"))

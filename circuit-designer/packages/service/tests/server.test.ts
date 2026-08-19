@@ -19,7 +19,7 @@ describe("Circuit Designer REST service", () => {
     const file = join(mkdtempSync(join(tmpdir(), "spec2gds-service-log-")), "combined.jsonl");
     const logger = new StructuredLogger("circuit-designer", {
       enabled: true, level: "debug", file, maxBytes: 100_000,
-      viewerHost: "127.0.0.1", viewerPort: 4300,
+      viewerHost: "127.0.0.1", viewerPort: 6014,
     });
     service = new CircuitDesignerService({ logger });
     const port = await service.listen();
@@ -47,7 +47,7 @@ describe("Circuit Designer REST service", () => {
     const directory = await (await fetch(`${base}/services`)).json() as {
       services: { ai_assistant: { ui_url: string } };
     };
-    expect(directory.services.ai_assistant.ui_url).toBe("http://127.0.0.1:4200");
+    expect(directory.services.ai_assistant.ui_url).toMatch(/^http:\/\/[^/]+:6013$/);
   });
 
   it("uses ephemeral process memory by default", async () => {

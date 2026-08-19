@@ -14,7 +14,7 @@ def test_thread_history_and_review_state_are_persistent(tmp_path: Path) -> None:
     thread = database.create_thread(thread_id="thread_1")
     bound = database.bind_circuit(
         thread["id"],
-        base_url="http://127.0.0.1:4100/api/circuit-designer/v1",
+        base_url="http://127.0.0.1:6011/api/circuit-designer/v1",
         document_id="fixture_simple",
     )
     assert bound and bound["document_id"] == "fixture_simple"
@@ -50,13 +50,13 @@ def test_chat_cannot_be_rebound_to_a_different_circuit(tmp_path: Path) -> None:
     database.create_thread(thread_id="thread_1")
     database.bind_circuit(
         "thread_1",
-        base_url="http://127.0.0.1:4100/api/circuit-designer/v1",
+        base_url="http://127.0.0.1:6011/api/circuit-designer/v1",
         document_id="first",
     )
     with pytest.raises(ValueError, match="already bound"):
         database.bind_circuit(
             "thread_1",
-            base_url="http://127.0.0.1:4100/api/circuit-designer/v1",
+            base_url="http://127.0.0.1:6011/api/circuit-designer/v1",
             document_id="second",
         )
 
@@ -67,7 +67,7 @@ def test_spec_binding_and_running_conversation_summary(tmp_path: Path) -> None:
     thread = database.create_thread(thread_id="thread_spec", domain="spec")
     bound = database.bind_spec(
         thread["id"],
-        base_url="http://127.0.0.1:8000",
+        base_url="http://127.0.0.1:6010",
         document_id="spec_demo",
         entity_kind="component",
         entity_id="component_leaf",
@@ -95,7 +95,7 @@ def test_document_spec_binding_has_no_entity_target(tmp_path: Path) -> None:
     thread = database.create_thread(thread_id="thread_document", domain="spec")
     bound = database.bind_spec_document(
         thread["id"],
-        base_url="http://127.0.0.1:8000",
+        base_url="http://127.0.0.1:6010",
         document_id="spec_demo",
     )
     assert bound
@@ -121,7 +121,7 @@ def test_existing_circuit_database_migrates_additively(tmp_path: Path) -> None:
             """
             INSERT INTO threads VALUES (
                 'old', 'Old circuit', 'regular',
-                'http://127.0.0.1:4100/api/circuit-designer/v1', 'fixture', 0,
+                'http://127.0.0.1:6011/api/circuit-designer/v1', 'fixture', 0,
                 '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
             )
             """

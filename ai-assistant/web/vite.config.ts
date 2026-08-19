@@ -9,7 +9,10 @@ const serviceConfig = JSON.parse(readFileSync(
   "utf8",
 ));
 const assistantService = serviceConfig.ai_assistant.service;
-const assistantOrigin = `${assistantService.scheme}://${assistantService.host}:${assistantService.port}`;
+const proxyHost = ["0.0.0.0", "::"].includes(assistantService.host)
+  ? "127.0.0.1"
+  : assistantService.host;
+const assistantOrigin = `${assistantService.scheme}://${proxyHost}:${assistantService.port}`;
 
 export default defineConfig({
   plugins: [react()],
@@ -60,6 +63,7 @@ export default defineConfig({
     ],
   },
   server: {
+    allowedHosts: true,
     proxy: {
       "/api": assistantOrigin,
       "/a2a": assistantOrigin,

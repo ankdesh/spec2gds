@@ -16,7 +16,7 @@ from spec2gds.service_registry import load_service_registry
 
 
 def create_app() -> Any:
-    """Create the loopback-only viewer API and static web application."""
+    """Create the configured read-only viewer API and static web application."""
     from fastapi import FastAPI, Query
     from fastapi.responses import FileResponse, StreamingResponse
     from fastapi.staticfiles import StaticFiles
@@ -139,7 +139,8 @@ def main() -> None:
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     args = parser.parse_args()
     settings = load_service_registry().logging
-    url = f"http://{settings.viewer_host}:{settings.viewer_port}"
+    public_host = settings.viewer_public_host or settings.viewer_host
+    url = f"http://{public_host}:{settings.viewer_port}"
     logger = StructuredLogger("log-viewer", settings)
     logger.event(
         "process", "starting", "Starting spec2gds Log Viewer",

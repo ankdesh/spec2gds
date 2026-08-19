@@ -651,6 +651,26 @@ button:disabled {
   color: #7e5a0d;
 }
 
+.status--queued,
+.status--running {
+  background: #dfeaf5;
+  color: #285f86;
+}
+
+.status--cancelled {
+  background: #e6e8e7;
+  color: #58605c;
+}
+
+.activity-warning {
+  color: #7e5a0d !important;
+}
+
+.activity-item code,
+.action-option code {
+  overflow-wrap: anywhere;
+}
+
 .button-row {
   display: flex;
   gap: 0.4rem;

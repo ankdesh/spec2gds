@@ -7,7 +7,7 @@ PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 STATE_DIR="${PROJECT_ROOT}/logs/serve-all"
 
 SERVICES=(spec-editor circuit-designer ai-assistant)
-DEFAULT_PORTS=(8000 4100 4180 4200)
+DEFAULT_PORTS=(6010 6011 6012 6013 6014)
 
 usage() {
   echo "Usage: scripts/serve-all.sh {start|stop}"
@@ -19,6 +19,16 @@ pid_file() {
 
 log_file() {
   echo "${STATE_DIR}/$1.log"
+}
+
+public_host() {
+  if [[ -n "${SPEC2GDS_PUBLIC_HOST:-}" && "${SPEC2GDS_PUBLIC_HOST}" != "auto" ]]; then
+    echo "${SPEC2GDS_PUBLIC_HOST}"
+    return
+  fi
+  local address
+  address="$(hostname -I 2>/dev/null | awk '{print $1}')"
+  echo "${address:-$(hostname)}"
 }
 
 tracked_pid() {
@@ -101,6 +111,12 @@ start_all() {
 
   mkdir -p "${STATE_DIR}"
 
+  # Resolve auto once and export it so Python, Node, and printed browser URLs
+  # all advertise the same interface on multi-homed development machines.
+  if [[ -z "${SPEC2GDS_PUBLIC_HOST:-}" || "${SPEC2GDS_PUBLIC_HOST}" == "auto" ]]; then
+    export SPEC2GDS_PUBLIC_HOST="$(public_host)"
+  fi
+
   start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
   start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev
   start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" uv run spec2gds-ai-assistant
@@ -120,9 +136,11 @@ start_all() {
     return 1
   fi
 
-  echo "Spec Editor:      http://127.0.0.1:8000/editor"
-  echo "Circuit Designer: http://127.0.0.1:4180"
-  echo "AI Assistant:     http://127.0.0.1:4200"
+  local advertised_host
+  advertised_host="$(public_host)"
+  echo "Spec Editor:      http://${advertised_host}:6010/editor"
+  echo "Circuit Designer: http://${advertised_host}:6012"
+  echo "AI Assistant:     http://${advertised_host}:6013"
 }
 
 stop_tracked_services() {

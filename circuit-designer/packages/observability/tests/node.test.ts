@@ -8,7 +8,7 @@ import { StructuredLogger, loadObservabilityConfig, redact, type ObservabilityCo
 function config(file: string, overrides: Partial<ObservabilityConfig> = {}): ObservabilityConfig {
   return {
     enabled: true, level: "debug", file, maxBytes: 1024,
-    viewerHost: "127.0.0.1", viewerPort: 4300, ...overrides,
+    viewerHost: "127.0.0.1", viewerPort: 6014, ...overrides,
   };
 }
 
@@ -44,7 +44,7 @@ describe("loadObservabilityConfig", () => {
       schema_version: 2,
       logging: {
         enabled: false, level: "info", file: "configured.jsonl", max_bytes: 4096,
-        viewer: { host: "127.0.0.1", port: 4300 },
+        viewer: { host: "127.0.0.1", port: 6014 },
       },
     }));
     const before = { logging: process.env.SPEC2GDS_LOGGING, level: process.env.SPEC2GDS_LOG_LEVEL, file: process.env.SPEC2GDS_LOG_FILE };

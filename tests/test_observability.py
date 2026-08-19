@@ -16,7 +16,7 @@ def settings(
     max_bytes: int = 4096,
 ) -> LogSettings:
     return LogSettings(
-        enabled, level, path, max_bytes, "127.0.0.1", 4300  # type: ignore[arg-type]
+        enabled, level, path, max_bytes, "127.0.0.1", 6014  # type: ignore[arg-type]
     )
 
 

@@ -67,7 +67,7 @@ class FakeSpecOpenAI:
 def settings(tmp_path: Path) -> Settings:
     return Settings(
         host="127.0.0.1",
-        port=4200,
+        port=6013,
         database_path=tmp_path / "assistant.db",
         openai_api_key=None,
         openai_model="gpt-4o-mini",
@@ -76,7 +76,7 @@ def settings(tmp_path: Path) -> Settings:
     )
 
 
-def test_environment_defaults_are_local_and_use_gpt_4o_mini(
+def test_environment_defaults_are_lan_accessible_and_use_gpt_4o_mini(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     for name in (
@@ -85,17 +85,21 @@ def test_environment_defaults_are_local_and_use_gpt_4o_mini(
         "ASSISTANT_DATABASE_PATH",
         "ASSISTANT_WEB_DIST_PATH",
         "SPEC2GDS_SERVICE_CONFIG",
+        "SPEC2GDS_PUBLIC_HOST",
         "AI_ASSISTANT_URL",
     ):
         monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("SPEC2GDS_PUBLIC_HOST", "design-host.test")
     configured = Settings.from_env()
     assert configured.openai_model == "gpt-4o-mini"
     assert configured.database_path.name == "assistant.db"
     assert configured.database_path.parent.name == "data"
     assert configured.web_dist_path.name == "dist"
     assert configured.web_dist_path.parent.name == "web"
-    assert configured.spec_editor_service_url == "http://127.0.0.1:8000"
-    assert configured.circuit_designer_ui_url == "http://127.0.0.1:4180"
+    assert configured.host == "0.0.0.0"
+    assert configured.port == 6013
+    assert configured.spec_editor_service_url == "http://design-host.test:6010"
+    assert configured.circuit_designer_ui_url == "http://design-host.test:6012"
 
 
 def test_context_processor_describes_semantic_circuit(circuit_snapshot: dict[str, Any]) -> None:
@@ -300,7 +304,7 @@ async def test_agent_logs_owned_openai_request_and_response_boundaries(
     log_file = tmp_path / "combined.jsonl"
     configured = dataclasses.replace(
         settings(tmp_path),
-        logging=LogSettings(True, "debug", log_file, 100_000, "127.0.0.1", 4300),
+        logging=LogSettings(True, "debug", log_file, 100_000, "127.0.0.1", 6014),
     )
     await CircuitEditingAgent(configured, client=FakeOpenAI(draft)).propose(
         CircuitAgentRequest(user_request="Inspect this circuit.", snapshot=circuit_snapshot)

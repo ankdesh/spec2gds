@@ -17,8 +17,9 @@ SpecRevision -> ActivitySnapshot -> ActivityContext -> Activity -> ActivityResul
 ```
 
 Activity definitions contain no command, process, HTTP, database, queue, or
-workspace settings. A future in-process runner, child-process runner, or
-independent Activity service can invoke the same plugin unchanged.
+workspace settings. The Spec Editor's persistent in-process host, a direct
+caller, or an independent Activity service can invoke the same plugin
+unchanged.
 
 ## Two-level read API
 
@@ -152,6 +153,9 @@ Deployments load explicit `module:callable` paths with
 `load_extension_modules()`. Registration is atomic per module. Invalid imports,
 definitions, duplicate IDs, or schema mismatches disable that module and
 produce visible `ExtensionDiagnostic` records; valid plugins remain available.
+The product host reads these paths from `activities.extension_modules` in
+`config/services.json` and reports the same diagnostics through
+`GET /activities` and the editor launch dialog.
 
 Context Renderers use the same snapshot and read APIs but return deterministic
 `RenderedContext` text rather than creating Activity runs. This is the intended

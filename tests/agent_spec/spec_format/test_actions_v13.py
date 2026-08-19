@@ -1,8 +1,9 @@
 """V1.3 snapshot, external-action, artifact, and proposal acceptance tests."""
 
-from pathlib import Path
+import json
 import sys
 import tempfile
+from pathlib import Path
 
 from spec2gds.agent_spec.spec_format.actions import (
     ActionDefinition,
@@ -80,6 +81,37 @@ def test_out_of_process_summary_transform_and_activity_persistence() -> None:
             assert len(restored.state.executions) == 2
             assert restored.artifact_diagnostics() == ()
             assert ActivityStore(reopened.to_package(), ArtifactSidecar(Path(temporary) / "missing-sidecar")).artifact_diagnostics()
+    finally:
+        activity._test_temporary.cleanup()  # type: ignore[attr-defined]
+
+
+def test_v1_activity_state_upgrades_without_losing_legacy_history() -> None:
+    revision, activity, service = _context()
+    try:
+        target = revision.entry_designs()[0].ref
+        execution = service.execute(
+            revision,
+            activity,
+            "reference.snapshot_summary",
+            target,
+        )
+        activity.save()
+        legacy = json.loads(activity.package.files["activity/v1/actions.json"])
+        legacy["version"] = 1
+        legacy.pop("activity_executions", None)
+        activity.package.files["activity/v1/actions.json"] = json.dumps(legacy).encode()
+
+        restored = ActivityStore(activity.package, activity.sidecar)
+        assert restored.state.version == 2
+        assert restored.state.activity_executions == ()
+        assert [item.execution_id for item in restored.state.executions] == [
+            execution.execution_id
+        ]
+
+        restored.save()
+        persisted = json.loads(activity.package.files["activity/v1/actions.json"])
+        assert persisted["version"] == 2
+        assert persisted["executions"][0]["execution_id"] == execution.execution_id
     finally:
         activity._test_temporary.cleanup()  # type: ignore[attr-defined]
 

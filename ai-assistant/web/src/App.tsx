@@ -274,14 +274,14 @@ const fallbackServices: ServiceDirectory = {
   schema_version: 2,
   services: {
     spec_editor: {
-      service_url: "http://127.0.0.1:8000",
-      ui_url: "http://127.0.0.1:8000/editor",
+      service_url: `http://${window.location.hostname}:6010`,
+      ui_url: `http://${window.location.hostname}:6010/editor`,
       available: false,
       detail: "Not checked",
     },
     circuit_designer: {
-      service_url: "http://127.0.0.1:4100/api/circuit-designer/v1",
-      ui_url: "http://127.0.0.1:4180",
+      service_url: `http://${window.location.hostname}:6011/api/circuit-designer/v1`,
+      ui_url: `http://${window.location.hostname}:6012`,
       available: false,
       detail: "Not checked",
     },

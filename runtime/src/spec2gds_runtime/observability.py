@@ -12,6 +12,7 @@ import dataclasses
 import hashlib
 import json
 import os
+import socket
 import threading
 import time
 import traceback
@@ -45,6 +46,7 @@ class LogSettings:
     max_bytes: int
     viewer_host: str
     viewer_port: int
+    viewer_public_host: str | None = None
 
 
 def load_log_settings(config_path: Path) -> LogSettings:
@@ -77,12 +79,36 @@ def load_log_settings(config_path: Path) -> LogSettings:
     if not isinstance(viewer, dict):
         raise ValueError("logging.viewer is required.")
     host = str(viewer.get("host", ""))
-    if host not in {"127.0.0.1", "localhost", "::1"}:
-        raise ValueError("The log viewer must use a loopback host.")
+    if not host:
+        raise ValueError("logging.viewer.host is required.")
     port = viewer.get("port")
     if not isinstance(port, int) or not 1 <= port <= 65535:
         raise ValueError("logging.viewer.port must be between 1 and 65535.")
-    return LogSettings(enabled, level, log_file.resolve(), max_bytes, host, port)
+    return LogSettings(
+        enabled,
+        level,
+        log_file.resolve(),
+        max_bytes,
+        host,
+        port,
+        _public_host(payload),
+    )
+
+
+def _public_host(payload: dict[str, Any]) -> str:
+    """Choose the host shown in viewer links without changing its bind address."""
+    configured = os.environ.get("SPEC2GDS_PUBLIC_HOST", str(payload.get("public_host", "auto")))
+    value = configured.strip()
+    if value.lower() == "auto":
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect(("192.0.2.1", 9))
+                value = str(probe.getsockname()[0])
+        except OSError:
+            value = socket.gethostname()
+    if not value or "://" in value or "/" in value:
+        raise ValueError("public_host must be auto, an IP address, or a hostname.")
+    return value
 
 
 def _environment_boolean(value: str) -> bool:

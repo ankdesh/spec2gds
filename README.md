@@ -66,7 +66,7 @@ cd circuit-designer
 npm install
 cd ..
 
-# Optional AI Assistant API and its production web bundle
+# AI Assistant API and its production web bundle
 cd ai-assistant
 uv sync
 cd web
@@ -84,9 +84,19 @@ export OPENAI_API_KEY="..."  # optional
 scripts/serve-all.sh start
 ```
 
-Open the Spec Editor at <http://127.0.0.1:8000/editor>, Circuit Designer at
-<http://127.0.0.1:4180>, and the AI Assistant at
-<http://127.0.0.1:4200>. Logs and PID files are under `logs/serve-all/`.
+The launcher prints browser URLs using the detected LAN IPv4 address. From
+another computer, open the printed Spec Editor (`6010`), Circuit Designer
+(`6012`), or AI Assistant (`6013`) URL. If automatic detection selects the
+wrong interface, set the advertised IP address or resolvable hostname first:
+
+```bash
+export SPEC2GDS_PUBLIC_HOST="192.168.1.50"  # or design-host.example
+scripts/serve-all.sh start
+```
+
+Services bind to `0.0.0.0` by default. If the host firewall is enabled, allow
+TCP ports `6010` through `6014` for the LAN. Logs and PID files are under
+`logs/serve-all/`.
 
 ```bash
 scripts/serve-all.sh stop
@@ -103,6 +113,11 @@ It contains the host, port, and base path for each API and browser UI. Change
 that file before starting the services when the defaults are not appropriate;
 set `SPEC2GDS_SERVICE_CONFIG` to point at an alternate registry. Existing
 per-service environment variables remain supported as overrides.
+
+The tracked registry uses `host: "0.0.0.0"` for listeners and
+`public_host: "auto"` for browser URLs. `SPEC2GDS_PUBLIC_HOST` overrides the
+advertised host without changing the bind address. Never give another system a
+URL containing `0.0.0.0`; use the detected/overridden public host instead.
 
 Unified file logging is disabled by default. Enable concise operational logs
 with `SPEC2GDS_LOGGING=ON`; add boundary data and owned OpenAI request/response
@@ -134,7 +149,7 @@ uv sync
 uv run spec2gds-server
 ```
 
-Open <http://127.0.0.1:8000/editor>. Use **File → New Specification** or
+Open `http://SERVER_IP:6010/editor`. Use **File → New Specification** or
 **File → Open Specification**. New asks for a human-readable specification
 name plus a server-local `.spec` path; Open asks only for the path. The visible
 name is editable from the document cover and is stored separately from the
@@ -169,7 +184,7 @@ validation, and extension instructions.
 The **Circuit** menu lists available designs and components. Eligible document
 sections also expose **Options → Open circuit** beside their headings, while
 **Options → More actions** opens the entity action workflow. The server exposes
-interactive API docs at <http://127.0.0.1:8000/docs>.
+interactive API docs at `http://SERVER_IP:6010/docs`.
 
 Launching a leaf component shows one read-only component preview with its wire
 ports attached to that component. Ports are not presented as separate design
@@ -202,7 +217,7 @@ scripts/serve-all.sh stop
 
 Each service reads its address from `config/services.json`; the launcher's
 displayed URLs and untracked-listener cleanup cover the tracked default ports
-`8000`, `4100`, `4180`, and `4200`. It writes PID files and per-service logs
+`6010` through `6014`. It writes PID files and per-service logs
 under `logs/serve-all/`. Set `OPENAI_API_KEY` before starting if the AI
 Assistant should make OpenAI requests.
 
@@ -218,6 +233,22 @@ The public contracts live in `spec2gds.agent_spec.activities`. See the
 [Activity Snapshot v1 format](docs/activity-snapshot-v1.md) and
 [Activity SDK guide](docs/activity-sdk.md). The SDK intentionally does not
 choose a queue, worker process, storage service, or monitoring mechanism.
+
+The Spec Editor supplies the product host for these contracts. Open a design,
+choose **Options → More actions… → Launch activity…**, and select an
+available generator. The dialog shows preflight failures without allowing an
+invalid run. Accepted runs move to the **Activity** tab, where queued and
+running jobs can be cancelled and reports update live. Completed generator
+output is left on the server at the absolute path shown in the report; it is
+not downloaded by the browser.
+
+The host persists its single-worker queue in
+`generated/.spec2gds/activity-jobs.sqlite3` and immutable run inputs under
+`generated/.spec2gds/snapshots/` by default. Queued work survives a service
+restart, interrupted running work is requeued from its saved snapshot, and
+terminal provenance is saved inside the `.spec` package without changing its
+source revision hash. Configure the root and optional extension registrations
+through the `activities` object in `config/services.json`.
 
 The deterministic `systemc.generate_at_skeleton` Activity generates a
 structural C++17/SystemC TLM 2.0 AT project for one selected design. It preserves
@@ -257,7 +288,7 @@ npm install
 npm run dev:editor
 ```
 
-Open <http://127.0.0.1:4190>. Rebuild the Python-packaged editor with
+Open `http://SERVER_IP:6015`. Rebuild the Python-packaged editor with
 `npm run build:editor` before committing UI changes.
 
 ## Run only Circuit Designer
@@ -270,12 +301,12 @@ npm install
 npm run dev
 ```
 
-Open <http://127.0.0.1:4180>. The app starts with an empty circuit. Use
+Open `http://SERVER_IP:6012`. The app starts with an empty circuit. Use
 **Unlock** to edit it, **Save** to accept the draft and download a canonical
 file, or **Open file** to load an existing `.circuit.json`.
 
 To use **Open circuit** from the specification editor, run both services. The
-default Spec API (`8000`) and Circuit service (`4100`) already use compatible
+default Spec API (`6010`) and Circuit service (`6011`) already use compatible
 settings from `config/services.json`.
 
 ## Run only the optional AI Assistant
@@ -291,7 +322,7 @@ export OPENAI_API_KEY="..."
 uv run spec2gds-ai-assistant
 ```
 
-Open <http://127.0.0.1:4200>. The production service reads the frontend from
+Open `http://SERVER_IP:6013`. The production service reads the frontend from
 `web/dist`, so repeat `npm run build` after changing Assistant web code.
 
 The AI Assistant is optional and does not sit on either editor's critical path.

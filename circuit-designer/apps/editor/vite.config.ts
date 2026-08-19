@@ -9,7 +9,8 @@ const serviceConfig = JSON.parse(readFileSync(
   "utf8",
 ));
 const specService = serviceConfig.spec_editor.service;
-const specServiceOrigin = `${specService.scheme}://${specService.host}:${specService.port}`;
+const proxyHost = ["0.0.0.0", "::"].includes(specService.host) ? "127.0.0.1" : specService.host;
+const specServiceOrigin = `${specService.scheme}://${proxyHost}:${specService.port}`;
 
 export default defineConfig({
   base: "/editor-assets/",
@@ -19,7 +20,8 @@ export default defineConfig({
     emptyOutDir: true,
   },
   server: {
-    port: 4190,
+    port: 6015,
+    allowedHosts: true,
     proxy: {
       "/api": {
         target: specServiceOrigin,

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { hostname, networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 type LogLevel = "info" | "debug";
@@ -17,6 +18,7 @@ interface HostedServiceConfig {
 
 interface RegistryConfig {
   schema_version: 2;
+  public_host?: string;
   logging: { enabled: boolean; level: LogLevel };
   spec_editor: HostedServiceConfig;
   circuit_designer: HostedServiceConfig;
@@ -48,12 +50,13 @@ export function loadServiceRegistry(
 
 export function resolvedServiceDirectory(): PublicServiceDirectory {
   const value = loadServiceRegistry();
+  const publicHost = resolvePublicHost(value);
   const directory: PublicServiceDirectory = {
     schema_version: 2,
     services: {
-      spec_editor: location(value.spec_editor),
-      circuit_designer: location(value.circuit_designer),
-      ai_assistant: location(value.ai_assistant),
+      spec_editor: location(value.spec_editor, publicHost),
+      circuit_designer: location(value.circuit_designer, publicHost),
+      ai_assistant: location(value.ai_assistant, publicHost),
     },
     logging: publicLogging(value),
   };
@@ -94,13 +97,37 @@ function defaultRegistryPath(): string {
   );
 }
 
-function location(value: HostedServiceConfig): ServiceLocation {
-  return { service_url: endpointUrl(value.service), ui_url: endpointUrl(value.ui) };
+function location(value: HostedServiceConfig, publicHost: string): ServiceLocation {
+  return {
+    service_url: endpointUrl(value.service, publicHost),
+    ui_url: endpointUrl(value.ui, publicHost),
+  };
 }
 
-function endpointUrl(value: EndpointConfig): string {
+function endpointUrl(value: EndpointConfig, publicHost: string): string {
   const path = value.base_path ? `/${value.base_path.replace(/^\/+|\/+$/g, "")}` : "";
-  return `${value.scheme}://${value.host}:${value.port}${path}`;
+  const authority = publicHost.includes(":") ? `[${publicHost}]` : publicHost;
+  return `${value.scheme}://${authority}:${value.port}${path}`;
+}
+
+export function resolvedPublicHost(): string {
+  return resolvePublicHost(loadServiceRegistry());
+}
+
+function resolvePublicHost(value: RegistryConfig): string {
+  const configured = (process.env.SPEC2GDS_PUBLIC_HOST ?? value.public_host ?? "auto").trim();
+  if (configured.toLowerCase() !== "auto") {
+    if (!configured || configured.includes("://") || configured.includes("/")) {
+      throw new Error("public_host must be auto, an IP address, or a hostname.");
+    }
+    return configured;
+  }
+  for (const addresses of Object.values(networkInterfaces())) {
+    for (const address of addresses ?? []) {
+      if (address.family === "IPv4" && !address.internal) return address.address;
+    }
+  }
+  return hostname();
 }
 
 function stripTrailingSlash(value: string): string {

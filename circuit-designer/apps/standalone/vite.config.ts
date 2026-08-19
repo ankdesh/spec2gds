@@ -12,9 +12,10 @@ export default defineConfig({
   server: {
     host: circuitUi.host,
     port: circuitUi.port,
+    allowedHosts: true,
     proxy: {
       "/api": `${circuitService.scheme}://${circuitService.host}:${circuitService.port}`,
     },
   },
-  preview: { host: circuitUi.host, port: circuitUi.port },
+  preview: { host: circuitUi.host, port: circuitUi.port, allowedHosts: true },
 });

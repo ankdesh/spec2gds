@@ -42,7 +42,7 @@ describe("assistant connection API", () => {
 
     await assistantApi.bindSpec(
       "thread/1",
-      "http://127.0.0.1:8000",
+      "http://127.0.0.1:6010",
       "spec-demo",
       "component",
       "component-id",
@@ -52,7 +52,7 @@ describe("assistant connection API", () => {
     expect(path).toBe("/api/threads/thread%2F1/spec");
     expect(init.method).toBe("PUT");
     expect(JSON.parse(String(init.body))).toEqual({
-      base_url: "http://127.0.0.1:8000",
+      base_url: "http://127.0.0.1:6010",
       document_id: "spec-demo",
       entity_kind: "component",
       entity_id: "component-id",

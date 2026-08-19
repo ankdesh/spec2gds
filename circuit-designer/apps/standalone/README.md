@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Open <http://127.0.0.1:4180>. The command starts both the Vite client and the
+Open `http://SERVER_IP:6012`. The command starts both the Vite client and the
 ephemeral Node service. `npm run dev:standalone` starts only the client;
 `npm run service` starts only the service.
 

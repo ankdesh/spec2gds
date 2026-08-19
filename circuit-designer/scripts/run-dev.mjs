@@ -38,7 +38,9 @@ function waitForService(timeoutMs = 15_000) {
     const connect = () => {
       if (stopping) return reject(new Error("Circuit Designer service stopped during startup."));
       const socket = createConnection({
-        host: process.env.CIRCUIT_DESIGNER_HOST ?? circuitService.host,
+        host: ["0.0.0.0", "::"].includes(process.env.CIRCUIT_DESIGNER_HOST ?? circuitService.host)
+          ? "127.0.0.1"
+          : process.env.CIRCUIT_DESIGNER_HOST ?? circuitService.host,
         port: Number(process.env.CIRCUIT_DESIGNER_PORT ?? circuitService.port),
       });
       socket.once("connect", () => {

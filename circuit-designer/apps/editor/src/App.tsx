@@ -3,8 +3,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   A2UIDocumentSurface,
   SPEC_ENTITY_ACTION_EVENT,
+  SPEC_LAUNCH_ACTIVITY_EVENT,
   SPEC_OPEN_CIRCUIT_EVENT,
   type SpecDocumentEditController,
+  type SpecLaunchActivityEventDetail,
   type SpecOpenCircuitEventDetail,
 } from "@spec2gds/document-a2ui-react";
 import {
@@ -19,6 +21,7 @@ import {
   type EditorTransactionOperation,
   type EntityMetadataInput,
   type EntityAction,
+  type EntityActivity,
   type EntityRef,
   type SourceChangeEvent,
 } from "@spec2gds/document-core";
@@ -29,6 +32,13 @@ import { BrowserLogger } from "@spec2gds/observability/browser";
 type ActionDialogState = {
   ref: EntityRef;
   actions: EntityAction[];
+  loading: boolean;
+  runningId: string;
+} | null;
+
+type ActivityDialogState = {
+  ref: EntityRef;
+  activities: EntityActivity[];
   loading: boolean;
   runningId: string;
 } | null;
@@ -62,6 +72,7 @@ export default function App() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
+  const [activityDialog, setActivityDialog] = useState<ActivityDialogState>(null);
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
@@ -108,6 +119,32 @@ export default function App() {
       setLoading(false);
     }
   }, [browserLogger, client]);
+
+  useEffect(() => {
+    if (!snapshot) return;
+    const events = new EventSource(client.activityEventsUrl());
+    const updateExecution = (event: MessageEvent<string>) => {
+      try {
+        const execution = JSON.parse(event.data) as Record<string, unknown>;
+        const executionId = text(execution.execution_id, "");
+        if (!executionId) return;
+        setActivity((current) => {
+          const existing = current.executions.findIndex(
+            (item) => text(record(item).execution_id, "") === executionId,
+          );
+          const executions = [...current.executions];
+          if (existing >= 0) executions[existing] = execution;
+          else executions.push(execution);
+          return { ...current, executions };
+        });
+      } catch {
+        // Reconnect recovery fetches the authoritative execution list.
+      }
+    };
+    events.addEventListener("activity.execution.changed", updateExecution as EventListener);
+    events.onerror = () => void refreshActivity();
+    return () => events.close();
+  }, [client, refreshActivity, snapshot]);
 
   const createDocument = useCallback(async (nextPath: string, title: string) => {
     if (!nextPath || !title.trim()) return false;
@@ -262,6 +299,52 @@ export default function App() {
     window.addEventListener(SPEC_OPEN_CIRCUIT_EVENT, onOpenCircuit);
     return () => window.removeEventListener(SPEC_OPEN_CIRCUIT_EVENT, onOpenCircuit);
   }, [launchCircuitDesigner]);
+
+  useEffect(() => {
+    const onLaunchActivity = (event: Event) => {
+      const { entityRef } = (event as CustomEvent<SpecLaunchActivityEventDetail>).detail;
+      setActivityDialog({ ref: entityRef, activities: [], loading: true, runningId: "" });
+      void client.listEntityActivities(entityRef).then((response) => {
+        setActivityDialog((current) => current?.ref.entity_id === entityRef.entity_id
+          ? { ...current, activities: response.activities, loading: false }
+          : current);
+      }).catch((caught) => {
+        setActivityDialog(null);
+        setError(caught instanceof Error ? caught.message : String(caught));
+      });
+    };
+    window.addEventListener(SPEC_LAUNCH_ACTIVITY_EVENT, onLaunchActivity);
+    return () => window.removeEventListener(SPEC_LAUNCH_ACTIVITY_EVENT, onLaunchActivity);
+  }, [client]);
+
+  const executeActivity = async (item: EntityActivity) => {
+    if (!activityDialog || !snapshot) return;
+    const ref = activityDialog.ref;
+    setActivityDialog({ ...activityDialog, runningId: item.definition.activity_id });
+    try {
+      const execution = await client.launchEntityActivity(
+        ref,
+        item.definition.activity_id,
+        snapshot.source_revision_hash,
+      );
+      await refreshActivity();
+      setActivityDialog(null);
+      setNotice(`Queued ${item.definition.title} as ${text(execution.execution_id)}.`);
+      setView("activity");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+      setActivityDialog({ ...activityDialog, runningId: "" });
+    }
+  };
+
+  const cancelActivity = async (executionId: string) => {
+    try {
+      await client.cancelExecution(executionId);
+      await refreshActivity();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    }
+  };
 
   const launchAssistant = async (target: EntityRef) => {
     if (launchingAssistant) return;
@@ -481,7 +564,12 @@ export default function App() {
           <A2UIDocumentSurface batch={batch} editController={editController} />
         )}
         {!loading && view === "activity" && (
-          <ActivityView activity={activity} onRefresh={refreshActivity} onReview={reviewProposal} />
+          <ActivityView
+            activity={activity}
+            onCancel={cancelActivity}
+            onRefresh={refreshActivity}
+            onReview={reviewProposal}
+          />
         )}
         {!loading && view === "diagnostics" && (
           <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} sections={sectionDiagnostics} />
@@ -503,6 +591,13 @@ export default function App() {
           exploring={launchingAssistant}
         />
       )}
+      {activityDialog && (
+        <ActivityDialog
+          state={activityDialog}
+          onClose={() => setActivityDialog(null)}
+          onExecute={executeActivity}
+        />
+      )}
     </div>
   );
 }
@@ -522,10 +617,12 @@ function LoadingState() {
 
 function ActivityView({
   activity,
+  onCancel,
   onRefresh,
   onReview,
 }: {
   activity: ActivityState;
+  onCancel: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onReview: (id: string, decision: "accept" | "reject") => Promise<void>;
 }) {
@@ -541,12 +638,34 @@ function ActivityView({
             const item = record(value);
             const report = record(item.report);
             const diagnostics = Array.isArray(item.diagnostics) ? item.diagnostics : [];
+            const activityExecution = text(item.execution_type, "action") === "activity";
+            const executionId = text(item.execution_id);
+            const status = text(item.status, "unknown");
+            const cancelling = Boolean(item.cancel_requested) && ["queued", "running"].includes(status);
+            const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+            const files = Array.isArray(report.files) ? report.files : [];
             return (
-              <article className="activity-item" key={text(item.execution_id)}>
-                <span className={`status status--${text(item.status, "unknown")}`}>{text(item.status)}</span>
-                <strong>{text(item.action_id)}</strong>
-                <small>{text(item.execution_id)}</small>
+              <article className="activity-item" key={executionId}>
+                <span className={`status status--${cancelling ? "running" : status}`}>
+                  {cancelling ? "cancelling" : status}
+                </span>
+                <strong>{text(item.activity_id, text(item.action_id))}</strong>
+                <small>{executionId}</small>
                 <p>{text(report.summary, text(diagnostics[0], "No report summary"))}</p>
+                {activityExecution && text(item.workspace_output_path, "") && (
+                  <p><strong>Server path:</strong> <code>{text(item.workspace_output_path)}</code></p>
+                )}
+                {activityExecution && text(report.top_module, "") && (
+                  <p>Top module: <code>{text(report.top_module)}</code> · {files.length} generated files</p>
+                )}
+                {warnings.map((warning, index) => <p className="activity-warning" key={index}>{String(warning)}</p>)}
+                {activityExecution && ["queued", "running"].includes(status) && (
+                  <div className="button-row">
+                    <button disabled={cancelling} onClick={() => void onCancel(executionId)}>
+                      {cancelling ? "Cancelling…" : "Cancel"}
+                    </button>
+                  </div>
+                )}
               </article>
             );
           })}
@@ -609,6 +728,61 @@ function ActivityView({
           {!activity.assistant_changes.length && <p className="empty-copy">No AI Assistant changes have been applied.</p>}
         </UtilityPanel>
       </div>
+    </div>
+  );
+}
+
+function ActivityDialog({
+  state,
+  onClose,
+  onExecute,
+}: {
+  state: NonNullable<ActivityDialogState>;
+  onClose: () => void;
+  onExecute: (activity: EntityActivity) => Promise<void>;
+}) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        aria-labelledby="activity-dialog-title"
+        aria-modal="true"
+        className="action-dialog"
+        role="dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header>
+          <div>
+            <p className="utility-kicker">{state.ref.entity_kind.replaceAll("_", " ")}</p>
+            <h2 id="activity-dialog-title">Launch activity</h2>
+          </div>
+          <button aria-label="Close" className="icon-button" onClick={onClose}>×</button>
+        </header>
+        {state.loading && <p>Checking Activity availability…</p>}
+        {!state.loading && !state.activities.length && <p>No Activities support this entity.</p>}
+        {state.activities.map((item) => {
+          const diagnostics = item.availability.diagnostics;
+          return (
+            <article className="action-option" key={item.definition.activity_id}>
+              <div>
+                <strong>{item.definition.title}</strong>
+                <small>{item.definition.activity_id} · v{item.definition.version}</small>
+                <p>{item.definition.description}</p>
+                {diagnostics.map((diagnostic, index) => (
+                  <p className={item.availability.available ? "activity-warning" : "diagnostic"} key={index}>
+                    {diagnostic}
+                  </p>
+                ))}
+              </div>
+              <button
+                disabled={!item.availability.available || Boolean(state.runningId)}
+                onClick={() => void onExecute(item)}
+              >
+                {state.runningId === item.definition.activity_id ? "Queueing…" : "Run"}
+              </button>
+            </article>
+          );
+        })}
+      </section>
     </div>
   );
 }

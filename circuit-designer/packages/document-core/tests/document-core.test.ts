@@ -6,9 +6,9 @@ describe("SpecEditorHttpClient", () => {
     const directory = {
       schema_version: 2,
       services: {
-        spec_editor: { service_url: "http://127.0.0.1:8000", ui_url: "http://127.0.0.1:8000/editor" },
-        circuit_designer: { service_url: "http://127.0.0.1:4100/api/circuit-designer/v1", ui_url: "http://127.0.0.1:4180" },
-        ai_assistant: { service_url: "http://127.0.0.1:4200", ui_url: "http://127.0.0.1:4200" },
+        spec_editor: { service_url: "http://127.0.0.1:6010", ui_url: "http://127.0.0.1:6010/editor" },
+        circuit_designer: { service_url: "http://127.0.0.1:6011/api/circuit-designer/v1", ui_url: "http://127.0.0.1:6012" },
+        ai_assistant: { service_url: "http://127.0.0.1:6013", ui_url: "http://127.0.0.1:6013" },
       },
       logging: { enabled: false, level: "info" as const },
     } as const;
@@ -86,7 +86,7 @@ describe("SpecEditorHttpClient", () => {
       document_id: "spec_demo_design_top_1234",
       entity_id: "design_top",
       entity_kind: "design" as const,
-      editor_url: "http://127.0.0.1:4180?document_id=spec_demo_design_top_1234",
+      editor_url: "http://127.0.0.1:6012?document_id=spec_demo_design_top_1234",
       reused_session: false,
       omitted_bus_items: ["control_bus"],
       omitted_ports: ["service"],
@@ -113,7 +113,7 @@ describe("SpecEditorHttpClient", () => {
       entity_kind: "component" as const,
     };
     const launch = {
-      assistant_url: "http://127.0.0.1:4200/launch/spec?document_id=spec_demo",
+      assistant_url: "http://127.0.0.1:6013/launch/spec?document_id=spec_demo",
       target,
     };
     const fetchMock = vi.fn().mockResolvedValue(

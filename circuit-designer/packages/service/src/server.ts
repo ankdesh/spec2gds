@@ -50,7 +50,7 @@ export class CircuitDesignerService {
     this.server = createServer((request, response) => void this.handle(request, response));
   }
 
-  listen(port = 0, host = "127.0.0.1"): Promise<number> {
+  listen(port = 0, host = "0.0.0.0"): Promise<number> {
     return new Promise((resolve, reject) => {
       this.server.once("error", reject);
       this.server.listen(port, host, () => {

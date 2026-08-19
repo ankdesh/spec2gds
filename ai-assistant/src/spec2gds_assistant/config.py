@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 
 from spec2gds_runtime import LogSettings, load_log_settings
+
+_DEFAULT_PUBLIC_HOST = socket.gethostname()
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,18 +31,22 @@ class Settings:
     circuit_request_timeout_seconds: float
     spec_request_timeout_seconds: float = 30.0
     spec_service_allowlist: tuple[str, ...] = (
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
+        f"http://{_DEFAULT_PUBLIC_HOST}:6010",
+        "http://127.0.0.1:6010",
+        "http://localhost:6010",
     )
     circuit_service_allowlist: tuple[str, ...] = (
-        "http://127.0.0.1:4100/api/circuit-designer/v1",
+        f"http://{_DEFAULT_PUBLIC_HOST}:6011/api/circuit-designer/v1",
+        "http://127.0.0.1:6011/api/circuit-designer/v1",
     )
-    spec_editor_service_url: str = "http://127.0.0.1:8000"
-    spec_editor_ui_url: str = "http://127.0.0.1:8000/editor"
-    circuit_designer_service_url: str = "http://127.0.0.1:4100/api/circuit-designer/v1"
-    circuit_designer_ui_url: str = "http://127.0.0.1:4180"
-    ai_assistant_service_url: str = "http://127.0.0.1:4200"
-    ai_assistant_ui_url: str = "http://127.0.0.1:4200"
+    spec_editor_service_url: str = f"http://{_DEFAULT_PUBLIC_HOST}:6010"
+    spec_editor_ui_url: str = f"http://{_DEFAULT_PUBLIC_HOST}:6010/editor"
+    circuit_designer_service_url: str = (
+        f"http://{_DEFAULT_PUBLIC_HOST}:6011/api/circuit-designer/v1"
+    )
+    circuit_designer_ui_url: str = f"http://{_DEFAULT_PUBLIC_HOST}:6012"
+    ai_assistant_service_url: str = f"http://{_DEFAULT_PUBLIC_HOST}:6013"
+    ai_assistant_ui_url: str = f"http://{_DEFAULT_PUBLIC_HOST}:6013"
     logging: LogSettings | None = None
 
     @classmethod
@@ -114,6 +121,7 @@ def _service_urls(path: Path) -> dict[str, dict[str, str | int]]:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 2:
         raise ValueError("Service registry schema_version must be 2.")
+    public_host = _public_host(payload)
 
     result: dict[str, dict[str, str | int]] = {}
     for name in ("spec_editor", "circuit_designer", "ai_assistant"):
@@ -122,8 +130,8 @@ def _service_urls(path: Path) -> dict[str, dict[str, str | int]]:
         result[name] = {
             "host": service["host"],
             "port": service["port"],
-            "service_url": _endpoint_url(service),
-            "ui_url": _endpoint_url(ui),
+            "service_url": _endpoint_url(service, public_host),
+            "ui_url": _endpoint_url(ui, public_host),
         }
 
     result["spec_editor"]["service_url"] = os.environ.get(
@@ -144,7 +152,24 @@ def _service_urls(path: Path) -> dict[str, dict[str, str | int]]:
     return result
 
 
-def _endpoint_url(value: dict[str, object]) -> str:
+def _endpoint_url(value: dict[str, object], public_host: str) -> str:
     path = str(value.get("base_path", "")).strip("/")
     suffix = f"/{path}" if path else ""
-    return f"{value['scheme']}://{value['host']}:{value['port']}{suffix}"
+    authority = f"[{public_host}]" if ":" in public_host else public_host
+    return f"{value['scheme']}://{authority}:{value['port']}{suffix}"
+
+
+def _public_host(payload: dict[str, object]) -> str:
+    """Resolve the browser-reachable host independently from wildcard binds."""
+    configured = os.environ.get("SPEC2GDS_PUBLIC_HOST", str(payload.get("public_host", "auto")))
+    value = configured.strip()
+    if value.lower() == "auto":
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+                probe.connect(("192.0.2.1", 9))
+                value = str(probe.getsockname()[0])
+        except OSError:
+            value = socket.gethostname()
+    if not value or "://" in value or "/" in value:
+        raise ValueError("public_host must be auto, an IP address, or a hostname.")
+    return value

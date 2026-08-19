@@ -58,11 +58,12 @@ def _run(command: str, argv: Sequence[str] | None = None) -> None:
         f"Starting spec2gds {command}",
         details={"host": args.host, "port": args.port, "reload": args.reload},
     )
-    editor_url = f"http://{args.host}:{args.port}/editor"
+    public_host = registry.public_host if args.host in {"0.0.0.0", "::"} else args.host
+    editor_url = f"http://{public_host}:{args.port}/editor"
     if command == "editor":
         print(f"spec2gds editor: {editor_url}")
     else:
-        print(f"spec2gds server: http://{args.host}:{args.port}")
+        print(f"spec2gds server: http://{public_host}:{args.port}")
 
     import uvicorn
 

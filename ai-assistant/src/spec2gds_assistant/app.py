@@ -101,9 +101,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=[
-            "http://127.0.0.1:4201",
-            "http://localhost:4201",
+            "http://127.0.0.1:6016",
+            "http://localhost:6016",
         ],
+        allow_origin_regex=r"^https?://[^/:]+:6016$",
         allow_methods=["*"],
         allow_headers=["*"],
     )

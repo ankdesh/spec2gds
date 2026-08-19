@@ -12,6 +12,7 @@ import base64
 import dataclasses
 import json
 import os
+import threading
 import time
 import typing
 from datetime import UTC, datetime
@@ -22,13 +23,27 @@ from uuid import uuid4
 import pydantic
 from spec2gds_runtime import StructuredLogger
 
+from spec2gds.agent_spec.activities import (
+    ActivitySnapshot,
+    SpecExtensionRegistry,
+    activity_availability,
+    load_extension_modules,
+)
+from spec2gds.agent_spec.activities.contracts import ActivityResult
+from spec2gds.agent_spec.activities.rtl import register_extensions as register_rtl
+from spec2gds.agent_spec.activities.systemc_at import register_extensions as register_systemc_at
 from spec2gds.agent_spec.spec_format.actions import (
+    ActionRegistry,
     ActionService,
+    ActivityExecutionRecord,
     ActivityStore,
+    ArtifactRef,
     ArtifactSidecar,
     AssistantChangeDecision,
-    create_reference_registry,
+    ChangeProposal,
+    _decode_operations,
 )
+from spec2gds.agent_spec.spec_format.activity_jobs import ActivityJobManager, JobEnvelope
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.assistant import (
     SpecChangeProposal,
@@ -50,7 +65,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     PortEndpointIR,
     SpecRevision,
 )
-from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock, new_entity_id
 from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
 from spec2gds.agent_spec.spec_format.transactions import (
     AddAsset,
@@ -116,6 +131,12 @@ class ActionInputRequest(pydantic.BaseModel):
     input_artifact_ids: list[str] = pydantic.Field(default_factory=list)
 
 
+class ActivityExecutionRequest(pydantic.BaseModel):
+    """Revision guard for one entity-scoped Activity launch."""
+
+    expected_source_revision_hash: str
+
+
 class ProposalRequest(pydantic.BaseModel):
     """Revision guard used while previewing or accepting a proposal."""
 
@@ -162,7 +183,8 @@ class V1Session:
         self.revision = SpecRevision.from_package(self.package)
         self.sidecar = ArtifactSidecar(sidecar_root or f"{self.path}.artifacts")
         self.activity = ActivityStore(self.package, self.sidecar)
-        self.actions = ActionService(create_reference_registry(), self.sidecar)
+        self.actions = ActionService(ActionRegistry(), self.sidecar)
+        self.lock = _path_lock(self.path)
 
     @classmethod
     def create(
@@ -184,17 +206,19 @@ class V1Session:
 
     def save(self) -> None:
         """Persist source and activity using the package's deterministic writer."""
-        self.package.save(self.path)
+        with self.lock:
+            self.package.save(self.path)
 
     def commit_revision(self, revision: SpecRevision) -> None:
         """Adopt validated source while retaining activity, which is not source state."""
-        next_package = revision.to_package()
-        if "activity/v1/actions.json" in self.package.files:
-            next_package.files["activity/v1/actions.json"] = self.package.files["activity/v1/actions.json"]
-        self.package = next_package
-        self.revision = SpecRevision.from_package(self.package)
-        self.activity = ActivityStore(self.package, self.sidecar)
-        self.save()
+        with self.lock:
+            next_package = revision.to_package()
+            if "activity/v1/actions.json" in self.package.files:
+                next_package.files["activity/v1/actions.json"] = self.package.files["activity/v1/actions.json"]
+            self.package = next_package
+            self.revision = SpecRevision.from_package(self.package)
+            self.activity = ActivityStore(self.package, self.sidecar)
+            self.package.save(self.path)
 
     def commit_assistant_revision(
         self,
@@ -202,17 +226,35 @@ class V1Session:
         decision: AssistantChangeDecision,
     ) -> None:
         """Atomically save source and its accepted assistant decision together."""
-        next_package = revision.to_package()
-        if "activity/v1/actions.json" in self.package.files:
-            next_package.files["activity/v1/actions.json"] = self.package.files[
-                "activity/v1/actions.json"
-            ]
-        next_activity = ActivityStore(next_package, self.sidecar)
-        next_activity.record_assistant_change(decision)
-        next_package.save(self.path)
-        self.package = next_package
-        self.revision = SpecRevision.from_package(next_package)
-        self.activity = ActivityStore(next_package, self.sidecar)
+        with self.lock:
+            next_package = revision.to_package()
+            if "activity/v1/actions.json" in self.package.files:
+                next_package.files["activity/v1/actions.json"] = self.package.files[
+                    "activity/v1/actions.json"
+                ]
+            next_activity = ActivityStore(next_package, self.sidecar)
+            next_activity.record_assistant_change(decision)
+            next_package.save(self.path)
+            self.package = next_package
+            self.revision = SpecRevision.from_package(next_package)
+            self.activity = ActivityStore(next_package, self.sidecar)
+
+
+_PATH_LOCKS: dict[str, threading.RLock] = {}
+_PATH_LOCKS_GUARD = threading.Lock()
+
+
+def _path_lock(path: str) -> threading.RLock:
+    canonical = str(Path(path).expanduser().resolve())
+    with _PATH_LOCKS_GUARD:
+        return _PATH_LOCKS.setdefault(canonical, threading.RLock())
+
+
+def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtensionRegistry:
+    registry = SpecExtensionRegistry()
+    register_rtl(registry)
+    register_systemc_at(registry)
+    return load_extension_modules(extension_modules, registry)
 
 
 def create_app() -> typing.Any:
@@ -226,6 +268,7 @@ def create_app() -> typing.Any:
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
     registry = load_service_registry()
+    activity_registry = _product_activity_registry(registry.activities.extension_modules)
     logger = StructuredLogger("spec-editor", registry.logging)
     app.state.structured_logger = logger
 
@@ -283,6 +326,80 @@ def create_app() -> typing.Any:
         "source_event_sequence": 0,
         "source_event": None,
     }
+
+    def finalize_activity(
+        envelope: JobEnvelope,
+        result: ActivityResult | None,
+    ) -> ActivityExecutionRecord:
+        """Persist a terminal Activity record and validated result into its owning package."""
+        lock = _path_lock(envelope.package_path)
+        with lock:
+            current = state.get("active")
+            if isinstance(current, V1Session) and current.path == envelope.package_path:
+                session = current
+            else:
+                session = V1Session(envelope.package_path, envelope.sidecar_root)
+            if session.revision.document_id != envelope.record.target.document_id:
+                raise ValueError("Activity result package identity no longer matches its snapshot.")
+            artifact_ids: list[str] = []
+            if result is not None:
+                definition = activity_registry.activity(envelope.record.activity_id).definition
+                existing_artifacts = tuple(
+                    item for item in session.activity.state.artifacts
+                    if item.producer_execution_id == envelope.record.execution_id
+                )
+                if existing_artifacts:
+                    artifact_ids.extend(item.artifact_id for item in existing_artifacts)
+                else:
+                    for output in result.artifacts:
+                        if output.role not in definition.artifact_roles:
+                            raise ValueError(f"Activity returned an undeclared artifact role: {output.role}")
+                        digest, locator = session.sidecar.ingest(output.data)
+                        artifact = ArtifactRef(
+                            artifact_id=new_entity_id("artifact"),
+                            role=output.role,
+                            kind="file",
+                            media_type=output.media_type,
+                            sha256=digest,
+                            size=output.size,
+                            storage_locator=locator,
+                            producer_execution_id=envelope.record.execution_id,
+                            producer_action_id=envelope.record.activity_id,
+                            source_revision_hash=envelope.record.source_revision_hash,
+                            source_entities=output.source_entities,
+                            toolchain_identity=(
+                                f"{envelope.record.activity_id}/{envelope.record.activity_version}"
+                            ),
+                        )
+                        session.activity._append_artifacts((artifact,))
+                        artifact_ids.append(artifact.artifact_id)
+                if not any(
+                    proposal.producer_execution_id == envelope.record.execution_id
+                    for proposal in session.activity.state.proposals
+                ):
+                    for draft in result.proposals:
+                        _decode_operations(draft.operations)
+                        session.activity._append_proposals((ChangeProposal(
+                            proposal_id=new_entity_id("proposal"),
+                            base_source_revision_hash=envelope.record.source_revision_hash,
+                            producer_execution_id=envelope.record.execution_id,
+                            rationale=draft.rationale,
+                            operations=draft.operations,
+                        ),))
+            updated = envelope.record.model_copy(update={"artifact_ids": tuple(artifact_ids)})
+            session.activity.replace_activity_execution(updated)
+            session.activity.save()
+            session.package.save(session.path)
+            return updated
+
+    activity_jobs = ActivityJobManager(
+        activity_registry,
+        registry.activities.workspace_root,
+        finalize_activity,
+    )
+    app.state.activity_jobs = activity_jobs
+
+    app.router.add_event_handler("shutdown", activity_jobs.close)
     editor_root = Path(__file__).with_name("editor_dist")
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
@@ -578,6 +695,101 @@ def create_app() -> typing.Any:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
+    @app.get("/activities")
+    def activities() -> dict[str, typing.Any]:
+        """List product Activities and isolated extension-load diagnostics."""
+        return {
+            "activities": [_jsonable(item) for item in activity_registry.activities()],
+            "diagnostics": [_jsonable(item) for item in activity_registry.diagnostics],
+            "workspace_root": str(registry.activities.workspace_root),
+        }
+
+    @app.get("/entities/{kind}/{entity_id}/activities")
+    def entity_activities(kind: str, entity_id: str) -> dict[str, typing.Any]:
+        """List target-compatible Activities with pure availability preflight."""
+        target = ref(kind, entity_id)
+        try:
+            active().revision.resolve(target)
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        snapshot = ActivitySnapshot.create(active().revision, target)
+        values: list[dict[str, typing.Any]] = []
+        for definition in activity_registry.activities():
+            if not definition.scopes.supports(target):
+                continue
+            availability = activity_availability(
+                activity_registry,
+                definition.activity_id,
+                snapshot,
+            )
+            values.append({
+                "definition": _jsonable(definition),
+                "availability": _jsonable(availability),
+            })
+        return {"activities": values}
+
+    @app.post(
+        "/entities/{kind}/{entity_id}/activities/{activity_id}/executions",
+        status_code=202,
+    )
+    def launch_activity(
+        kind: str,
+        entity_id: str,
+        activity_id: str,
+        request: ActivityExecutionRequest,
+    ) -> dict[str, typing.Any]:
+        """Capture the current source revision and enqueue one Activity execution."""
+        session = active()
+        if request.expected_source_revision_hash != session.revision.source_revision_hash:
+            raise fastapi.HTTPException(status_code=409, detail="Expected source revision hash is stale.")
+        target = ref(kind, entity_id)
+        try:
+            definition = activity_registry.activity(activity_id).definition
+            if not definition.scopes.supports(target):
+                raise ValueError("Activity does not support the selected entity kind.")
+            snapshot = ActivitySnapshot.create(session.revision, target)
+            availability = activity_availability(activity_registry, activity_id, snapshot)
+            if not availability.available:
+                raise ValueError("Activity is unavailable: " + "; ".join(availability.diagnostics))
+            record = activity_jobs.enqueue(
+                activity_id=activity_id,
+                snapshot=snapshot,
+                package_path=session.path,
+                sidecar_root=str(session.sidecar.root),
+            )
+            return _jsonable(record)
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, SpecValidationError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/activity-events")
+    async def activity_events() -> typing.Any:
+        """Stream background Activity execution transitions for the active package."""
+        package_path = active().path
+
+        async def events() -> typing.AsyncIterator[str]:
+            observed = 0
+            while True:
+                updates = await asyncio.to_thread(activity_jobs.events_after, observed, 15.0)
+                if not updates:
+                    yield ": keep-alive\n\n"
+                    continue
+                for update in updates:
+                    observed = max(observed, int(update["sequence"]))
+                    execution = typing.cast(dict[str, typing.Any], update["execution"])
+                    envelope = activity_jobs.get(str(execution["execution_id"]))
+                    if envelope is None or envelope.package_path != package_path:
+                        continue
+                    payload = json.dumps(execution, separators=(",", ":"))
+                    yield f"id: {observed}\nevent: activity.execution.changed\ndata: {payload}\n\n"
+
+        return fastapi.responses.StreamingResponse(
+            events(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @app.get("/diagnostics")
     def diagnostics() -> dict[str, typing.Any]:
         """Return source diagnostics separately from artifact-sidecar diagnostics."""
@@ -724,16 +936,47 @@ def create_app() -> typing.Any:
 
     @app.get("/executions")
     def executions() -> dict[str, typing.Any]:
-        """List durable action-execution records for the active package."""
-        return {"executions": [_jsonable(item) for item in active().activity.state.executions]}
+        """List legacy actions and Activity jobs for the active package."""
+        session = active()
+        legacy = [
+            {"execution_type": "action", **_jsonable(item)}
+            for item in session.activity.state.executions
+        ]
+        persisted = {item.execution_id: item for item in session.activity.state.activity_executions}
+        for item in activity_jobs.list_for_package(session.path):
+            persisted[item.execution_id] = item
+        return {
+            "executions": [*legacy, *[_jsonable(item) for item in persisted.values()]],
+        }
 
     @app.get("/executions/{execution_id}")
     def execution(execution_id: str) -> dict[str, typing.Any]:
-        """Return one durable action-execution record."""
-        item = next((item for item in active().activity.state.executions if item.execution_id == execution_id), None)
-        if item is None:
-            raise fastapi.HTTPException(status_code=404, detail="Unknown action execution.")
-        return _jsonable(item)
+        """Return one legacy action or Activity execution record."""
+        session = active()
+        item = next((item for item in session.activity.state.executions if item.execution_id == execution_id), None)
+        if item is not None:
+            return {"execution_type": "action", **_jsonable(item)}
+        envelope = activity_jobs.get(execution_id)
+        if envelope is not None and envelope.package_path == session.path:
+            return _jsonable(envelope.record)
+        activity_item = next(
+            (item for item in session.activity.state.activity_executions if item.execution_id == execution_id),
+            None,
+        )
+        if activity_item is None:
+            raise fastapi.HTTPException(status_code=404, detail="Unknown execution.")
+        return _jsonable(activity_item)
+
+    @app.post("/executions/{execution_id}/cancel")
+    def cancel_execution(execution_id: str) -> dict[str, typing.Any]:
+        """Cancel one queued Activity or request cooperative running cancellation."""
+        envelope = activity_jobs.get(execution_id)
+        if envelope is None or envelope.package_path != active().path:
+            raise fastapi.HTTPException(status_code=404, detail="Unknown Activity execution.")
+        try:
+            return _jsonable(activity_jobs.cancel(execution_id))
+        except KeyError as exc:
+            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.get("/artifacts")
     def artifacts(entity_kind: str | None = None, entity_id: str | None = None) -> dict[str, typing.Any]:
