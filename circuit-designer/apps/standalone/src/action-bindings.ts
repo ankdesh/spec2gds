@@ -21,7 +21,7 @@ export type CircuitActionDefinition = {
   mouseOptions: MouseShortcut[];
 };
 
-const commandMouseOptions: MouseShortcut[] = ["none", "primary-click", "primary-double-click", "middle-click", "secondary-click"];
+const commandMouseOptions: MouseShortcut[] = ["none", "primary-click", "primary-double-click", "middle-click"];
 const command = (id: CircuitActionId, group: CircuitActionGroup, label: string, description: string): CircuitActionDefinition => ({
   id, group, label, description, mouseOptions: commandMouseOptions,
 });
@@ -92,7 +92,7 @@ export function loadCachedPreferences(storage: BindingStorage): CircuitDesignerP
   try {
     const cached = JSON.parse(storage.getItem(cacheStorageKey) ?? "null") as unknown;
     const checked = validateCircuitDesignerPreferences(cached);
-    if (checked.valid) return checked.preferences;
+    if (checked.valid) return normalizeContextMenuMouseBindings(checked.preferences).preferences;
     const legacy = JSON.parse(storage.getItem(legacyStorageKey) ?? "null") as {
       bindings?: Partial<Record<CircuitActionId, { keyboard?: unknown; mouse?: unknown }>>;
     } | null;
@@ -110,6 +110,20 @@ export function loadCachedPreferences(storage: BindingStorage): CircuitDesignerP
   } catch {
     return undefined;
   }
+}
+
+export function normalizeContextMenuMouseBindings(preferences: CircuitDesignerPreferencesV1): {
+  preferences: CircuitDesignerPreferencesV1;
+  changed: boolean;
+} {
+  const next = structuredClone(preferences);
+  let changed = false;
+  for (const binding of Object.values(next.action_bindings)) {
+    if (binding.mouse !== "secondary-click") continue;
+    binding.mouse = "none";
+    changed = true;
+  }
+  return { preferences: next, changed };
 }
 
 export function cachePreferences(storage: BindingStorage, preferences: CircuitDesignerPreferencesV1): void {

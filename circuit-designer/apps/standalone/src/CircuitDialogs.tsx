@@ -50,6 +50,28 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
   </div>;
 }
 
+export function CircuitConfirmationDialog({
+  title,
+  message,
+  confirmLabel,
+  onCancel,
+  onConfirm,
+}: {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return <CircuitModal onClose={onCancel} title={title}>
+    <div className="circuit-dialog__copy"><p>{message}</p></div>
+    <div className="circuit-dialog__actions">
+      <button autoFocus onClick={onCancel} type="button">Cancel</button>
+      <button className="danger" onClick={onConfirm} type="button">{confirmLabel}</button>
+    </div>
+  </CircuitModal>;
+}
+
 export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;

@@ -120,6 +120,27 @@ describe("independent circuit core", () => {
     expect(draft.dirty).toBe(false);
   });
 
+  it("applies compound draft commands atomically as one undo step", () => {
+    const document = simpleDocumentFixture();
+    const draft = new CircuitDraft(document, "7");
+    const diagnostics = draft.applyBatch([
+      { operation_id: "delete_net", type: "delete_net", net_id: "data" },
+      { operation_id: "remove_producer", type: "remove_instance", instance_id: "producer_0", cascade: true },
+    ]);
+    expect(diagnostics.some((item) => item.severity === "error")).toBe(false);
+    expect(draft.document.design.nets).toHaveLength(0);
+    expect(draft.document.design.instances.map((item) => item.id)).not.toContain("producer_0");
+    draft.undo();
+    expect(draft.document).toEqual(document);
+
+    const beforeRejected = draft.document;
+    expect(draft.applyBatch([
+      { operation_id: "move", type: "set_instance_geometry", instance_id: "producer_0", geometry: { x: 20, y: 20, width: 180, height: 100 } },
+      { operation_id: "missing", type: "delete_net", net_id: "missing" },
+    ]).some((item) => item.severity === "error")).toBe(true);
+    expect(draft.document).toEqual(beforeRejected);
+  });
+
   it("compiles aliases and primitive templates into a normalized document", () => {
     const construction: CircuitConstruction = {
       mode: "create",

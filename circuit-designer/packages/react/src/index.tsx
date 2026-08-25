@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ForwardedRef,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
@@ -23,8 +24,10 @@ import {
   useReactFlow,
   useUpdateNodeInternals,
   type Edge,
+  type EdgeChange,
   type EdgeProps,
   type Node,
+  type NodeChange,
   type NodeProps,
   type ReactFlowInstance,
   type Viewport,
@@ -54,6 +57,24 @@ import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
 export type CircuitCanvasSelectionItem = { kind: "node" | "boundary" | "net"; id: string };
 export type CircuitCanvasSelection = CircuitCanvasSelectionItem[];
 export type CircuitConnectionRejectionReason = "same_terminal" | "terminal_in_use" | "invalid_target";
+export type CircuitCanvasPoint = { x: number; y: number };
+
+export type CircuitCanvasContextTarget =
+  | { kind: "canvas" }
+  | { kind: "node"; nodeId: string }
+  | { kind: "boundary"; terminalId: string }
+  | { kind: "terminal"; terminalId: string; owner: { kind: "node" | "boundary"; id: string } }
+  | { kind: "net"; netId: string }
+  | { kind: "route-segment"; netId: string; segmentId: string }
+  | { kind: "route-vertex"; netId: string; vertexId: string; vertexKind: "bend" | "junction" };
+
+export interface CircuitCanvasContextMenuRequest {
+  target: CircuitCanvasContextTarget;
+  clientPoint: CircuitCanvasPoint;
+  flowPoint: CircuitCanvasPoint;
+  keyboard: boolean;
+  focusTarget?: HTMLElement | SVGElement;
+}
 
 export interface CircuitDesignerCanvasHandle {
   zoomIn: () => void;
@@ -100,10 +121,12 @@ export interface CircuitDesignerCanvasProps {
   viewportPanActivationKeyCode?: string | string[] | null;
   wheelZoomEnabled?: boolean;
   useDefaultEscapeBinding?: boolean;
+  onContextMenuRequest?: (request: CircuitCanvasContextMenuRequest) => void;
 }
 
 type CircuitNodeData = {
   circuitNode: CircuitNode;
+  geometry: NodeGeometry;
   terminals: CircuitTerminal[];
   placements: Record<string, TerminalPlacement>;
   rendererRegistry?: CircuitCanvasRendererRegistry;
@@ -111,6 +134,17 @@ type CircuitNodeData = {
   occupiedTerminalIds: Set<string>;
   pendingTerminalId?: string;
   onTerminalActivate: (terminalId: string) => void;
+  contextTarget: Extract<CircuitCanvasContextTarget, { kind: "node" | "boundary" }>;
+  onTerminalContextMenu: (
+    target: Extract<CircuitCanvasContextTarget, { kind: "terminal" }>,
+    anchor: CircuitContextAnchor,
+  ) => void;
+};
+
+type CircuitContextAnchor = {
+  clientPoint: { x: number; y: number };
+  focusTarget?: HTMLElement | SVGElement;
+  keyboard: boolean;
 };
 
 type CircuitFlowNode = Node<CircuitNodeData, "circuit">;
@@ -121,6 +155,10 @@ type CircuitEdgeData = {
   routeEditable: boolean;
   gridSize: number;
   onRouteChange?: (route: NetRoute) => void;
+  onContextMenu?: (
+    target: Extract<CircuitCanvasContextTarget, { kind: "route-segment" | "route-vertex" }>,
+    anchor: CircuitContextAnchor,
+  ) => void;
 };
 type CircuitFlowEdge = Edge<CircuitEdgeData, "circuit">;
 
@@ -162,12 +200,32 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
-        const offset = 60 + (placement?.order ?? 0) * 20;
+        const requestedOffset = 60 + (placement?.order ?? 0) * 20;
+        const offset = side === "EAST" || side === "WEST"
+          ? Math.min(requestedOffset, data.geometry.height - 20)
+          : Math.min(requestedOffset, data.geometry.width - 20);
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
         const displayLabel = terminalDisplayLabel(terminal);
         const occupied = data.occupiedTerminalIds.has(terminal.id);
         const pending = data.pendingTerminalId === terminal.id;
         const activateFromKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+          if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+            event.preventDefault();
+            event.stopPropagation();
+            const bounds = event.currentTarget.getBoundingClientRect();
+            data.onTerminalContextMenu({
+              kind: "terminal",
+              terminalId: terminal.id,
+              owner: data.contextTarget.kind === "node"
+                ? { kind: "node", id: data.contextTarget.nodeId }
+                : { kind: "boundary", id: data.contextTarget.terminalId },
+            }, {
+              clientPoint: { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 },
+              focusTarget: event.currentTarget,
+              keyboard: true,
+            });
+            return;
+          }
           if (event.key !== "Enter" || occupied || !data.editable) return;
           event.preventDefault();
           event.stopPropagation();
@@ -179,7 +237,7 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             id={terminalHandleId(terminal.id)}
             type="source"
             position={positions[side]}
-            style={style}
+            style={{ ...style, pointerEvents: "all" }}
             className={occupied ? "cd-terminal--occupied" : pending ? "cd-terminal--pending" : undefined}
             title={occupied ? `${displayLabel} · already connected` : `${displayLabel} · drag to connect`}
             aria-label={occupied ? `${displayLabel}, already connected` : `${displayLabel}, connection terminal`}
@@ -188,6 +246,22 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             tabIndex={data.editable ? 0 : -1}
             isConnectable={data.editable && !occupied}
             onKeyDown={activateFromKeyboard}
+            data-terminal-id={terminal.id}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              data.onTerminalContextMenu({
+                kind: "terminal",
+                terminalId: terminal.id,
+                owner: data.contextTarget.kind === "node"
+                  ? { kind: "node", id: data.contextTarget.nodeId }
+                  : { kind: "boundary", id: data.contextTarget.terminalId },
+              }, {
+                clientPoint: { x: event.clientX, y: event.clientY },
+                focusTarget: event.currentTarget,
+                keyboard: false,
+              });
+            }}
           />
         </Fragment>;
       })}
@@ -233,7 +307,7 @@ export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Re
   });
 }
 
-function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
+function CircuitEdgeView({ id: netId, data, selected }: EdgeProps<CircuitFlowEdge>) {
   if (!data) return null;
   const { screenToFlowPosition } = useReactFlow();
   const [draft, setDraft] = useState(() => ensureRouteIds(data.route));
@@ -251,6 +325,22 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
     degrees.set(segment.to_vertex, (degrees.get(segment.to_vertex) ?? 0) + 1);
   }
   const flowPoint = (event: { clientX: number; clientY: number }) => screenToFlowPosition({ x: event.clientX, y: event.clientY });
+  const openContextMenu = (
+    event: ReactMouseEvent<SVGElement> | ReactKeyboardEvent<SVGElement>,
+    target: Extract<CircuitCanvasContextTarget, { kind: "route-segment" | "route-vertex" }>,
+    keyboard: boolean,
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const clientPoint = keyboard
+      ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+      : { x: (event as ReactMouseEvent<SVGElement>).clientX, y: (event as ReactMouseEvent<SVGElement>).clientY };
+    data.onContextMenu?.(target, { clientPoint, focusTarget: event.currentTarget, keyboard });
+  };
+  const contextKey = (event: ReactKeyboardEvent<SVGElement>, target: Extract<CircuitCanvasContextTarget, { kind: "route-segment" | "route-vertex" }>) => {
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) openContextMenu(event, target, true);
+  };
   const startDrag = (event: ReactPointerEvent<SVGElement>, kind: "segment" | "vertex", id: string, locked = false) => {
     if (!data.routeEditable || locked) return;
     event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId);
@@ -282,38 +372,75 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
         const movable = !segment.locked
           && vertices.get(segment.from_vertex)?.kind !== "endpoint"
           && vertices.get(segment.to_vertex)?.kind !== "endpoint";
-        const id = segment.id ?? `segment:${index}`;
-        return <Fragment key={id}>
+        const segmentId = segment.id ?? `segment:${index}`;
+        return <Fragment key={segmentId}>
           <path d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`} className={segment.locked ? "cd-net__segment cd-net__segment--locked" : "cd-net__segment"} />
-          {data.routeEditable && <path
+          <path
             d={`M ${start.x} ${start.y} L ${end.x} ${end.y}`}
-            className="cd-net__hit-segment"
-            data-segment-id={id}
+            aria-label={`Route segment ${segmentId}`}
+            className={data.routeEditable ? "cd-net__hit-segment" : "cd-net__hit-segment cd-net__hit-segment--readonly"}
+            data-segment-id={segmentId}
             data-movable={movable}
-            onPointerDown={(event) => startDrag(event, "segment", id, segment.locked)}
+            onContextMenu={(event) => openContextMenu(event, { kind: "route-segment", netId, segmentId }, false)}
+            onKeyDown={(event) => contextKey(event, { kind: "route-segment", netId, segmentId })}
+            onPointerDown={(event) => startDrag(event, "segment", segmentId, segment.locked)}
             onPointerMove={moveDrag}
             onPointerUp={endDrag}
+            role="button"
+            tabIndex={0}
             onDoubleClick={(event) => {
+              if (!data.routeEditable) return;
               event.stopPropagation();
-              const next = insertRouteBend(draftRef.current, id, flowPoint(event), data.gridSize);
+              const next = insertRouteBend(draftRef.current, segmentId, flowPoint(event), data.gridSize);
               updateDraft(next); data.onRouteChange?.(next);
             }}
-          />}
+          />
         </Fragment>;
       })}
       {draft.vertices.filter((vertex) => vertex.kind === "junction" && (degrees.get(vertex.id) ?? 0) >= 3).map((vertex) => (
-        <circle key={vertex.id} cx={vertex.point.x} cy={vertex.point.y} r="3.5" className="cd-net__junction" />
-      ))}
-      {data.routeEditable && draft.vertices.filter((vertex) => vertex.kind !== "endpoint").map((vertex) => (
         <circle
+          aria-label={`Route junction ${vertex.id}`}
+          className="cd-net__junction"
+          cx={vertex.point.x}
+          cy={vertex.point.y}
+          key={vertex.id}
+          onContextMenu={(event) => openContextMenu(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: "junction" }, false)}
+          onKeyDown={(event) => contextKey(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: "junction" })}
+          r="3.5"
+          role="button"
+          tabIndex={0}
+        />
+      ))}
+      {!selected && draft.vertices.filter((vertex) => vertex.kind === "bend").map((vertex) => (
+        <circle
+          aria-label={`Route bend ${vertex.id}`}
+          className="cd-net__vertex-context-target"
+          cx={vertex.point.x}
+          cy={vertex.point.y}
+          key={`context:${vertex.id}`}
+          onContextMenu={(event) => openContextMenu(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: "bend" }, false)}
+          onKeyDown={(event) => contextKey(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: "bend" })}
+          r="7"
+          role="button"
+          tabIndex={0}
+        />
+      ))}
+      {selected && draft.vertices.filter((vertex) => vertex.kind !== "endpoint").map((vertex) => (
+        <circle
+          aria-label={`Route ${vertex.kind} ${vertex.id}`}
           key={`handle:${vertex.id}`}
           cx={vertex.point.x} cy={vertex.point.y} r="5"
-          className={vertex.locked ? "cd-net__route-handle cd-net__route-handle--locked" : "cd-net__route-handle"}
+          className={vertex.locked || !data.routeEditable ? "cd-net__route-handle cd-net__route-handle--locked" : "cd-net__route-handle"}
           data-vertex-id={vertex.id}
+          onContextMenu={(event) => openContextMenu(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: vertex.kind as "bend" | "junction" }, false)}
+          onKeyDown={(event) => contextKey(event, { kind: "route-vertex", netId, vertexId: vertex.id, vertexKind: vertex.kind as "bend" | "junction" })}
           onPointerDown={(event) => startDrag(event, "vertex", vertex.id, vertex.locked)}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
+          role="button"
+          tabIndex={0}
           onDoubleClick={(event) => {
+            if (!data.routeEditable) return;
             event.stopPropagation();
             const next = removeRouteBend(draftRef.current, vertex.id);
             updateDraft(next); data.onRouteChange?.(next);
@@ -337,10 +464,20 @@ export function connectionRejectionReason(
   return undefined;
 }
 
-function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
+  const secondaryDragRef = useRef<{ x: number; y: number; moved: boolean }>();
   const [pendingTerminalId, setPendingTerminalId] = useState<string>();
+  const emitContextMenu = (target: CircuitCanvasContextTarget, anchor: CircuitContextAnchor) => {
+    if (!anchor.keyboard && secondaryDragRef.current?.moved) {
+      secondaryDragRef.current = undefined;
+      return;
+    }
+    secondaryDragRef.current = undefined;
+    const flowPoint = instanceRef.current?.screenToFlowPosition(anchor.clientPoint) ?? anchor.clientPoint;
+    onContextMenuRequest?.({ target, flowPoint, ...anchor });
+  };
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
@@ -348,6 +485,27 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     () => new Set(selection.map((item) => `${item.kind}:${item.id}`)),
     [selection],
   );
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const applyControlledSelectionChanges = (
+    kind: "node" | "net",
+    changes: Array<NodeChange<CircuitFlowNode> | EdgeChange<CircuitFlowEdge>>,
+  ) => {
+    let next = [...selectionRef.current];
+    for (const change of changes) {
+      if (change.type !== "select") continue;
+      const item: CircuitCanvasSelectionItem = kind === "net"
+        ? { kind: "net", id: change.id }
+        : change.id.startsWith("boundary:")
+          ? { kind: "boundary", id: change.id.slice("boundary:".length) }
+          : { kind: "node", id: change.id };
+      next = next.filter((selected) => selected.kind !== item.kind || selected.id !== item.id);
+      if (change.selected) next.push(item);
+    }
+    if (circuitSelectionsEqual(selectionRef.current, next)) return;
+    selectionRef.current = next;
+    onSelectionChange?.(next);
+  };
   const selectedNetId = selection.length === 1 && selection[0].kind === "net" ? selection[0].id : undefined;
   const occupiedTerminalIds = useMemo(
     () => new Set(graph.nets.flatMap((net) => net.endpoints.map((endpoint) => endpoint.terminal_id))),
@@ -389,6 +547,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: node,
+        geometry,
         terminals: terminalsByNode.get(node.id) ?? [],
         placements: terminalPlacements,
         rendererRegistry,
@@ -396,6 +555,8 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         occupiedTerminalIds,
         pendingTerminalId,
         onTerminalActivate: activateTerminal,
+        contextTarget: { kind: "node", nodeId: node.id },
+        onTerminalContextMenu: emitContextMenu,
       },
       draggable: editable && Boolean(onNodeGeometryChanges),
       className: elementStatus?.nodes?.[node.id] ? `cd-element--${elementStatus.nodes[node.id]}` : undefined,
@@ -403,10 +564,11 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     }];
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
-    const geometry = boundaryGeometry[terminal.id];
+    const boundaryId = terminal.id.startsWith("boundary:") ? terminal.id.slice("boundary:".length) : terminal.id;
+    const geometry = boundaryGeometry[terminal.id] ?? boundaryGeometry[boundaryId];
     if (!geometry) continue;
     nodes.push({
-      id: `boundary:${terminal.id}`,
+      id: `boundary:${boundaryId}`,
       type: "circuit",
       position: { x: geometry.x, y: geometry.y },
       width: geometry.width,
@@ -414,6 +576,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: { id: terminal.id, label: terminal.label, component_id: "boundary", terminal_ids: [terminal.id], configuration_values: {} },
+        geometry,
         terminals: [terminal],
         placements: terminalPlacements,
         rendererRegistry,
@@ -421,10 +584,12 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         occupiedTerminalIds,
         pendingTerminalId,
         onTerminalActivate: activateTerminal,
+        contextTarget: { kind: "boundary", terminalId: boundaryId },
+        onTerminalContextMenu: emitContextMenu,
       },
       draggable: false,
       className: elementStatus?.nodes?.[terminal.id] ? `cd-element--${elementStatus.nodes[terminal.id]}` : undefined,
-      selected: selectedKeys.has(`boundary:${terminal.id}`),
+      selected: selectedKeys.has(`boundary:${boundaryId}`),
     });
   }
   const edges = buildCircuitFlowEdges(graph, netRoutes, {
@@ -436,6 +601,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     const status = elementStatus?.nets?.[edge.id];
     if (status) edge.className = `cd-element--${status}`;
     edge.selected = selectedKeys.has(`net:${edge.id}`);
+    if (edge.data) edge.data.onContextMenu = emitContextMenu;
   }
 
   useImperativeHandle(forwardedRef, () => ({
@@ -487,6 +653,39 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
     if (typing) return;
+    if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) {
+      event.preventDefault();
+      const element = target instanceof Element ? target : event.currentTarget;
+      const nodeElement = element.closest<HTMLElement>(".react-flow__node");
+      const edgeElement = element.closest<HTMLElement>(".react-flow__edge");
+      let selectedElement: HTMLElement | SVGElement | null = null;
+      let contextTarget: CircuitCanvasContextTarget = { kind: "canvas" };
+      if (nodeElement?.dataset.id?.startsWith("boundary:")) {
+        contextTarget = { kind: "boundary", terminalId: nodeElement.dataset.id.slice("boundary:".length) };
+      } else if (nodeElement?.dataset.id) {
+        contextTarget = { kind: "node", nodeId: nodeElement.dataset.id };
+      } else if (edgeElement?.dataset.id) {
+        contextTarget = { kind: "net", netId: edgeElement.dataset.id };
+      } else if (selection.length === 1) {
+        const item = selection[0];
+        contextTarget = item.kind === "node" ? { kind: "node", nodeId: item.id }
+          : item.kind === "boundary" ? { kind: "boundary", terminalId: item.id }
+            : { kind: "net", netId: item.id };
+        const flowId = item.kind === "boundary" ? `boundary:${item.id}` : item.id;
+        selectedElement = canvasRef.current?.querySelector<HTMLElement | SVGElement>(
+          item.kind === "net" ? `.react-flow__edge[data-id="${CSS.escape(flowId)}"]` : `.react-flow__node[data-id="${CSS.escape(flowId)}"]`,
+        ) ?? null;
+      }
+      const bounds = (nodeElement ?? edgeElement ?? selectedElement ?? canvasRef.current)?.getBoundingClientRect();
+      emitContextMenu(contextTarget, {
+        clientPoint: bounds
+          ? { x: bounds.left + bounds.width / 2, y: bounds.top + bounds.height / 2 }
+          : { x: window.innerWidth / 2, y: window.innerHeight / 2 },
+        focusTarget: element instanceof HTMLElement || element instanceof SVGElement ? element : undefined,
+        keyboard: true,
+      });
+      return;
+    }
     if (event.key === "Escape" && useDefaultEscapeBinding) {
       if (pendingTerminalId) setPendingTerminalId(undefined);
       else onSelectionChange?.([]);
@@ -510,7 +709,21 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
   };
 
   return (
-    <div className="cd-canvas" data-testid="circuit-canvas" ref={canvasRef} onKeyDown={onCanvasKeyDown}>
+    <div
+      className="cd-canvas"
+      data-testid="circuit-canvas"
+      ref={canvasRef}
+      onKeyDown={onCanvasKeyDown}
+      onPointerDownCapture={(event) => {
+        if (event.button === 2) secondaryDragRef.current = { x: event.clientX, y: event.clientY, moved: false };
+      }}
+      onPointerMoveCapture={(event) => {
+        const drag = secondaryDragRef.current;
+        if (drag && Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 5) drag.moved = true;
+      }}
+      onPointerUpCapture={() => window.setTimeout(() => { secondaryDragRef.current = undefined; }, 100)}
+      tabIndex={0}
+    >
       <ReactFlow<CircuitFlowNode, CircuitFlowEdge>
         nodes={nodes}
         edges={edges}
@@ -547,14 +760,34 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         autoPanOnNodeDrag={allowViewportNavigation}
         autoPanOnConnect={allowViewportNavigation}
         onMove={(_, nextViewport) => onViewportChange?.(nextViewport)}
-        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
-          const next = [
-            ...selectedNodes.map((node): CircuitCanvasSelectionItem => node.id.startsWith("boundary:")
-            ? { kind: "boundary", id: node.id.slice("boundary:".length) }
-            : { kind: "node", id: node.id }),
-            ...selectedEdges.map((edge): CircuitCanvasSelectionItem => ({ kind: "net", id: edge.id })),
-          ];
-          if (!circuitSelectionsEqual(selection, next)) onSelectionChange?.(next);
+        onNodesChange={(changes) => applyControlledSelectionChanges("node", changes)}
+        onEdgesChange={(changes) => applyControlledSelectionChanges("net", changes)}
+        onPaneContextMenu={(event) => {
+          event.preventDefault();
+          emitContextMenu({ kind: "canvas" }, {
+            clientPoint: { x: event.clientX, y: event.clientY },
+            focusTarget: event.currentTarget instanceof HTMLElement || event.currentTarget instanceof SVGElement ? event.currentTarget : undefined,
+            keyboard: false,
+          });
+        }}
+        onNodeContextMenu={(event, node) => {
+          event.preventDefault();
+          const contextTarget: CircuitCanvasContextTarget = node.id.startsWith("boundary:")
+            ? { kind: "boundary", terminalId: node.id.slice("boundary:".length) }
+            : { kind: "node", nodeId: node.id };
+          emitContextMenu(contextTarget, {
+            clientPoint: { x: event.clientX, y: event.clientY },
+            focusTarget: event.currentTarget instanceof HTMLElement || event.currentTarget instanceof SVGElement ? event.currentTarget : undefined,
+            keyboard: false,
+          });
+        }}
+        onEdgeContextMenu={(event, edge) => {
+          event.preventDefault();
+          emitContextMenu({ kind: "net", netId: edge.id }, {
+            clientPoint: { x: event.clientX, y: event.clientY },
+            focusTarget: event.currentTarget instanceof HTMLElement || event.currentTarget instanceof SVGElement ? event.currentTarget : undefined,
+            keyboard: false,
+          });
         }}
         onConnect={(connection) => {
           const sourceTerminalId = terminalIdFromHandle(connection.sourceHandle);

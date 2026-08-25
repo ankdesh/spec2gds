@@ -42,15 +42,23 @@ export class CircuitDraft {
   get dirty(): boolean { return this.current.operations.length > 0; }
 
   apply(operation: CircuitOperation): Diagnostic[] {
-    const result = applyOperations(this.current.document, [operation]);
+    return this.applyBatch([operation]);
+  }
+
+  /** Apply a user-visible compound command atomically and record one undo step. */
+  applyBatch(batch: CircuitOperation[]): Diagnostic[] {
+    if (!batch.length) return [];
+    const result = applyOperations(this.current.document, batch);
     if (!result.candidate) return result.diagnostics;
     this.undoStack.push(clone(this.current));
     this.redoStack = [];
     const operations = [...this.current.operations];
-    const key = coalescingKey(operation);
-    const priorIndex = key ? operations.findIndex((item) => coalescingKey(item) === key) : -1;
-    if (priorIndex >= 0) operations[priorIndex] = clone(operation);
-    else operations.push(clone(operation));
+    for (const operation of batch) {
+      const key = coalescingKey(operation);
+      const priorIndex = key ? operations.findIndex((item) => coalescingKey(item) === key) : -1;
+      if (priorIndex >= 0) operations[priorIndex] = clone(operation);
+      else operations.push(clone(operation));
+    }
     this.current = { document: result.candidate, operations };
     return result.diagnostics;
   }

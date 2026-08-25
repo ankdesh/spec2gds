@@ -33,6 +33,9 @@ flowchart LR
 The service owns live revisions and leases, but not durable storage. Save
 downloads a new canonical file and never overwrites the input file. A circuit
 opened from the Spec Editor is source-owned and read-only.
+SVG and PNG downloads use the currently visible effective canvas layout; PNG
+is rasterized from the same SVG representation so their geometry and styling
+remain aligned.
 
 ## Menus and canvas interactions
 
@@ -49,11 +52,15 @@ The canvas has no separate tool modes. Direct gestures remain available:
 - drag between two free terminals to create a full-terminal net;
 - select one net to reveal and drag its route handles;
 - use the wheel to zoom and left-drag empty canvas to pan without Space.
+- right-click a canvas object, route subpart, or port for a semantic menu; use
+  the Context Menu key or Shift+F10 for keyboard access.
 
 Open **Edit → Preferences → Actions and shortcuts** to configure the keyboard
 and mouse input for every action. Preferences are shared by every browser using
 the service and are saved to the server-managed JSON profile. The browser keeps
 only a failed-save/migration cache.
+Right-click is reserved inside the canvas and is not assignable to an action;
+right-drag panning remains available and suppresses a context menu after drag.
 
 Use **Connect → New connection** for named or sliced nets. View and selection
 commands work in read-only documents; circuit-changing commands require an

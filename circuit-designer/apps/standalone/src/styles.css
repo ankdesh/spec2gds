@@ -110,6 +110,10 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
 .circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover, .circuit-submenu > button:focus-visible { outline: none; background: #dcece7; color: #164f50; }
 .circuit-menu__panel > button small, .circuit-submenu > button small { color: #748287; font: 8px ui-monospace; white-space: nowrap; }
 .circuit-menu__separator { height: 1px; margin: 4px 3px; background: #daddd7; }
+.circuit-context-menu { position: fixed; z-index: 1000; }
+.circuit-context-menu > .circuit-menu__panel { position: relative; inset: auto; min-width: 220px; border-radius: 4px; }
+.circuit-context-menu .circuit-menu__panel--nested { position: absolute; top: -6px; left: calc(100% + 4px); }
+.circuit-dialog__actions .danger { border-color: #a83939; background: #a83939; color: #fff; }
 .circuit-submenu { position: relative; }
 
 .preference-toggle { display: flex; align-items: flex-start; gap: 9px; border: 1px solid #cdd2ce; border-radius: 4px; background: #fffef9; padding: 13px 14px; }

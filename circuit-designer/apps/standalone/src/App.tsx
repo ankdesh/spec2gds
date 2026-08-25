@@ -5,11 +5,15 @@ import {
   createDefaultCircuitDesignerPreferences,
   createEmptyCircuitDocument,
   exportCircuitJson,
+  endpointTerminalKey,
+  insertRouteBend,
   projectDocument,
+  removeRouteBend,
+  renderCircuitPng,
+  renderCircuitSvg,
   uniqueSlug,
   type CircuitDocument,
   type CircuitDesignerPreferencesV1,
-  type CircuitExport,
   type CircuitOperation,
   type CircuitProposal,
   type CircuitSnapshot,
@@ -18,6 +22,7 @@ import {
   type NetEndpoint,
   type NetRoute,
   type NodeGeometry,
+  type TerminalPlacement,
   setAllRouteLocks,
 } from "@spec2gds/circuit-core";
 import {
@@ -28,6 +33,8 @@ import {
 } from "@spec2gds/circuit-layout";
 import {
   CircuitDesignerCanvas,
+  type CircuitCanvasContextMenuRequest,
+  type CircuitCanvasContextTarget,
   type CircuitCanvasSelection,
   type CircuitDesignerCanvasHandle,
 } from "@spec2gds/circuit-react";
@@ -42,13 +49,21 @@ import { browserRandomUuid } from "./browser-id";
 import { BrowserLogger, type PublicLoggingConfig } from "@spec2gds/observability/browser";
 import { ActionSettingsPage } from "./ActionSettingsPage";
 import { CircuitMenuBar } from "./CircuitMenuBar";
-import { CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
+import { CircuitConfirmationDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
+import { CircuitContextMenu } from "./CircuitActionMenu";
+import {
+  buildCircuitContextMenu,
+  type CircuitActionInvocation,
+  type CircuitCommandId,
+} from "./context-actions";
 import {
   cachePreferences,
   circuitActionDefinitions,
   clearCachedPreferences,
+  formatKeyboardShortcut,
   keyboardEventMatches,
   loadCachedPreferences,
+  normalizeContextMenuMouseBindings,
   panMouseButtons,
   reactFlowKeyCode,
   standardWheelZoomEnabled,
@@ -107,6 +122,12 @@ export function App() {
   );
   const [preferenceStatus, setPreferenceStatus] = useState<"loading" | "saved" | "saving" | "error">("loading");
   const [dialog, setDialog] = useState<CircuitDialogId>();
+  const [confirmation, setConfirmation] = useState<{
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }>();
   const [linkedDocumentId, setLinkedDocumentId] = useState<string | undefined>(
     () => linkedCircuitDocumentId(window.location.search),
   );
@@ -137,10 +158,13 @@ export function App() {
   const [proposals, setProposals] = useState<CircuitProposal[]>([]);
   const [sourceDescription, setSourceDescription] = useState("Empty local circuit. Add definitions and instances after unlocking.");
   const [openingFile, setOpeningFile] = useState(false);
+  const [contextRequest, setContextRequest] = useState<(CircuitCanvasContextMenuRequest & { selection: CircuitCanvasSelection })>();
+  const [componentCreationPoint, setComponentCreationPoint] = useState<{ x: number; y: number }>();
+  const [menubarDismissVersion, setMenubarDismissVersion] = useState(0);
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
-  const actionExecutorRef = useRef<(actionId: CircuitActionId) => boolean>(() => false);
+  const actionExecutorRef = useRef<(invocation: CircuitActionInvocation) => boolean>(() => false);
   const preferencesHydratedRef = useRef(false);
   const savedPreferencesRef = useRef("");
 
@@ -156,6 +180,9 @@ export function App() {
         if (!loaded.persisted && initialCachedPreferences) {
           next = (await backend.putPreferences(initialCachedPreferences)).preferences;
         }
+        const normalized = normalizeContextMenuMouseBindings(next);
+        next = normalized.preferences;
+        if ((loaded.persisted || initialCachedPreferences) && normalized.changed) next = (await backend.putPreferences(next)).preferences;
         if (!active) return;
         savedPreferencesRef.current = JSON.stringify(next);
         setPreferences(next);
@@ -278,13 +305,15 @@ export function App() {
   useEffect(() => {
     if (!graph) return;
     const nodeIds = new Set(graph.nodes.map((node) => node.id));
-    const boundaryIds = new Set(graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => terminal.id));
+    const boundaryIds = new Set(graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => terminal.id.replace(/^boundary:/, "")));
     const netIds = new Set(graph.nets.map((net) => net.id));
     setSelection((current) => {
       const next = current.filter((item) => item.kind === "node" ? nodeIds.has(item.id) : item.kind === "boundary" ? boundaryIds.has(item.id) : netIds.has(item.id));
       return next.length === current.length ? current : next;
     });
   }, [graph]);
+
+  useEffect(() => setContextRequest(undefined), [document]);
 
   useEffect(() => {
     if (!graph) return;
@@ -325,12 +354,16 @@ export function App() {
   }, [backend, lease, snapshot?.document.document_id, snapshot?.revision]);
 
   function mutate(operation: CircuitOperation, success: string): boolean {
+    return mutateBatch([operation], success);
+  }
+
+  function mutateBatch(operations: CircuitOperation[], success: string): boolean {
     const draft = draftRef.current;
     if (!draft) {
       setMessage("Unlock the document before editing.");
       return false;
     }
-    const diagnostics = draft.apply(operation);
+    const diagnostics = draft.applyBatch(operations);
     const errors = diagnostics.filter((item) => item.severity === "error");
     if (errors.length) {
       setMessage(errors.map((item) => item.message).join(" · "));
@@ -412,13 +445,33 @@ export function App() {
       parameters: [],
       appearance: { renderer_key: "generic", properties: {} },
     };
-    if (!mutate({ operation_id: operationId("component"), type: "add_component", component }, "Local component definition created.")) return;
-    mutate({
-      operation_id: operationId("instance"),
-      type: "add_instance",
-      instance: { id: instanceId, label: componentName.trim(), component_id: componentId, parameter_values: {} },
-    }, "Local component and first instance created.");
+    const operations: CircuitOperation[] = [
+      { operation_id: operationId("component"), type: "add_component", component },
+      {
+        operation_id: operationId("instance"),
+        type: "add_instance",
+        instance: { id: instanceId, label: componentName.trim(), component_id: componentId, parameter_values: {} },
+      },
+    ];
+    if (componentCreationPoint) {
+      const grid = document.layout.grid_size || 20;
+      operations.push({
+        operation_id: operationId("geometry"),
+        type: "set_instance_geometry",
+        instance_id: instanceId,
+        geometry: {
+          x: Math.round((componentCreationPoint.x - 90) / grid) * grid,
+          y: Math.round((componentCreationPoint.y - 50) / grid) * grid,
+          width: 180,
+          height: 100,
+          pinned: true,
+        },
+      });
+    }
+    if (!mutateBatch(operations, "Local component and first instance created.")) return;
+    setSelection([{ kind: "node", id: instanceId }]);
     setComponentName("");
+    setComponentCreationPoint(undefined);
   }
 
   function createNet(source: string, target: string, requestedName = "", lsb = sliceLsb, width = sliceWidth): boolean {
@@ -442,14 +495,12 @@ export function App() {
   }
 
   function moveNodes(changes: Record<string, NodeGeometry>): void {
-    for (const [instanceId, geometry] of Object.entries(changes)) {
-      mutate({
+    mutateBatch(Object.entries(changes).map(([instanceId, geometry]) => ({
         operation_id: operationId("move"),
         type: "set_instance_geometry",
         instance_id: instanceId,
         geometry,
-      }, `Moved ${Object.keys(changes).length} selected instance${Object.keys(changes).length === 1 ? "" : "s"}.`);
-    }
+      })), `Moved ${Object.keys(changes).length} selected instance${Object.keys(changes).length === 1 ? "" : "s"}.`);
   }
 
   function saveRoute(netId: string, route: NetRoute): void {
@@ -527,12 +578,28 @@ export function App() {
       setMessage(`Downloaded ${circuitDocumentFilename(snapshot.document)}.`);
       return;
     }
+    if (!layout) {
+      setMessage("Wait for the visible circuit layout before exporting an image.");
+      return;
+    }
     try {
-      const exported: CircuitExport = await backend.export(snapshot.document.document_id, { format });
-      const data = typeof exported.data === "string"
-        ? exported.data
-        : exported.data.slice().buffer;
-      triggerDownload(new Blob([data], { type: exported.media_type }), exported.filename);
+      const exportDocument: CircuitDocument = {
+        ...snapshot.document,
+        layout: {
+          ...snapshot.document.layout,
+          direction: layout.layout.direction,
+          instance_geometry: structuredClone(layout.layout.node_geometry),
+          terminal_placements: structuredClone(layout.layout.terminal_placements),
+          net_routes: structuredClone(layout.layout.net_routes),
+        },
+      };
+      const options = { boundaryGeometry: layout.boundary_geometry };
+      const stem = `${snapshot.document.document_id}-${snapshot.document.design.id}`;
+      if (format === "svg") {
+        triggerDownload(new Blob([renderCircuitSvg(exportDocument, options)], { type: "image/svg+xml" }), `${stem}.svg`);
+      } else {
+        triggerDownload(await renderCircuitPng(exportDocument, options), `${stem}.png`);
+      }
       setMessage(`Exported ${format.toUpperCase()}.`);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
@@ -651,11 +718,70 @@ export function App() {
     || selectedRoute?.vertices.some((vertex) => vertex.locked),
   );
 
+  const selectionItemForTarget = (target: CircuitCanvasContextTarget): CircuitCanvasSelection[number] | undefined => {
+    if (target.kind === "node") return { kind: "node", id: target.nodeId };
+    if (target.kind === "boundary") return { kind: "boundary", id: target.terminalId };
+    if (target.kind === "terminal") return target.owner.kind === "node"
+      ? { kind: "node", id: target.owner.id }
+      : { kind: "boundary", id: target.owner.id };
+    if (target.kind === "net" || target.kind === "route-segment" || target.kind === "route-vertex") return { kind: "net", id: target.netId };
+    return undefined;
+  };
+  const targetTerminalKey = (target: CircuitCanvasContextTarget | undefined): string | undefined => {
+    if (!target) return undefined;
+    if (target.kind === "terminal") return target.terminalId;
+    if (target.kind === "boundary") return `boundary:${target.terminalId}`;
+    return undefined;
+  };
+  const targetNetId = (target: CircuitCanvasContextTarget | undefined): string | undefined => {
+    if (!target) return undefined;
+    if (target.kind === "net" || target.kind === "route-segment" || target.kind === "route-vertex") return target.netId;
+    const terminalKey = targetTerminalKey(target);
+    return terminalKey ? document?.design.nets.find((net) => net.endpoints.some((endpoint) => endpointTerminalKey(endpoint) === terminalKey))?.id : undefined;
+  };
+  const contextTargetItem = contextRequest ? selectionItemForTarget(contextRequest.target) : undefined;
+  const contextTargetSelected = Boolean(contextTargetItem && contextRequest?.selection.some((item) => item.kind === contextTargetItem.kind && item.id === contextTargetItem.id));
+  const contextSelectionWide = Boolean(contextRequest && contextRequest.selection.length > 1 && (
+    (contextRequest.keyboard && contextRequest.target.kind === "canvas")
+    || (contextTargetSelected && ["node", "boundary", "net"].includes(contextRequest.target.kind))
+  ));
+  const contextTerminalKey = targetTerminalKey(contextRequest?.target);
+  const contextNetId = targetNetId(contextRequest?.target);
+  const contextNet = document?.design.nets.find((net) => net.id === contextNetId);
+  const contextRoute = contextNetId ? layout?.layout.net_routes[contextNetId] : undefined;
+  const contextPlacement = contextTerminalKey ? layout?.layout.terminal_placements[contextTerminalKey] : undefined;
+  const contextRouteLocked = Boolean(contextRoute?.segments.some((segment) => segment.locked)
+    || contextRoute?.vertices.some((vertex) => vertex.locked));
+  const contextEntries = contextRequest ? buildCircuitContextMenu({
+    target: contextRequest.target,
+    selectionWide: contextSelectionWide,
+    inspectorOpen,
+    terminalConnected: Boolean(contextNet),
+    terminalSide: contextPlacement?.side,
+    terminalPlacementLocked: contextPlacement?.locked,
+    routeLocked: contextRouteLocked,
+  }) : [];
+
+  function openCanvasContextMenu(request: CircuitCanvasContextMenuRequest): void {
+    const item = selectionItemForTarget(request.target);
+    const preservedSelection = item && !selection.some((selected) => selected.kind === item.kind && selected.id === item.id) ? [item] : selection;
+    if (preservedSelection !== selection) setSelection(preservedSelection);
+    setDialog(undefined);
+    setMenubarDismissVersion((value) => value + 1);
+    setContextRequest({ ...request, selection: preservedSelection });
+  }
+
+  function closeContextMenu(restoreFocus = true): void {
+    const target = contextRequest?.focusTarget;
+    setContextRequest(undefined);
+    if (restoreFocus && target?.isConnected) requestAnimationFrame(() => (target as HTMLElement).focus?.());
+  }
+
   function selectAllCanvas(): void {
     if (!graph) return;
     setSelection([
       ...graph.nodes.map((node) => ({ kind: "node" as const, id: node.id })),
-      ...graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => ({ kind: "boundary" as const, id: terminal.id })),
+      ...graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => ({ kind: "boundary" as const, id: terminal.id.replace(/^boundary:/, "") })),
       ...graph.nets.map((net) => ({ kind: "net" as const, id: net.id })),
     ]);
   }
@@ -671,15 +797,117 @@ export function App() {
     return true;
   }
 
-  function rerouteSelectedNet(): void {
-    if (!graph || !layout || !selectedNet || selectedRouteLocked) return;
-    const route = routeCircuitNets(graph, layout.layout, layout.boundary_geometry, [selectedNet.id], false)[selectedNet.id];
-    if (route) saveRoute(selectedNet.id, route);
+  function deleteCurrentSelection(fallback?: CircuitCanvasSelection[number], selectionOverride?: CircuitCanvasSelection): boolean {
+    const effectiveSelection = selectionOverride ?? selection;
+    if (!document || (!effectiveSelection.length && !fallback)) return false;
+    const captured = effectiveSelection.length ? [...effectiveSelection] : [fallback!];
+    const applyDelete = () => {
+      const selectedNetIds = new Set(captured.filter((item) => item.kind === "net").map((item) => item.id));
+      const operations: CircuitOperation[] = [
+        ...[...selectedNetIds].map((netId): CircuitOperation => ({ operation_id: operationId("delete_net"), type: "delete_net", net_id: netId })),
+        ...captured.filter((item) => item.kind === "node").map((item): CircuitOperation => ({ operation_id: operationId("remove"), type: "remove_instance", instance_id: item.id, cascade: true })),
+        ...captured.filter((item) => item.kind === "boundary").map((item): CircuitOperation => ({ operation_id: operationId("remove_boundary"), type: "remove_boundary_terminal", terminal_id: item.id, cascade: true })),
+      ];
+      const changed = mutateBatch(operations, `Deleted ${captured.length} selected item${captured.length === 1 ? "" : "s"} atomically.`);
+      if (changed) setSelection([]);
+      return changed;
+    };
+    const boundaryCount = captured.filter((item) => item.kind === "boundary").length;
+    if (boundaryCount) {
+      setConfirmation({
+        title: "Delete selected boundary terminals?",
+        message: `This will delete ${boundaryCount} boundary terminal${boundaryCount === 1 ? "" : "s"} and explicitly cascade their connectivity. The complete selection is deleted as one undoable change.`,
+        confirmLabel: "Delete selection",
+        onConfirm: () => { setConfirmation(undefined); applyDelete(); },
+      });
+      return true;
+    }
+    return applyDelete();
   }
 
-  function setSelectedRouteLocked(locked: boolean): void {
-    if (!selectedNet || !selectedRoute) return;
-    saveRoute(selectedNet.id, setAllRouteLocks(selectedRoute, locked));
+  function terminalContext(target: CircuitCanvasContextTarget | undefined) {
+    const terminalKey = targetTerminalKey(target);
+    if (!terminalKey || !graph || !layout) return undefined;
+    const terminal = graph.terminals.find((item) => item.id === terminalKey);
+    if (!terminal) return undefined;
+    const ownerTerminals = graph.terminals.filter((item) => terminal.node_id ? item.node_id === terminal.node_id : !item.node_id);
+    const placement = layout.layout.terminal_placements[terminalKey];
+    const sameSide = ownerTerminals
+      .filter((item) => layout.layout.terminal_placements[item.id]?.side === placement?.side)
+      .sort((left, right) => (layout.layout.terminal_placements[left.id]?.order ?? 0) - (layout.layout.terminal_placements[right.id]?.order ?? 0));
+    return { terminalKey, terminal, ownerTerminals, placement, sameSide, index: sameSide.findIndex((item) => item.id === terminalKey) };
+  }
+
+  function setTerminalSide(target: CircuitCanvasContextTarget | undefined, side: TerminalPlacement["side"]): boolean {
+    const context = terminalContext(target);
+    if (!context) return false;
+    const orders = context.ownerTerminals
+      .map((terminal) => layout?.layout.terminal_placements[terminal.id])
+      .filter((placement): placement is TerminalPlacement => placement?.side === side)
+      .map((placement) => placement.order);
+    return mutate({
+      operation_id: operationId("placement"),
+      type: "set_terminal_placement",
+      terminal_key: context.terminalKey,
+      placement: { side, order: (orders.length ? Math.max(...orders) : -1) + 1, locked: context.placement?.locked ?? false },
+    }, `Moved ${context.terminalKey} to the ${side.toLowerCase()} side.`);
+  }
+
+  function moveTerminalInOrder(target: CircuitCanvasContextTarget | undefined, delta: -1 | 1): boolean {
+    const context = terminalContext(target);
+    const adjacent = context && context.sameSide[context.index + delta];
+    if (!context?.placement || !adjacent) return false;
+    const adjacentPlacement = layout?.layout.terminal_placements[adjacent.id];
+    if (!adjacentPlacement) return false;
+    return mutateBatch([
+      { operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: context.terminalKey, placement: { ...context.placement, order: adjacentPlacement.order } },
+      { operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: adjacent.id, placement: { ...adjacentPlacement, order: context.placement.order } },
+    ], `Moved ${context.terminalKey} ${delta < 0 ? "earlier" : "later"}.`);
+  }
+
+  function setTerminalPlacementLocked(target: CircuitCanvasContextTarget | undefined, locked: boolean): boolean {
+    const context = terminalContext(target);
+    if (!context?.placement) return false;
+    return mutate({ operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: context.terminalKey, placement: { ...context.placement, locked } }, `${locked ? "Locked" : "Unlocked"} ${context.terminalKey} placement.`);
+  }
+
+  function resetTerminalPlacement(target: CircuitCanvasContextTarget | undefined): boolean {
+    const context = terminalContext(target);
+    if (!context) return false;
+    return mutate({ operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: context.terminalKey, placement: null }, `Reset ${context.terminalKey} to automatic placement.`);
+  }
+
+  function disconnectContextTerminal(target: CircuitCanvasContextTarget | undefined): boolean {
+    const terminalKey = targetTerminalKey(target);
+    const net = terminalKey ? document?.design.nets.find((item) => item.endpoints.some((endpoint) => endpointTerminalKey(endpoint) === terminalKey)) : undefined;
+    const endpoint = net?.endpoints.find((item) => endpointTerminalKey(item) === terminalKey);
+    if (!net || !endpoint) return false;
+    if (net.endpoints.length > 2) return mutate({ operation_id: operationId("disconnect"), type: "disconnect_endpoint", net_id: net.id, endpoint }, `Disconnected ${terminalKey} from ${net.label || net.id}.`);
+    setConfirmation({
+      title: "Delete the connected net?",
+      message: `Disconnecting ${terminalKey} would leave “${net.label || net.id}” with fewer than two endpoints. Delete the whole net instead?`,
+      confirmLabel: "Delete net",
+      onConfirm: () => {
+        setConfirmation(undefined);
+        if (mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: net.id }, `Deleted net ${net.label || net.id}.`)) setSelection([]);
+      },
+    });
+    return true;
+  }
+
+  function deleteBoundaryTarget(target: CircuitCanvasContextTarget | undefined): boolean {
+    const item = target && selectionItemForTarget(target);
+    if (!item || item.kind !== "boundary") return false;
+    setConfirmation({
+      title: "Delete boundary terminal?",
+      message: `Delete boundary terminal “${item.id}” and explicitly cascade its connectivity?`,
+      confirmLabel: "Delete boundary terminal",
+      onConfirm: () => {
+        setConfirmation(undefined);
+        if (mutate({ operation_id: operationId("remove_boundary"), type: "remove_boundary_terminal", terminal_id: item.id, cascade: true }, `Deleted boundary terminal ${item.id}.`)) setSelection([]);
+      },
+    });
+    return true;
   }
 
   function reportConnectionRejection(reason: "same_terminal" | "terminal_in_use" | "invalid_target"): void {
@@ -690,7 +918,17 @@ export function App() {
         : "Drop the connection on another free terminal.");
   }
 
-  function isActionEnabled(actionId: CircuitActionId): boolean {
+  function isCommandEnabled(invocation: CircuitActionInvocation): boolean {
+    const actionId = invocation.commandId;
+    const contextualNetId = targetNetId(invocation.target) ?? selectedNet?.id;
+    const contextualRoute = contextualNetId ? layout?.layout.net_routes[contextualNetId] : undefined;
+    const contextualRouteLocked = Boolean(contextualRoute?.segments.some((segment) => segment.locked)
+      || contextualRoute?.vertices.some((vertex) => vertex.locked));
+    const terminal = terminalContext(invocation.target);
+    const contextualInstanceId = invocation.target?.kind === "node" ? invocation.target.nodeId
+      : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
+        : selectedInstance?.id;
+    const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
     switch (actionId) {
       case "new-document": return !lease && !openingFile;
       case "open-document": return Boolean(snapshot) && !lease && !openingFile;
@@ -698,22 +936,22 @@ export function App() {
       case "cancel-changes": return Boolean(lease);
       case "download-json":
       case "export-svg":
-      case "export-png": return Boolean(snapshot) && !lease;
+      case "export-png": return Boolean(snapshot && layout) && !lease;
       case "begin-edit": return Boolean(snapshot) && !lease && !linkedDocumentId;
       case "undo": return Boolean(lease && draftRef.current?.canUndo);
       case "redo": return Boolean(lease && draftRef.current?.canRedo);
-      case "delete-selection": return Boolean(lease && (selectedInstance || selectedNet));
+      case "delete-selection": return Boolean(lease && (selection.length || (invocation.target && selectionItemForTarget(invocation.target))));
       case "open-component-catalog": return Boolean(document);
       case "create-local-component": return Boolean(lease && document);
       case "review-proposals": return proposals.length > 0;
-      case "open-child-design": return Boolean(selectedInstance && !draftRef.current?.dirty);
+      case "open-child-design": return Boolean(contextualInstance && !draftRef.current?.dirty);
       case "select-all": return Boolean(graph);
       case "clear-selection": return Boolean(graph);
-      case "center-selection": return selection.length > 0;
+      case "center-selection": return Boolean(selection.length || (invocation.target && invocation.target.kind !== "canvas"));
       case "open-connect": return Boolean(lease);
-      case "reroute-selected": return Boolean(lease && selectedNet && !selectedRouteLocked);
-      case "lock-selected-route": return Boolean(lease && selectedNet && selectedRoute && !selectedRouteLocked);
-      case "unlock-selected-route": return Boolean(lease && selectedNet && selectedRoute && selectedRouteLocked);
+      case "reroute-selected": return Boolean(lease && contextualNetId && !contextualRouteLocked);
+      case "lock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && !contextualRouteLocked);
+      case "unlock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && contextualRouteLocked);
       case "arrange-all": return Boolean(lease);
       case "pan-up":
       case "pan-left":
@@ -728,11 +966,38 @@ export function App() {
       case "getting-started":
       case "about": return true;
       case "pan-canvas": return false;
+      case "add-bend-here": {
+        if (!lease || invocation.target?.kind !== "route-segment" || !contextualRoute || !invocation.circuitPoint) return false;
+        return JSON.stringify(insertRouteBend(contextualRoute, invocation.target.segmentId, invocation.circuitPoint, document?.layout.grid_size ?? 20)) !== JSON.stringify(contextualRoute);
+      }
+      case "remove-bend": {
+        if (!lease || invocation.target?.kind !== "route-vertex" || invocation.target.vertexKind !== "bend" || !contextualRoute) return false;
+        return JSON.stringify(removeRouteBend(contextualRoute, invocation.target.vertexId)) !== JSON.stringify(contextualRoute);
+      }
+      case "select-connected-net": return Boolean(contextualNetId);
+      case "disconnect-port": return Boolean(lease && contextualNetId && terminal);
+      case "delete-boundary-terminal": return Boolean(lease && invocation.target && selectionItemForTarget(invocation.target)?.kind === "boundary");
+      case "terminal-side-north":
+      case "terminal-side-east":
+      case "terminal-side-south":
+      case "terminal-side-west":
+      case "terminal-lock-placement":
+      case "terminal-unlock-placement": return Boolean(lease && terminal);
+      case "terminal-move-earlier": return Boolean(lease && terminal && terminal.index > 0);
+      case "terminal-move-later": return Boolean(lease && terminal && terminal.index >= 0 && terminal.index < terminal.sameSide.length - 1);
+      case "terminal-reset-placement": return Boolean(lease && terminal && document?.layout.terminal_placements[terminal.terminalKey]);
     }
   }
 
-  function executeCircuitAction(actionId: CircuitActionId): boolean {
-    if (!isActionEnabled(actionId)) return false;
+  function executeCircuitAction(invocation: CircuitActionInvocation): boolean {
+    if (!isCommandEnabled(invocation)) return false;
+    const actionId = invocation.commandId;
+    const contextualNetId = targetNetId(invocation.target) ?? selectedNet?.id;
+    const contextualRoute = contextualNetId ? layout?.layout.net_routes[contextualNetId] : undefined;
+    const contextualInstanceId = invocation.target?.kind === "node" ? invocation.target.nodeId
+      : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
+        : selectedInstance?.id;
+    const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
     switch (actionId) {
       case "new-document": newDocument(); return true;
       case "open-document": fileInputRef.current?.click(); return true;
@@ -744,29 +1009,48 @@ export function App() {
       case "begin-edit": void unlock(); return true;
       case "undo": undoDraft("undo"); return true;
       case "redo": undoDraft("redo"); return true;
-      case "delete-selection":
-        if (selectedInstance) {
-          return mutate({ operation_id: operationId("remove"), type: "remove_instance", instance_id: selectedInstance.id, cascade: true }, "Instance removed with explicit connectivity cascade.");
-        }
-        if (selectedNet) {
-          return mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: selectedNet.id }, "Net deleted.");
-        }
-        return false;
+      case "delete-selection": return deleteCurrentSelection(
+        invocation.target ? selectionItemForTarget(invocation.target) : undefined,
+        invocation.source === "context-menu" ? contextRequest?.selection : undefined,
+      );
       case "open-preferences": setActivePage("actions"); return true;
       case "open-component-catalog": setDialog("catalog"); return true;
-      case "create-local-component": setDialog("new-component"); return true;
+      case "create-local-component":
+        setComponentCreationPoint(invocation.source === "context-menu" && invocation.target?.kind === "canvas" ? invocation.circuitPoint : undefined);
+        setDialog("new-component");
+        return true;
       case "review-proposals": setDialog("proposals"); return true;
-      case "open-child-design": void openHierarchy(selectedInstance!.component_id); return true;
+      case "open-child-design":
+        if (!contextualInstance) return false;
+        void openHierarchy(contextualInstance.component_id);
+        return true;
       case "select-all": selectAllCanvas(); return true;
       case "clear-selection":
         canvasRef.current?.cancelPendingConnection();
         setSelection([]);
         return true;
-      case "center-selection": canvasRef.current?.centerSelection(); return true;
-      case "open-connect": setDialog("connect"); return true;
-      case "reroute-selected": rerouteSelectedNet(); return true;
-      case "lock-selected-route": setSelectedRouteLocked(true); return true;
-      case "unlock-selected-route": setSelectedRouteLocked(false); return true;
+      case "center-selection":
+        if (invocation.source === "context-menu" && contextRequest?.selection.length) {
+          setSelection(contextRequest.selection);
+          requestAnimationFrame(() => canvasRef.current?.centerSelection());
+        } else canvasRef.current?.centerSelection();
+        return true;
+      case "open-connect":
+        setEndpointA(targetTerminalKey(invocation.target) ?? "");
+        setEndpointB("");
+        setDialog("connect");
+        return true;
+      case "reroute-selected": {
+        if (!graph || !layout || !contextualNetId) return false;
+        const route = routeCircuitNets(graph, layout.layout, layout.boundary_geometry, [contextualNetId], false)[contextualNetId];
+        if (route) saveRoute(contextualNetId, route);
+        return Boolean(route);
+      }
+      case "lock-selected-route":
+      case "unlock-selected-route":
+        if (!contextualNetId || !contextualRoute) return false;
+        saveRoute(contextualNetId, setAllRouteLocks(contextualRoute, actionId === "lock-selected-route"));
+        return true;
       case "arrange-all": void autoLayout(); return true;
       case "toggle-inspector":
         setPreferences((current) => ({ ...current, ui: { inspector_open: !current.ui.inspector_open } }));
@@ -784,6 +1068,29 @@ export function App() {
       case "getting-started": setDialog("getting-started"); return true;
       case "about": setDialog("about"); return true;
       case "pan-canvas": return false;
+      case "add-bend-here":
+        if (!contextualNetId || !contextualRoute || invocation.target?.kind !== "route-segment" || !invocation.circuitPoint) return false;
+        saveRoute(contextualNetId, insertRouteBend(contextualRoute, invocation.target.segmentId, invocation.circuitPoint, document?.layout.grid_size ?? 20));
+        return true;
+      case "remove-bend":
+        if (!contextualNetId || !contextualRoute || invocation.target?.kind !== "route-vertex") return false;
+        saveRoute(contextualNetId, removeRouteBend(contextualRoute, invocation.target.vertexId));
+        return true;
+      case "select-connected-net":
+        if (!contextualNetId) return false;
+        setSelection([{ kind: "net", id: contextualNetId }]);
+        return true;
+      case "disconnect-port": return disconnectContextTerminal(invocation.target);
+      case "delete-boundary-terminal": return deleteBoundaryTarget(invocation.target);
+      case "terminal-side-north": return setTerminalSide(invocation.target, "NORTH");
+      case "terminal-side-east": return setTerminalSide(invocation.target, "EAST");
+      case "terminal-side-south": return setTerminalSide(invocation.target, "SOUTH");
+      case "terminal-side-west": return setTerminalSide(invocation.target, "WEST");
+      case "terminal-move-earlier": return moveTerminalInOrder(invocation.target, -1);
+      case "terminal-move-later": return moveTerminalInOrder(invocation.target, 1);
+      case "terminal-lock-placement": return setTerminalPlacementLocked(invocation.target, true);
+      case "terminal-unlock-placement": return setTerminalPlacementLocked(invocation.target, false);
+      case "terminal-reset-placement": return resetTerminalPlacement(invocation.target);
     }
   }
 
@@ -797,7 +1104,7 @@ export function App() {
         || (target instanceof HTMLElement && target.isContentEditable)) return;
       const action = circuitActionDefinitions.find((definition) => definition.id !== "pan-canvas"
         && keyboardEventMatches(event, actionBindings[definition.id].keyboard));
-      if (!action || !actionExecutorRef.current(action.id)) return;
+      if (!action || !actionExecutorRef.current({ commandId: action.id, source: "shortcut" })) return;
       event.preventDefault();
     };
     window.addEventListener("keydown", runShortcut);
@@ -810,7 +1117,7 @@ export function App() {
 
   function runCanvasMouseShortcut(mouse: MouseShortcut, event: ReactMouseEvent | ReactWheelEvent): void {
     const actionId = actionForMouseShortcut(mouse);
-    if (!actionId || !executeCircuitAction(actionId)) return;
+    if (!actionId || !executeCircuitAction({ commandId: actionId, source: "mouse-binding" })) return;
     event.preventDefault();
   }
 
@@ -823,9 +1130,11 @@ export function App() {
       <div className="brand"><span className="brand-mark">CD</span><h1>Circuit Designer</h1></div>
       <CircuitMenuBar
         bindings={actionBindings}
+        dismissVersion={menubarDismissVersion}
         inspectorOpen={inspectorOpen}
-        isActionEnabled={isActionEnabled}
-        onAction={executeCircuitAction}
+        isActionEnabled={(commandId) => isCommandEnabled({ commandId, source: "menubar" })}
+        onAction={(commandId) => { executeCircuitAction({ commandId, source: "menubar" }); }}
+        onOpenChange={(open) => { if (open) closeContextMenu(false); }}
         proposalCount={proposals.length}
       />
       <div className="document-status" title={sourceDescription}>
@@ -867,11 +1176,6 @@ export function App() {
           onAuxClick={(event) => {
             if (event.button === 1 && emptyCanvasPointer(event)) runCanvasMouseShortcut("middle-click", event);
           }}
-          onContextMenu={(event) => {
-            if (!emptyCanvasPointer(event)) return;
-            if (actionBindings["pan-canvas"].mouse === "secondary-drag") event.preventDefault();
-            runCanvasMouseShortcut("secondary-click", event);
-          }}
           onWheelCapture={(event) => {
             if (standardWheelZoomEnabled(actionBindings)) return;
             runCanvasMouseShortcut(event.deltaY < 0 ? "wheel-up" : "wheel-down", event);
@@ -890,6 +1194,7 @@ export function App() {
             onConnectTerminals={(source, target) => { createNet(source, target, "", 0, 0); }}
             onConnectionRejected={reportConnectionRejection}
             onNetRouteChange={saveRoute}
+            onContextMenuRequest={openCanvasContextMenu}
             fitViewOnInit={false}
             showInlineViewportControls={false}
             viewportPanMouseButtons={panMouseButtons(actionBindings["pan-canvas"].mouse)}
@@ -923,7 +1228,7 @@ export function App() {
       endpointA={endpointA}
       endpointB={endpointB}
       netName={netName}
-      onClose={() => setDialog(undefined)}
+      onClose={() => { setDialog(undefined); setComponentCreationPoint(undefined); }}
       onComponentNameChange={setComponentName}
       onCreateComponent={addLocalComponent}
       onCreateConnection={createConnectionFromDialog}
@@ -939,5 +1244,35 @@ export function App() {
       sourceDescription={sourceDescription}
       terminals={terminals}
     />
+    {contextRequest && <CircuitContextMenu<CircuitCommandId>
+      entries={contextEntries}
+      isCommandEnabled={(commandId) => isCommandEnabled({
+        commandId,
+        source: "context-menu",
+        target: contextRequest.target,
+        clientPoint: contextRequest.clientPoint,
+        circuitPoint: contextRequest.flowPoint,
+      })}
+      onCommand={(commandId) => { executeCircuitAction({
+        commandId,
+        source: "context-menu",
+        target: contextRequest.target,
+        clientPoint: contextRequest.clientPoint,
+        circuitPoint: contextRequest.flowPoint,
+      }); }}
+      onDismiss={closeContextMenu}
+      point={contextRequest.clientPoint}
+      shortcutFor={(commandId) => commandId in actionBindings
+        && actionBindings[commandId as CircuitActionId].keyboard
+        ? formatKeyboardShortcut(actionBindings[commandId as CircuitActionId].keyboard)
+        : undefined}
+    />}
+    {confirmation && <CircuitConfirmationDialog
+      confirmLabel={confirmation.confirmLabel}
+      message={confirmation.message}
+      onCancel={() => setConfirmation(undefined)}
+      onConfirm={confirmation.onConfirm}
+      title={confirmation.title}
+    />}
   </main>;
 }

@@ -176,6 +176,122 @@ test("pans with left drag while Shift+left-drag remains selection gesture", asyn
   await expect(node).toHaveClass(/selected/);
 });
 
+test("keeps controlled component selection stable after click and Escape", async ({ page }) => {
+  await page.goto("/");
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Components", "New local component");
+  await page.getByLabel("Name", { exact: true }).fill("Stable selection");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  const node = page.locator(".react-flow__node[data-id='stable_selection']");
+  await expect(node).toHaveClass(/selected/);
+
+  await page.keyboard.press("Escape");
+  await expect(node).not.toHaveClass(/selected/);
+  const changesAfterEscape = await node.evaluate((element) => new Promise<number>((resolve) => {
+    let changes = 0;
+    const observer = new MutationObserver(() => { changes += 1; });
+    observer.observe(element, { attributes: true, attributeFilter: ["class"] });
+    window.setTimeout(() => { observer.disconnect(); resolve(changes); }, 450);
+  }));
+  expect(changesAfterEscape).toBe(0);
+
+  await node.click();
+  await expect(node).toHaveClass(/selected/);
+  const changesAfterClick = await node.evaluate((element) => new Promise<number>((resolve) => {
+    let changes = 0;
+    const observer = new MutationObserver(() => { changes += 1; });
+    observer.observe(element, { attributes: true, attributeFilter: ["class"] });
+    window.setTimeout(() => { observer.disconnect(); resolve(changes); }, 450);
+  }));
+  expect(changesAfterClick).toBe(0);
+});
+
+test("opens clamped semantic context menus from pointer and keyboard", async ({ page }) => {
+  await page.goto("/");
+  const pane = page.locator(".react-flow__pane");
+  const paneBounds = await pane.boundingBox();
+  expect(paneBounds).not.toBeNull();
+
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await pane.click({ button: "right", position: { x: paneBounds!.width - 20, y: paneBounds!.height - 120 } });
+  await expect(page.getByRole("menu", { name: "File" })).toHaveCount(0);
+  const contextMenu = page.getByRole("menu", { name: "Circuit context menu" });
+  await expect(contextMenu).toBeVisible();
+  const menuBounds = await contextMenu.boundingBox();
+  const viewport = page.viewportSize();
+  expect(menuBounds).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(menuBounds!.x).toBeGreaterThanOrEqual(8);
+  expect(menuBounds!.y).toBeGreaterThanOrEqual(8);
+  expect(menuBounds!.x + menuBounds!.width).toBeLessThanOrEqual(viewport!.width - 8);
+  expect(menuBounds!.y + menuBounds!.height).toBeLessThanOrEqual(viewport!.height - 8);
+  await page.keyboard.press("Escape");
+  await expect(contextMenu).toHaveCount(0);
+
+  await menuAction(page, "Edit", "Begin editing");
+  const createPoint = { x: 420, y: 280 };
+  await pane.click({ button: "right", position: createPoint });
+  await page.getByRole("menuitem", { name: "New local component…", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Pointer block");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  const node = page.locator(".react-flow__node[data-id='pointer_block']");
+  await expect(node).toBeVisible();
+  const nodeBounds = await node.boundingBox();
+  expect(nodeBounds).not.toBeNull();
+  expect(Math.abs(nodeBounds!.x + nodeBounds!.width / 2 - (paneBounds!.x + createPoint.x))).toBeLessThanOrEqual(25);
+  expect(Math.abs(nodeBounds!.y + nodeBounds!.height / 2 - (paneBounds!.y + createPoint.y))).toBeLessThanOrEqual(25);
+
+  await node.click({ button: "right" });
+  await expect(node).toHaveClass(/selected/);
+  await expect(page.getByRole("menuitem", { name: "Open selected child design", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await node.focus();
+  await page.keyboard.press("Shift+F10");
+  await expect(page.getByRole("menuitem", { name: "Center selection", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+
+  const port = page.locator('.react-flow__handle[data-handleid="pointer_block:input"]');
+  await port.click({ button: "right", force: true });
+  await expect(page.getByRole("menuitem", { name: "Placement", exact: true })).toBeVisible();
+  await page.getByRole("menuitem", { name: "New connection…", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
+  await expect(page.getByLabel("Endpoint A")).toHaveValue("pointer_block:input");
+  await page.getByRole("button", { name: "Close" }).click();
+
+  await menuAction(page, "Components", "New local component");
+  await page.getByLabel("Name", { exact: true }).fill("Context sink");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await menuAction(page, "Connect", "New connection");
+  await page.getByLabel("Endpoint A").selectOption("pointer_block:output");
+  await page.getByLabel("Endpoint B").selectOption("context_sink:input");
+  await page.getByRole("button", { name: "Create net" }).click();
+  const connectedPort = page.locator('.react-flow__handle[data-handleid="pointer_block:output"]');
+  await connectedPort.click({ button: "right", force: true });
+  await expect(page.getByRole("menuitem", { name: "Select connected net", exact: true })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Disconnect port", exact: true })).toBeVisible();
+});
+
+test("keeps right-drag panning without opening a context menu", async ({ page, request }) => {
+  const preferences = createDefaultCircuitDesignerPreferences();
+  preferences.action_bindings["pan-canvas"].mouse = "secondary-drag";
+  expect((await request.put(`${circuitApiUrl}/preferences`, { data: preferences })).ok()).toBe(true);
+  await page.goto("/");
+  const pane = page.locator(".react-flow__pane");
+  const viewport = page.locator(".react-flow__viewport");
+  const bounds = await pane.boundingBox();
+  expect(bounds).not.toBeNull();
+  const before = await viewport.getAttribute("style");
+  await page.mouse.move(bounds!.x + 250, bounds!.y + 180);
+  await page.mouse.down({ button: "right" });
+  await page.mouse.move(bounds!.x + 330, bounds!.y + 225, { steps: 5 });
+  await page.mouse.up({ button: "right" });
+  await expect.poll(() => viewport.getAttribute("style")).not.toBe(before);
+  await expect(page.getByRole("menu", { name: "Circuit context menu" })).toHaveCount(0);
+
+  await pane.click({ button: "right", position: { x: 200, y: 160 } });
+  await expect(page.getByRole("menu", { name: "Circuit context menu" })).toBeVisible();
+});
+
 test("downloads and reopens a portable circuit file from File commands", async ({ page }) => {
   await page.goto("/");
   await menuAction(page, "Edit", "Begin editing");
@@ -200,6 +316,50 @@ test("downloads and reopens a portable circuit file from File commands", async (
   await page.getByLabel("Circuit file").setInputFiles(filePath!);
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   await expect(page.locator(".notice")).toContainText(".circuit.json");
+});
+
+test("exports the visible canvas layout consistently to SVG and PNG", async ({ page }) => {
+  await page.goto("/");
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Components", "New local component");
+  await page.getByLabel("Name", { exact: true }).fill("Visual export");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  const node = page.locator(".react-flow__node[data-id='visual_export']");
+  await expect(node).toBeVisible();
+  const nodeTransform = await node.evaluate((element) => (element as HTMLElement).style.transform);
+  const canvasPosition = nodeTransform.match(/translate\(([-\d.]+)px,\s*([-\d.]+)px\)/);
+  expect(canvasPosition).not.toBeNull();
+
+  const saveDownload = page.waitForEvent("download");
+  await menuAction(page, "File", /Save changes/);
+  await saveDownload;
+
+  const svgDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Export SVG", exact: true }).click();
+  const svgPath = await (await svgDownloadPromise).path();
+  expect(svgPath).not.toBeNull();
+  const svg = await readFile(svgPath!, "utf8");
+  const svgBox = svg.match(/<svg[^>]+width="(\d+)"[^>]+height="(\d+)"/);
+  const exportedPosition = svg.match(/data-instance-id="visual_export"><rect x="([\d.-]+)" y="([\d.-]+)"/);
+  expect(svgBox).not.toBeNull();
+  expect(exportedPosition?.slice(1)).toEqual(canvasPosition?.slice(1));
+  expect(svg).toContain(".canvas-background{fill:#f4f2ec}");
+  expect(svg).toContain('fill="url(#canvas-grid)"');
+  expect(svg).toContain('data-terminal-id="visual_export:input"');
+  expect(svg).toContain('data-terminal-id="visual_export:output"');
+
+  const pngDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Export PNG", exact: true }).click();
+  const pngPath = await (await pngDownloadPromise).path();
+  expect(pngPath).not.toBeNull();
+  const png = await readFile(pngPath!);
+  expect([...png.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  expect(png.readUInt32BE(16)).toBe(Number(svgBox![1]));
+  expect(png.readUInt32BE(20)).toBe(Number(svgBox![2]));
 });
 
 test("rejects an invalid file without replacing the current circuit", async ({ page }) => {

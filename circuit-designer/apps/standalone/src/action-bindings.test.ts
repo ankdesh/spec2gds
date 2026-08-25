@@ -8,8 +8,10 @@ import {
   keyboardEventMatches,
   keyboardShortcutFromEvent,
   loadCachedPreferences,
+  normalizeContextMenuMouseBindings,
   panMouseButtons,
   standardWheelZoomEnabled,
+  circuitActionDefinitions,
 } from "./action-bindings";
 import { createDefaultCircuitDesignerPreferences } from "@spec2gds/circuit-core";
 
@@ -81,5 +83,17 @@ describe("Circuit Designer action bindings", () => {
     expect(loadCachedPreferences(memoryStorage({
       "spec2gds.circuit-designer.preferences-cache.v1": "not-json",
     }))).toBeUndefined();
+  });
+
+  test("reserves secondary click for semantic context menus", () => {
+    const preferences = createDefaultCircuitDesignerPreferences();
+    preferences.action_bindings["fit-circuit"].mouse = "secondary-click";
+    const normalized = normalizeContextMenuMouseBindings(preferences);
+
+    expect(normalized.changed).toBe(true);
+    expect(normalized.preferences.action_bindings["fit-circuit"].mouse).toBe("none");
+    expect(normalizeContextMenuMouseBindings(normalized.preferences).changed).toBe(false);
+    expect(circuitActionDefinitions.every((action) => !action.mouseOptions.includes("secondary-click"))).toBe(true);
+    expect(circuitActionDefinitions.find((action) => action.id === "pan-canvas")?.mouseOptions).toContain("secondary-drag");
   });
 });

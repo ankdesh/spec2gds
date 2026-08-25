@@ -20,10 +20,13 @@
 .cd-net__segment { fill: none; stroke: #304b55; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .cd-net__segment--locked { stroke: #204b6a; stroke-dasharray: 7 3; stroke-width: 2; }
 .cd-net__hit-segment { fill: none; stroke: transparent; stroke-width: 14; cursor: move; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.cd-net__hit-segment--readonly { cursor: context-menu; }
 .cd-net--selected .cd-net__segment { stroke: #dc6b2f; stroke-width: 2.6; }
 .cd-net__junction { fill: #304b55; }
 .cd-net__route-handle { fill: #fffdf7; stroke: #dc6b2f; stroke-width: 1.8; cursor: move; pointer-events: all; vector-effect: non-scaling-stroke; }
 .cd-net__route-handle--locked { fill: #204b6a; stroke: #fff; cursor: not-allowed; }
+.cd-net__vertex-context-target { fill: transparent; stroke: transparent; pointer-events: all; }
+.cd-net__vertex-context-target:focus { fill: #fffdf7; stroke: #dc6b2f; stroke-width: 1.8; outline: none; }
 .react-flow__node.selected .cd-node { border-color: #dc6b2f; box-shadow: 0 0 0 2px rgb(220 107 47 / 22%); }
 .react-flow__selection { border: 1px solid #1d7773; background: rgb(29 119 115 / 10%); }
 .react-flow__node.cd-element--added .cd-node { border-color: #1f9d66; background: #effcf5; box-shadow: 0 0 0 2px rgb(31 157 102 / 20%); }

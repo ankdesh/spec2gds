@@ -319,8 +319,11 @@ The canvas has no separate interaction modes. Its compact menubar contains
 File, Edit, Components, Selection, Connect, Route, View, Tools, and Help; the
 Inspector defaults closed so the canvas can span the window. Direct gestures
 include dragging between free ports, dragging a selected route, wheel zoom,
-and left-drag pan on empty canvas. Use **Edit → Preferences → Actions and
-shortcuts** to configure shared keyboard and mouse inputs. See the
+left-drag pan on empty canvas, and target-aware right-click menus for canvas,
+components, selections, routes, bends, junctions, and ports. The Context Menu
+key and Shift+F10 provide the same menus from the keyboard. Use **Edit →
+Preferences → Actions and shortcuts** to configure shared keyboard and mouse
+inputs; right-click itself is reserved for context menus. See the
 [Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
 
 To use **Open circuit** from the specification editor, run both services. The
