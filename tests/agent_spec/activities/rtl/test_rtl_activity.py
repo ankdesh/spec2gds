@@ -1,4 +1,4 @@
-"""Acceptance tests for deterministic RTL scaffold generation."""
+"""Acceptance tests for deterministic RTL project generation."""
 
 from __future__ import annotations
 
@@ -17,8 +17,7 @@ from spec2gds.agent_spec.activities import (
     invoke_activity,
 )
 from spec2gds.agent_spec.activities.rtl import register_extensions
-from spec2gds.agent_spec.activities.rtl.codegen import _render_template, generate_project
-from spec2gds.agent_spec.activities.view import SpecAccess
+from spec2gds.agent_spec.activities.rtl.codegen import _render_template
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.models import ComponentComposition, EntityRef
@@ -264,7 +263,7 @@ def test_activity_generates_hierarchy_report_warnings_and_name_map(tmp_path: Pat
     definition = registry.activity("rtl.generate").definition
     availability = activity_availability(registry, "rtl.generate", snapshot)
 
-    assert definition.version == "1.1.0"
+    assert definition.version == "1.1.1"
     assert definition.scopes.entity_kinds == ("design",)
     assert definition.requires_workspace_output
     assert availability.available
@@ -355,7 +354,9 @@ def test_internal_design_uses_owning_component_as_top(tmp_path: Path) -> None:
     assert (output / "rtl/components/cluster.sv").is_file()
 
 
-def test_sv_bodies_render_after_structure_with_logic_ports_and_v2_provenance() -> None:
+def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
+    tmp_path: Path,
+) -> None:
     package = _rtl_package()
     initial = SpecRevision.from_package(package)
     unit = initial.by_vlnv("component", "spec2gds.example:demo:unit:1.0")
@@ -367,10 +368,17 @@ def test_sv_bodies_render_after_structure_with_logic_ports_and_v2_provenance() -
 
     source = SpecRevision.from_package(package)
     target = source.entry_designs()[0]
-    project = generate_project(SpecAccess(source, target.ref), target.ref)
-    unit_source = project.files["rtl/components/unit.sv"].decode()
-    cluster_source = project.files["rtl/components/cluster.sv"].decode()
-    manifest = json.loads(project.files["generation-manifest.json"])
+    snapshot = ActivitySnapshot.from_bytes(ActivitySnapshot.create(source, target.ref).to_bytes())
+    result = invoke_activity(
+        _registry(),
+        "rtl.generate",
+        snapshot,
+        LocalActivityWorkspace(tmp_path),
+    )
+    output = tmp_path / result.report["output_path"]
+    unit_source = (output / "rtl/components/unit.sv").read_text()
+    cluster_source = (output / "rtl/components/cluster.sv").read_text()
+    manifest = json.loads((output / "generation-manifest.json").read_text())
 
     assert "output logic [7:0] dout" in unit_source
     assert "inout wire pad" in unit_source
@@ -382,6 +390,10 @@ def test_sv_bodies_render_after_structure_with_logic_ports_and_v2_provenance() -
     assert f'`line 1 "{design_body.source_path}" 0' in cluster_source
     assert manifest["schema_version"] == "spec2gds.rtl-generation.v2"
     assert {item["section_id"] for item in manifest["source_sections"]} >= {
+        component_body.section_id,
+        design_body.section_id,
+    }
+    assert {item["section_id"] for item in result.report["source_sections"]} >= {
         component_body.section_id,
         design_body.section_id,
     }

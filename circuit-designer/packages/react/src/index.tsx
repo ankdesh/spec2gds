@@ -1,4 +1,16 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ForwardedRef,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
 import {
   Background,
   BackgroundVariant,
@@ -7,11 +19,14 @@ import {
   Handle,
   Position,
   ReactFlow,
+  SelectionMode,
   useReactFlow,
+  useUpdateNodeInternals,
   type Edge,
   type EdgeProps,
   type Node,
   type NodeProps,
+  type ReactFlowInstance,
   type Viewport,
 } from "@xyflow/react";
 import type {
@@ -32,32 +47,26 @@ import {
   moveRouteSegment,
   moveRouteVertex,
   removeRouteBend,
-  toggleRouteSegmentLock,
-  toggleRouteVertexLock,
   projectDocument,
 } from "@spec2gds/circuit-core";
 import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
 
-export type CircuitCanvasMode = "select" | "connect" | "route" | "pan";
+export type CircuitCanvasSelectionItem = { kind: "node" | "boundary" | "net"; id: string };
+export type CircuitCanvasSelection = CircuitCanvasSelectionItem[];
+export type CircuitConnectionRejectionReason = "same_terminal" | "terminal_in_use" | "invalid_target";
 
-export interface CircuitInteractionPolicy {
-  nodesDraggable: boolean;
-  nodesConnectable: boolean;
-  elementsSelectable: boolean;
-  routeEditable: boolean;
-  panOnDrag: boolean;
-  zoomEnabled: boolean;
+export interface CircuitDesignerCanvasHandle {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitView: () => void;
+  centerSelection: () => void;
+  pan: (direction: "left" | "right" | "up" | "down") => void;
 }
 
-export function interactionPolicy(mode: CircuitCanvasMode, editable: boolean): CircuitInteractionPolicy {
-  return {
-    nodesDraggable: editable && mode === "select",
-    nodesConnectable: editable && mode === "connect",
-    elementsSelectable: mode !== "pan",
-    routeEditable: editable && mode === "route",
-    panOnDrag: mode === "pan",
-    zoomEnabled: mode === "pan",
-  };
+export function circuitSelectionsEqual(left: CircuitCanvasSelection, right: CircuitCanvasSelection): boolean {
+  if (left.length !== right.length) return false;
+  const keys = new Set(left.map((item) => `${item.kind}:${item.id}`));
+  return right.every((item) => keys.has(`${item.kind}:${item.id}`));
 }
 
 export function terminalDisplayLabel(terminal: Pick<CircuitTerminal, "label" | "width">): string {
@@ -68,23 +77,24 @@ export interface CircuitDesignerCanvasProps {
   graph: CircuitGraphSnapshot;
   layout: DiagramLayout;
   boundaryGeometry?: Record<string, NodeGeometry>;
-  onSelect?: (selection: { kind: "node" | "net"; id: string } | null) => void;
+  selection?: CircuitCanvasSelection;
+  onSelectionChange?: (selection: CircuitCanvasSelection) => void;
   editable?: boolean;
-  onNodeGeometryChange?: (nodeId: string, geometry: NodeGeometry) => void;
+  onNodeGeometryChanges?: (changes: Record<string, NodeGeometry>) => void;
   onConnectTerminals?: (sourceTerminalId: string, targetTerminalId: string) => void;
+  onConnectionRejected?: (reason: CircuitConnectionRejectionReason) => void;
   gridSize?: number;
   allowViewportNavigation?: boolean;
   fitViewOnInit?: boolean;
-  mode?: CircuitCanvasMode;
   onNetRouteChange?: (netId: string, route: NetRoute) => void;
   rendererRegistry?: CircuitCanvasRendererRegistry;
   elementStatus?: {
     nodes?: Record<string, "added" | "removed" | "changed">;
     nets?: Record<string, "added" | "removed" | "changed">;
   };
-  selectedElement?: { kind: "node" | "net"; id: string } | null;
   viewport?: Viewport;
   onViewportChange?: (viewport: Viewport) => void;
+  showInlineViewportControls?: boolean;
 }
 
 type CircuitNodeData = {
@@ -92,6 +102,10 @@ type CircuitNodeData = {
   terminals: CircuitTerminal[];
   placements: Record<string, TerminalPlacement>;
   rendererRegistry?: CircuitCanvasRendererRegistry;
+  editable: boolean;
+  occupiedTerminalIds: Set<string>;
+  pendingTerminalId?: string;
+  onTerminalActivate: (terminalId: string) => void;
 };
 
 type CircuitFlowNode = Node<CircuitNodeData, "circuit">;
@@ -128,7 +142,9 @@ for (const key of ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer", "
   defaultCircuitCanvasRenderers.register(key, ({ node }) => <span className={`cd-node__symbol cd-node__symbol--${key}`}>{node.label}</span>);
 }
 
-function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
+function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
+  const updateNodeInternals = useUpdateNodeInternals();
+  useEffect(() => updateNodeInternals(id), [id, selected, updateNodeInternals]);
   const rendererKey = data.circuitNode.component_vlnv ?? "generic";
   const customRenderer = data.rendererRegistry?.renderer(rendererKey)
     ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
@@ -144,26 +160,46 @@ function CircuitNodeView({ data }: NodeProps<CircuitFlowNode>) {
         const offset = 60 + (placement?.order ?? 0) * 20;
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
         const displayLabel = terminalDisplayLabel(terminal);
+        const occupied = data.occupiedTerminalIds.has(terminal.id);
+        const pending = data.pendingTerminalId === terminal.id;
+        const activateFromKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+          if (event.key !== "Enter" || occupied || !data.editable) return;
+          event.preventDefault();
+          event.stopPropagation();
+          data.onTerminalActivate(terminal.id);
+        };
         return <Fragment key={terminal.id}>
           <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{displayLabel}</span>
-          <Handle id={terminalHandleId(terminal.id, "source")} type="source" position={positions[side]} style={style} title={displayLabel} />
-          <Handle id={terminalHandleId(terminal.id, "target")} type="target" position={positions[side]} style={style} title={displayLabel} />
+          <Handle
+            id={terminalHandleId(terminal.id)}
+            type="source"
+            position={positions[side]}
+            style={style}
+            className={occupied ? "cd-terminal--occupied" : pending ? "cd-terminal--pending" : undefined}
+            title={occupied ? `${displayLabel} · already connected` : `${displayLabel} · drag to connect`}
+            aria-label={occupied ? `${displayLabel}, already connected` : `${displayLabel}, connection terminal`}
+            aria-disabled={occupied || !data.editable}
+            role="button"
+            tabIndex={data.editable ? 0 : -1}
+            isConnectable={data.editable && !occupied}
+            onKeyDown={activateFromKeyboard}
+          />
         </Fragment>;
       })}
     </div>
   );
 }
 
-export function terminalHandleId(terminalId: string, type: "source" | "target"): string {
-  return `${terminalId}:${type}`;
+export function terminalHandleId(terminalId: string, _type?: "source" | "target"): string {
+  return terminalId;
 }
 
 export function terminalIdFromHandle(handleId: string | null | undefined): string | undefined {
-  return handleId?.replace(/:(source|target)$/, "");
+  return handleId || undefined;
 }
 
 export interface BuildCircuitFlowEdgeOptions {
-  routeEditable?: boolean;
+  routeEditableNetId?: string;
   gridSize?: number;
   onNetRouteChange?: (netId: string, route: NetRoute) => void;
 }
@@ -183,7 +219,7 @@ export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Re
       targetHandle: terminalHandleId(targetTerminalId, "target"),
       data: {
         route: ensureRouteIds(route), label: net.label, kind: net.kind,
-        routeEditable: options.routeEditable ?? false,
+        routeEditable: options.routeEditableNetId === net.id,
         gridSize: options.gridSize ?? 20,
         onRouteChange: options.onNetRouteChange ? (nextRoute) => options.onNetRouteChange?.(net.id, nextRoute) : undefined,
       },
@@ -257,12 +293,6 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
               const next = insertRouteBend(draftRef.current, id, flowPoint(event), data.gridSize);
               updateDraft(next); data.onRouteChange?.(next);
             }}
-            onClick={(event) => {
-              if (!event.shiftKey) return;
-              event.stopPropagation();
-              const next = toggleRouteSegmentLock(draftRef.current, id);
-              updateDraft(next); data.onRouteChange?.(next);
-            }}
           />}
         </Fragment>;
       })}
@@ -283,23 +313,55 @@ function CircuitEdgeView({ data, selected }: EdgeProps<CircuitFlowEdge>) {
             const next = removeRouteBend(draftRef.current, vertex.id);
             updateDraft(next); data.onRouteChange?.(next);
           }}
-          onClick={(event) => {
-            if (!event.shiftKey) return;
-            event.stopPropagation();
-            const next = toggleRouteVertexLock(draftRef.current, vertex.id);
-            updateDraft(next); data.onRouteChange?.(next);
-          }}
         />
       ))}
     </g>
   );
 }
 
-export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, onSelect, editable = false, onNodeGeometryChange, onConnectTerminals, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, mode = "select", onNetRouteChange, rendererRegistry, elementStatus, selectedElement, viewport, onViewportChange }: CircuitDesignerCanvasProps) {
-  const policy = interactionPolicy(mode, editable);
+export function connectionRejectionReason(
+  graph: CircuitGraphSnapshot,
+  sourceTerminalId: string,
+  targetTerminalId: string,
+): CircuitConnectionRejectionReason | undefined {
+  if (sourceTerminalId === targetTerminalId) return "same_terminal";
+  const terminalIds = new Set(graph.terminals.map((terminal) => terminal.id));
+  if (!terminalIds.has(sourceTerminalId) || !terminalIds.has(targetTerminalId)) return "invalid_target";
+  const occupied = new Set(graph.nets.flatMap((net) => net.endpoints.map((endpoint) => endpoint.terminal_id)));
+  if (occupied.has(sourceTerminalId) || occupied.has(targetTerminalId)) return "terminal_in_use";
+  return undefined;
+}
+
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
+  const [pendingTerminalId, setPendingTerminalId] = useState<string>();
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
+  const selectedKeys = useMemo(
+    () => new Set(selection.map((item) => `${item.kind}:${item.id}`)),
+    [selection],
+  );
+  const selectedNetId = selection.length === 1 && selection[0].kind === "net" ? selection[0].id : undefined;
+  const occupiedTerminalIds = useMemo(
+    () => new Set(graph.nets.flatMap((net) => net.endpoints.map((endpoint) => endpoint.terminal_id))),
+    [graph.nets],
+  );
+  const rejectConnection = (reason: CircuitConnectionRejectionReason) => onConnectionRejected?.(reason);
+  const completeConnection = (sourceTerminalId: string, targetTerminalId: string) => {
+    const rejection = connectionRejectionReason(graph, sourceTerminalId, targetTerminalId);
+    if (rejection) rejectConnection(rejection);
+    else onConnectTerminals?.(sourceTerminalId, targetTerminalId);
+  };
+  const activateTerminal = (terminalId: string) => {
+    if (!pendingTerminalId) {
+      setPendingTerminalId(terminalId);
+      return;
+    }
+    completeConnection(pendingTerminalId, terminalId);
+    setPendingTerminalId(undefined);
+  };
   const terminalsByNode = useMemo(() => {
     const result = new Map<string, CircuitTerminal[]>();
     for (const terminal of graph.terminals) {
@@ -317,11 +379,22 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       id: node.id,
       type: "circuit",
       position: { x: geometry.x, y: geometry.y },
+      width: geometry.width,
+      height: geometry.height,
       style: { width: geometry.width, height: geometry.height },
-      data: { circuitNode: node, terminals: terminalsByNode.get(node.id) ?? [], placements: terminalPlacements, rendererRegistry },
-      draggable: policy.nodesDraggable,
+      data: {
+        circuitNode: node,
+        terminals: terminalsByNode.get(node.id) ?? [],
+        placements: terminalPlacements,
+        rendererRegistry,
+        editable: editable && Boolean(onConnectTerminals),
+        occupiedTerminalIds,
+        pendingTerminalId,
+        onTerminalActivate: activateTerminal,
+      },
+      draggable: editable && Boolean(onNodeGeometryChanges),
       className: elementStatus?.nodes?.[node.id] ? `cd-element--${elementStatus.nodes[node.id]}` : undefined,
-      selected: selectedElement?.kind === "node" && selectedElement.id === node.id,
+      selected: selectedKeys.has(`node:${node.id}`),
     }];
   });
   for (const terminal of graph.terminals.filter((item) => !item.node_id)) {
@@ -331,73 +404,184 @@ export function CircuitDesignerCanvas({ graph, layout, boundaryGeometry = {}, on
       id: `boundary:${terminal.id}`,
       type: "circuit",
       position: { x: geometry.x, y: geometry.y },
+      width: geometry.width,
+      height: geometry.height,
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: { id: terminal.id, label: terminal.label, component_id: "boundary", terminal_ids: [terminal.id], configuration_values: {} },
-        terminals: [terminal], placements: terminalPlacements, rendererRegistry,
+        terminals: [terminal],
+        placements: terminalPlacements,
+        rendererRegistry,
+        editable: editable && Boolean(onConnectTerminals),
+        occupiedTerminalIds,
+        pendingTerminalId,
+        onTerminalActivate: activateTerminal,
       },
       draggable: false,
       className: elementStatus?.nodes?.[terminal.id] ? `cd-element--${elementStatus.nodes[terminal.id]}` : undefined,
-      selected: selectedElement?.kind === "node" && selectedElement.id === terminal.id,
+      selected: selectedKeys.has(`boundary:${terminal.id}`),
     });
   }
-  const edges = buildCircuitFlowEdges(graph, netRoutes, { routeEditable: policy.routeEditable, gridSize, onNetRouteChange });
+  const edges = buildCircuitFlowEdges(graph, netRoutes, {
+    routeEditableNetId: editable && onNetRouteChange ? selectedNetId : undefined,
+    gridSize,
+    onNetRouteChange,
+  });
   for (const edge of edges) {
     const status = elementStatus?.nets?.[edge.id];
     if (status) edge.className = `cd-element--${status}`;
-    edge.selected = selectedElement?.kind === "net" && selectedElement.id === edge.id;
+    edge.selected = selectedKeys.has(`net:${edge.id}`);
   }
+
+  useImperativeHandle(forwardedRef, () => ({
+    zoomIn: () => { void instanceRef.current?.zoomIn({ duration: 140 }); },
+    zoomOut: () => { void instanceRef.current?.zoomOut({ duration: 140 }); },
+    fitView: () => { void instanceRef.current?.fitView({ padding: 0.2, duration: 180 }); },
+    centerSelection: () => {
+      const instance = instanceRef.current;
+      if (!instance) return;
+      const selectedNodeIds = new Set(selection.flatMap((item) => {
+        if (item.kind === "node") return [item.id];
+        if (item.kind === "boundary") return [`boundary:${item.id}`];
+        return [];
+      }));
+      const selectedNodes = instance.getNodes().filter((node) => selectedNodeIds.has(node.id));
+      if (selectedNodes.length) {
+        void instance.fitView({ nodes: selectedNodes, padding: 0.3, duration: 180 });
+        return;
+      }
+      const routePoints = selection
+        .filter((item) => item.kind === "net")
+        .flatMap((item) => netRoutes[item.id]?.vertices.map((vertex) => vertex.point) ?? []);
+      if (!routePoints.length) return;
+      const xs = routePoints.map((point) => point.x);
+      const ys = routePoints.map((point) => point.y);
+      void instance.fitBounds({
+        x: Math.min(...xs), y: Math.min(...ys),
+        width: Math.max(1, Math.max(...xs) - Math.min(...xs)),
+        height: Math.max(1, Math.max(...ys) - Math.min(...ys)),
+      }, { padding: 0.3, duration: 180 });
+    },
+    pan: (direction) => {
+      const instance = instanceRef.current;
+      const canvas = canvasRef.current;
+      if (!instance || !canvas) return;
+      const horizontal = canvas.clientWidth * 0.2;
+      const vertical = canvas.clientHeight * 0.2;
+      const delta = direction === "left" ? { x: horizontal, y: 0 }
+        : direction === "right" ? { x: -horizontal, y: 0 }
+          : direction === "up" ? { x: 0, y: vertical }
+            : { x: 0, y: -vertical };
+      const current = instance.getViewport();
+      void instance.setViewport({ ...current, x: current.x + delta.x, y: current.y + delta.y }, { duration: 140 });
+    },
+  }), [netRoutes, selection]);
+
+  const onCanvasKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const target = event.target;
+    const typing = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
+    if (typing) return;
+    if (event.key === "Escape") {
+      if (pendingTerminalId) setPendingTerminalId(undefined);
+      else onSelectionChange?.([]);
+      return;
+    }
+    if (!event.key.startsWith("Arrow") || !editable || !onNodeGeometryChanges) return;
+    const delta = gridSize * (event.shiftKey ? 10 : 1);
+    const offset = event.key === "ArrowLeft" ? { x: -delta, y: 0 }
+      : event.key === "ArrowRight" ? { x: delta, y: 0 }
+        : event.key === "ArrowUp" ? { x: 0, y: -delta }
+          : { x: 0, y: delta };
+    const changes = Object.fromEntries(selection.flatMap((item) => {
+      if (item.kind !== "node") return [];
+      const geometry = nodeGeometry[item.id];
+      if (!geometry) return [];
+      return [[item.id, { ...geometry, x: geometry.x + offset.x, y: geometry.y + offset.y, pinned: true }]];
+    }));
+    if (!Object.keys(changes).length) return;
+    event.preventDefault();
+    onNodeGeometryChanges(changes);
+  };
+
   return (
-    <div className="cd-canvas" data-testid="circuit-canvas">
+    <div className="cd-canvas" data-testid="circuit-canvas" ref={canvasRef} onKeyDown={onCanvasKeyDown}>
       <ReactFlow<CircuitFlowNode, CircuitFlowEdge>
         nodes={nodes}
         edges={edges}
         nodeTypes={{ circuit: CircuitNodeView }}
         edgeTypes={{ circuit: CircuitEdgeView }}
         fitView={fitViewOnInit}
+        onInit={(instance) => { instanceRef.current = instance; }}
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         {...(viewport ? { viewport } : {})}
         minZoom={0.08}
         maxZoom={2.5}
-        nodesDraggable={policy.nodesDraggable}
-        nodesConnectable={policy.nodesConnectable && Boolean(onConnectTerminals)}
-        elementsSelectable={policy.elementsSelectable}
+        nodesDraggable={editable && Boolean(onNodeGeometryChanges)}
+        nodesConnectable={editable && Boolean(onConnectTerminals)}
+        elementsSelectable
         connectionMode={ConnectionMode.Loose}
+        connectOnClick={false}
+        isValidConnection={(connection) => {
+          const source = terminalIdFromHandle(connection.sourceHandle);
+          const target = terminalIdFromHandle(connection.targetHandle);
+          return Boolean(source && target && !connectionRejectionReason(graph, source, target));
+        }}
         snapToGrid
         snapGrid={[gridSize, gridSize]}
-        panOnDrag={allowViewportNavigation && policy.panOnDrag}
-        zoomOnScroll={allowViewportNavigation && policy.zoomEnabled}
-        zoomOnPinch={allowViewportNavigation && policy.zoomEnabled}
-        zoomOnDoubleClick={allowViewportNavigation && policy.zoomEnabled}
-        autoPanOnNodeDrag={false}
-        autoPanOnConnect={false}
-        onPaneClick={() => onSelect?.(null)}
+        panOnDrag={allowViewportNavigation ? [1] : false}
+        panActivationKeyCode={allowViewportNavigation ? "Space" : null}
+        zoomOnScroll={allowViewportNavigation}
+        zoomOnPinch={allowViewportNavigation}
+        zoomOnDoubleClick={false}
+        selectionOnDrag
+        selectionMode={SelectionMode.Partial}
+        multiSelectionKeyCode={["Shift", "Meta", "Control"]}
+        deleteKeyCode={null}
+        autoPanOnNodeDrag={allowViewportNavigation}
+        autoPanOnConnect={allowViewportNavigation}
         onMove={(_, nextViewport) => onViewportChange?.(nextViewport)}
-        onNodeClick={(_, node) => onSelect?.({ kind: "node", id: node.id.replace(/^boundary:/, "") })}
-        onEdgeClick={(_, edge) => onSelect?.({ kind: "net", id: edge.id })}
+        onSelectionChange={({ nodes: selectedNodes, edges: selectedEdges }) => {
+          const next = [
+            ...selectedNodes.map((node): CircuitCanvasSelectionItem => node.id.startsWith("boundary:")
+            ? { kind: "boundary", id: node.id.slice("boundary:".length) }
+            : { kind: "node", id: node.id }),
+            ...selectedEdges.map((edge): CircuitCanvasSelectionItem => ({ kind: "net", id: edge.id })),
+          ];
+          if (!circuitSelectionsEqual(selection, next)) onSelectionChange?.(next);
+        }}
         onConnect={(connection) => {
           const sourceTerminalId = terminalIdFromHandle(connection.sourceHandle);
           const targetTerminalId = terminalIdFromHandle(connection.targetHandle);
-          if (sourceTerminalId && targetTerminalId && sourceTerminalId !== targetTerminalId) onConnectTerminals?.(sourceTerminalId, targetTerminalId);
+          if (sourceTerminalId && targetTerminalId) completeConnection(sourceTerminalId, targetTerminalId);
+          setPendingTerminalId(undefined);
         }}
-        onNodeDragStop={(_, node) => {
-          const original = nodeGeometry[node.id];
-          if (!original) return;
-          onNodeGeometryChange?.(node.id, {
-            x: Math.round(node.position.x / gridSize) * gridSize,
-            y: Math.round(node.position.y / gridSize) * gridSize,
-            width: original.width,
-            height: original.height,
-            pinned: true,
-          });
+        onConnectEnd={(_, state) => {
+          if (state.fromHandle && !state.isValid) rejectConnection("invalid_target");
+        }}
+        onNodeDragStop={(_, node, draggedNodes) => {
+          const values = draggedNodes.length ? draggedNodes : [node];
+          const changes = Object.fromEntries(values.flatMap((value) => {
+            const original = nodeGeometry[value.id];
+            if (!original) return [];
+            return [[value.id, {
+              x: Math.round(value.position.x / gridSize) * gridSize,
+              y: Math.round(value.position.y / gridSize) * gridSize,
+              width: original.width,
+              height: original.height,
+              pinned: true,
+            }]];
+          }));
+          if (Object.keys(changes).length) onNodeGeometryChanges?.(changes);
         }}
       >
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
-        <Controls showInteractive={false} />
+        {showInlineViewportControls && <Controls showInteractive={false} />}
       </ReactFlow>
     </div>
   );
 }
+
+export const CircuitDesignerCanvas = forwardRef<CircuitDesignerCanvasHandle, CircuitDesignerCanvasProps>(CircuitDesignerCanvasInner);
 
 export interface CircuitProposalDiffViewerProps {
   before: CircuitDocument;
@@ -422,7 +606,7 @@ export function CircuitProposalDiffViewer({
 }: CircuitProposalDiffViewerProps) {
   const [beforeState, setBeforeState] = useState<DiffCanvasState>();
   const [afterState, setAfterState] = useState<DiffCanvasState>();
-  const [selection, setSelection] = useState<{ kind: "node" | "net"; id: string } | null>(null);
+  const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
   const [viewport, setViewport] = useState<Viewport>();
 
   useEffect(() => {
@@ -471,12 +655,11 @@ export function CircuitProposalDiffViewer({
               layout={beforeState.layout}
               boundaryGeometry={beforeState.boundaryGeometry}
               elementStatus={beforeStatus}
-              selectedElement={selection}
-              onSelect={setSelection}
+              selection={selection}
+              onSelectionChange={setSelection}
               viewport={viewport}
               onViewportChange={setViewport}
               editable={false}
-              mode="pan"
             />
           ) : <div className="cd-proposal-diff__loading">Preparing layout…</div>}
         </div>
@@ -488,12 +671,11 @@ export function CircuitProposalDiffViewer({
               layout={afterState.layout}
               boundaryGeometry={afterState.boundaryGeometry}
               elementStatus={afterStatus}
-              selectedElement={selection}
-              onSelect={setSelection}
+              selection={selection}
+              onSelectionChange={setSelection}
               viewport={viewport}
               onViewportChange={setViewport}
               editable={false}
-              mode="pan"
             />
           ) : <div className="cd-proposal-diff__loading">Preparing layout…</div>}
         </div>

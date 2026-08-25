@@ -34,5 +34,20 @@ The service owns live revisions and leases, but not durable storage. Save
 downloads a new canonical file and never overwrites the input file. A circuit
 opened from the Spec Editor is source-owned and read-only.
 
+## Canvas interactions
+
+The canvas has no separate tool modes. Its Selection, Connect, Route, and View
+action menus expose every primary operation. Direct gestures remain available:
+
+- click or marquee to select, and drag selected instances to move them;
+- drag between two free terminals to create a full-terminal net;
+- select one net to reveal and drag its route handles;
+- use the wheel to zoom and middle-drag or Space+drag to pan.
+
+Use **Connect…** for named or sliced nets. View and selection commands work in
+read-only documents; circuit-changing commands require **Unlock**. See the
+[interaction guide](../../../docs/circuit-designer-interactions.md) for the
+complete mouse and keyboard contract.
+
 See [`../../../docs/architecture.md`](../../../docs/architecture.md) and
 [`../../../docs/flows.md`](../../../docs/flows.md).

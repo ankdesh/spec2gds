@@ -85,13 +85,17 @@ normalization.
 
 ## RTL behavior
 
-`rtl.generate` 1.1.0 inserts generated nets and instances first, then the
+`rtl.generate` 1.1.1 inserts generated nets and instances first, then the
 component body, then the owned/design body. Generated `` `line`` mappings point
 tool diagnostics at the stored section path. Active modules use `input logic`,
 `output logic`, and `inout wire`. A non-empty leaf body removes automatic
 output/inout tie-offs; an empty or missing body retains the existing scaffold.
 Generation manifests and reports use V2 and record each consumed section ID,
 digest, source path, and generated output path.
+
+The one-cycle and two-cycle component examples, their generated projects, and
+the fixture regeneration command are documented in
+[RTL semantics examples](rtl-semantics-examples.md).
 
 Owned designs inherit their owning component's ports. Entry and otherwise
 unowned designs remain portless. Storing a section does not expand the RTL

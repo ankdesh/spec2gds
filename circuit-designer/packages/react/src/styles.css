@@ -12,7 +12,11 @@
 .cd-node__port-label--east { right: 8px; transform: translateY(-50%); }
 .cd-node__port-label--north { top: 5px; transform: translateX(-50%); }
 .cd-node__port-label--south { bottom: 5px; transform: translateX(-50%); }
-.react-flow__handle { width: 7px; height: 7px; border: 1px solid #fffdf7; border-radius: 1px; background: #156b70; }
+.react-flow__handle { width: 10px; height: 10px; border: 2px solid #fffdf7; border-radius: 50%; background: #156b70; box-shadow: 0 0 0 1px #156b70; transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease; }
+.react-flow__handle.connectionindicator:hover, .react-flow__handle.connectingto.valid { box-shadow: 0 0 0 4px rgb(76 201 164 / 30%); transform: scale(1.18); }
+.react-flow__handle.connectingto:not(.valid) { background: #b34d3c; box-shadow: 0 0 0 4px rgb(179 77 60 / 24%); }
+.react-flow__handle.cd-terminal--occupied { cursor: not-allowed; opacity: .48; background: #66777a; box-shadow: 0 0 0 1px #66777a; }
+.react-flow__handle.cd-terminal--pending { background: #dc6b2f; box-shadow: 0 0 0 4px rgb(220 107 47 / 24%); }
 .cd-net__segment { fill: none; stroke: #304b55; stroke-width: 1.6; vector-effect: non-scaling-stroke; }
 .cd-net__segment--locked { stroke: #204b6a; stroke-dasharray: 7 3; stroke-width: 2; }
 .cd-net__hit-segment { fill: none; stroke: transparent; stroke-width: 14; cursor: move; pointer-events: stroke; vector-effect: non-scaling-stroke; }
@@ -21,6 +25,7 @@
 .cd-net__route-handle { fill: #fffdf7; stroke: #dc6b2f; stroke-width: 1.8; cursor: move; pointer-events: all; vector-effect: non-scaling-stroke; }
 .cd-net__route-handle--locked { fill: #204b6a; stroke: #fff; cursor: not-allowed; }
 .react-flow__node.selected .cd-node { border-color: #dc6b2f; box-shadow: 0 0 0 2px rgb(220 107 47 / 22%); }
+.react-flow__selection { border: 1px solid #1d7773; background: rgb(29 119 115 / 10%); }
 .react-flow__node.cd-element--added .cd-node { border-color: #1f9d66; background: #effcf5; box-shadow: 0 0 0 2px rgb(31 157 102 / 20%); }
 .react-flow__node.cd-element--removed .cd-node { border-color: #cf3f4f; background: #fff1f2; box-shadow: 0 0 0 2px rgb(207 63 79 / 18%); }
 .react-flow__node.cd-element--changed .cd-node { border-color: #c57b13; background: #fff8e8; box-shadow: 0 0 0 2px rgb(197 123 19 / 18%); }

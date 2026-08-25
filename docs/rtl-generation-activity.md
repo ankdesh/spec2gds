@@ -1,7 +1,7 @@
 # Deterministic RTL Generation Activity
 
-`rtl.generate` version `1.1.0` generates a SystemVerilog 2017
-scaffold for one selected design. It preserves reachable component hierarchy,
+`rtl.generate` version `1.1.1` generates a SystemVerilog 2017
+project for one selected design. It preserves reachable component hierarchy,
 emits one reusable module per component definition, and translates direct
 physical wire connections. It does not call an LLM, inspect narrative intent,
 mutate the specification or infer clocks and resets. It incorporates explicit
@@ -130,6 +130,10 @@ The directory is fully generator-owned. A rerun atomically replaces it only
 when its manifest matches the generator, document, and design. Do not add
 hand-written implementation code to this tree because regeneration discards
 manual edits.
+
+See [RTL semantics examples](rtl-semantics-examples.md) for one-cycle and
+two-cycle component bodies, configured workspace generation, and behavioral
+verification.
 
 ## Verify with Verilator
 

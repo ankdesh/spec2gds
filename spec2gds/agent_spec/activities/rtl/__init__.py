@@ -94,7 +94,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
     activity_id=GENERATOR_ID,
     version=GENERATOR_VERSION,
     title="Generate RTL",
-    description="Generate deterministic structural SystemVerilog modules and direct wiring.",
+    description="Generate deterministic SystemVerilog from IP-XACT structure and stored module bodies.",
     scopes=ActivityScopes(entity_kinds=("design",)),
     report_model=RtlGenerationReport,
     artifact_roles=(REPORT_ROLE,),
@@ -102,7 +102,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
     availability=_availability,
 )
 def generate_rtl(context: ActivityContext) -> ActivityResult:
-    """Generate and publish one compile-only RTL scaffold."""
+    """Generate and publish one deterministic RTL project."""
     context.cancellation.raise_if_cancelled()
     if context.target is None or context.workspace is None:
         raise RuntimeError("RTL generation requires a design target and workspace.")
@@ -152,7 +152,7 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
         source_entities=source_entities,
     )
     return ActivityResult(
-        summary=f"Generated RTL scaffold at {published.relative_path}.",
+        summary=f"Generated RTL project at {published.relative_path}.",
         report=report.model_dump(mode="json"),
         artifacts=(artifact,),
     )

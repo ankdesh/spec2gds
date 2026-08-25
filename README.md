@@ -274,7 +274,15 @@ interfaces, non-wire ports, symbolic ranges, and
 unsupported net shapes are rejected during preflight. See the
 [RTL Generation Activity guide](docs/rtl-generation-activity.md) for the exact
 source profile, report contract, invocation, and required Verilator 5.x lint
-workflow.
+workflow. The
+[one-cycle and two-cycle semantics examples](docs/rtl-semantics-examples.md)
+show the body-only source contract and can be generated under the configured
+Activity workspace with:
+
+```bash
+uv run python scripts/generate_rtl_examples.py --check
+uv run python scripts/generate_rtl_examples.py --update
+```
 
 For frontend work:
 
@@ -304,6 +312,12 @@ npm run dev
 Open `http://SERVER_IP:6012`. The app starts with an empty circuit. Use
 **Unlock** to edit it, **Save** to accept the draft and download a canonical
 file, or **Open file** to load an existing `.circuit.json`.
+
+The canvas has no separate interaction modes. Use its action bar for visible
+Selection, Connect, Route, and View commands, or use direct gestures such as
+dragging between free ports, dragging a selected route, wheel zoom, and
+middle-drag or Space+drag pan. See the
+[Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
 
 To use **Open circuit** from the specification editor, run both services. The
 default Spec API (`6010`) and Circuit service (`6011`) already use compatible

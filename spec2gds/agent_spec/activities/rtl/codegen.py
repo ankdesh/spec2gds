@@ -1,4 +1,4 @@
-"""Deterministic SystemVerilog rendering for structural RTL scaffolds."""
+"""Deterministic SystemVerilog rendering from structure and stored semantics."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "rtl.generate"
-GENERATOR_VERSION = "1.1.0"
+GENERATOR_VERSION = "1.1.1"
 GENERATION_SCHEMA = "spec2gds.rtl-generation.v2"
 
 _TEMPLATES = Environment(

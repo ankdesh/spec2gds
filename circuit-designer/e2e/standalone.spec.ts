@@ -9,20 +9,42 @@ test("starts an empty document through the REST service", async ({ page }) => {
   await expect(page.locator(".library")).toContainText("Empty local circuit");
 });
 
-test("keeps select, connect, route, and pan modes mutually exclusive", async ({ page }) => {
+test("uses one canvas interaction layer with discoverable command-bar actions", async ({ page }) => {
   await page.goto("/");
-  const modes = page.locator(".mode-toolbar");
+  const actions = page.getByLabel("Circuit canvas actions");
 
-  await expect(modes.getByRole("button", { name: "select" })).toHaveClass(/active/);
-  await modes.getByRole("button", { name: "connect" }).click();
-  await expect(modes.getByRole("button", { name: "connect" })).toHaveClass(/active/);
-  await modes.getByRole("button", { name: "route" }).click();
-  await expect(modes.getByRole("button", { name: "route" })).toHaveClass(/active/);
-  await modes.getByRole("button", { name: "pan" }).click();
-  await expect(modes.getByRole("button", { name: "pan" })).toHaveClass(/active/);
+  await expect(page.locator(".mode-toolbar")).toHaveCount(0);
+  await expect(actions.getByRole("button", { name: /Selection/ })).toBeVisible();
+  await expect(actions.getByRole("button", { name: /Connect/ })).toBeDisabled();
+  await actions.getByRole("button", { name: /View/ }).click();
+  await expect(actions.getByRole("button", { name: "Pan left" })).toBeVisible();
+  await actions.getByRole("menuitem", { name: "Zoom In" }).click();
 
-  await page.keyboard.press("Escape");
-  await expect(modes.getByRole("button", { name: "select" })).toHaveClass(/active/);
+  await page.getByRole("button", { name: "Unlock" }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeVisible();
+  await page.getByLabel("Name", { exact: true }).fill("Producer");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Consumer");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+
+  await actions.getByRole("button", { name: /Selection/ }).click();
+  await actions.getByRole("menuitem", { name: /Select All/ }).click();
+  await expect(page.locator(".inspector")).toContainText("2 items selected");
+  await actions.getByRole("button", { name: /Selection/ }).click();
+  await actions.getByRole("menuitem", { name: /Clear Selection/ }).click();
+
+  const source = page.locator('.react-flow__handle[data-handleid="producer:output"]');
+  const target = page.locator('.react-flow__handle[data-handleid="consumer:input"]');
+  await expect(source).toBeVisible();
+  await expect(target).toBeVisible();
+  await source.dragTo(target);
+  await expect(page.locator(".notice")).toContainText("Created net");
+
+  await actions.getByRole("button", { name: /Connect/ }).click();
+  await page.getByLabel("Endpoint A").selectOption("producer:input");
+  await page.getByLabel("Endpoint B").selectOption("consumer:output");
+  await page.getByRole("button", { name: "Create net" }).click();
+  await expect(page.locator(".notice")).toContainText("Created net");
 });
 
 test("downloads and reopens a portable circuit file", async ({ page }) => {
@@ -49,6 +71,7 @@ test("downloads and reopens a portable circuit file", async ({ page }) => {
 
 test("rejects an invalid file without replacing the current circuit", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByTestId("circuit-canvas")).toBeVisible();
   const nodeCount = await page.locator(".react-flow__node").count();
 
   await page.getByLabel("Circuit file").setInputFiles({

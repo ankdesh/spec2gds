@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
+import { CircuitDesignerHttpError, HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
   createEmptyCircuitDocument,
@@ -16,13 +16,19 @@ import {
   type NetEndpoint,
   type NetRoute,
   type NodeGeometry,
+  setAllRouteLocks,
 } from "@spec2gds/circuit-core";
 import {
   createLayoutTask,
   layoutCircuitGraph,
+  routeCircuitNets,
   type LayoutResult,
 } from "@spec2gds/circuit-layout";
-import { CircuitDesignerCanvas, type CircuitCanvasMode } from "@spec2gds/circuit-react";
+import {
+  CircuitDesignerCanvas,
+  type CircuitCanvasSelection,
+  type CircuitDesignerCanvasHandle,
+} from "@spec2gds/circuit-react";
 import {
   circuitDocumentFileContents,
   circuitDocumentFilename,
@@ -32,8 +38,8 @@ import {
 import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
 import { browserRandomUuid } from "./browser-id";
 import { BrowserLogger, type PublicLoggingConfig } from "@spec2gds/observability/browser";
+import { CanvasActionBar } from "./CanvasActionBar";
 
-type Selection = { kind: "node" | "net"; id: string } | null;
 type ServiceDirectory = {
   schema_version: 2;
   services: {
@@ -97,8 +103,7 @@ export function App() {
   const [lease, setLease] = useState<EditLease>();
   const [layout, setLayout] = useState<LayoutResult>();
   const [layoutProgress, setLayoutProgress] = useState("");
-  const [selection, setSelection] = useState<Selection>(null);
-  const [mode, setMode] = useState<CircuitCanvasMode>("select");
+  const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
   const [message, setMessage] = useState("Ready. Unlock to make a private draft.");
   const [componentName, setComponentName] = useState("");
   const [endpointA, setEndpointA] = useState("");
@@ -111,7 +116,7 @@ export function App() {
   const [openingFile, setOpeningFile] = useState(false);
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const priorMode = useRef<CircuitCanvasMode>("select");
+  const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
 
   useEffect(() => {
     void fetch(`${apiBase}/services`)
@@ -132,28 +137,30 @@ export function App() {
           setSnapshot(next);
           setDocument(next.document);
           setLayout(undefined);
-          setSelection(null);
+          setSelection([]);
           setLease(undefined);
           setSourceDescription("Projected from the specification editor through the direct-port adapter.");
           setMessage(`Opened source-owned projection at revision ${next.revision}. Return to the specification editor to change source.`);
           draftRef.current = undefined;
           return;
         }
-        const created = await backend.create(initial, operationId("initialize"));
-        let next = created.snapshot;
         let joined = false;
-        if (created.status === "conflict") {
+        let next: CircuitSnapshot | undefined;
+        try {
+          next = (await backend.create(initial, operationId("initialize"))).snapshot;
+        } catch (reason) {
+          if (!(reason instanceof CircuitDesignerHttpError) || reason.status !== 409) throw reason;
           next = await backend.get(initial.document_id);
           joined = true;
         }
         if (!next) {
-          throw new Error(summarizeFileDiagnostics(created.diagnostics) || "The service rejected the empty document.");
+          throw new Error("The service rejected the empty document.");
         }
         if (!active) return;
         setSnapshot(next);
         setDocument(next.document);
         setLayout(undefined);
-        setSelection(null);
+        setSelection([]);
         setLease(undefined);
         setSourceDescription("Empty local circuit. Add definitions and instances after unlocking.");
         setMessage(joined
@@ -181,7 +188,7 @@ export function App() {
     setSnapshot(undefined);
     setDocument(undefined);
     setLayout(undefined);
-    setSelection(null);
+    setSelection([]);
     setLease(undefined);
     setLinkedDocumentId(undefined);
     window.history.replaceState({}, "", window.location.pathname);
@@ -193,6 +200,34 @@ export function App() {
     () => document ? projectDocument(document, lease ? "draft" : snapshot?.revision ?? "loading") : undefined,
     [document, lease, snapshot?.revision],
   );
+
+  useEffect(() => {
+    if (!graph) return;
+    const nodeIds = new Set(graph.nodes.map((node) => node.id));
+    const boundaryIds = new Set(graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => terminal.id));
+    const netIds = new Set(graph.nets.map((net) => net.id));
+    setSelection((current) => {
+      const next = current.filter((item) => item.kind === "node" ? nodeIds.has(item.id) : item.kind === "boundary" ? boundaryIds.has(item.id) : netIds.has(item.id));
+      return next.length === current.length ? current : next;
+    });
+  }, [graph]);
+
+  useEffect(() => {
+    const selectAll = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "a"
+        || target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
+      event.preventDefault();
+      if (!graph) return;
+      setSelection([
+        ...graph.nodes.map((node) => ({ kind: "node" as const, id: node.id })),
+        ...graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => ({ kind: "boundary" as const, id: terminal.id })),
+        ...graph.nets.map((net) => ({ kind: "net" as const, id: net.id })),
+      ]);
+    };
+    window.addEventListener("keydown", selectAll);
+    return () => window.removeEventListener("keydown", selectAll);
+  }, [graph]);
 
   useEffect(() => {
     if (!graph) return;
@@ -223,7 +258,7 @@ export function App() {
         if (next.revision === snapshot.revision) return;
         setSnapshot(next);
         setDocument(next.document);
-        setSelection(null);
+        setSelection([]);
         setLayout(undefined);
         setMessage(`REST session updated by another client to revision ${next.revision}.`);
       }).catch((reason) => {
@@ -231,32 +266,6 @@ export function App() {
       });
     });
   }, [backend, lease, snapshot?.document.document_id, snapshot?.revision]);
-
-  useEffect(() => {
-    const typing = (target: EventTarget | null) =>
-      target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
-    const down = (event: KeyboardEvent) => {
-      if (typing(event.target)) return;
-      if (event.key === "Escape") setMode("select");
-      if (event.code === "Space" && !event.repeat) {
-        event.preventDefault();
-        priorMode.current = mode;
-        setMode("pan");
-      }
-    };
-    const up = (event: KeyboardEvent) => {
-      if (event.code === "Space" && !typing(event.target)) {
-        event.preventDefault();
-        setMode(priorMode.current);
-      }
-    };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-    };
-  }, [mode]);
 
   function mutate(operation: CircuitOperation, success: string): boolean {
     const draft = draftRef.current;
@@ -355,31 +364,35 @@ export function App() {
     setComponentName("");
   }
 
-  function createNet(source: string, target: string, requestedName = ""): void {
-    if (!document || !source || !target || source === target) return;
+  function createNet(source: string, target: string, requestedName = "", lsb = sliceLsb, width = sliceWidth): boolean {
+    if (!document || !source || !target || source === target) return false;
     const label = requestedName.trim() || `net ${document.design.nets.length + 1}`;
     const id = uniqueSlug(label, document.design.nets.map((item) => item.id));
-    mutate({
+    const created = mutate({
       operation_id: operationId("net"),
       type: "create_net",
       net: {
         id,
         label,
         endpoints: [
-          endpointFromTerminal(source, sliceLsb, sliceWidth),
-          endpointFromTerminal(target, sliceLsb, sliceWidth),
+          endpointFromTerminal(source, lsb, width),
+          endpointFromTerminal(target, lsb, width),
         ],
       },
     }, `Created net “${label}”.`);
+    if (created) setSelection([{ kind: "net", id }]);
+    return created;
   }
 
-  function moveNode(instanceId: string, geometry: NodeGeometry): void {
-    mutate({
-      operation_id: operationId("move"),
-      type: "set_instance_geometry",
-      instance_id: instanceId,
-      geometry,
-    }, `Moved ${instanceId}.`);
+  function moveNodes(changes: Record<string, NodeGeometry>): void {
+    for (const [instanceId, geometry] of Object.entries(changes)) {
+      mutate({
+        operation_id: operationId("move"),
+        type: "set_instance_geometry",
+        instance_id: instanceId,
+        geometry,
+      }, `Moved ${Object.keys(changes).length} selected instance${Object.keys(changes).length === 1 ? "" : "s"}.`);
+    }
   }
 
   function saveRoute(netId: string, route: NetRoute): void {
@@ -486,14 +499,17 @@ export function App() {
         setMessage(`Could not open ${file.name}: ${summarizeFileDiagnostics(parsed.diagnostics)}`);
         return;
       }
-      const created = await backend.create(parsed.document, operationId("open_file"));
-      let next = created.snapshot;
+      const displayName = file.name.endsWith(".json") ? file.name : circuitDocumentFilename(parsed.document);
       let joined = false;
-      if (created.status === "conflict") {
+      let next: CircuitSnapshot | undefined;
+      try {
+        next = (await backend.create(parsed.document, operationId("open_file"))).snapshot;
+      } catch (reason) {
+        if (!(reason instanceof CircuitDesignerHttpError) || reason.status !== 409) throw reason;
         const existing = await backend.get(parsed.document.document_id);
         if (exportCircuitJson(existing.document) !== exportCircuitJson(parsed.document)) {
           setMessage(
-            `Could not open ${file.name}: a different REST session already uses document ID “${parsed.document.document_id}”.`,
+            `Could not open ${displayName}: a different REST session already uses document ID “${parsed.document.document_id}”.`,
           );
           return;
         }
@@ -501,22 +517,22 @@ export function App() {
         joined = true;
       }
       if (!next) {
-        setMessage(`Could not open ${file.name}: ${summarizeFileDiagnostics(created.diagnostics)}`);
+        setMessage(`Could not open ${displayName}: the service rejected the document.`);
         return;
       }
       draftRef.current = undefined;
       setSnapshot(next);
       setDocument(next.document);
       setLease(undefined);
-      setSelection(null);
+      setSelection([]);
       setLayout(undefined);
       setProposals(await backend.listProposals(next.document.document_id));
       setLinkedDocumentId(undefined);
       window.history.replaceState({}, "", window.location.pathname);
-      setSourceDescription(`Opened from ${file.name}; permanent changes are saved by downloading a new file.`);
+      setSourceDescription(`Opened from ${displayName}; permanent changes are saved by downloading a new file.`);
       const warnings = parsed.diagnostics.filter((item) => item.severity === "warning");
       setMessage(
-        `${joined ? "Joined matching session for" : "Opened"} ${file.name} at revision ${next.revision}`
+        `${joined ? "Joined matching session for" : "Opened"} ${displayName} at revision ${next.revision}`
         + (warnings.length ? ` with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}.` : "."),
       );
     } catch (reason) {
@@ -561,13 +577,61 @@ export function App() {
     if (opened) opened.opener = null;
   }
 
-  const selectedInstance = selection?.kind === "node"
-    ? document?.design.instances.find((item) => item.id === selection.id)
+  const selectedItem = selection.length === 1 ? selection[0] : undefined;
+  const selectedInstance = selectedItem?.kind === "node"
+    ? document?.design.instances.find((item) => item.id === selectedItem.id)
     : undefined;
-  const selectedNet = selection?.kind === "net"
-    ? document?.design.nets.find((item) => item.id === selection.id)
+  const selectedBoundary = selectedItem?.kind === "boundary"
+    ? document?.design.boundary_terminals.find((item) => item.id === selectedItem.id)
+    : undefined;
+  const selectedNet = selectedItem?.kind === "net"
+    ? document?.design.nets.find((item) => item.id === selectedItem.id)
     : undefined;
   const terminals = graph?.terminals ?? [];
+  const selectedRoute = selectedNet && layout ? layout.layout.net_routes[selectedNet.id] : undefined;
+  const selectedRouteLocked = Boolean(
+    selectedRoute?.segments.some((segment) => segment.locked)
+    || selectedRoute?.vertices.some((vertex) => vertex.locked),
+  );
+
+  function selectAllCanvas(): void {
+    if (!graph) return;
+    setSelection([
+      ...graph.nodes.map((node) => ({ kind: "node" as const, id: node.id })),
+      ...graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => ({ kind: "boundary" as const, id: terminal.id })),
+      ...graph.nets.map((net) => ({ kind: "net" as const, id: net.id })),
+    ]);
+  }
+
+  function createConnectionFromBar(): boolean {
+    const created = createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth);
+    if (!created) return false;
+    setNetName("");
+    setEndpointA("");
+    setEndpointB("");
+    setSliceLsb(0);
+    setSliceWidth(0);
+    return true;
+  }
+
+  function rerouteSelectedNet(): void {
+    if (!graph || !layout || !selectedNet || selectedRouteLocked) return;
+    const route = routeCircuitNets(graph, layout.layout, layout.boundary_geometry, [selectedNet.id], false)[selectedNet.id];
+    if (route) saveRoute(selectedNet.id, route);
+  }
+
+  function setSelectedRouteLocked(locked: boolean): void {
+    if (!selectedNet || !selectedRoute) return;
+    saveRoute(selectedNet.id, setAllRouteLocks(selectedRoute, locked));
+  }
+
+  function reportConnectionRejection(reason: "same_terminal" | "terminal_in_use" | "invalid_target"): void {
+    setMessage(reason === "same_terminal"
+      ? "Choose two different terminals."
+      : reason === "terminal_in_use"
+        ? "That terminal is already connected. Extending and merging nets are not available yet."
+        : "Drop the connection on another free terminal.");
+  }
 
   return <main className="standalone-shell">
     <header className="topbar">
@@ -612,43 +676,70 @@ export function App() {
         <div className="metrics"><div><b>{document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-list">{document?.components.map((component) => <button key={component.id} onClick={() => setMessage(`${component.label}: ${component.terminals.length} terminals · ${component.origin}`)}><b>{component.label}</b><small>{component.origin} · {component.appearance.renderer_key}</small></button>)}</div>
         <div className="section"><h3>Local definition</h3><label>Name<input value={componentName} onChange={(event) => setComponentName(event.target.value)} placeholder="Arithmetic unit" /></label><button className="primary" disabled={!lease || !componentName.trim()} onClick={addLocalComponent}>Create definition + instance</button></div>
-        <div className="section"><h3>Layout</h3><button disabled={!lease} onClick={() => void autoLayout()}>Arrange and route</button></div>
-        <div className="section"><h3>Connect / bus slice</h3>
-          <label>Net label<input value={netName} onChange={(event) => setNetName(event.target.value)} /></label>
-          <label>Endpoint A<select value={endpointA} onChange={(event) => setEndpointA(event.target.value)}><option value="">Choose…</option>{terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.id}</option>)}</select></label>
-          <label>Endpoint B<select value={endpointB} onChange={(event) => setEndpointB(event.target.value)}><option value="">Choose…</option>{terminals.filter((terminal) => terminal.id !== endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.id}</option>)}</select></label>
-          <div className="slice-row"><label>LSB<input type="number" min="0" value={sliceLsb} onChange={(event) => setSliceLsb(Number(event.target.value))} /></label><label>Width (0=full)<input type="number" min="0" value={sliceWidth} onChange={(event) => setSliceWidth(Number(event.target.value))} /></label></div>
-          <button className="primary" disabled={!lease || !endpointA || !endpointB} onClick={() => { createNet(endpointA, endpointB, netName); setNetName(""); }}>Create net</button>
-        </div>
         {proposals.length > 0 && <div className="section"><h3>Pending proposals</h3>{proposals.map((proposal) => <div className="proposal-card" key={proposal.proposal_id}><b>{proposal.title}</b><p>{proposal.summary}</p><small>{proposal.diff.added.length} added · {proposal.diff.changed.length} changed · {proposal.diff.removed.length} removed</small><button onClick={() => void decideProposal(proposal.proposal_id, "accept")}>Accept</button><button onClick={() => void decideProposal(proposal.proposal_id, "reject")}>Reject</button></div>)}</div>}
       </aside>
       <div className="stage">
-        <div className="mode-toolbar">{(["select", "connect", "route", "pan"] as CircuitCanvasMode[]).map((item) => <button key={item} className={mode === item ? "active" : ""} onClick={() => setMode(item)}>{item}</button>)}</div>
-        {!layout && <div className="loading">Computing flattened canvas projection…</div>}
-        {graph && layout && <CircuitDesignerCanvas
-          graph={graph}
-          layout={layout.layout}
-          boundaryGeometry={layout.boundary_geometry}
+        <CanvasActionBar
           editable={Boolean(lease)}
-          mode={mode}
-          onSelect={setSelection}
-          onNodeGeometryChange={moveNode}
-          onConnectTerminals={(source, target) => createNet(source, target)}
-          onNetRouteChange={saveRoute}
-          fitViewOnInit={false}
-        />}
-        {layout && <div className="layout-time">Grid router · {layout.elapsed_ms} ms</div>}
+          selectionCount={selection.length}
+          selectedNetId={selectedNet?.id}
+          selectedRouteLocked={selectedRouteLocked}
+          terminals={terminals}
+          netName={netName}
+          endpointA={endpointA}
+          endpointB={endpointB}
+          sliceLsb={sliceLsb}
+          sliceWidth={sliceWidth}
+          onNetNameChange={setNetName}
+          onEndpointAChange={setEndpointA}
+          onEndpointBChange={setEndpointB}
+          onSliceLsbChange={setSliceLsb}
+          onSliceWidthChange={setSliceWidth}
+          onCreateConnection={createConnectionFromBar}
+          onSelectAll={selectAllCanvas}
+          onClearSelection={() => setSelection([])}
+          onCenterSelection={() => canvasRef.current?.centerSelection()}
+          onRerouteSelected={rerouteSelectedNet}
+          onSetRouteLocked={setSelectedRouteLocked}
+          onArrangeAll={() => void autoLayout()}
+          onPan={(direction) => canvasRef.current?.pan(direction)}
+          onZoomIn={() => canvasRef.current?.zoomIn()}
+          onZoomOut={() => canvasRef.current?.zoomOut()}
+          onFitView={() => canvasRef.current?.fitView()}
+        />
+        <div className="canvas-surface">
+          {!layout && <div className="loading">Computing flattened canvas projection…</div>}
+          {graph && layout && <CircuitDesignerCanvas
+            ref={canvasRef}
+            graph={graph}
+            layout={layout.layout}
+            boundaryGeometry={layout.boundary_geometry}
+            editable={Boolean(lease)}
+            selection={selection}
+            onSelectionChange={setSelection}
+            onNodeGeometryChanges={moveNodes}
+            onConnectTerminals={(source, target) => { createNet(source, target, "", 0, 0); }}
+            onConnectionRejected={reportConnectionRejection}
+            onNetRouteChange={saveRoute}
+            fitViewOnInit={false}
+            showInlineViewportControls={false}
+          />}
+          {layout && <div className="layout-time">Grid router · {layout.elapsed_ms} ms</div>}
+        </div>
       </div>
       <aside className="inspector">
         <p className="eyebrow">Inspector</p>
-        {!selection && <div className="empty-inspector"><span>⌁</span><p>Select an instance or net. Manual edits remain private until Save.</p></div>}
+        {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net. Manual edits remain private until Save.</p></div>}
+        {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p><button onClick={() => canvasRef.current?.centerSelection()}>Center selection</button><button onClick={() => setSelection([])}>Clear selection</button></div>}
         {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2><code>{selectedInstance.id}</code>
           <label>Label<input value={selectedInstance.label} onChange={(event) => mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label: event.target.value || selectedInstance.id } }, "Instance label updated.")} disabled={!lease} /></label>
           <button onClick={() => void openHierarchy(selectedInstance.component_id)}>Open child design</button>
           <button className="danger" disabled={!lease} onClick={() => mutate({ operation_id: operationId("remove"), type: "remove_instance", instance_id: selectedInstance.id, cascade: true }, "Instance removed with explicit connectivity cascade.")}>Delete with cascade</button>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
+        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2><code>{selectedBoundary.id}</code><p className="draw-hint">{selectedBoundary.direction} · {String(selectedBoundary.width)} bit{selectedBoundary.width === 1 ? "" : "s"}</p><details><summary>Canonical data</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details></>}
         {selectedNet && <><span className="kind">net</span><h2>{selectedNet.label || selectedNet.id}</h2><code>{selectedNet.id}</code>
+          <p className="draw-hint">{selectedRouteLocked ? "Route locked. Use Route → Unlock Selected Route before editing." : "Drag highlighted segments or handles to edit this route."}</p>
           <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n")}</p>
           <button className="danger" disabled={!lease} onClick={() => mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: selectedNet.id }, "Net deleted.")}>Delete net</button>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedNet, null, 2)}</pre></details>

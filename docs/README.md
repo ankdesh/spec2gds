@@ -24,17 +24,21 @@ Read in this order:
    SystemC generation, workspace publishing, and supported topology.
 9. [RTL Generation Activity](rtl-generation-activity.md) — deterministic
    SystemVerilog scaffolding, direct-wire validation, and Verilator checks.
-10. [AI Assistant](ai-assistant.md) — document- and entity-bound editor
+10. [RTL semantics examples](rtl-semantics-examples.md) — body-only component
+    behavior, one-/two-cycle samples, and configured output generation.
+11. [AI Assistant](ai-assistant.md) — document- and entity-bound editor
     integration, review boundary, and proposal contracts.
-11. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
-   browser viewer.
-12. [Python code-reading guide](python-code-guide.md) — package ownership,
+12. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+    browser viewer.
+13. [Python code-reading guide](python-code-guide.md) — package ownership,
     request flows, proposal boundaries, and a safe newcomer reading order.
-13. [Code quality](code-quality.md) — commenting and unused-code review gates.
-14. [Sample application method](sample-apps.md) — how to build one representative
-   application through the entire system.
-15. [Development guide](development.md) — setup, commands, checks, and where code
-   belongs.
+14. [Code quality](code-quality.md) — commenting and unused-code review gates.
+15. [Sample application method](sample-apps.md) — how to build one representative
+    application through the entire system.
+16. [Development guide](development.md) — setup, commands, checks, and where code
+    belongs.
+17. [Circuit Designer interactions](circuit-designer-interactions.md) — unified
+    canvas gestures, visible action-bar commands, and editing constraints.
 
 ## Documentation rule
 

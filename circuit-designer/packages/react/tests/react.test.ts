@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import { simpleFixture, type NetRoute } from "@spec2gds/circuit-core";
 import {
   buildCircuitFlowEdges,
-  interactionPolicy,
+  circuitSelectionsEqual,
+  connectionRejectionReason,
   terminalDisplayLabel,
   terminalHandleId,
   terminalIdFromHandle,
@@ -34,9 +35,9 @@ describe("React Flow circuit model", () => {
     expect(buildCircuitFlowEdges(simpleFixture(), {})).toEqual([]);
   });
 
-  test("maps either connection-handle role back to its semantic terminal", () => {
-    expect(terminalIdFromHandle("node:port:data:source")).toBe("node:port:data");
-    expect(terminalIdFromHandle("node:port:data:target")).toBe("node:port:data");
+  test("uses one role-independent connection handle per terminal", () => {
+    expect(terminalHandleId("node:port:data")).toBe("node:port:data");
+    expect(terminalIdFromHandle("node:port:data")).toBe("node:port:data");
   });
 
   test("renders symbolic width text without changing numeric terminal labels", () => {
@@ -45,12 +46,21 @@ describe("React Flow circuit model", () => {
     expect(terminalDisplayLabel({ label: "valid", width: 1 })).toBe("valid");
   });
 
-  test("keeps canvas gestures mutually exclusive in every explicit mode", () => {
-    expect(interactionPolicy("select", true)).toMatchObject({ nodesDraggable: true, nodesConnectable: false, routeEditable: false, panOnDrag: false, zoomEnabled: false });
-    expect(interactionPolicy("connect", true)).toMatchObject({ nodesDraggable: false, nodesConnectable: true, routeEditable: false, panOnDrag: false, zoomEnabled: false });
-    expect(interactionPolicy("route", true)).toMatchObject({ nodesDraggable: false, nodesConnectable: false, routeEditable: true, panOnDrag: false, zoomEnabled: false });
-    expect(interactionPolicy("pan", true)).toMatchObject({ nodesDraggable: false, nodesConnectable: false, routeEditable: false, panOnDrag: true, zoomEnabled: true });
-    expect(interactionPolicy("select", false).nodesDraggable).toBe(false);
+  test("only permits new connections between two distinct free terminals", () => {
+    const occupied = simpleFixture();
+    expect(connectionRejectionReason(occupied, "producer_0:data", "consumer_0:data")).toBe("terminal_in_use");
+    const free = { ...occupied, nets: [] };
+    expect(connectionRejectionReason(free, "producer_0:data", "producer_0:data")).toBe("same_terminal");
+    expect(connectionRejectionReason(free, "producer_0:data", "missing:data")).toBe("invalid_target");
+    expect(connectionRejectionReason(free, "producer_0:data", "consumer_0:data")).toBeUndefined();
+  });
+
+  test("does not emit controlled selection changes for order-only differences", () => {
+    expect(circuitSelectionsEqual(
+      [{ kind: "node", id: "producer_0" }, { kind: "net", id: "data" }],
+      [{ kind: "net", id: "data" }, { kind: "node", id: "producer_0" }],
+    )).toBe(true);
+    expect(circuitSelectionsEqual([{ kind: "node", id: "producer_0" }], [])).toBe(false);
   });
 
   test("provides stable editable segment identity without changing semantic connectivity", () => {
@@ -62,7 +72,7 @@ describe("React Flow circuit model", () => {
       ],
       segments: [{ id: "data-trunk", from_vertex: "a", to_vertex: "b", locked: true }],
     };
-    const edges = buildCircuitFlowEdges(graph, { data: route }, { routeEditable: true, gridSize: 20 });
+    const edges = buildCircuitFlowEdges(graph, { data: route }, { routeEditableNetId: "data", gridSize: 20 });
     expect(edges[0].data?.routeEditable).toBe(true);
     expect(edges[0].data?.route.segments[0]).toMatchObject({ id: "data-trunk", locked: true });
     expect(edges[0].source).toBe("producer_0");
