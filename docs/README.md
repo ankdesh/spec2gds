@@ -38,7 +38,10 @@ Read in this order:
 16. [Development guide](development.md) — setup, commands, checks, and where code
     belongs.
 17. [Circuit Designer interactions](circuit-designer-interactions.md) — unified
-    canvas gestures, visible action-bar commands, and editing constraints.
+    canvas gestures, configurable action bindings, visible commands, and
+    editing constraints.
+18. [Circuit Designer preferences](circuit-designer-preferences.md) — shared
+    JSON profile, REST endpoints, validation, migration, and persistence.
 
 ## Documentation rule
 

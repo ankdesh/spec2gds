@@ -3,7 +3,7 @@ import { simpleDocumentFixture } from "@spec2gds/circuit-core";
 import { CircuitDesignerService } from "../src/server";
 import { EphemeralCircuitSessionBackend } from "../src/session-backend";
 import { StructuredLogger } from "@spec2gds/observability/node";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -48,6 +48,76 @@ describe("Circuit Designer REST service", () => {
       services: { ai_assistant: { ui_url: string } };
     };
     expect(directory.services.ai_assistant.ui_url).toMatch(/^http:\/\/[^/]+:6013$/);
+  });
+
+  it("loads defaults and atomically persists a shared preference file", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "spec2gds-preferences-"));
+    const preferencesPath = join(directory, "nested", "preferences.json");
+    service = new CircuitDesignerService({ preferencesPath });
+    let port = await service.listen();
+    let base = `http://127.0.0.1:${port}/api/circuit-designer/v1/preferences`;
+    const initial = await (await fetch(base)).json() as {
+      persisted: boolean;
+      preferences: { ui: { inspector_open: boolean }; action_bindings: Record<string, { keyboard: string }> };
+    };
+    expect(initial.persisted).toBe(false);
+    expect(initial.preferences.ui.inspector_open).toBe(false);
+    expect(initial.preferences.action_bindings["new-document"].keyboard).toBe("Mod+N");
+
+    const changed = {
+      ...initial.preferences,
+      ui: { inspector_open: true },
+      action_bindings: {
+        ...initial.preferences.action_bindings,
+        "fit-circuit": { keyboard: "F", mouse: "none" },
+      },
+    };
+    expect((await fetch(base, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changed),
+    })).status).toBe(200);
+    expect(JSON.parse(readFileSync(preferencesPath, "utf8"))).toMatchObject(changed);
+    expect(readdirSync(join(directory, "nested"))).toEqual(["preferences.json"]);
+
+    await service.close();
+    service = new CircuitDesignerService({ preferencesPath });
+    port = await service.listen();
+    base = `http://127.0.0.1:${port}/api/circuit-designer/v1/preferences`;
+    const reloaded = await (await fetch(base)).json() as { persisted: boolean; preferences: typeof changed };
+    expect(reloaded.persisted).toBe(true);
+    expect(reloaded.preferences.ui.inspector_open).toBe(true);
+    expect(reloaded.preferences.action_bindings["fit-circuit"].keyboard).toBe("F");
+  });
+
+  it("reports malformed and unsupported preference files without overwriting them", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "spec2gds-invalid-preferences-"));
+    const preferencesPath = join(directory, "preferences.json");
+    writeFileSync(preferencesPath, "{broken", "utf8");
+    service = new CircuitDesignerService({ preferencesPath });
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1/preferences`;
+    const malformed = await fetch(base);
+    expect(malformed.status).toBe(400);
+    expect((await malformed.json() as { message: string }).message).toContain("not valid JSON");
+    expect(readFileSync(preferencesPath, "utf8")).toBe("{broken");
+
+    const rejected = await fetch(base, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schema_version: 9, ui: {}, action_bindings: {} }),
+    });
+    expect(rejected.status).toBe(400);
+    expect(readFileSync(preferencesPath, "utf8")).toBe("{broken");
+
+    const oversized = await fetch(base, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ schema_version: 1, padding: "x".repeat(262_144) }),
+    });
+    expect(oversized.status).toBe(400);
+    expect((await oversized.json() as { message: string }).message).toContain("256 KiB");
+    expect(readFileSync(preferencesPath, "utf8")).toBe("{broken");
   });
 
   it("uses ephemeral process memory by default", async () => {

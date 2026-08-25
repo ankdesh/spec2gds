@@ -43,7 +43,7 @@ the owning application and the binding cannot be changed.
 
 The chooser reads the shared service directory and probes the owning APIs. It
 shows their availability and pre-fills the resolved service URLs. Circuit
-Designer's toolbar bypasses the manual form by calling `/launch/circuit` with
+Designer's **Tools → AI Assistant** command bypasses the manual form by calling `/launch/circuit` with
 the active document; the Assistant validates that document before creating the
 bound chat. Spec Editor's top button similarly creates a validated,
 document-bound chat with top-level creation capability. Its entity action

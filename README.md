@@ -133,8 +133,9 @@ uv run spec2gds-log-viewer
 See [the logging guide](docs/logging.md) for filters, redaction, and the event
 format.
 
-The editors expose **AI Assistant ↗** in their upper-right toolbar. Circuit
-Designer opens a chat already bound to the active circuit. Spec Editor opens
+The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
+uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
+chat already bound to the active circuit. Spec Editor opens
 a chat bound to the complete active specification. That document chat can
 propose new top-level components or designs (including a design's initial
 instances); use an entity's **Options → More actions… → Explore with AI
@@ -310,13 +311,16 @@ npm run dev
 ```
 
 Open `http://SERVER_IP:6012`. The app starts with an empty circuit. Use
-**Unlock** to edit it, **Save** to accept the draft and download a canonical
-file, or **Open file** to load an existing `.circuit.json`.
+**Edit → Begin editing** to edit it, **File → Save changes** to accept the
+draft and download a canonical file, or **File → Open circuit** to load an
+existing `.circuit.json`.
 
-The canvas has no separate interaction modes. Use its action bar for visible
-Selection, Connect, Route, and View commands, or use direct gestures such as
-dragging between free ports, dragging a selected route, wheel zoom, and
-middle-drag or Space+drag pan. See the
+The canvas has no separate interaction modes. Its compact menubar contains
+File, Edit, Components, Selection, Connect, Route, View, Tools, and Help; the
+Inspector defaults closed so the canvas can span the window. Direct gestures
+include dragging between free ports, dragging a selected route, wheel zoom,
+and left-drag pan on empty canvas. Use **Edit → Preferences → Actions and
+shortcuts** to configure shared keyboard and mouse inputs. See the
 [Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
 
 To use **Open circuit** from the specification editor, run both services. The

@@ -32,6 +32,7 @@
     }
   },
   "circuit_designer": {
+    "preferences_file": "../generated/circuit-designer/preferences.json",
     "service": {
       "scheme": "http",
       "host": "0.0.0.0",

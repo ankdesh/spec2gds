@@ -61,6 +61,7 @@ export interface CircuitDesignerCanvasHandle {
   fitView: () => void;
   centerSelection: () => void;
   pan: (direction: "left" | "right" | "up" | "down") => void;
+  cancelPendingConnection: () => void;
 }
 
 export function circuitSelectionsEqual(left: CircuitCanvasSelection, right: CircuitCanvasSelection): boolean {
@@ -95,6 +96,10 @@ export interface CircuitDesignerCanvasProps {
   viewport?: Viewport;
   onViewportChange?: (viewport: Viewport) => void;
   showInlineViewportControls?: boolean;
+  viewportPanMouseButtons?: Array<0 | 1 | 2>;
+  viewportPanActivationKeyCode?: string | string[] | null;
+  wheelZoomEnabled?: boolean;
+  useDefaultEscapeBinding?: boolean;
 }
 
 type CircuitNodeData = {
@@ -332,7 +337,7 @@ export function connectionRejectionReason(
   return undefined;
 }
 
-function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
   const [pendingTerminalId, setPendingTerminalId] = useState<string>();
@@ -437,6 +442,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     zoomIn: () => { void instanceRef.current?.zoomIn({ duration: 140 }); },
     zoomOut: () => { void instanceRef.current?.zoomOut({ duration: 140 }); },
     fitView: () => { void instanceRef.current?.fitView({ padding: 0.2, duration: 180 }); },
+    cancelPendingConnection: () => setPendingTerminalId(undefined),
     centerSelection: () => {
       const instance = instanceRef.current;
       if (!instance) return;
@@ -481,7 +487,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     const target = event.target;
     const typing = target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement;
     if (typing) return;
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && useDefaultEscapeBinding) {
       if (pendingTerminalId) setPendingTerminalId(undefined);
       else onSelectionChange?.([]);
       return;
@@ -528,12 +534,13 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         }}
         snapToGrid
         snapGrid={[gridSize, gridSize]}
-        panOnDrag={allowViewportNavigation ? [1] : false}
-        panActivationKeyCode={allowViewportNavigation ? "Space" : null}
-        zoomOnScroll={allowViewportNavigation}
+        panOnDrag={allowViewportNavigation && viewportPanMouseButtons.length ? viewportPanMouseButtons : false}
+        panActivationKeyCode={allowViewportNavigation ? viewportPanActivationKeyCode : null}
+        zoomOnScroll={allowViewportNavigation && wheelZoomEnabled}
         zoomOnPinch={allowViewportNavigation}
         zoomOnDoubleClick={false}
-        selectionOnDrag
+        selectionKeyCode="Shift"
+        selectionOnDrag={false}
         selectionMode={SelectionMode.Partial}
         multiSelectionKeyCode={["Shift", "Meta", "Control"]}
         deleteKeyCode={null}

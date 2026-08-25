@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from "vitest";
 import {
+  createDefaultCircuitDesignerPreferences,
   simpleDocumentFixture,
   type CircuitChangeResult,
   type CircuitOperationBatch,
@@ -32,6 +33,27 @@ describe("HTTP circuit designer client", () => {
       status: 404,
       message: "No circuit document.",
     });
+  });
+
+  test("loads and saves validated Circuit Designer preferences", async () => {
+    const preferences = createDefaultCircuitDesignerPreferences();
+    preferences.ui.inspector_open = true;
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(response({ preferences, persisted: false }))
+      .mockResolvedValueOnce(response({ preferences, persisted: true }));
+    const client = new HttpCircuitDesignerBackend({ baseUrl: "http://example.test/circuit/v1", fetch });
+
+    expect((await client.getPreferences()).persisted).toBe(false);
+    expect((await client.putPreferences(preferences)).preferences.ui.inspector_open).toBe(true);
+    expect(fetch.mock.calls[0][0]).toBe("http://example.test/circuit/v1/preferences");
+    expect(fetch.mock.calls[1][1]).toMatchObject({ method: "PUT" });
+  });
+
+  test("rejects invalid preference responses", async () => {
+    const client = new HttpCircuitDesignerBackend({
+      fetch: vi.fn().mockResolvedValue(response({ preferences: { schema_version: 9 }, persisted: true })),
+    });
+    await expect(client.getPreferences()).rejects.toMatchObject({ status: 502 });
   });
 
   test("uses the same revision-guarded batch for preview and commit", async () => {

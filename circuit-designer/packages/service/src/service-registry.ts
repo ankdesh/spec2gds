@@ -21,7 +21,7 @@ interface RegistryConfig {
   public_host?: string;
   logging: { enabled: boolean; level: LogLevel };
   spec_editor: HostedServiceConfig;
-  circuit_designer: HostedServiceConfig;
+  circuit_designer: HostedServiceConfig & { preferences_file?: string };
   ai_assistant: HostedServiceConfig;
 }
 
@@ -46,6 +46,18 @@ export function loadServiceRegistry(
   const value = JSON.parse(readFileSync(path, "utf8")) as RegistryConfig;
   if (value.schema_version !== 2) throw new Error("Service registry schema_version must be 2.");
   return value;
+}
+
+export function resolvedCircuitPreferencesPath(
+  registryPath = process.env.SPEC2GDS_SERVICE_CONFIG ?? defaultRegistryPath(),
+): string {
+  const override = process.env.CIRCUIT_DESIGNER_PREFERENCES_FILE;
+  if (override) return resolve(override);
+  const value = loadServiceRegistry(registryPath);
+  return resolve(
+    dirname(registryPath),
+    value.circuit_designer.preferences_file ?? "../generated/circuit-designer/preferences.json",
+  );
 }
 
 export function resolvedServiceDirectory(): PublicServiceDirectory {

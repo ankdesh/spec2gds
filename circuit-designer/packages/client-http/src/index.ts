@@ -10,6 +10,7 @@ import {
   type CircuitProposal,
   type CircuitProposalCreateRequest,
   type CircuitSnapshot,
+  type CircuitDesignerPreferencesV1,
   type ComponentDefinition,
   type ComponentQuery,
   type DocumentSummary,
@@ -21,6 +22,7 @@ import {
   type ServiceError,
   type ServiceEvent,
   type SubgraphQuery,
+  validateCircuitDesignerPreferences,
 } from "@spec2gds/circuit-core";
 
 export type CircuitFetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -41,6 +43,11 @@ export interface HttpCircuitDesignerOptions {
   fetch?: CircuitFetch;
 }
 
+export interface CircuitPreferencesResponse {
+  preferences: CircuitDesignerPreferencesV1;
+  persisted: boolean;
+}
+
 /** Versioned HTTP implementation of the common independent backend contract. */
 export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
   readonly baseUrl: string;
@@ -57,6 +64,14 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
 
   async get(documentId: string): Promise<CircuitSnapshot> {
     return this.validated("CircuitSnapshot", await this.getJson(this.documentUrl(documentId))) as CircuitSnapshot;
+  }
+
+  async getPreferences(): Promise<CircuitPreferencesResponse> {
+    return this.preferencesResponse(await this.getJson(`${this.baseUrl}/preferences`));
+  }
+
+  async putPreferences(preferences: CircuitDesignerPreferencesV1): Promise<CircuitPreferencesResponse> {
+    return this.preferencesResponse(await this.sendJson(`${this.baseUrl}/preferences`, "PUT", preferences));
   }
 
   async replace(
@@ -263,6 +278,22 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
 
   private change(value: unknown): CircuitChangeResult {
     return this.validated("CircuitChangeResult", value) as CircuitChangeResult;
+  }
+
+  private preferencesResponse(value: unknown): CircuitPreferencesResponse {
+    if (!value || typeof value !== "object") {
+      throw new CircuitDesignerHttpError("Server returned invalid Circuit Designer preferences.", 502, value);
+    }
+    const response = value as { preferences?: unknown; persisted?: unknown };
+    const checked = validateCircuitDesignerPreferences(response.preferences);
+    if (!checked.valid || typeof response.persisted !== "boolean") {
+      throw new CircuitDesignerHttpError(
+        checked.valid ? "Server returned an invalid preference persistence state." : checked.message,
+        502,
+        value,
+      );
+    }
+    return { preferences: checked.preferences, persisted: response.persisted };
   }
 
   private acceptFor(format: CircuitExportOptions["format"]): CircuitExport["media_type"] {

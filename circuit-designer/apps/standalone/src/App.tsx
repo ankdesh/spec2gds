@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type WheelEvent as ReactWheelEvent } from "react";
 import { CircuitDesignerHttpError, HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
+  createDefaultCircuitDesignerPreferences,
   createEmptyCircuitDocument,
   exportCircuitJson,
   projectDocument,
   uniqueSlug,
   type CircuitDocument,
+  type CircuitDesignerPreferencesV1,
   type CircuitExport,
   type CircuitOperation,
   type CircuitProposal,
@@ -38,7 +40,21 @@ import {
 import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
 import { browserRandomUuid } from "./browser-id";
 import { BrowserLogger, type PublicLoggingConfig } from "@spec2gds/observability/browser";
-import { CanvasActionBar } from "./CanvasActionBar";
+import { ActionSettingsPage } from "./ActionSettingsPage";
+import { CircuitMenuBar } from "./CircuitMenuBar";
+import { CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
+import {
+  cachePreferences,
+  circuitActionDefinitions,
+  clearCachedPreferences,
+  keyboardEventMatches,
+  loadCachedPreferences,
+  panMouseButtons,
+  reactFlowKeyCode,
+  standardWheelZoomEnabled,
+  type CircuitActionId,
+  type MouseShortcut,
+} from "./action-bindings";
 
 type ServiceDirectory = {
   schema_version: 2;
@@ -84,6 +100,13 @@ function endpointFromTerminal(terminalKey: string, lsb: number, width: number): 
 }
 
 export function App() {
+  const [activePage, setActivePage] = useState<"canvas" | "actions">("canvas");
+  const initialCachedPreferences = useMemo(() => loadCachedPreferences(window.localStorage), []);
+  const [preferences, setPreferences] = useState<CircuitDesignerPreferencesV1>(
+    () => initialCachedPreferences ?? createDefaultCircuitDesignerPreferences(),
+  );
+  const [preferenceStatus, setPreferenceStatus] = useState<"loading" | "saved" | "saving" | "error">("loading");
+  const [dialog, setDialog] = useState<CircuitDialogId>();
   const [linkedDocumentId, setLinkedDocumentId] = useState<string | undefined>(
     () => linkedCircuitDocumentId(window.location.search),
   );
@@ -117,6 +140,57 @@ export function App() {
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
+  const actionExecutorRef = useRef<(actionId: CircuitActionId) => boolean>(() => false);
+  const preferencesHydratedRef = useRef(false);
+  const savedPreferencesRef = useRef("");
+
+  const actionBindings = preferences.action_bindings;
+  const inspectorOpen = preferences.ui.inspector_open;
+
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const loaded = await backend.getPreferences();
+        let next = loaded.preferences;
+        if (!loaded.persisted && initialCachedPreferences) {
+          next = (await backend.putPreferences(initialCachedPreferences)).preferences;
+        }
+        if (!active) return;
+        savedPreferencesRef.current = JSON.stringify(next);
+        setPreferences(next);
+        setPreferenceStatus("saved");
+        preferencesHydratedRef.current = true;
+        clearCachedPreferences(window.localStorage);
+      } catch (reason) {
+        if (!active) return;
+        savedPreferencesRef.current = JSON.stringify(preferences);
+        preferencesHydratedRef.current = true;
+        setPreferenceStatus("error");
+        setMessage(`Could not load Circuit Designer preferences: ${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+    })();
+    return () => { active = false; };
+  }, [backend, initialCachedPreferences]);
+
+  useEffect(() => {
+    if (!preferencesHydratedRef.current) return;
+    const serialized = JSON.stringify(preferences);
+    if (serialized === savedPreferencesRef.current) return;
+    cachePreferences(window.localStorage, preferences);
+    setPreferenceStatus("saving");
+    const timer = window.setTimeout(() => {
+      void backend.putPreferences(preferences).then((result) => {
+        savedPreferencesRef.current = JSON.stringify(result.preferences);
+        setPreferenceStatus("saved");
+        clearCachedPreferences(window.localStorage);
+      }).catch((reason) => {
+        setPreferenceStatus("error");
+        setMessage(`Could not save Circuit Designer preferences: ${reason instanceof Error ? reason.message : String(reason)}`);
+      });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [backend, preferences]);
 
   useEffect(() => {
     void fetch(`${apiBase}/services`)
@@ -210,23 +284,6 @@ export function App() {
       const next = current.filter((item) => item.kind === "node" ? nodeIds.has(item.id) : item.kind === "boundary" ? boundaryIds.has(item.id) : netIds.has(item.id));
       return next.length === current.length ? current : next;
     });
-  }, [graph]);
-
-  useEffect(() => {
-    const selectAll = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "a"
-        || target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement) return;
-      event.preventDefault();
-      if (!graph) return;
-      setSelection([
-        ...graph.nodes.map((node) => ({ kind: "node" as const, id: node.id })),
-        ...graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => ({ kind: "boundary" as const, id: terminal.id })),
-        ...graph.nets.map((net) => ({ kind: "net" as const, id: net.id })),
-      ]);
-    };
-    window.addEventListener("keydown", selectAll);
-    return () => window.removeEventListener("keydown", selectAll);
   }, [graph]);
 
   useEffect(() => {
@@ -603,7 +660,7 @@ export function App() {
     ]);
   }
 
-  function createConnectionFromBar(): boolean {
+  function createConnectionFromDialog(): boolean {
     const created = createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth);
     if (!created) return false;
     setNetName("");
@@ -633,81 +690,193 @@ export function App() {
         : "Drop the connection on another free terminal.");
   }
 
+  function isActionEnabled(actionId: CircuitActionId): boolean {
+    switch (actionId) {
+      case "new-document": return !lease && !openingFile;
+      case "open-document": return Boolean(snapshot) && !lease && !openingFile;
+      case "save-document":
+      case "cancel-changes": return Boolean(lease);
+      case "download-json":
+      case "export-svg":
+      case "export-png": return Boolean(snapshot) && !lease;
+      case "begin-edit": return Boolean(snapshot) && !lease && !linkedDocumentId;
+      case "undo": return Boolean(lease && draftRef.current?.canUndo);
+      case "redo": return Boolean(lease && draftRef.current?.canRedo);
+      case "delete-selection": return Boolean(lease && (selectedInstance || selectedNet));
+      case "open-component-catalog": return Boolean(document);
+      case "create-local-component": return Boolean(lease && document);
+      case "review-proposals": return proposals.length > 0;
+      case "open-child-design": return Boolean(selectedInstance && !draftRef.current?.dirty);
+      case "select-all": return Boolean(graph);
+      case "clear-selection": return Boolean(graph);
+      case "center-selection": return selection.length > 0;
+      case "open-connect": return Boolean(lease);
+      case "reroute-selected": return Boolean(lease && selectedNet && !selectedRouteLocked);
+      case "lock-selected-route": return Boolean(lease && selectedNet && selectedRoute && !selectedRouteLocked);
+      case "unlock-selected-route": return Boolean(lease && selectedNet && selectedRoute && selectedRouteLocked);
+      case "arrange-all": return Boolean(lease);
+      case "pan-up":
+      case "pan-left":
+      case "pan-down":
+      case "pan-right":
+      case "zoom-in":
+      case "zoom-out":
+      case "fit-circuit": return Boolean(graph && layout);
+      case "open-assistant": return Boolean(snapshot) && !lease;
+      case "open-preferences":
+      case "toggle-inspector":
+      case "getting-started":
+      case "about": return true;
+      case "pan-canvas": return false;
+    }
+  }
+
+  function executeCircuitAction(actionId: CircuitActionId): boolean {
+    if (!isActionEnabled(actionId)) return false;
+    switch (actionId) {
+      case "new-document": newDocument(); return true;
+      case "open-document": fileInputRef.current?.click(); return true;
+      case "save-document": void save(); return true;
+      case "cancel-changes": void cancel(); return true;
+      case "download-json": void download("json"); return true;
+      case "export-svg": void download("svg"); return true;
+      case "export-png": void download("png"); return true;
+      case "begin-edit": void unlock(); return true;
+      case "undo": undoDraft("undo"); return true;
+      case "redo": undoDraft("redo"); return true;
+      case "delete-selection":
+        if (selectedInstance) {
+          return mutate({ operation_id: operationId("remove"), type: "remove_instance", instance_id: selectedInstance.id, cascade: true }, "Instance removed with explicit connectivity cascade.");
+        }
+        if (selectedNet) {
+          return mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: selectedNet.id }, "Net deleted.");
+        }
+        return false;
+      case "open-preferences": setActivePage("actions"); return true;
+      case "open-component-catalog": setDialog("catalog"); return true;
+      case "create-local-component": setDialog("new-component"); return true;
+      case "review-proposals": setDialog("proposals"); return true;
+      case "open-child-design": void openHierarchy(selectedInstance!.component_id); return true;
+      case "select-all": selectAllCanvas(); return true;
+      case "clear-selection":
+        canvasRef.current?.cancelPendingConnection();
+        setSelection([]);
+        return true;
+      case "center-selection": canvasRef.current?.centerSelection(); return true;
+      case "open-connect": setDialog("connect"); return true;
+      case "reroute-selected": rerouteSelectedNet(); return true;
+      case "lock-selected-route": setSelectedRouteLocked(true); return true;
+      case "unlock-selected-route": setSelectedRouteLocked(false); return true;
+      case "arrange-all": void autoLayout(); return true;
+      case "toggle-inspector":
+        setPreferences((current) => ({ ...current, ui: { inspector_open: !current.ui.inspector_open } }));
+        return true;
+      case "pan-up":
+      case "pan-left":
+      case "pan-down":
+      case "pan-right":
+        canvasRef.current?.pan(actionId.slice("pan-".length) as "up" | "left" | "down" | "right");
+        return true;
+      case "zoom-in": canvasRef.current?.zoomIn(); return true;
+      case "zoom-out": canvasRef.current?.zoomOut(); return true;
+      case "fit-circuit": canvasRef.current?.fitView(); return true;
+      case "open-assistant": openAssistant(); return true;
+      case "getting-started": setDialog("getting-started"); return true;
+      case "about": setDialog("about"); return true;
+      case "pan-canvas": return false;
+    }
+  }
+
+  actionExecutorRef.current = executeCircuitAction;
+
+  useEffect(() => {
+    if (activePage !== "canvas" || dialog) return;
+    const runShortcut = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLElement && target.isContentEditable)) return;
+      const action = circuitActionDefinitions.find((definition) => definition.id !== "pan-canvas"
+        && keyboardEventMatches(event, actionBindings[definition.id].keyboard));
+      if (!action || !actionExecutorRef.current(action.id)) return;
+      event.preventDefault();
+    };
+    window.addEventListener("keydown", runShortcut);
+    return () => window.removeEventListener("keydown", runShortcut);
+  }, [actionBindings, activePage, dialog]);
+
+  function actionForMouseShortcut(mouse: MouseShortcut): CircuitActionId | undefined {
+    return circuitActionDefinitions.find((action) => actionBindings[action.id].mouse === mouse)?.id;
+  }
+
+  function runCanvasMouseShortcut(mouse: MouseShortcut, event: ReactMouseEvent | ReactWheelEvent): void {
+    const actionId = actionForMouseShortcut(mouse);
+    if (!actionId || !executeCircuitAction(actionId)) return;
+    event.preventDefault();
+  }
+
+  function emptyCanvasPointer(event: ReactMouseEvent): boolean {
+    return event.target instanceof Element && event.target.classList.contains("react-flow__pane");
+  }
+
   return <main className="standalone-shell">
     <header className="topbar">
-      <div className="brand"><span className="brand-mark">CD</span><div><span>Independent v1</span><h1>Circuit Designer</h1></div></div>
-      <div className="example-picker"><span>Document</span><strong>{document?.label ?? "Loading…"}</strong></div>
-      <div className="toolbar">
-        <button disabled={Boolean(lease) || openingFile} onClick={newDocument}>New</button>
-        {!lease && !linkedDocumentId && <button className="primary" onClick={() => void unlock()}>Unlock</button>}
-        {!lease && linkedDocumentId && <button disabled title="This projection is owned by the specification editor.">Source-owned</button>}
-        {lease && <><button disabled={!draftRef.current?.canUndo} onClick={() => undoDraft("undo")}>Undo</button><button disabled={!draftRef.current?.canRedo} onClick={() => undoDraft("redo")}>Redo</button><button className="primary" onClick={() => void save()}>Save</button><button onClick={() => void cancel()}>Cancel</button></>}
-        <input
-          ref={fileInputRef}
-          className="file-input"
-          type="file"
-          accept=".json,application/json"
-          aria-label="Circuit file"
-          disabled={!snapshot || Boolean(lease) || openingFile}
-          onChange={(event) => void openCircuitFile(event)}
-        />
-        <button disabled={!snapshot || Boolean(lease) || openingFile} onClick={() => fileInputRef.current?.click()}>
-          {openingFile ? "Opening…" : "Open file"}
-        </button>
-        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("json")}>Download file</button>
-        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("svg")}>SVG</button>
-        <button disabled={!snapshot || Boolean(lease)} onClick={() => void download("png")}>PNG</button>
-        <button
-          className="assistant"
-          disabled={!snapshot || Boolean(lease)}
-          onClick={openAssistant}
-          title={lease ? "Save or Cancel the private draft before opening AI Assistant." : "Open a chat bound to this circuit"}
-        >
-          AI Assistant ↗
-        </button>
+      <div className="brand"><span className="brand-mark">CD</span><h1>Circuit Designer</h1></div>
+      <CircuitMenuBar
+        bindings={actionBindings}
+        inspectorOpen={inspectorOpen}
+        isActionEnabled={isActionEnabled}
+        onAction={executeCircuitAction}
+        proposalCount={proposals.length}
+      />
+      <div className="document-status" title={sourceDescription}>
+        <strong>{document?.label ?? "Loading…"}</strong>
+        <small>{linkedDocumentId ? "source-owned" : lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}</small>
       </div>
+      <input
+        ref={fileInputRef}
+        className="file-input"
+        type="file"
+        accept=".json,application/json"
+        aria-label="Circuit file"
+        disabled={!snapshot || Boolean(lease) || openingFile}
+        onChange={(event) => void openCircuitFile(event)}
+      />
     </header>
-    <div className="notice"><span className="local-dot" />{linkedDocumentId ? "Editor projection" : "Independent document"} · {lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}<span>{layoutProgress || message}</span></div>
-    <section className="workspace">
-      <aside className="library">
-        <p className="eyebrow">Component catalog</p>
-        <h2>{document?.label}</h2>
-        <p>{sourceDescription}</p>
-        <div className="metrics"><div><b>{document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
-        <div className="catalog-list">{document?.components.map((component) => <button key={component.id} onClick={() => setMessage(`${component.label}: ${component.terminals.length} terminals · ${component.origin}`)}><b>{component.label}</b><small>{component.origin} · {component.appearance.renderer_key}</small></button>)}</div>
-        <div className="section"><h3>Local definition</h3><label>Name<input value={componentName} onChange={(event) => setComponentName(event.target.value)} placeholder="Arithmetic unit" /></label><button className="primary" disabled={!lease || !componentName.trim()} onClick={addLocalComponent}>Create definition + instance</button></div>
-        {proposals.length > 0 && <div className="section"><h3>Pending proposals</h3>{proposals.map((proposal) => <div className="proposal-card" key={proposal.proposal_id}><b>{proposal.title}</b><p>{proposal.summary}</p><small>{proposal.diff.added.length} added · {proposal.diff.changed.length} changed · {proposal.diff.removed.length} removed</small><button onClick={() => void decideProposal(proposal.proposal_id, "accept")}>Accept</button><button onClick={() => void decideProposal(proposal.proposal_id, "reject")}>Reject</button></div>)}</div>}
-      </aside>
+    <div className="notice">
+      <span className="local-dot" />
+      {activePage === "actions" ? "Actions & shortcuts" : linkedDocumentId ? "Editor projection" : "Independent document"}
+      <span>{activePage === "actions"
+        ? `Shared preference file · ${preferenceStatus === "loading" ? "loading…" : preferenceStatus === "saving" ? "saving…" : preferenceStatus === "saved" ? "saved" : "save failed"}`
+        : layoutProgress || message}</span>
+    </div>
+    {activePage === "actions" ? <ActionSettingsPage
+      onClose={() => setActivePage("canvas")}
+      onPreferencesChange={setPreferences}
+      preferences={preferences}
+      preferenceStatus={preferenceStatus}
+    /> : <section className={`workspace${inspectorOpen ? " workspace--inspector-open" : ""}`}>
       <div className="stage">
-        <CanvasActionBar
-          editable={Boolean(lease)}
-          selectionCount={selection.length}
-          selectedNetId={selectedNet?.id}
-          selectedRouteLocked={selectedRouteLocked}
-          terminals={terminals}
-          netName={netName}
-          endpointA={endpointA}
-          endpointB={endpointB}
-          sliceLsb={sliceLsb}
-          sliceWidth={sliceWidth}
-          onNetNameChange={setNetName}
-          onEndpointAChange={setEndpointA}
-          onEndpointBChange={setEndpointB}
-          onSliceLsbChange={setSliceLsb}
-          onSliceWidthChange={setSliceWidth}
-          onCreateConnection={createConnectionFromBar}
-          onSelectAll={selectAllCanvas}
-          onClearSelection={() => setSelection([])}
-          onCenterSelection={() => canvasRef.current?.centerSelection()}
-          onRerouteSelected={rerouteSelectedNet}
-          onSetRouteLocked={setSelectedRouteLocked}
-          onArrangeAll={() => void autoLayout()}
-          onPan={(direction) => canvasRef.current?.pan(direction)}
-          onZoomIn={() => canvasRef.current?.zoomIn()}
-          onZoomOut={() => canvasRef.current?.zoomOut()}
-          onFitView={() => canvasRef.current?.fitView()}
-        />
-        <div className="canvas-surface">
+        <div
+          className="canvas-surface"
+          onClick={(event) => {
+            if (event.detail === 1 && emptyCanvasPointer(event)) runCanvasMouseShortcut("primary-click", event);
+          }}
+          onDoubleClick={(event) => {
+            if (emptyCanvasPointer(event)) runCanvasMouseShortcut("primary-double-click", event);
+          }}
+          onAuxClick={(event) => {
+            if (event.button === 1 && emptyCanvasPointer(event)) runCanvasMouseShortcut("middle-click", event);
+          }}
+          onContextMenu={(event) => {
+            if (!emptyCanvasPointer(event)) return;
+            if (actionBindings["pan-canvas"].mouse === "secondary-drag") event.preventDefault();
+            runCanvasMouseShortcut("secondary-click", event);
+          }}
+          onWheelCapture={(event) => {
+            if (standardWheelZoomEnabled(actionBindings)) return;
+            runCanvasMouseShortcut(event.deltaY < 0 ? "wheel-up" : "wheel-down", event);
+          }}
+        >
           {!layout && <div className="loading">Computing flattened canvas projection…</div>}
           {graph && layout && <CircuitDesignerCanvas
             ref={canvasRef}
@@ -723,28 +892,52 @@ export function App() {
             onNetRouteChange={saveRoute}
             fitViewOnInit={false}
             showInlineViewportControls={false}
+            viewportPanMouseButtons={panMouseButtons(actionBindings["pan-canvas"].mouse)}
+            viewportPanActivationKeyCode={reactFlowKeyCode(actionBindings["pan-canvas"].keyboard)}
+            wheelZoomEnabled={standardWheelZoomEnabled(actionBindings)}
+            useDefaultEscapeBinding={false}
           />}
           {layout && <div className="layout-time">Grid router · {layout.elapsed_ms} ms</div>}
         </div>
       </div>
-      <aside className="inspector">
+      {inspectorOpen && <aside className="inspector">
         <p className="eyebrow">Inspector</p>
-        {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net. Manual edits remain private until Save.</p></div>}
-        {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p><button onClick={() => canvasRef.current?.centerSelection()}>Center selection</button><button onClick={() => setSelection([])}>Clear selection</button></div>}
+        {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net to inspect its properties.</p></div>}
+        {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p></div>}
         {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2><code>{selectedInstance.id}</code>
           <label>Label<input value={selectedInstance.label} onChange={(event) => mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label: event.target.value || selectedInstance.id } }, "Instance label updated.")} disabled={!lease} /></label>
-          <button onClick={() => void openHierarchy(selectedInstance.component_id)}>Open child design</button>
-          <button className="danger" disabled={!lease} onClick={() => mutate({ operation_id: operationId("remove"), type: "remove_instance", instance_id: selectedInstance.id, cascade: true }, "Instance removed with explicit connectivity cascade.")}>Delete with cascade</button>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
         {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2><code>{selectedBoundary.id}</code><p className="draw-hint">{selectedBoundary.direction} · {String(selectedBoundary.width)} bit{selectedBoundary.width === 1 ? "" : "s"}</p><details><summary>Canonical data</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details></>}
         {selectedNet && <><span className="kind">net</span><h2>{selectedNet.label || selectedNet.id}</h2><code>{selectedNet.id}</code>
           <p className="draw-hint">{selectedRouteLocked ? "Route locked. Use Route → Unlock Selected Route before editing." : "Drag highlighted segments or handles to edit this route."}</p>
           <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n")}</p>
-          <button className="danger" disabled={!lease} onClick={() => mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: selectedNet.id }, "Net deleted.")}>Delete net</button>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedNet, null, 2)}</pre></details>
         </>}
-      </aside>
-    </section>
+      </aside>}
+    </section>}
+    <CircuitDialogs
+      componentName={componentName}
+      dialog={dialog}
+      document={document}
+      endpointA={endpointA}
+      endpointB={endpointB}
+      netName={netName}
+      onClose={() => setDialog(undefined)}
+      onComponentNameChange={setComponentName}
+      onCreateComponent={addLocalComponent}
+      onCreateConnection={createConnectionFromDialog}
+      onDecideProposal={(proposalId, decision) => void decideProposal(proposalId, decision)}
+      onEndpointAChange={setEndpointA}
+      onEndpointBChange={setEndpointB}
+      onNetNameChange={setNetName}
+      onSliceLsbChange={setSliceLsb}
+      onSliceWidthChange={setSliceWidth}
+      proposals={proposals}
+      sliceLsb={sliceLsb}
+      sliceWidth={sliceWidth}
+      sourceDescription={sourceDescription}
+      terminals={terminals}
+    />
   </main>;
 }

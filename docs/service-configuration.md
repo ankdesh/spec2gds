@@ -15,6 +15,13 @@ AI Assistant serve their UI from the same listener as their API. Circuit
 Designer uses two listeners: its REST service defaults to port `6011` and its
 Vite UI defaults to port `6012`.
 
+`circuit_designer.preferences_file` selects the shared Circuit Designer JSON
+preference profile and is resolved relative to this configuration file. The
+tracked value resolves to `generated/circuit-designer/preferences.json`.
+`CIRCUIT_DESIGNER_PREFERENCES_FILE` overrides it with an absolute or
+working-directory-relative path. See
+[Circuit Designer preferences](circuit-designer-preferences.md).
+
 The default allocation is Spec Editor `6010`, Circuit API `6011`, Circuit UI
 `6012`, AI Assistant `6013`, and Log Viewer `6014`. Development-only Vite UIs
 use `6015` and `6016`. The schema also contains the unified logging policy.
@@ -63,7 +70,8 @@ Existing per-service environment variables remain higher-priority overrides:
 
 - `AGENT_SPEC_HOST`, `AGENT_SPEC_PORT`, and `SPEC_EDITOR_SERVICE_URL`
 - `CIRCUIT_DESIGNER_HOST`, `CIRCUIT_DESIGNER_PORT`,
-  `CIRCUIT_DESIGNER_SERVICE_URL`, and `CIRCUIT_DESIGNER_UI_URL`
+  `CIRCUIT_DESIGNER_SERVICE_URL`, `CIRCUIT_DESIGNER_UI_URL`, and
+  `CIRCUIT_DESIGNER_PREFERENCES_FILE`
 - `ASSISTANT_HOST`, `ASSISTANT_PORT`, and `AI_ASSISTANT_URL`
 
 `SPEC2GDS_PUBLIC_HOST` is the shared advertised-host override. Bind overrides
@@ -89,9 +97,9 @@ The **AI Assistant ↗** button in Spec Editor opens the Assistant with the Spec
 workspace selected. Entity-level **Explore with AI Assistant** remains the
 recommended route because it can bind the exact IP-XACT entity.
 
-The same button in Circuit Designer sends the active document ID and configured
-Circuit API URL to `/launch/circuit`; the Assistant validates the document and
-opens a new circuit-bound chat directly.
+Circuit Designer's **Tools → AI Assistant** command sends the active document
+ID and configured Circuit API URL to `/launch/circuit`; the Assistant validates
+the document and opens a new circuit-bound chat directly.
 
 The combined `scripts/serve-all.sh` launcher starts services with these
 resolved settings, but its printed links and its untracked-listener cleanup are

@@ -19,6 +19,7 @@ export * from "./hierarchy";
 export * from "./export";
 export * from "./tools";
 export * from "./route-editor";
+export * from "./preferences";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const definitions = (protocolSchema as { $defs?: Record<string, unknown> }).$defs ?? {};

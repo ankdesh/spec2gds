@@ -15,6 +15,8 @@ import { EphemeralCircuitSessionBackend } from "./session-backend";
 import { resolvedServiceDirectory, type PublicServiceDirectory } from "./service-registry";
 import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observability/node";
 import { randomUUID } from "node:crypto";
+import { CircuitPreferencesStore } from "./preferences-store";
+import { resolvedCircuitPreferencesPath } from "./service-registry";
 
 type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
 
@@ -24,6 +26,7 @@ export interface CircuitServiceOptions {
   now?: () => Date;
   serviceDirectory?: PublicServiceDirectory;
   logger?: StructuredLogger;
+  preferencesPath?: string;
 }
 
 interface RouteContext {
@@ -40,6 +43,7 @@ export class CircuitDesignerService {
   private readonly now: () => Date;
   private readonly serviceDirectory: PublicServiceDirectory;
   private readonly logger: StructuredLogger;
+  private readonly preferences: CircuitPreferencesStore;
 
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
@@ -47,6 +51,7 @@ export class CircuitDesignerService {
     this.now = options.now ?? (() => new Date());
     this.serviceDirectory = options.serviceDirectory ?? resolvedServiceDirectory();
     this.logger = options.logger ?? new StructuredLogger("circuit-designer", loadObservabilityConfig());
+    this.preferences = new CircuitPreferencesStore(options.preferencesPath ?? resolvedCircuitPreferencesPath());
     this.server = createServer((request, response) => void this.handle(request, response));
   }
 
@@ -97,6 +102,13 @@ export class CircuitDesignerService {
       }
       if (method === "GET" && parts[0] === "services" && parts.length === 1) {
         return this.jsonResponse(response, 200, this.serviceDirectory);
+      }
+      if (method === "GET" && parts[0] === "preferences" && parts.length === 1) {
+        return this.jsonResponse(response, 200, await this.preferences.get());
+      }
+      if (method === "PUT" && parts[0] === "preferences" && parts.length === 1) {
+        const body = await this.json(request, 262_144);
+        return this.jsonResponse(response, 200, { preferences: await this.preferences.put(body), persisted: true });
       }
       if (method === "POST" && parts[0] === "logs" && parts[1] === "events" && parts.length === 2) {
         const body = await this.json(request) as { session_id?: string; events?: unknown[] };
@@ -327,9 +339,17 @@ export class CircuitDesignerService {
     this.jsonResponse(response, status, result);
   }
 
-  private async json(request: IncomingMessage): Promise<unknown> {
+  private async json(request: IncomingMessage, maximumBytes?: number): Promise<unknown> {
     const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(Buffer.from(chunk));
+    let bytes = 0;
+    for await (const chunk of request) {
+      const buffer = Buffer.from(chunk);
+      bytes += buffer.length;
+      if (maximumBytes !== undefined && bytes > maximumBytes) {
+        throw new CircuitBackendError("validation_failed", "Circuit Designer preferences exceed 256 KiB.");
+      }
+      chunks.push(buffer);
+    }
     if (!chunks.length) return {};
     try {
       return JSON.parse(Buffer.concat(chunks).toString("utf8"));
