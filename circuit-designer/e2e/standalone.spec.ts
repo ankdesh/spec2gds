@@ -1,9 +1,41 @@
 import { readFile } from "node:fs/promises";
+import { createServer, type Server } from "node:http";
 import { expect, test, type Page } from "@playwright/test";
-import { createDefaultCircuitDesignerPreferences } from "@spec2gds/circuit-core";
+import { createDefaultCircuitDesignerPreferences, simpleDocumentFixture } from "@spec2gds/circuit-core";
 
 const circuitApiUrl = process.env.CIRCUIT_DESIGNER_E2E_API_URL
   ?? "http://127.0.0.1:6011/api/circuit-designer/v1";
+
+let sourceProvider: Server;
+let sourceProviderPort = 0;
+let sourceProviderCalls: string[] = [];
+
+test.beforeAll(async () => {
+  sourceProvider = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk) => chunks.push(chunk));
+    request.on("end", () => {
+      sourceProviderCalls.push(request.url ?? "");
+      const body = JSON.parse(Buffer.concat(chunks).toString()) as {
+        candidate_document: ReturnType<typeof simpleDocumentFixture>;
+      };
+      response.setHeader("Content-Type", "application/json");
+      response.end(JSON.stringify({
+        accepted: true,
+        source_revision_hash: "sha256:source-roundtrip-saved",
+        document: body.candidate_document,
+        diagnostics: [],
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => sourceProvider.listen(0, "127.0.0.1", resolve));
+  const address = sourceProvider.address();
+  sourceProviderPort = typeof address === "object" && address ? address.port : 0;
+});
+
+test.afterAll(async () => {
+  await new Promise<void>((resolve) => sourceProvider.close(() => resolve()));
+});
 
 async function menuAction(page: Page, menu: string, action: string | RegExp): Promise<void> {
   await page.getByRole("menuitem", { name: menu, exact: true }).click();
@@ -100,6 +132,56 @@ test("launches former sidebar and action-strip workflows from menus", async ({ p
   await page.getByLabel("Endpoint B").selectOption("consumer:output");
   await page.getByRole("button", { name: "Create net" }).click();
   await expect(page.locator(".notice")).toContainText("Created net");
+});
+
+test("edits a writable specification binding and saves it through source preview and commit", async ({ page, request }) => {
+  sourceProviderCalls = [];
+  const document = simpleDocumentFixture();
+  document.document_id = `source_roundtrip_${Date.now()}`;
+  const created = await request.post(`${circuitApiUrl}/documents`, {
+    data: { request_id: `create_${document.document_id}`, document },
+  });
+  expect(created.ok()).toBe(true);
+  const registered = await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, {
+    data: {
+      callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`,
+      token: "browser-source-token",
+      binding: {
+        schema_version: 1,
+        binding_id: `binding_${document.document_id}`,
+        source_document_id: "browser_spec",
+        source_entity: { document_id: "browser_spec", entity_id: "design_top", entity_kind: "design" },
+        editable_design_id: "design_top",
+        base_source_revision_hash: "sha256:source-roundtrip-base",
+        writable: true,
+        capabilities: ["topology", "layout", "local-components"],
+        omitted_bus_items: [],
+        omitted_ports: [],
+      },
+    },
+  });
+  expect(registered.ok()).toBe(true);
+
+  await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator(".document-status")).toContainText("specification bound");
+  await menuAction(page, "Edit", "Begin editing");
+  await expect(page.locator(".document-status")).toContainText("specification draft");
+
+  const pane = page.locator(".react-flow__pane");
+  await pane.click({ button: "right", position: { x: 420, y: 260 } });
+  const createLocal = page.getByRole("menuitem", { name: "New local component…", exact: true });
+  await expect(createLocal).toBeEnabled();
+  await createLocal.click();
+  await page.getByLabel("Name", { exact: true }).fill("spec_block");
+  await expect(page.getByText("VLNV: spec2gds.local:work:spec_block:1.0")).toBeVisible();
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+
+  const save = page.getByRole("button", { name: "Save to Specification", exact: true });
+  await expect(save).toBeVisible();
+  await save.click();
+  await expect(page.locator(".document-status")).toContainText("specification bound");
+  await expect(page.locator(".notice")).toContainText("Saved to the specification");
+  expect(sourceProviderCalls).toEqual(["/source/preview", "/source/commit"]);
 });
 
 test("saves shared shortcuts and Inspector visibility through the preference endpoint", async ({ page, request }) => {

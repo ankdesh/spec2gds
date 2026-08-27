@@ -25,6 +25,7 @@ import {
   SPEC_DOCUMENT_CATALOG_ID,
   type PersistedEntitySectionType,
 } from "./entity-section-registry";
+import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
 export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./entity-section-registry";
 
 import type {
@@ -90,10 +91,12 @@ const EditCoordinatorContext = createContext<EditCoordinator>({
 function EditCoordinatorProvider({
   controller,
   children,
+  onEditingChange,
   resetKey,
 }: {
   controller?: SpecDocumentEditController;
   children: React.ReactNode;
+  onEditingChange?: (editing: boolean) => void;
   resetKey: string;
 }) {
   const [activeEditorId, setActiveEditorId] = useState("");
@@ -102,6 +105,10 @@ function EditCoordinatorProvider({
     setActiveEditorId("");
     setNotice("");
   }, [resetKey]);
+  useEffect(() => {
+    onEditingChange?.(Boolean(activeEditorId));
+  }, [activeEditorId, onEditingChange]);
+  useEffect(() => () => onEditingChange?.(false), [onEditingChange]);
   const value = useMemo<EditCoordinator>(() => ({
     controller: controller ?? null,
     activeEditorId,
@@ -1738,6 +1745,16 @@ const LiveView = createComponentImplementation(
   LiveViewApi,
   ({ props }) => {
     const block = props.block as NarrativeBlockData;
+    if (block.renderer_id === "design.topology") {
+      const circuitRef = block.entity_refs[0];
+      return <DesignTopologyLiveView
+        block={block}
+        documentId={props.documentId}
+        onOpenCircuit={circuitRef && (circuitRef.entity_kind === "design" || circuitRef.entity_kind === "component")
+          ? () => dispatchOpenCircuit(circuitRef)
+          : undefined}
+      />;
+    }
     return (
       <div className="spec-callout spec-callout--live">
         <span className="spec-live-dot" aria-hidden="true" />
@@ -1795,9 +1812,11 @@ export function createDocumentMessageProcessor(batch: A2UIDocumentBatch) {
 export function A2UIDocumentSurface({
   batch,
   editController,
+  onEditingChange,
 }: {
   batch: A2UIDocumentBatch;
   editController?: SpecDocumentEditController;
+  onEditingChange?: (editing: boolean) => void;
 }) {
   const processor = useMemo(() => createDocumentMessageProcessor(batch), [batch]);
   const surface = processor.model.surfacesMap.get(batch.surface_id);
@@ -1805,7 +1824,11 @@ export function A2UIDocumentSurface({
     return <div className="spec-render-error" role="alert">The A2UI document surface was not created.</div>;
   }
   return (
-    <EditCoordinatorProvider controller={editController} resetKey={batch.source_revision_hash}>
+    <EditCoordinatorProvider
+      controller={editController}
+      onEditingChange={onEditingChange}
+      resetKey={batch.source_revision_hash}
+    >
       <A2uiSurface surface={surface} />
     </EditCoordinatorProvider>
   );

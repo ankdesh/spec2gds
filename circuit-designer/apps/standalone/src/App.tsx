@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type MouseEvent as ReactMouseEvent, type WheelEvent as ReactWheelEvent } from "react";
-import { CircuitDesignerHttpError, HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
+import {
+  CircuitDesignerHttpError,
+  HttpCircuitDesignerBackend,
+  type CircuitSourceBindingV1,
+  type CircuitSourceSyncResponse,
+} from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
   createDefaultCircuitDesignerPreferences,
@@ -145,6 +150,8 @@ export function App() {
   const [snapshot, setSnapshot] = useState<CircuitSnapshot>();
   const [document, setDocument] = useState<CircuitDocument>();
   const [lease, setLease] = useState<EditLease>();
+  const [sourceBinding, setSourceBinding] = useState<CircuitSourceBindingV1>();
+  const [sourceConflict, setSourceConflict] = useState(false);
   const [layout, setLayout] = useState<LayoutResult>();
   const [layoutProgress, setLayoutProgress] = useState("");
   const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
@@ -233,15 +240,24 @@ export function App() {
     void (async () => {
       try {
         if (linkedDocumentId) {
-          const next = await backend.get(linkedDocumentId);
+          const [next, binding] = await Promise.all([
+            backend.get(linkedDocumentId),
+            backend.getSourceBinding(linkedDocumentId),
+          ]);
           if (!active) return;
           setSnapshot(next);
           setDocument(next.document);
           setLayout(undefined);
           setSelection([]);
           setLease(undefined);
-          setSourceDescription("Projected from the specification editor through the direct-port adapter.");
-          setMessage(`Opened source-owned projection at revision ${next.revision}. Return to the specification editor to change source.`);
+          setSourceBinding(binding);
+          setSourceConflict(false);
+          setSourceDescription(binding?.writable
+            ? "Bound to the specification editor. Save commits topology and layout back to the .spec package."
+            : binding?.message ?? "Projected from the specification editor through the direct-port adapter.");
+          setMessage(binding?.writable
+            ? `Opened writable specification design at source revision ${binding.base_source_revision_hash.slice(0, 20)}…`
+            : binding?.message ?? `Opened source-owned projection at revision ${next.revision}.`);
           draftRef.current = undefined;
           return;
         }
@@ -291,6 +307,8 @@ export function App() {
     setLayout(undefined);
     setSelection([]);
     setLease(undefined);
+    setSourceBinding(undefined);
+    setSourceConflict(false);
     setLinkedDocumentId(undefined);
     window.history.replaceState({}, "", window.location.pathname);
     draftRef.current = undefined;
@@ -394,6 +412,66 @@ export function App() {
       await cancel();
       return;
     }
+    if (sourceBinding) {
+      if (!sourceBinding.writable) return;
+      if (!layout) {
+        setMessage("Wait for the visible circuit layout before saving to the specification.");
+        return;
+      }
+      const materialize: CircuitOperation[] = [
+        ...Object.entries(layout.layout.node_geometry).map(([instanceId, geometry]) => ({
+          operation_id: operationId("save_geometry"),
+          type: "set_instance_geometry" as const,
+          instance_id: instanceId,
+          geometry,
+        })),
+        ...Object.entries(layout.layout.terminal_placements).map(([terminalKey, placement]) => ({
+          operation_id: operationId("save_placement"),
+          type: "set_terminal_placement" as const,
+          terminal_key: terminalKey,
+          placement,
+        })),
+        ...Object.entries(layout.layout.net_routes).map(([netId, route]) => ({
+          operation_id: operationId("save_route"),
+          type: "set_net_route" as const,
+          net_id: netId,
+          route,
+        })),
+      ];
+      const materializeDiagnostics = draft.applyBatch(materialize);
+      const materializeErrors = materializeDiagnostics.filter((item) => item.severity === "error");
+      if (materializeErrors.length) {
+        setMessage(materializeErrors.map((item) => item.message).join(" · "));
+        return;
+      }
+      setDocument(draft.document);
+      let result: CircuitSourceSyncResponse;
+      try {
+        result = await backend.commitSource(
+          snapshot.document.document_id,
+          draft.toBatch(operationId("source_save")),
+          lease.lease_id,
+        );
+      } catch (reason) {
+        setMessage(`The specification save response was lost or failed. The complete draft is preserved; retry Save to Specification. ${reason instanceof Error ? reason.message : String(reason)}`);
+        return;
+      }
+      if (!result.accepted || !result.snapshot) {
+        const conflict = result.diagnostics.some((item) => item.code === "source_revision_conflict");
+        setSourceConflict(conflict);
+        setMessage(result.diagnostics.map((item) => item.message).join(" · ") || "Specification save was rejected.");
+        return;
+      }
+      draftRef.current = undefined;
+      setLease(undefined);
+      setSnapshot(result.snapshot);
+      setDocument(result.snapshot.document);
+      setSelection([]);
+      setSourceBinding(result.binding ?? { ...sourceBinding, base_source_revision_hash: result.source_revision_hash });
+      setSourceConflict(false);
+      setMessage(`Saved to the specification at ${result.source_revision_hash.slice(0, 20)}… Edit mode closed.`);
+      return;
+    }
     const result = await backend.commit(
       snapshot.document.document_id,
       draft.toBatch(operationId("draft_save")),
@@ -410,6 +488,25 @@ export function App() {
     setDocument(result.snapshot.document);
     downloadCircuitDocument(result.snapshot.document);
     setMessage(`Saved revision ${result.snapshot.revision} and downloaded ${circuitDocumentFilename(result.snapshot.document)}.`);
+  }
+
+  async function reopenLatestSource(): Promise<void> {
+    if (!snapshot || !sourceBinding) return;
+    if (lease) await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
+    draftRef.current?.cancel();
+    draftRef.current = undefined;
+    setLease(undefined);
+    const result = await backend.reloadSource(snapshot.document.document_id);
+    if (!result.accepted || !result.snapshot) {
+      setMessage(result.diagnostics.map((item) => item.message).join(" · "));
+      return;
+    }
+    setSnapshot(result.snapshot);
+    setDocument(result.snapshot.document);
+    setSourceBinding(result.binding ?? { ...sourceBinding, base_source_revision_hash: result.source_revision_hash });
+    setSelection([]);
+    setSourceConflict(false);
+    setMessage("Reopened the latest specification revision. The previous unsaved draft was discarded.");
   }
 
   async function cancel(): Promise<void> {
@@ -431,6 +528,10 @@ export function App() {
 
   function addLocalComponent(): void {
     if (!document || !componentName.trim()) return;
+    if (sourceBinding && !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(componentName.trim())) {
+      setMessage("Specification component names must be XML-compatible identifiers without spaces.");
+      return;
+    }
     const componentId = uniqueSlug(componentName, document.components.map((item) => item.id));
     const instanceId = uniqueSlug(componentName, document.design.instances.map((item) => item.id));
     const component: ComponentDefinition = {
@@ -474,9 +575,45 @@ export function App() {
     setComponentCreationPoint(undefined);
   }
 
+  function placeCatalogComponent(componentId: string): void {
+    if (!document || !lease) return;
+    const component = document.components.find((item) => item.id === componentId);
+    if (!component) return;
+    const instanceId = uniqueSlug(component.label, document.design.instances.map((item) => item.id));
+    if (mutate({
+      operation_id: operationId("instance"),
+      type: "add_instance",
+      instance: { id: instanceId, label: instanceId, component_id: component.id, parameter_values: {} },
+    }, `Placed ${component.label} as ${instanceId}.`)) setSelection([{ kind: "node", id: instanceId }]);
+  }
+
+  function addBoundaryPort(): void {
+    if (!document || !lease || !sourceBinding?.capabilities.includes("boundary-ports")) return;
+    const id = uniqueSlug("port", document.design.boundary_terminals.map((item) => item.id));
+    if (mutate({
+      operation_id: operationId("boundary"),
+      type: "add_boundary_terminal",
+      terminal: { id, label: id, direction: "inout", width: 1, category: "port" },
+    }, `Added boundary port ${id}.`)) setSelection([{ kind: "boundary", id }]);
+  }
+
+  function updateBoundaryPort(value: CircuitDocument["design"]["boundary_terminals"][number] | undefined): void {
+    if (!value) return;
+    mutate({
+      operation_id: operationId("boundary"),
+      type: "update_boundary_terminal",
+      terminal: value,
+      cascade: false,
+    }, `Updated boundary port ${value.label}.`);
+  }
+
   function createNet(source: string, target: string, requestedName = "", lsb = sliceLsb, width = sliceWidth): boolean {
     if (!document || !source || !target || source === target) return false;
-    const label = requestedName.trim() || `net ${document.design.nets.length + 1}`;
+    const label = requestedName.trim() || `${sourceBinding ? "net_" : "net "}${document.design.nets.length + 1}`;
+    if (sourceBinding && !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(label)) {
+      setMessage("Specification connection names must be XML-compatible identifiers without spaces.");
+      return false;
+    }
     const id = uniqueSlug(label, document.design.nets.map((item) => item.id));
     const created = mutate({
       operation_id: operationId("net"),
@@ -937,7 +1074,7 @@ export function App() {
       case "download-json":
       case "export-svg":
       case "export-png": return Boolean(snapshot && layout) && !lease;
-      case "begin-edit": return Boolean(snapshot) && !lease && !linkedDocumentId;
+      case "begin-edit": return Boolean(snapshot) && !lease && Boolean(!linkedDocumentId || sourceBinding?.writable);
       case "undo": return Boolean(lease && draftRef.current?.canUndo);
       case "redo": return Boolean(lease && draftRef.current?.canRedo);
       case "delete-selection": return Boolean(lease && (selection.length || (invocation.target && selectionItemForTarget(invocation.target))));
@@ -1136,11 +1273,17 @@ export function App() {
         onAction={(commandId) => { executeCircuitAction({ commandId, source: "menubar" }); }}
         onOpenChange={(open) => { if (open) closeContextMenu(false); }}
         proposalCount={proposals.length}
+        sourceBound={Boolean(sourceBinding)}
       />
       <div className="document-status" title={sourceDescription}>
         <strong>{document?.label ?? "Loading…"}</strong>
-        <small>{linkedDocumentId ? "source-owned" : lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}</small>
+        <small>{sourceBinding ? sourceBinding.writable ? lease ? "specification draft" : "specification bound" : "source-owned read only" : lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}</small>
       </div>
+      {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
+        className="source-save-button"
+        onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
+        type="button"
+      >Save to Specification</button>}
       <input
         ref={fileInputRef}
         className="file-input"
@@ -1153,10 +1296,14 @@ export function App() {
     </header>
     <div className="notice">
       <span className="local-dot" />
-      {activePage === "actions" ? "Actions & shortcuts" : linkedDocumentId ? "Editor projection" : "Independent document"}
+      {activePage === "actions" ? "Actions & shortcuts" : sourceBinding?.writable ? "Specification design" : linkedDocumentId ? "Editor projection" : "Independent document"}
       <span>{activePage === "actions"
         ? `Shared preference file · ${preferenceStatus === "loading" ? "loading…" : preferenceStatus === "saving" ? "saving…" : preferenceStatus === "saved" ? "saved" : "save failed"}`
         : layoutProgress || message}</span>
+      {sourceConflict && <span className="source-recovery">
+        <button onClick={() => void reopenLatestSource()} type="button">Reopen Latest</button>
+        <button onClick={() => document && downloadCircuitDocument(document)} type="button">Download Draft JSON</button>
+      </span>}
     </div>
     {activePage === "actions" ? <ActionSettingsPage
       onClose={() => setActivePage("canvas")}
@@ -1207,13 +1354,58 @@ export function App() {
       </div>
       {inspectorOpen && <aside className="inspector">
         <p className="eyebrow">Inspector</p>
+        {sourceBinding?.capabilities.includes("boundary-ports") && <button
+          disabled={!lease}
+          onClick={addBoundaryPort}
+          type="button"
+        >New Boundary Port</button>}
         {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net to inspect its properties.</p></div>}
         {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p></div>}
         {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2><code>{selectedInstance.id}</code>
-          <label>Label<input value={selectedInstance.label} onChange={(event) => mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label: event.target.value || selectedInstance.id } }, "Instance label updated.")} disabled={!lease} /></label>
+          <label>{sourceBinding ? "Instance name" : "Label"}<input pattern={sourceBinding ? "[A-Za-z_][A-Za-z0-9_.-]*" : undefined} value={selectedInstance.label} onChange={(event) => {
+            const label = event.target.value || selectedInstance.id;
+            if (sourceBinding && !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(label)) {
+              setMessage("Specification instance names must be XML-compatible identifiers without spaces.");
+              return;
+            }
+            mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label } }, "Instance name updated.");
+          }} disabled={!lease} /></label>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
-        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2><code>{selectedBoundary.id}</code><p className="draw-hint">{selectedBoundary.direction} · {String(selectedBoundary.width)} bit{selectedBoundary.width === 1 ? "" : "s"}</p><details><summary>Canonical data</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details></>}
+        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2><code>{selectedBoundary.id}</code>
+          <label>Name<input
+            disabled={!lease}
+            pattern="[A-Za-z_][A-Za-z0-9_.-]*"
+            value={selectedBoundary.label}
+            onChange={(event) => {
+              const label = event.target.value || selectedBoundary.id;
+              if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(label)) {
+                setMessage("Specification boundary-port names must be XML-compatible identifiers without spaces.");
+                return;
+              }
+              updateBoundaryPort({ ...selectedBoundary, label });
+            }}
+          /></label>
+          <label>Direction<select
+            disabled={!lease}
+            value={selectedBoundary.direction}
+            onChange={(event) => updateBoundaryPort({ ...selectedBoundary, direction: event.target.value as "input" | "output" | "inout" })}
+          ><option value="input">Input</option><option value="output">Output</option><option value="inout">In/out</option></select></label>
+          <label>Wire width or range<input
+            disabled={!lease}
+            value={String(selectedBoundary.width)}
+            onChange={(event) => {
+              const raw = event.target.value.trim();
+              if (!raw) return;
+              const width = /^\d+$/.test(raw)
+                ? Math.max(1, Number(raw))
+                : raw.startsWith("[") || !raw.includes(":") ? raw : `[${raw}]`;
+              updateBoundaryPort({ ...selectedBoundary, width });
+            }}
+          /></label>
+          <p className="draw-hint">Width reductions that invalidate connected slices are rejected.</p>
+          <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details>
+        </>}
         {selectedNet && <><span className="kind">net</span><h2>{selectedNet.label || selectedNet.id}</h2><code>{selectedNet.id}</code>
           <p className="draw-hint">{selectedRouteLocked ? "Route locked. Use Route → Unlock Selected Route before editing." : "Drag highlighted segments or handles to edit this route."}</p>
           <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n")}</p>
@@ -1231,6 +1423,7 @@ export function App() {
       onClose={() => { setDialog(undefined); setComponentCreationPoint(undefined); }}
       onComponentNameChange={setComponentName}
       onCreateComponent={addLocalComponent}
+      onPlaceComponent={placeCatalogComponent}
       onCreateConnection={createConnectionFromDialog}
       onDecideProposal={(proposalId, decision) => void decideProposal(proposalId, decision)}
       onEndpointAChange={setEndpointA}
@@ -1242,6 +1435,7 @@ export function App() {
       sliceLsb={sliceLsb}
       sliceWidth={sliceWidth}
       sourceDescription={sourceDescription}
+      sourceBound={Boolean(sourceBinding)}
       terminals={terminals}
     />
     {contextRequest && <CircuitContextMenu<CircuitCommandId>

@@ -1,3 +1,5 @@
+import type { CircuitDocument, CircuitSourceBindingV1 } from "@spec2gds/circuit-core";
+
 export type EntityKind =
   | "component"
   | "design"
@@ -109,6 +111,15 @@ export interface NarrativeBlock {
   entity_refs: EntityRef[];
   renderer_id: string;
   options: Record<string, unknown>;
+}
+
+export interface DesignTopologyLiveViewOptionsV1 {
+  schema_version: 1;
+  status: "ready" | "empty" | "unavailable";
+  circuit_document?: CircuitDocument;
+  omitted_bus_items: string[];
+  omitted_ports: string[];
+  message?: string;
 }
 
 export interface DocumentSectionData {
@@ -265,6 +276,7 @@ export interface CircuitDesignerLaunch {
   reused_session: boolean;
   omitted_bus_items: string[];
   omitted_ports: string[];
+  source_binding?: CircuitSourceBindingV1;
 }
 
 export interface AssistantLaunch {

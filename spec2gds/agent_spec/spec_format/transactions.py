@@ -11,7 +11,12 @@ import lxml.etree as etree
 
 from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
-from spec2gds.agent_spec.spec_format.ir import ConnectionIR, InstanceIR, SpecRevision
+from spec2gds.agent_spec.spec_format.circuit_layouts import (
+    DesignCircuitLayoutV1,
+    delete_design_layout,
+    upsert_design_layout,
+)
+from spec2gds.agent_spec.spec_format.ir import ConnectionIR, ExternalPortEndpointIR, InstanceIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import (
     ID_PATTERN,
     ComponentComposition,
@@ -124,6 +129,7 @@ class AddComponentPort:
     component: EntityRef
     name: str
     port: ComponentPortInput
+    allow_composite: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +139,24 @@ class UpdateComponentPort:
     component: EntityRef
     name: str
     port: ComponentPortInput
+    allow_composite: bool = False
+
+
+@dataclass(frozen=True)
+class RenameComponentPort:
+    """Rename a physical component port and every package-local reference."""
+
+    component: EntityRef
+    old_name: str
+    new_name: str
+
+
+@dataclass(frozen=True)
+class DeleteComponentPort:
+    """Delete a component port after dependency checks performed by the caller."""
+
+    component: EntityRef
+    name: str
 
 
 @dataclass(frozen=True)
@@ -149,6 +173,15 @@ class DeleteInstance:
 
     design: EntityRef
     instance_name: str
+
+
+@dataclass(frozen=True)
+class RenameInstance:
+    """Rename one instance and all connection references in its design."""
+
+    design: EntityRef
+    old_name: str
+    new_name: str
 
 
 @dataclass(frozen=True)
@@ -282,6 +315,13 @@ class DeleteEntitySection:
     section_id: str | None = None
 
 
+@dataclass(frozen=True)
+class UpsertCircuitLayout:
+    """Persist one source-semantic circuit layout annotation."""
+
+    layout: DesignCircuitLayoutV1
+
+
 EditOperation = typing.Union[
     UpsertDocumentXml,
     DeleteDocument,
@@ -290,8 +330,11 @@ EditOperation = typing.Union[
     SetEntityMetadata,
     AddComponentPort,
     UpdateComponentPort,
+    RenameComponentPort,
+    DeleteComponentPort,
     UpsertInstance,
     DeleteInstance,
+    RenameInstance,
     ReorderInstances,
     UpsertConnection,
     DeleteConnection,
@@ -308,6 +351,7 @@ EditOperation = typing.Union[
     RemoveAsset,
     UpsertEntitySection,
     DeleteEntitySection,
+    UpsertCircuitLayout,
 ]
 
 
@@ -379,6 +423,8 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
     if isinstance(operation, UpsertDocumentXml):
         package.add_document(operation.kind, operation.xml)
     elif isinstance(operation, DeleteDocument):
+        if operation.ref.entity_kind == "design":
+            delete_design_layout(package, operation.ref.entity_id)
         _delete_document(package, operation.ref)
     elif isinstance(operation, CreateEntity):
         _create_entity(package, operation)
@@ -397,13 +443,17 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         )
         package.add_document(typing.cast(DocumentKind, operation.entity.entity_kind), _serialize(root))
     elif isinstance(operation, AddComponentPort):
-        root = _editable_component_root(package, operation.component)
+        root = _editable_component_root(package, operation.component, allow_composite=operation.allow_composite)
         add_component_port(root, {"name": operation.name, **_port_input_mapping(operation.port)})
         package.add_document("component", _serialize(root))
     elif isinstance(operation, UpdateComponentPort):
-        root = _editable_component_root(package, operation.component)
+        root = _editable_component_root(package, operation.component, allow_composite=operation.allow_composite)
         update_component_port(root, name=operation.name, value=_port_input_mapping(operation.port))
         package.add_document("component", _serialize(root))
+    elif isinstance(operation, RenameComponentPort):
+        _rename_component_port(package, operation)
+    elif isinstance(operation, DeleteComponentPort):
+        _delete_component_port(package, operation)
     elif isinstance(operation, UpsertInstance):
         root, entry = _design_root(package, operation.design)
         _upsert_instance(root, operation.instance)
@@ -420,6 +470,8 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         if not len(container):
             root.remove(container)
         package.add_document("design", _serialize(root))
+    elif isinstance(operation, RenameInstance):
+        _rename_instance(package, operation)
     elif isinstance(operation, ReorderInstances):
         root, _ = _design_root(package, operation.design)
         container = _required_child(root, "componentInstances")
@@ -499,6 +551,8 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         if definition is None or not definition.deletable:
             raise ValueError(f"Section type {operation.section_type} is not deletable.")
         delete_entity_section(package, operation.owner, operation.section_type, operation.section_id)
+    elif isinstance(operation, UpsertCircuitLayout):
+        upsert_design_layout(package, operation.layout)
     else:  # pragma: no cover - protects this dispatcher when the union grows.
         raise TypeError(f"Unsupported edit operation: {type(operation).__name__}")
 
@@ -578,13 +632,13 @@ def _editable_entity_root(package: SpecPackage, ref: EntityRef) -> etree._Elemen
     return ipxact.parse_xml(package.files[entry.path])
 
 
-def _editable_component_root(package: SpecPackage, ref: EntityRef) -> etree._Element:
-    """Load a leaf component root and reject composite boundary mutations."""
+def _editable_component_root(package: SpecPackage, ref: EntityRef, *, allow_composite: bool = False) -> etree._Element:
+    """Load one component root for validated physical-port mutations."""
     _assert_local(package, ref)
     if ref.entity_kind != "component":
         raise ValueError("Port operations require a component reference.")
-    if any(item.component.entity_id == ref.entity_id for item in package.manifest.component_compositions):
-        raise ValueError("Ports on components with internal designs are read-only until boundary editing is supported.")
+    if not allow_composite and any(item.component.entity_id == ref.entity_id for item in package.manifest.component_compositions):
+        raise ValueError("Ports on components with internal designs require the circuit boundary editor.")
     entry = next(
         (item for item in package.manifest.documents if item.entity_id == ref.entity_id and item.kind == "component"),
         None,
@@ -592,6 +646,184 @@ def _editable_component_root(package: SpecPackage, ref: EntityRef) -> etree._Ele
     if entry is None:
         raise KeyError(f"Unknown component: {ref.entity_id}")
     return ipxact.parse_xml(package.files[entry.path])
+
+
+def _rename_instance(package: SpecPackage, operation: RenameInstance) -> None:
+    """Rename an instance while retaining both visible and omitted connections."""
+    if not ID_PATTERN.fullmatch(operation.new_name):
+        raise ValueError("Instance name must be an XML-compatible identifier.")
+    root, _ = _design_root(package, operation.design)
+    container = _required_child(root, "componentInstances")
+    target = _named_child(container, "componentInstance", operation.old_name, "instanceName")
+    if target is None:
+        raise KeyError(f"Design has no instance named {operation.old_name}.")
+    if _named_child(container, "componentInstance", operation.new_name, "instanceName") is not None:
+        raise ValueError(f"Design already has an instance named {operation.new_name}.")
+    name = _child(target, "instanceName")
+    assert name is not None
+    name.text = operation.new_name
+    for node in root.xpath(".//*[@componentInstanceRef]"):
+        if node.get("componentInstanceRef") == operation.old_name:
+            node.set("componentInstanceRef", operation.new_name)
+    package.add_document("design", _serialize(root))
+    layout_annotation = package.files.get(f"annotations/circuit-layout/{operation.design.entity_id}.json")
+    if layout_annotation is not None:
+        layout = DesignCircuitLayoutV1.model_validate_json(layout_annotation)
+        old_prefix = f"instance:{operation.old_name}/"
+        new_prefix = f"instance:{operation.new_name}/"
+
+        def rename_key(key: str) -> str:
+            if key == f"instance:{operation.old_name}":
+                return f"instance:{operation.new_name}"
+            return new_prefix + key[len(old_prefix):] if key.startswith(old_prefix) else key
+
+        routes = copy.deepcopy(layout.net_routes)
+        for route in routes.values():
+            for vertex in route.get("vertices", []):
+                if isinstance(vertex.get("terminal_id"), str):
+                    vertex["terminal_id"] = rename_key(vertex["terminal_id"])
+        geometry = dict(layout.instance_geometry)
+        if operation.old_name in geometry:
+            geometry[operation.new_name] = geometry.pop(operation.old_name)
+        upsert_design_layout(package, layout.model_copy(update={
+            "instance_geometry": geometry,
+            "terminal_placements": {rename_key(key): value for key, value in layout.terminal_placements.items()},
+            "label_geometry": {rename_key(key): value for key, value in layout.label_geometry.items()},
+            "net_routes": routes,
+        }))
+
+
+def _component_vlnv(package: SpecPackage, component: EntityRef) -> str:
+    entry = next(
+        (item for item in package.manifest.documents if item.entity_id == component.entity_id and item.kind == "component"),
+        None,
+    )
+    if entry is None:
+        raise KeyError(f"Unknown component: {component.entity_id}")
+    return entry.vlnv
+
+
+def _rename_component_port(package: SpecPackage, operation: RenameComponentPort) -> None:
+    """Rename a port and all physical references throughout the package."""
+    if not ID_PATTERN.fullmatch(operation.new_name):
+        raise ValueError("Port name must be an XML-compatible identifier.")
+    component_root = _editable_component_root(package, operation.component, allow_composite=True)
+    ports = component_root.xpath("./*[local-name()='model']/*[local-name()='ports']")[0]
+    target = _named_child(ports, "port", operation.old_name, "name")
+    if target is None:
+        raise KeyError(f"Unknown component port: {operation.old_name}")
+    if _named_child(ports, "port", operation.new_name, "name") is not None:
+        raise ValueError(f"Component already has a port named {operation.new_name}.")
+    port_name = _child(target, "name")
+    assert port_name is not None
+    port_name.text = operation.new_name
+    for node in component_root.xpath(".//*[local-name()='physicalPort']/*[local-name()='name']"):
+        if (node.text or "").strip() == operation.old_name:
+            node.text = operation.new_name
+    package.add_document("component", _serialize(component_root))
+
+    component_vlnv = _component_vlnv(package, operation.component)
+    internal_design_ids = {
+        item.internal_design.entity_id
+        for item in package.manifest.component_compositions
+        if item.component.entity_id == operation.component.entity_id
+    }
+    for entry in [item for item in package.manifest.documents if item.kind == "design"]:
+        root = ipxact.parse_xml(package.files[entry.path])
+        matching_instances: set[str] = set()
+        for instance in root.xpath("./*[local-name()='componentInstances']/*[local-name()='componentInstance']"):
+            component_ref = _child(instance, "componentRef")
+            if component_ref is None:
+                continue
+            vlnv = ":".join(component_ref.get(field, "") for field in ("vendor", "library", "name", "version"))
+            if vlnv == component_vlnv:
+                matching_instances.add(_text(instance, "instanceName"))
+        changed = False
+        for node in root.xpath(".//*[local-name()='internalPortReference']"):
+            if node.get("componentInstanceRef") in matching_instances and node.get("portRef") == operation.old_name:
+                node.set("portRef", operation.new_name)
+                changed = True
+        if entry.entity_id in internal_design_ids:
+            for node in root.xpath(".//*[local-name()='externalPortReference']"):
+                if node.get("portRef") == operation.old_name:
+                    node.set("portRef", operation.new_name)
+                    changed = True
+        if changed:
+            package.add_document("design", _serialize(root))
+        layout_annotation = package.files.get(f"annotations/circuit-layout/{entry.entity_id}.json")
+        if layout_annotation is not None:
+            layout = DesignCircuitLayoutV1.model_validate_json(layout_annotation)
+            replacements = {
+                **{
+                    f"instance:{instance_name}/port:{operation.old_name}":
+                    f"instance:{instance_name}/port:{operation.new_name}"
+                    for instance_name in matching_instances
+                },
+                **({
+                    f"boundary:{operation.old_name}": f"boundary:{operation.new_name}"
+                } if entry.entity_id in internal_design_ids else {}),
+            }
+
+            def rename_keys(values: dict[str, typing.Any]) -> dict[str, typing.Any]:
+                return {replacements.get(key, key): value for key, value in values.items()}
+
+            routes = copy.deepcopy(layout.net_routes)
+            for route in routes.values():
+                for vertex in route.get("vertices", []):
+                    terminal_id = vertex.get("terminal_id")
+                    if terminal_id in replacements:
+                        vertex["terminal_id"] = replacements[terminal_id]
+            upsert_design_layout(package, layout.model_copy(update={
+                "terminal_placements": rename_keys(layout.terminal_placements),
+                "label_geometry": rename_keys(layout.label_geometry),
+                "net_routes": routes,
+            }))
+
+
+def _delete_component_port(package: SpecPackage, operation: DeleteComponentPort) -> None:
+    """Delete an unreferenced component port; callers provide dependency policy."""
+    component_vlnv = _component_vlnv(package, operation.component)
+    component_root = _editable_component_root(package, operation.component, allow_composite=True)
+    if component_root.xpath(
+        ".//*[local-name()='physicalPort']/*[local-name()='name' and normalize-space(text())=$name]",
+        name=operation.name,
+    ):
+        raise ValueError(f"Port {operation.name} is mapped by a bus interface and cannot be deleted.")
+    model = _child(component_root, "model")
+    ports = _child(model, "ports") if model is not None else None
+    target = _named_child(ports, "port", operation.name, "name") if ports is not None else None
+    if target is None or ports is None:
+        raise KeyError(f"Unknown component port: {operation.name}")
+    ports.remove(target)
+    if not len(ports) and model is not None:
+        model.remove(ports)
+    package.add_document("component", _serialize(component_root))
+    internal_design_ids = {
+        item.internal_design.entity_id
+        for item in package.manifest.component_compositions
+        if item.component.entity_id == operation.component.entity_id
+    }
+    for entry in [item for item in package.manifest.documents if item.kind == "design"]:
+        data = package.files.get(f"annotations/circuit-layout/{entry.entity_id}.json")
+        if data is None:
+            continue
+        root = ipxact.parse_xml(package.files[entry.path])
+        instance_names = set()
+        for instance in root.xpath("./*[local-name()='componentInstances']/*[local-name()='componentInstance']"):
+            component_ref = _child(instance, "componentRef")
+            if component_ref is None:
+                continue
+            vlnv = ":".join(component_ref.get(field, "") for field in ("vendor", "library", "name", "version"))
+            if vlnv == component_vlnv:
+                instance_names.add(_text(instance, "instanceName"))
+        removed_keys = {f"instance:{name}/port:{operation.name}" for name in instance_names}
+        if entry.entity_id in internal_design_ids:
+            removed_keys.add(f"boundary:{operation.name}")
+        layout = DesignCircuitLayoutV1.model_validate_json(data)
+        upsert_design_layout(package, layout.model_copy(update={
+            "terminal_placements": {key: value for key, value in layout.terminal_placements.items() if key not in removed_keys},
+            "label_geometry": {key: value for key, value in layout.label_geometry.items() if key not in removed_keys},
+        }))
 
 
 def _set_composition(package: SpecPackage, component: EntityRef, internal_design: EntityRef) -> None:
@@ -702,10 +934,27 @@ def _upsert_connection(root: etree._Element, connection: ConnectionIR) -> None:
         node = etree.Element(_q("adHocConnection"))
         etree.SubElement(node, _q("name")).text = connection.name
         references = etree.SubElement(node, _q("portReferences"))
+        def add_slice(node: etree._Element, endpoint_slice: typing.Any, symbolic_slice: str | None = None) -> None:
+            if endpoint_slice is None and symbolic_slice is None:
+                return
+            part = etree.SubElement(node, _q("partSelect"))
+            range_node = etree.SubElement(part, _q("range"))
+            if endpoint_slice is not None:
+                left = str(endpoint_slice.lsb + endpoint_slice.width - 1)
+                right = str(endpoint_slice.lsb)
+            else:
+                left, _, right = symbolic_slice.partition(":")
+            etree.SubElement(range_node, _q("left")).text = left
+            etree.SubElement(range_node, _q("right")).text = right
+
         for endpoint in connection.port_endpoints:
-            etree.SubElement(references, _q("internalPortReference"), componentInstanceRef=endpoint.instance_name, portRef=endpoint.port_name)
-        for port_name in connection.external_ports:
-            etree.SubElement(references, _q("externalPortReference"), portRef=port_name)
+            endpoint_node = etree.SubElement(references, _q("internalPortReference"), componentInstanceRef=endpoint.instance_name, portRef=endpoint.port_name)
+            add_slice(endpoint_node, endpoint.slice, endpoint.symbolic_slice)
+        for endpoint in connection.external_ports:
+            if isinstance(endpoint, str):  # Backward-compatible internal callers.
+                endpoint = ExternalPortEndpointIR(endpoint)
+            endpoint_node = etree.SubElement(references, _q("externalPortReference"), portRef=endpoint.port_name)
+            add_slice(endpoint_node, endpoint.slice, endpoint.symbolic_slice)
     container.append(node)
 
 

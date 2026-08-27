@@ -312,6 +312,13 @@ class SpecPackage:
         except (ValueError, pydantic.ValidationError) as exc:
             diagnostics.append(f"Invalid entity sections: {exc}")
 
+        try:
+            from spec2gds.agent_spec.spec_format.circuit_layouts import validate_layout_annotations
+
+            validate_layout_annotations(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid circuit layouts: {exc}")
+
         diagnostics.extend(_reference_diagnostics(self.manifest, self.files))
         return sorted(set(diagnostics))
 

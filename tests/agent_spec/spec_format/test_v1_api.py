@@ -18,6 +18,7 @@ from spec2gds.agent_spec.spec_format.v1_api import (
     ActivityExecutionRequest,
     AssistantLaunchRequest,
     CircuitLaunchRequest,
+    CircuitSourceSyncRequest,
     CreateDocumentRequest,
     OpenDocumentRequest,
     TransactionRequest,
@@ -402,6 +403,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     endpoints = _endpoints()
     endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
     published: list[dict[str, object]] = []
+    registrations: list[dict[str, object]] = []
 
     def publish(document: dict[str, object], **_: object) -> object:
         published.append(document)
@@ -412,6 +414,10 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
         })()
 
     monkeypatch.setattr(v1_api, "publish_circuit_document", publish)
+    def register(*_: object, **kwargs: object) -> None:
+        registrations.append(kwargs)
+
+    monkeypatch.setattr(v1_api, "register_circuit_source_binding", register)
     result = endpoints["launch_circuit"](CircuitLaunchRequest(
         entity_kind="design",
         entity_id="design_subsystem_internal",
@@ -423,6 +429,56 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert result["omitted_bus_items"] == ["link0"]
     assert result["omitted_ports"] == []
     assert published[0]["protocol_version"] == "circuit-designer.v1"
+    assert result["source_binding"]["writable"] is True
+    base_source_revision_hash = result["source_binding"]["base_source_revision_hash"]
+    candidate = json.loads(json.dumps(published[0]))
+    preview = endpoints["preview_circuit_source"](
+        CircuitSourceSyncRequest(
+            request_id="preview_layout",
+            base_source_revision_hash=base_source_revision_hash,
+            candidate_document=candidate,
+        ),
+        authorization=f"Bearer {registrations[0]['token']}",
+    )
+    assert preview["accepted"] is True
+    committed = endpoints["commit_circuit_source"](
+        CircuitSourceSyncRequest(
+            request_id="commit_layout",
+            base_source_revision_hash=base_source_revision_hash,
+            candidate_document=candidate,
+        ),
+        authorization=f"Bearer {registrations[0]['token']}",
+    )
+    assert committed["accepted"] is True
+    assert committed["source_revision_hash"] != base_source_revision_hash
+    replayed = endpoints["commit_circuit_source"](
+        CircuitSourceSyncRequest(
+            request_id="commit_layout",
+            base_source_revision_hash=base_source_revision_hash,
+            candidate_document=candidate,
+        ),
+        authorization=f"Bearer {registrations[0]['token']}",
+    )
+    assert replayed == committed
+    replayed_preview = endpoints["preview_circuit_source"](
+        CircuitSourceSyncRequest(
+            request_id="commit_layout",
+            base_source_revision_hash=base_source_revision_hash,
+            candidate_document=candidate,
+        ),
+        authorization=f"Bearer {registrations[0]['token']}",
+    )
+    assert replayed_preview == committed
+    stale = endpoints["preview_circuit_source"](
+        CircuitSourceSyncRequest(
+            request_id="stale_layout",
+            base_source_revision_hash=base_source_revision_hash,
+            candidate_document=candidate,
+        ),
+        authorization=f"Bearer {registrations[0]['token']}",
+    )
+    assert stale["accepted"] is False
+    assert stale["diagnostics"][0]["code"] == "source_revision_conflict"
 
     component_result = endpoints["launch_circuit"](CircuitLaunchRequest(
         entity_kind="component",
@@ -432,6 +488,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert component_result["entity_id"] == "component_leaf"
     assert published[1]["design"]["boundary_terminals"] == []
     assert published[1]["design"]["instances"][0]["label"] == "leaf"
+    assert component_result["source_binding"]["writable"] is False
     assert published[1]["components"][0]["terminals"][0]["label"] == "irq_in"
 
 
@@ -892,7 +949,7 @@ def test_spec_assistant_port_edits_match_direct_editor_boundaries(tmp_path: Path
         )
     )
     assert composite_edit["status"] == "invalid"
-    assert "internal designs are read-only" in composite_edit["diagnostics"][0]
+    assert "source-bound Circuit Designer boundary workflow" in composite_edit["diagnostics"][0]
 
 
 def test_document_projection_uses_semantic_row_ids() -> None:

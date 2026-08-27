@@ -76,6 +76,7 @@ export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;
   sourceDescription: string;
+  sourceBound?: boolean;
   proposals: CircuitProposal[];
   terminals: Array<{ id: string }>;
   netName: string;
@@ -93,6 +94,7 @@ export interface CircuitDialogsProps {
   onCreateConnection: () => boolean;
   onComponentNameChange: (value: string) => void;
   onCreateComponent: () => void;
+  onPlaceComponent: (componentId: string) => void;
   onDecideProposal: (proposalId: string, decision: "accept" | "reject") => void;
 }
 
@@ -117,6 +119,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
   }
 
   if (props.dialog === "new-component") {
+    const sourceNameValid = !props.sourceBound || /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(props.componentName.trim());
     return <CircuitModal onClose={props.onClose} title="New local component">
       <form className="circuit-dialog__form" onSubmit={(event) => {
         event.preventDefault();
@@ -124,8 +127,10 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         props.onCreateComponent(); props.onClose();
       }}>
         <p>Create a local two-terminal component definition and its first instance.</p>
-        <label>Name<input autoFocus value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder="Arithmetic unit" /></label>
-        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim()} type="submit">Create definition + instance</button></div>
+        <label>Name<input autoFocus pattern={props.sourceBound ? "[A-Za-z_][A-Za-z0-9_.-]*" : undefined} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder={props.sourceBound ? "arithmetic_unit" : "Arithmetic unit"} /></label>
+        {props.sourceBound && <small>VLNV: spec2gds.local:work:{props.componentName || "component"}:1.0</small>}
+        {props.sourceBound && !sourceNameValid && <p role="alert">Use an XML-compatible name without spaces.</p>}
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim() || !sourceNameValid} type="submit">Create definition + instance</button></div>
       </form>
     </CircuitModal>;
   }
@@ -138,7 +143,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         <div className="metrics"><div><b>{props.document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{props.document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-dialog__grid">
           <div className="catalog-list">{props.document?.components.map((component) => <button className={component.id === selectedComponentId ? "active" : ""} key={component.id} onClick={() => setSelectedComponentId(component.id)} type="button"><b>{component.label}</b><small>{component.origin} · {component.appearance.renderer_key}</small></button>)}</div>
-          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3><code>{selected.id}</code><p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "read only"}</p></> : <p>Select a component to inspect its definition summary.</p>}</div>
+          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3><code>{selected.id}</code><p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source owned"}</p><button className="primary" onClick={() => { props.onPlaceComponent(selected.id); props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
         </div>
         {!props.document?.components.length && <p className="empty-copy">No component definitions are available yet.</p>}
       </div>

@@ -10,6 +10,8 @@ import {
   type CircuitProposal,
   type CircuitProposalCreateRequest,
   type CircuitSnapshot,
+  type CircuitSourceBindingV1,
+  type CircuitSourceSyncResponse,
   type CircuitDesignerPreferencesV1,
   type ComponentDefinition,
   type ComponentQuery,
@@ -22,6 +24,7 @@ import {
   type ServiceError,
   type ServiceEvent,
   type SubgraphQuery,
+  isCircuitSourceBindingV1,
   validateCircuitDesignerPreferences,
 } from "@spec2gds/circuit-core";
 
@@ -47,6 +50,8 @@ export interface CircuitPreferencesResponse {
   preferences: CircuitDesignerPreferencesV1;
   persisted: boolean;
 }
+
+export type { CircuitSourceBindingV1, CircuitSourceSyncResponse } from "@spec2gds/circuit-core";
 
 /** Versioned HTTP implementation of the common independent backend contract. */
 export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
@@ -100,6 +105,43 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
       batch,
       ...(leaseId ? { lease_id: leaseId } : {}),
     }));
+  }
+
+  async getSourceBinding(documentId: string): Promise<CircuitSourceBindingV1 | undefined> {
+    try {
+      const value = await this.getJson(`${this.documentUrl(documentId)}/source-binding`);
+      if (!isCircuitSourceBindingV1(value)) throw new Error("Circuit service returned invalid source-binding metadata.");
+      return value;
+    } catch (reason) {
+      if (reason instanceof CircuitDesignerHttpError && reason.status === 404) return undefined;
+      throw reason;
+    }
+  }
+
+  async previewSource(
+    documentId: string,
+    batch: CircuitOperationBatch,
+    leaseId: string,
+  ): Promise<CircuitSourceSyncResponse> {
+    return await this.sendJson(`${this.documentUrl(documentId)}/source/preview`, "POST", {
+      batch,
+      lease_id: leaseId,
+    }) as CircuitSourceSyncResponse;
+  }
+
+  async commitSource(
+    documentId: string,
+    batch: CircuitOperationBatch,
+    leaseId: string,
+  ): Promise<CircuitSourceSyncResponse> {
+    return await this.sendJson(`${this.documentUrl(documentId)}/source/commit`, "POST", {
+      batch,
+      lease_id: leaseId,
+    }) as CircuitSourceSyncResponse;
+  }
+
+  async reloadSource(documentId: string): Promise<CircuitSourceSyncResponse> {
+    return await this.sendJson(`${this.documentUrl(documentId)}/source/reload`, "POST", {}) as CircuitSourceSyncResponse;
   }
 
   async getLease(documentId: string): Promise<EditLease | null> {

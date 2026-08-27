@@ -25,14 +25,18 @@ flowchart LR
     Session --> Begin["Begin editing private draft"]
     Begin --> Edit["Typed operations"]
     Edit --> Save{"Save or Cancel"}
-    Save -->|"Save"| Validate["Validate and commit"]
+    Save -->|"Independent Save"| Validate["Validate and commit session"]
     Validate --> Download["Download .circuit.json"]
+    Save -->|"Save to Specification"| Source["Preview and atomically commit .spec"]
+    Source --> Session
     Save -->|"Cancel"| Session
 ```
 
 The service owns live revisions and leases, but not durable storage. Save
-downloads a new canonical file and never overwrites the input file. A circuit
-opened from the Spec Editor is source-owned and read-only.
+downloads a new canonical file and never overwrites the input file. Eligible
+designs opened from the Spec Editor are writable source bindings; **Save to
+Specification** updates the authoritative IP-XACT topology and semantic layout
+annotation. Leaf-component previews remain read-only.
 SVG and PNG downloads use the currently visible effective canvas layout; PNG
 is rasterized from the same SVG representation so their geometry and styling
 remain aligned.
@@ -67,6 +71,8 @@ commands work in read-only documents; circuit-changing commands require an
 active private draft. See the
 [interaction guide](../../../docs/circuit-designer-interactions.md) for the
 complete mouse and keyboard contract.
+See the [specification synchronization guide](../../../docs/circuit-designer-spec-sync.md)
+for source save, conflict, and recovery behavior.
 
 See [`../../../docs/architecture.md`](../../../docs/architecture.md) and
 [`../../../docs/flows.md`](../../../docs/flows.md).

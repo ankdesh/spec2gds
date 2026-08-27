@@ -104,11 +104,30 @@ class InterfaceEndpointIR:
 
 
 @dataclass(frozen=True)
+class EndpointSliceIR:
+    """One numeric IP-XACT part-select represented as Circuit LSB and width."""
+
+    lsb: int
+    width: int
+
+
+@dataclass(frozen=True)
 class PortEndpointIR:
     """One instance-port endpoint in an ad-hoc connection."""
 
     instance_name: str
     port_name: str
+    slice: EndpointSliceIR | None = None
+    symbolic_slice: str | None = None
+
+
+@dataclass(frozen=True)
+class ExternalPortEndpointIR:
+    """One component-boundary endpoint in an ad-hoc connection."""
+
+    port_name: str
+    slice: EndpointSliceIR | None = None
+    symbolic_slice: str | None = None
 
 
 @dataclass(frozen=True)
@@ -119,7 +138,7 @@ class ConnectionIR:
     kind: typing.Literal["interface", "ad_hoc"]
     interface_endpoints: tuple[InterfaceEndpointIR, ...] = ()
     port_endpoints: tuple[PortEndpointIR, ...] = ()
-    external_ports: tuple[str, ...] = ()
+    external_ports: tuple[ExternalPortEndpointIR, ...] = ()
     hierarchy_interfaces: tuple[str, ...] = ()
 
 
@@ -497,12 +516,38 @@ def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:
         hierarchy = tuple(node.get("busRef", "") for node in connection.xpath("./*[local-name()='hierInterface']"))
         connections.append(ConnectionIR(name=_text(connection, "name"), kind="interface", interface_endpoints=endpoints, hierarchy_interfaces=hierarchy))
     for connection in root.xpath("./*[local-name()='adHocConnections']/*[local-name()='adHocConnection']"):
-        endpoints = tuple(
-            PortEndpointIR(instance_name=node.get("componentInstanceRef", ""), port_name=node.get("portRef", ""))
-            for node in connection.xpath("./*[local-name()='portReferences']/*[local-name()='internalPortReference']")
-        )
-        external = tuple(node.get("portRef", "") for node in connection.xpath("./*[local-name()='portReferences']/*[local-name()='externalPortReference']"))
-        connections.append(ConnectionIR(name=_text(connection, "name"), kind="ad_hoc", port_endpoints=endpoints, external_ports=external))
+        def endpoint_slice(node: etree._Element) -> tuple[EndpointSliceIR | None, str | None]:
+            ranges = node.xpath("./*[local-name()='partSelect']/*[local-name()='range']")
+            if not ranges:
+                return None, None
+            left = _text(ranges[0], "left")
+            right = _text(ranges[0], "right")
+            try:
+                high, low = int(left), int(right)
+            except ValueError:
+                return None, f"{left}:{right}"
+            if high < low:
+                return None, f"{left}:{right}"
+            return EndpointSliceIR(lsb=low, width=high - low + 1), None
+
+        endpoints: list[PortEndpointIR] = []
+        for node in connection.xpath("./*[local-name()='portReferences']/*[local-name()='internalPortReference']"):
+            numeric, symbolic = endpoint_slice(node)
+            endpoints.append(PortEndpointIR(
+                instance_name=node.get("componentInstanceRef", ""),
+                port_name=node.get("portRef", ""),
+                slice=numeric,
+                symbolic_slice=symbolic,
+            ))
+        external: list[ExternalPortEndpointIR] = []
+        for node in connection.xpath("./*[local-name()='portReferences']/*[local-name()='externalPortReference']"):
+            numeric, symbolic = endpoint_slice(node)
+            external.append(ExternalPortEndpointIR(
+                port_name=node.get("portRef", ""),
+                slice=numeric,
+                symbolic_slice=symbolic,
+            ))
+        connections.append(ConnectionIR(name=_text(connection, "name"), kind="ad_hoc", port_endpoints=tuple(endpoints), external_ports=tuple(external)))
     return DesignIR(ref=ref, vlnv=vlnv, instances=tuple(instances), connections=tuple(connections))
 
 
@@ -562,12 +607,16 @@ def _semantic_diagnostics(
                 diagnostics.append(f"Design {design.vlnv} instance {instance.name} references missing component {instance.component_vlnv}.")
         owner_component = next((component for component in components if owner_by_design.get(design.ref.entity_id) == component.ref.entity_id), None)
         exported_interfaces = {name for connection in design.connections for name in connection.hierarchy_interfaces}
-        external_ports = {name for connection in design.connections for name in connection.external_ports}
+        external_ports = {endpoint.port_name for connection in design.connections for endpoint in connection.external_ports}
         if owner_component is not None:
             if exported_interfaces != {interface.name for interface in owner_component.interfaces}:
                 diagnostics.append(f"Internal design {design.vlnv} does not match component {owner_component.vlnv} interface boundary.")
-            if external_ports != {port.name for port in owner_component.ports}:
-                diagnostics.append(f"Internal design {design.vlnv} does not match component {owner_component.vlnv} port boundary.")
+            unknown_external_ports = external_ports - {port.name for port in owner_component.ports}
+            if unknown_external_ports:
+                diagnostics.append(
+                    f"Internal design {design.vlnv} references unknown component boundary ports: "
+                    + ", ".join(sorted(unknown_external_ports))
+                )
         for connection in design.connections:
             if connection.kind == "interface":
                 if len(connection.interface_endpoints) < 2:

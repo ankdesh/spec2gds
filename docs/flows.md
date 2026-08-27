@@ -66,25 +66,36 @@ sequenceDiagram
     User->>SE: Choose a component or design
     SE->>SA: POST /circuit-designer/launch
     SA->>CA: Project current SpecRevision
-    CA-->>SA: CircuitDocument + omitted bus items/non-wire ports
-    SA->>CS: Create or reuse source-owned session
-    CS-->>SA: document_id and revision
-    SA-->>SE: Editor URL and projection notes
+    CA-->>SA: CircuitDocument + source map + omission notes
+    SA->>CS: Create/refresh session and register source binding
+    CS-->>SA: document_id, revision, and writable capability
+    SA-->>SE: Editor URL, binding metadata, and projection notes
     SE->>CD: Open new browser tab
     CD->>CS: Read session
-    CS-->>CD: Read-only projected circuit
+    CS-->>CD: Projected circuit and source binding
+    User->>CD: Begin editing and change topology/layout
+    CD->>CS: Save to Specification(candidate, base source revision)
+    CS->>SA: Authenticated preview, then idempotent commit
+    SA->>SA: Validate and atomically save .spec
+    SA-->>CS: Authoritative re-projection and new source revision
+    CS-->>CD: Replace session, release lease, exit edit mode
+    SA-->>SE: source.changed; refresh tables and SVG
 ```
 
 Scenario: a specification design contains direct port wiring and bus
 interfaces. Direct ports appear in the circuit view. Unsupported bus items are
 reported, not silently converted. Unused transactional and structured ports
 are also reported as omitted. A connected non-wire port rejects the launch
-because dropping a real design connection would be unsafe. The projected
-session is read-only because the `.spec` file remains authoritative.
+because dropping a real design connection would be unsafe. Eligible design
+sessions are editable, but the `.spec` package remains authoritative because
+the source transaction must succeed before the ephemeral Circuit session is
+updated. Leaf-component previews remain read-only.
 
 Users can launch from the grouped **Circuit** menu or from **Options → Open
 circuit** on a design or component section. Non-circuit sections omit that
-command. Entity-backed sections retain **Options → More actions**.
+command. Entity-backed sections retain **Options → More actions**. See
+[Circuit Designer specification synchronization](circuit-designer-spec-sync.md)
+for conflicts, recovery, and the semantic layout annotation.
 
 ## Edit an independent circuit
 

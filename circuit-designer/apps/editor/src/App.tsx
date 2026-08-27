@@ -76,6 +76,7 @@ export default function App() {
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
+  const [inlineEditActive, setInlineEditActive] = useState(false);
   const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
 
   const refreshActivity = useCallback(async () => {
@@ -185,6 +186,24 @@ export default function App() {
           change.document_id === snapshot.document_id
           && change.source_revision_hash !== snapshot.source_revision_hash
         ) {
+          if (change.origin === "circuit-designer") {
+            if (inlineEditActive) {
+              setExternalChange(change);
+              return;
+            }
+            void Promise.all([
+              client.getSnapshot(),
+              client.getA2UIBatch(),
+              client.getActivity(),
+            ]).then(([nextSnapshot, nextBatch, nextActivity]) => {
+              setSnapshot(nextSnapshot);
+              setBatch(nextBatch);
+              setActivity(nextActivity);
+              setExternalChange(null);
+              setNotice("Loaded circuit changes saved to the specification.");
+            }).catch(() => setExternalChange(change));
+            return;
+          }
           setExternalChange(change);
         }
       } catch {
@@ -193,7 +212,7 @@ export default function App() {
     };
     source.addEventListener("source.changed", onChange as EventListener);
     return () => source.close();
-  }, [client, snapshot?.document_id, snapshot?.source_revision_hash]);
+  }, [client, inlineEditActive, snapshot?.document_id, snapshot?.source_revision_hash]);
 
   useEffect(() => {
     const onEntityAction = (event: Event) => {
@@ -514,7 +533,7 @@ export default function App() {
         return composite
           ? {
             enabled: false,
-            reason: "Ports on components with internal designs are read-only until boundary editing is supported.",
+            reason: "Edit composite boundary ports in the source-bound Circuit Designer.",
           }
           : { enabled: true, reason: "" };
       },
@@ -551,7 +570,7 @@ export default function App() {
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
-          <span>Document changed by AI Assistant. Your current view has not been replaced.</span>
+          <span>Document changed by {externalChange.origin === "circuit-designer" ? "Circuit Designer" : "AI Assistant"}. Your current view and inline draft have not been replaced.</span>
           <button type="button" onClick={() => void refreshExternalChange()}>Refresh</button>
           <button type="button" aria-label="Dismiss" onClick={() => setExternalChange(null)}>×</button>
         </div>
@@ -561,7 +580,11 @@ export default function App() {
       <main>
         {loading && <LoadingState />}
         {!loading && view === "document" && batch && (
-          <A2UIDocumentSurface batch={batch} editController={editController} />
+          <A2UIDocumentSurface
+            batch={batch}
+            editController={editController}
+            onEditingChange={setInlineEditActive}
+          />
         )}
         {!loading && view === "activity" && (
           <ActivityView

@@ -54,12 +54,17 @@ from spec2gds.agent_spec.spec_format.assistant import (
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
     CircuitDesignerConnectionError,
+    compile_circuit_sync_operations,
     project_source_to_circuit,
     publish_circuit_document,
+    register_circuit_source_binding,
+    source_session_document_id,
 )
 from spec2gds.agent_spec.spec_format.document import build_a2ui_batch, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import (
     ConnectionIR,
+    EndpointSliceIR,
+    ExternalPortEndpointIR,
     InstanceIR,
     InterfaceEndpointIR,
     PortEndpointIR,
@@ -158,6 +163,14 @@ class CircuitLaunchRequest(pydantic.BaseModel):
 
     entity_kind: typing.Literal["component", "design"]
     entity_id: str
+
+
+class CircuitSourceSyncRequest(pydantic.BaseModel):
+    """Candidate Circuit document submitted by the bound Circuit service."""
+
+    request_id: str
+    base_source_revision_hash: str
+    candidate_document: dict[str, typing.Any] | None = None
 
 
 class AssistantLaunchRequest(pydantic.BaseModel):
@@ -325,6 +338,8 @@ def create_app() -> typing.Any:
         "active": None,
         "source_event_sequence": 0,
         "source_event": None,
+        "circuit_source_bindings": {},
+        "circuit_source_results": {},
     }
 
     def finalize_activity(
@@ -540,17 +555,64 @@ def create_app() -> typing.Any:
 
     @app.post("/circuit-designer/launch")
     def launch_circuit(request: CircuitLaunchRequest) -> dict[str, typing.Any]:
-        """Project one direct-port design, publish it, and return its browser URL."""
+        """Project one design and register its revision-guarded source binding."""
         try:
+            initial_projection = project_source_to_circuit(
+                active().revision,
+                request.entity_kind,
+                request.entity_id,
+            )
+            session_id = source_session_document_id(
+                active().revision,
+                initial_projection.editable_design_id or initial_projection.source_entity_id,
+            )
             projection = project_source_to_circuit(
                 active().revision,
                 request.entity_kind,
                 request.entity_id,
+                session_document_id=session_id,
+                include_catalog=initial_projection.editable_design_id is not None,
             )
             launched = publish_circuit_document(
                 projection.document,
                 service_url=service_urls()["circuit_designer"]["service_url"],
                 editor_url=service_urls()["circuit_designer"]["ui_url"],
+            )
+            token = uuid4().hex
+            binding_id = f"source_{uuid4().hex}"
+            writable = projection.editable_design_id is not None
+            binding = {
+                "schema_version": 1,
+                "binding_id": binding_id,
+                "source_document_id": active().revision.document_id,
+                "source_entity": {
+                    "document_id": active().revision.document_id,
+                    "entity_id": projection.source_entity_id,
+                    "entity_kind": projection.source_entity_kind,
+                },
+                **({"editable_design_id": projection.editable_design_id} if projection.editable_design_id else {}),
+                "base_source_revision_hash": active().revision.source_revision_hash,
+                "writable": writable,
+                "capabilities": ([
+                    "topology", "layout", "local-components", "numeric-part-selects",
+                    *(["boundary-ports"] if projection.owner_component_id else []),
+                ] if writable else []),
+                "omitted_bus_items": list(projection.omitted_bus_items),
+                "omitted_ports": list(projection.omitted_ports),
+                **({"message": "Leaf-component previews have no internal design and remain read-only."} if not writable else {}),
+            }
+            state["circuit_source_bindings"][token] = {
+                "binding": binding,
+                "entity_kind": request.entity_kind,
+                "entity_id": request.entity_id,
+                "session_document_id": launched.document_id,
+            }
+            register_circuit_source_binding(
+                launched.document_id,
+                binding,
+                service_url=service_urls()["circuit_designer"]["service_url"],
+                callback_url=f"{service_urls()['spec_editor']['service_url']}/circuit-designer/source",
+                token=token,
             )
         except CircuitDesignerConnectionError as exc:
             raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc
@@ -564,7 +626,131 @@ def create_app() -> typing.Any:
             "reused_session": launched.reused_session,
             "omitted_bus_items": list(projection.omitted_bus_items),
             "omitted_ports": list(projection.omitted_ports),
+            "source_binding": binding,
         }
+
+    def circuit_source_record(authorization: str | None) -> dict[str, typing.Any]:
+        prefix = "Bearer "
+        if not authorization or not authorization.startswith(prefix):
+            raise fastapi.HTTPException(status_code=401, detail="Missing Circuit source-provider token.")
+        record = state["circuit_source_bindings"].get(authorization[len(prefix):])
+        if record is None:
+            raise fastapi.HTTPException(status_code=403, detail="Unknown Circuit source-provider token.")
+        if record["binding"]["source_document_id"] != active().revision.document_id:
+            raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
+        return typing.cast(dict[str, typing.Any], record)
+
+    def circuit_source_projection(record: dict[str, typing.Any], revision: SpecRevision | None = None) -> typing.Any:
+        return project_source_to_circuit(
+            revision or active().revision,
+            record["entity_kind"],
+            record["entity_id"],
+            session_document_id=record["session_document_id"],
+            include_catalog=True,
+        )
+
+    def sync_failure(code: str, message: str, revision_hash: str | None = None) -> dict[str, typing.Any]:
+        return {
+            "accepted": False,
+            "source_revision_hash": revision_hash or active().revision.source_revision_hash,
+            "diagnostics": [{"severity": "error", "code": code, "message": message}],
+        }
+
+    @app.post("/circuit-designer/source/resolve")
+    def resolve_circuit_source(
+        request: CircuitSourceSyncRequest,
+        authorization: str | None = fastapi.Header(default=None),
+    ) -> dict[str, typing.Any]:
+        """Return the current authoritative projection for one registered session."""
+        record = circuit_source_record(authorization)
+        try:
+            projection = circuit_source_projection(record)
+        except CircuitAdapterError as exc:
+            return sync_failure("source_projection_failed", str(exc))
+        record["binding"]["base_source_revision_hash"] = active().revision.source_revision_hash
+        return {
+            "accepted": True,
+            "source_revision_hash": active().revision.source_revision_hash,
+            "document": projection.document,
+            "diagnostics": [],
+        }
+
+    def preview_circuit_source_change(
+        request: CircuitSourceSyncRequest,
+        authorization: str | None,
+    ) -> tuple[dict[str, typing.Any], dict[str, typing.Any], typing.Any | None]:
+        record = circuit_source_record(authorization)
+        if request.base_source_revision_hash != active().revision.source_revision_hash:
+            return record, sync_failure(
+                "source_revision_conflict",
+                "The specification changed after Circuit editing began. Reopen the latest source or download the draft.",
+            ), None
+        if request.candidate_document is None:
+            return record, sync_failure("candidate_required", "A candidate Circuit document is required."), None
+        try:
+            projection = circuit_source_projection(record)
+            operations = compile_circuit_sync_operations(active().revision, projection, request.candidate_document)
+            result = SpecEditTransaction(active().revision.source_revision_hash, operations).apply(active().revision)
+        except (CircuitAdapterError, KeyError, TypeError, ValueError, pydantic.ValidationError) as exc:
+            return record, sync_failure("source_sync_invalid", str(exc)), None
+        if not result.succeeded or result.revision is None:
+            return record, sync_failure("source_sync_rejected", " · ".join(result.diagnostics)), None
+        authoritative = circuit_source_projection(record, result.revision)
+        response = {
+            "accepted": True,
+            "source_revision_hash": result.revision.source_revision_hash,
+            "document": authoritative.document,
+            "diagnostics": [],
+            "impact": {
+                "operation_count": len(operations),
+                "affected_design_id": authoritative.editable_design_id,
+            },
+        }
+        return record, response, result.revision
+
+    @app.post("/circuit-designer/source/preview")
+    def preview_circuit_source(
+        request: CircuitSourceSyncRequest,
+        authorization: str | None = fastapi.Header(default=None),
+    ) -> dict[str, typing.Any]:
+        """Validate a candidate without changing the active package."""
+        record = circuit_source_record(authorization)
+        replay = state["circuit_source_results"].get(
+            (record["binding"]["binding_id"], request.request_id)
+        )
+        if replay is not None:
+            return typing.cast(dict[str, typing.Any], replay)
+        _, response, _ = preview_circuit_source_change(request, authorization)
+        return response
+
+    @app.post("/circuit-designer/source/commit")
+    def commit_circuit_source(
+        request: CircuitSourceSyncRequest,
+        authorization: str | None = fastapi.Header(default=None),
+    ) -> dict[str, typing.Any]:
+        """Atomically commit a candidate and return its authoritative re-projection."""
+        record = circuit_source_record(authorization)
+        replay_key = (record["binding"]["binding_id"], request.request_id)
+        replay = state["circuit_source_results"].get(replay_key)
+        if replay is not None:
+            return typing.cast(dict[str, typing.Any], replay)
+        record, response, revision = preview_circuit_source_change(request, authorization)
+        if not response["accepted"] or revision is None:
+            return response
+        active().commit_revision(revision)
+        record["binding"]["base_source_revision_hash"] = revision.source_revision_hash
+        _publish_source_event(
+            state,
+            active(),
+            origin="circuit-designer",
+            affected_entities=[{
+                "document_id": revision.document_id,
+                "entity_id": record["binding"]["editable_design_id"],
+                "entity_kind": "design",
+            }],
+        )
+        state["circuit_source_results"][replay_key] = response
+        return response
 
     @app.get("/documents/a2ui")
     def document_a2ui() -> dict[str, typing.Any]:
@@ -1130,8 +1316,21 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
                             InterfaceEndpointIR(**item)
                             for item in connection.get("interface_endpoints", [])
                         ),
-                        port_endpoints=tuple(PortEndpointIR(**item) for item in connection.get("port_endpoints", [])),
-                        external_ports=tuple(connection.get("external_ports", [])),
+                        port_endpoints=tuple(
+                            PortEndpointIR(
+                                instance_name=item["instance_name"],
+                                port_name=item["port_name"],
+                                slice=EndpointSliceIR(**item["slice"]) if item.get("slice") else None,
+                            )
+                            for item in connection.get("port_endpoints", [])
+                        ),
+                        external_ports=tuple(
+                            ExternalPortEndpointIR(
+                                port_name=item if isinstance(item, str) else item["port_name"],
+                                slice=EndpointSliceIR(**item["slice"]) if isinstance(item, dict) and item.get("slice") else None,
+                            )
+                            for item in connection.get("external_ports", [])
+                        ),
                         hierarchy_interfaces=tuple(connection.get("hierarchy_interfaces", [])),
                     ),
                 )

@@ -42,6 +42,9 @@ Read in this order:
     editing constraints.
 18. [Circuit Designer preferences](circuit-designer-preferences.md) — shared
     JSON profile, REST endpoints, validation, migration, and persistence.
+19. [Circuit Designer specification synchronization](circuit-designer-spec-sync.md)
+    — source bindings, Save to Specification, layout annotations, conflicts,
+    and recovery.
 
 ## Documentation rule
 

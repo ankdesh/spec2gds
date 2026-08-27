@@ -25,6 +25,7 @@ from spec2gds.agent_spec.spec_format import ipxact
 from spec2gds.agent_spec.spec_format.document import DocumentSection, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import (
     ConnectionIR,
+    ExternalPortEndpointIR,
     InstanceIR,
     InterfaceEndpointIR,
     PortEndpointIR,
@@ -551,8 +552,8 @@ def _assert_component_port_editable(
         for item in revision.manifest.component_compositions
     ):
         raise ValueError(
-            "Ports on components with internal designs are read-only until "
-            "boundary editing is supported."
+            "Assistant proposals cannot edit ports on components with internal designs; "
+            "use the source-bound Circuit Designer boundary workflow."
         )
 
 
@@ -799,7 +800,7 @@ def _connection(value: dict[str, typing.Any]) -> ConnectionIR:
             InterfaceEndpointIR(**item) for item in interface_endpoints
         ),
         port_endpoints=tuple(PortEndpointIR(**item) for item in port_endpoints),
-        external_ports=tuple(str(item) for item in external_ports),
+        external_ports=tuple(ExternalPortEndpointIR(str(item)) for item in external_ports),
         hierarchy_interfaces=tuple(str(item) for item in hierarchy_interfaces),
     )
 

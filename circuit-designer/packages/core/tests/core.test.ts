@@ -6,6 +6,7 @@ import {
   connectedInstanceIds,
   createOperationBatch,
   documentFixtures,
+  isCircuitSourceBindingV1,
   projectDocument,
   simpleDocumentFixture,
   terminalDefaultPlacement,
@@ -25,6 +26,24 @@ describe("independent circuit core", () => {
       expect(result.diagnostics.filter((item) => item.severity === "error")).toEqual([]);
       expect(result.valid).toBe(true);
     }
+  });
+
+  it("validates public source-binding metadata at trust boundaries", () => {
+    const binding = {
+      schema_version: 1,
+      binding_id: "binding_top",
+      source_document_id: "spec_top",
+      source_entity: { document_id: "spec_top", entity_id: "design_top", entity_kind: "design" },
+      editable_design_id: "design_top",
+      base_source_revision_hash: "sha256:base",
+      writable: true,
+      capabilities: ["topology", "layout"],
+      omitted_bus_items: [],
+      omitted_ports: [],
+    };
+    expect(isCircuitSourceBindingV1(binding)).toBe(true);
+    expect(isCircuitSourceBindingV1({ ...binding, source_entity: { ...binding.source_entity, entity_kind: "asset" } })).toBe(false);
+    expect(isCircuitSourceBindingV1({ ...binding, capabilities: "topology" })).toBe(false);
   });
 
   it("preserves inout direction and opaque symbolic widths", () => {

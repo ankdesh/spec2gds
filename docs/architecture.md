@@ -42,7 +42,7 @@ flowchart TB
 | Action history | Spec API | package activity plus artifact sidecar | append/review operations |
 | Independent circuit | client | `.circuit.json` | private draft, then Save |
 | Circuit session | Circuit service | memory only | lease and revision checks |
-| Spec-derived circuit | specification source | read-only circuit session | edit the `.spec`, then project again |
+| Spec-derived circuit | specification source | `.spec` topology plus circuit-layout annotation | edit a private projection, then revision-checked Save to Specification |
 | AI Assistant suggestion | user review | proposal record | explicit accept or reject |
 
 The service processes bind to all interfaces by default so the editors can be
@@ -75,6 +75,7 @@ flowchart LR
     P --> X["ipxact/...<br/>IEEE 1685-2022 source"]
     P --> A["assets/...<br/>content-addressed media"]
     P --> E["annotations/entity-sections/...<br/>indexed typed bodies"]
+    P --> C["annotations/circuit-layout/...<br/>semantic design geometry"]
     P --> H["activity/...<br/>execution history"]
     H --> S[".spec.artifacts/<br/>large generated artifacts"]
 ```
@@ -97,8 +98,9 @@ Circuit Designer uses the JSON Schema in
 - layout geometry kept separate from electrical connectivity.
 
 The service owns live revisions, edit leases, idempotency results, proposals,
-and events. It intentionally owns no durable database. The client downloads the
-accepted canonical document.
+events, and ephemeral source bindings. It intentionally owns no durable
+database. Independent circuits download the accepted canonical document;
+source-bound circuits commit through the Spec API before their session changes.
 
 ## Dependency direction
 

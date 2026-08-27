@@ -7,5 +7,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@spec2gds/circuit-core": "0.0.0"
   }
 }

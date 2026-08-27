@@ -17,7 +17,8 @@ flowchart LR
     SpecAPI --> Package[".spec package<br/>IP-XACT + narrative + assets"]
     SpecAPI -->|"source-owned projection"| CircuitAPI["Circuit service"]
     CircuitUI["Circuit Designer"] --> CircuitAPI
-    CircuitAPI --> CircuitFile[".circuit.json<br/>client-owned file"]
+    CircuitAPI --> CircuitFile[".circuit.json<br/>independent circuits"]
+    CircuitAPI -->|"validated source commit"| SpecAPI
     User --> CircuitUI
     Assistant["Optional assistant"] -->|"reviewed proposals"| SpecAPI
     Assistant -->|"reviewed proposals"| CircuitAPI
@@ -27,8 +28,9 @@ The two editors have different source-of-truth rules:
 
 - A `.spec` package is owned and saved by the Spec API.
 - A local circuit is owned by its client and saved as `.circuit.json`.
-- A circuit projected from a specification is read-only in Circuit Designer;
-  changes return to the specification source.
+- A source-bound circuit is an editable projection; **Save to Specification**
+  commits validated topology and layout changes back to the `.spec` package.
+- Leaf-component previews and unsupported projections remain read-only.
 - Assistant changes are proposals until a user accepts them.
 
 See [the documentation index](docs/README.md) for the architecture and flow
@@ -166,6 +168,14 @@ shown in the normal document view. Component and design sections provide
 **Edit text** for the introductory paragraph beneath the heading. Entry-design
 sections also provide **Add component instance**: enter a unique instance name
 and choose any component defined at the specification’s top level.
+Every design section begins with a revision-derived SVG circuit preview before
+its authoritative instance and connection tables. The preview uses the same
+automatic layout and visual exporter as Circuit Designer, can be expanded or
+downloaded, or opened directly in Circuit Designer for round-trip editing. It
+is regenerated after every accepted source change without
+adding an image asset to the `.spec` package. Unsupported interface topology
+is reported beside the preview; a connection that cannot be represented safely
+shows an unavailable message while leaving the source tables accessible.
 Leaf-component sections provide separate **Add wire port**, **Add
 transactional port**, and **Add structured port** commands. All ports are shown
 as editable rows in one Ports table. Wire ports use
@@ -326,9 +336,14 @@ Preferences → Actions and shortcuts** to configure shared keyboard and mouse
 inputs; right-click itself is reserved for context menus. See the
 [Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
 
-To use **Open circuit** from the specification editor, run both services. The
+To use **Open circuit** from the specification editor, run both services. A
+design projection supports **Edit → Begin Editing** and **Save to
+Specification**; the save validates and atomically updates IP-XACT topology and
+its semantic layout annotation. Leaf-component previews remain read-only. The
 default Spec API (`6010`) and Circuit service (`6011`) already use compatible
-settings from `config/services.json`.
+settings from `config/services.json`. See the
+[specification synchronization guide](docs/circuit-designer-spec-sync.md) for
+save, conflict, layout, and recovery behavior.
 
 ## Run only the optional AI Assistant
 

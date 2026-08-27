@@ -26,13 +26,37 @@ The toolbar button is disabled until a specification is open.
   Choosing an item projects it through the existing circuit adapter and opens
   Circuit Designer. A leaf component opens as one read-only preview instance
   with its wire ports attached; a component with an internal design opens that
-  design instead.
+  design as a writable source-bound circuit.
 - **Help** contains getting-started guidance, keyboard shortcuts, the FastAPI
   reference, and the source-format identity.
 
 Menus support arrow-key traversal, Home and End within a menu, Escape to close,
 click-outside dismissal, and focus restoration. Dialogs trap keyboard focus
 until they are dismissed.
+
+## Derived circuit previews
+
+Every entry, internal, and other design section places a static circuit preview
+before its structured tables. The backend derives a Circuit Designer document
+from the same immutable IP-XACT revision used for the tables; the browser then
+uses the shared deterministic layout and SVG exporter. The preview is not an
+asset in the `.spec` package and does not require the Circuit Designer service,
+so it is regenerated automatically after an accepted edit, proposal, disk
+refresh, or reopen and cannot become stale independently of the source.
+
+The responsive preview is capped at 420 pixels high. **Expand** opens the same
+SVG at its natural dimensions in a scrollable, focus-trapped dialog, while
+**Download SVG** saves the exact displayed vector. **Open Circuit Designer**
+uses the same validated projection and new-tab launch flow as **Options → Open
+circuit**. Eligible designs can be changed there and explicitly saved back to
+the specification. Printed documents expand the complete diagram and omit
+these controls. The embedded SVG itself remains deliberately read-only.
+
+Unused non-wire ports and interface connections that can be omitted safely are
+listed below the diagram. If a connected endpoint or another source condition
+cannot be projected without producing a misleading circuit, that design shows
+a precise unavailable message instead. Empty designs show an explicit empty
+state. In all cases, the design tables remain visible and authoritative.
 
 ## Section options
 
@@ -101,9 +125,9 @@ and maintained internally rather than displayed.
 
 The editable source profile is deliberately strict: it rejects multiple wire
 dimensions, qualifiers, arrays, advanced wire/electrical fields, detailed TLM
-protocol modeling, structured subports, unions, and interfaces. Ports on
-components with internal designs remain read-only because changing a composite
-boundary requires hierarchy synchronization.
+protocol modeling, structured subports, unions, and interfaces. Composite
+boundaries are edited through the source-bound Circuit Designer, where
+hierarchy references and semantic layout keys can be updated atomically.
 
 ## Deliberate boundaries
 

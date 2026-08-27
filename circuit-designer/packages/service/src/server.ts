@@ -1,12 +1,14 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
+  isCircuitSourceBindingV1,
   validateContractDefinition,
   type CircuitChangeResult,
   type CircuitDesignerBackend,
   type CircuitDocument,
   type CircuitOperationBatch,
   type CircuitProposalCreateRequest,
+  type CircuitSourceSyncResponse,
   type ServiceError,
   type ServiceEvent,
 } from "@spec2gds/circuit-core";
@@ -17,6 +19,12 @@ import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observabili
 import { randomUUID } from "node:crypto";
 import { CircuitPreferencesStore } from "./preferences-store";
 import { resolvedCircuitPreferencesPath } from "./service-registry";
+import {
+  HttpSourceDesignProvider,
+  type SourceBindingRegistration,
+  type SourceCommitBody,
+  type StoredSourceBinding,
+} from "./source-provider";
 
 type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
 
@@ -44,12 +52,17 @@ export class CircuitDesignerService {
   private readonly serviceDirectory: PublicServiceDirectory;
   private readonly logger: StructuredLogger;
   private readonly preferences: CircuitPreferencesStore;
+  private readonly sourceBindings = new Map<string, StoredSourceBinding>();
+  private readonly sourceResults = new Map<string, CircuitSourceSyncResponse>();
 
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
-    this.allowlist = new Set(options.providerAllowlist ?? []);
     this.now = options.now ?? (() => new Date());
     this.serviceDirectory = options.serviceDirectory ?? resolvedServiceDirectory();
+    this.allowlist = new Set([
+      new URL(this.serviceDirectory.services.spec_editor.service_url).hostname,
+      ...(options.providerAllowlist ?? []),
+    ]);
     this.logger = options.logger ?? new StructuredLogger("circuit-designer", loadObservabilityConfig());
     this.preferences = new CircuitPreferencesStore(options.preferencesPath ?? resolvedCircuitPreferencesPath());
     this.server = createServer((request, response) => void this.handle(request, response));
@@ -185,6 +198,40 @@ export class CircuitDesignerService {
         this.emit(documentId, "provider.requested");
         return this.jsonResponse(response, result.accepted ? 200 : 409, result);
       }
+      if (tail[0] === "source-binding") {
+        if (method === "GET" && tail.length === 1) {
+          const stored = this.sourceBindings.get(documentId);
+          if (!stored) return this.error(response, 404, "not_found", "Document has no source binding.");
+          return this.jsonResponse(response, 200, stored.binding);
+        }
+        if (method === "PUT" && tail.length === 1) {
+          const body = await this.json(request) as SourceBindingRegistration;
+          let callback: URL;
+          try {
+            callback = validateCallbackUrl(body.callback_url, this.allowlist, body.allow_non_loopback);
+          } catch (reason) {
+            throw new CircuitBackendError("validation_failed", reason instanceof Error ? reason.message : String(reason));
+          }
+          if (!isCircuitSourceBindingV1(body.binding) || !body.token) {
+            throw new CircuitBackendError("validation_failed", "Source binding registration is invalid.");
+          }
+          await this.backend.get(documentId);
+          this.sourceBindings.set(documentId, {
+            binding: structuredClone(body.binding),
+            provider: new HttpSourceDesignProvider(callback, body.token),
+          });
+          return this.jsonResponse(response, 200, body.binding);
+        }
+      }
+      if (method === "POST" && tail[0] === "source" && tail[1] === "preview") {
+        return await this.sourcePreview(response, documentId, await this.json(request) as SourceCommitBody);
+      }
+      if (method === "POST" && tail[0] === "source" && tail[1] === "commit") {
+        return await this.sourceCommit(response, documentId, await this.json(request) as SourceCommitBody);
+      }
+      if (method === "POST" && tail[0] === "source" && tail[1] === "reload") {
+        return await this.sourceReload(response, documentId);
+      }
       if (method === "POST" && tail[0] === "queries" && tail[1] === "subgraph") {
         return this.jsonResponse(response, 200, await this.backend.subgraph(documentId, await this.json(request) as never));
       }
@@ -225,6 +272,86 @@ export class CircuitDesignerService {
   private routeContext(parts: string[]): RouteContext {
     if (parts[0] !== "documents" || !parts[1]) return { tail: parts };
     return { documentId: parts[1], tail: parts.slice(2) };
+  }
+
+  private sourceBinding(documentId: string): StoredSourceBinding {
+    const stored = this.sourceBindings.get(documentId);
+    if (!stored) throw new CircuitBackendError("not_found", "Document has no source binding.");
+    return stored;
+  }
+
+  private async sourceCandidate(documentId: string, body: SourceCommitBody) {
+    const stored = this.sourceBinding(documentId);
+    if (!stored.binding.writable) throw new CircuitBackendError("validation_failed", stored.binding.message ?? "Source projection is read-only.");
+    const lease = await this.backend.getLease(documentId);
+    if (!lease || lease.lease_id !== body.lease_id) throw new CircuitBackendError("lock_conflict", "The edit lease is missing or expired.");
+    const preview = await this.backend.preview(documentId, body.batch);
+    if (preview.status !== "accepted" || !preview.candidate) {
+      return { stored, preview, candidate: undefined };
+    }
+    return { stored, preview, candidate: preview.candidate };
+  }
+
+  private async sourcePreview(response: ServerResponse, documentId: string, body: SourceCommitBody): Promise<void> {
+    this.requireDefinition("CircuitOperationBatch", body.batch);
+    const { stored, preview, candidate } = await this.sourceCandidate(documentId, body);
+    if (!candidate) {
+      return this.jsonResponse(response, 200, {
+        accepted: false,
+        source_revision_hash: stored.binding.base_source_revision_hash,
+        diagnostics: preview.diagnostics,
+      });
+    }
+    const result = await stored.provider.preview(stored.binding, body.batch.request_id, candidate);
+    return this.jsonResponse(response, 200, result);
+  }
+
+  private async sourceCommit(response: ServerResponse, documentId: string, body: SourceCommitBody): Promise<void> {
+    this.requireDefinition("CircuitOperationBatch", body.batch);
+    const registered = this.sourceBinding(documentId);
+    const replayKey = `${registered.binding.binding_id}:${body.batch.request_id}`;
+    const replay = this.sourceResults.get(replayKey);
+    if (replay) return this.jsonResponse(response, 200, replay);
+    const { stored, preview, candidate } = await this.sourceCandidate(documentId, body);
+    if (!candidate) {
+      return this.jsonResponse(response, 200, {
+        accepted: false,
+        source_revision_hash: stored.binding.base_source_revision_hash,
+        diagnostics: preview.diagnostics,
+      });
+    }
+    const sourcePreview = await stored.provider.preview(stored.binding, body.batch.request_id, candidate);
+    if (!sourcePreview.accepted) return this.jsonResponse(response, 200, sourcePreview);
+    const result = await stored.provider.commit(stored.binding, body.batch.request_id, candidate);
+    if (!result.accepted || !result.document) return this.jsonResponse(response, 200, result);
+    if (result.document.document_id !== documentId) {
+      throw new CircuitBackendError("provider_failed", "Source provider returned a mismatched document ID.");
+    }
+    const before = await this.backend.get(documentId);
+    await this.backend.releaseLease(documentId, body.lease_id);
+    const replaced = await this.backend.replace(documentId, result.document, before.revision, `source:${body.batch.request_id}`);
+    if (replaced.status !== "accepted" || !replaced.snapshot) {
+      throw new CircuitBackendError("provider_failed", "Specification saved, but the Circuit session could not refresh.", replaced.diagnostics);
+    }
+    stored.binding = { ...stored.binding, base_source_revision_hash: result.source_revision_hash };
+    this.emit(documentId, "document.changed", replaced.snapshot.revision);
+    const responseBody = { ...result, binding: stored.binding, snapshot: replaced.snapshot };
+    this.sourceResults.set(replayKey, responseBody);
+    return this.jsonResponse(response, 200, responseBody);
+  }
+
+  private async sourceReload(response: ServerResponse, documentId: string): Promise<void> {
+    const stored = this.sourceBinding(documentId);
+    if (await this.backend.getLease(documentId)) throw new CircuitBackendError("lock_conflict", "Cancel the active draft before reopening the latest source.");
+    const result = await stored.provider.resolve(stored.binding);
+    if (!result.accepted || !result.document) return this.jsonResponse(response, 200, result);
+    const before = await this.backend.get(documentId);
+    const replaced = await this.backend.replace(documentId, result.document, before.revision, `source-reload:${result.source_revision_hash}`);
+    if (replaced.status !== "accepted" || !replaced.snapshot) {
+      throw new CircuitBackendError("provider_failed", "Could not refresh the Circuit session.", replaced.diagnostics);
+    }
+    stored.binding = { ...stored.binding, base_source_revision_hash: result.source_revision_hash };
+    return this.jsonResponse(response, 200, { ...result, binding: stored.binding, snapshot: replaced.snapshot });
   }
 
   private async lockRoute(

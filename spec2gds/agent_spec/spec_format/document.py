@@ -17,6 +17,10 @@ import lxml.etree as etree
 import pydantic
 
 from spec2gds.agent_spec.spec_format import ipxact
+from spec2gds.agent_spec.spec_format.circuit_adapter import (
+    CircuitAdapterError,
+    project_source_to_circuit,
+)
 from spec2gds.agent_spec.spec_format.ir import (
     AbstractionDefinitionIR,
     BusDefinitionIR,
@@ -617,7 +621,7 @@ def _design_tables(
             ad_hoc_rows.append({
                 "name": _cell(connection.name, "/adHocConnections/adHocConnection/name"),
                 "endpoints": _cell(endpoints, "/adHocConnections/adHocConnection/portReferences/internalPortReference", kind="reference"),
-                "external": _cell(", ".join(connection.external_ports), "/adHocConnections/adHocConnection/portReferences/externalPortReference", kind="reference"),
+                "external": _cell(", ".join(item.port_name for item in connection.external_ports), "/adHocConnections/adHocConnection/portReferences/externalPortReference", kind="reference"),
             })
     tables.append(_table(
         f"{prefix}-interface-connections",
@@ -773,6 +777,83 @@ def _split_narrative(blocks: list[NarrativeBlock]) -> tuple[list[NarrativeBlock]
     return overview, attached, cross_cutting
 
 
+_TOPOLOGY_RENDERER_ID = "design.topology"
+_DERIVED_TOPOLOGY_OPTION_KEYS = frozenset({
+    "schema_version",
+    "status",
+    "circuit_document",
+    "omitted_bus_items",
+    "omitted_ports",
+    "message",
+})
+
+
+def _topology_live_views(
+    revision: SpecRevision,
+    owner: EntityRef,
+    blocks: list[NarrativeBlock],
+    *,
+    synthesize: bool,
+) -> list[NarrativeBlock]:
+    """Attach revision-derived circuit payloads without mutating package narrative."""
+    result = [block.model_copy(deep=True) for block in blocks]
+    topology_indexes = [
+        index for index, block in enumerate(result)
+        if block.type == "live_view" and block.renderer_id == _TOPOLOGY_RENDERER_ID
+    ]
+    if synthesize and not topology_indexes:
+        used_ids = {block.block_id for block in result}
+        block_id = f"derived_topology_{_slug(owner.entity_id)}"
+        suffix = 2
+        while block_id in used_ids:
+            block_id = f"derived_topology_{_slug(owner.entity_id)}_{suffix}"
+            suffix += 1
+        result.append(NarrativeBlock(
+            block_id=block_id,
+            type="live_view",
+            text="Circuit topology",
+            renderer_id=_TOPOLOGY_RENDERER_ID,
+            entity_refs=[owner],
+        ))
+        topology_indexes.append(len(result) - 1)
+    if not topology_indexes:
+        return result
+
+    try:
+        projection = project_source_to_circuit(
+            revision,
+            typing.cast(typing.Literal["component", "design"], owner.entity_kind),
+            owner.entity_id,
+        )
+        design = typing.cast(dict[str, typing.Any], projection.document.get("design", {}))
+        empty = not design.get("instances") and not design.get("nets") and not design.get("boundary_terminals")
+        derived_options: dict[str, typing.Any] = {
+            "schema_version": 1,
+            "status": "empty" if empty else "ready",
+            "omitted_bus_items": list(projection.omitted_bus_items),
+            "omitted_ports": list(projection.omitted_ports),
+        }
+        if not empty:
+            derived_options["circuit_document"] = projection.document
+    except (CircuitAdapterError, KeyError, TypeError, ValueError) as exc:
+        derived_options = {
+            "schema_version": 1,
+            "status": "unavailable",
+            "omitted_bus_items": [],
+            "omitted_ports": [],
+            "message": str(exc),
+        }
+
+    for index in topology_indexes:
+        block = result[index]
+        authored_options = {
+            key: value for key, value in block.options.items()
+            if key not in _DERIVED_TOPOLOGY_OPTION_KEYS
+        }
+        result[index] = block.model_copy(update={"options": {**authored_options, **derived_options}}, deep=True)
+    return result
+
+
 def _editor_sections(sections: list[DocumentSection]) -> list[DocumentSection]:
     """Hide source-supported bus/protocol details from the focused editor UI."""
     visible: list[DocumentSection] = []
@@ -888,6 +969,12 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     for design in ordered_designs:
         root = roots[design.ref.entity_id]
         content_sections, available_section_types = _content_sections(revision, design.ref, root)
+        narrative = _topology_live_views(
+            revision,
+            design.ref,
+            attached.pop(design.ref.entity_id, []),
+            synthesize=True,
+        )
         sections.append(DocumentSection(
             section_id=_anchor("design", design.ref.entity_id),
             title=design.vlnv.split(":")[-2],
@@ -896,7 +983,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             entity_ref=design.ref,
             facts=_identity_facts(root, design.vlnv),
             tables=_design_tables(design, root, anchors_by_vlnv),
-            narrative=[block.model_dump(mode="json") for block in attached.pop(design.ref.entity_id, [])],
+            narrative=[block.model_dump(mode="json") for block in narrative],
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
@@ -917,6 +1004,12 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
                 value=design.vlnv,
                 reference_anchor=_anchor("design", design_id),
             ))
+        narrative = _topology_live_views(
+            revision,
+            component.ref,
+            attached.pop(component.ref.entity_id, []),
+            synthesize=False,
+        )
         sections.append(DocumentSection(
             section_id=_anchor("component", component.ref.entity_id),
             title=component.vlnv.split(":")[-2],
@@ -925,7 +1018,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             entity_ref=component.ref,
             facts=facts,
             tables=_component_tables(component, root, anchors_by_vlnv),
-            narrative=[block.model_dump(mode="json") for block in attached.pop(component.ref.entity_id, [])],
+            narrative=[block.model_dump(mode="json") for block in narrative],
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
@@ -995,15 +1088,14 @@ def build_a2ui_batch(projection: DocumentProjection) -> A2UIDocumentBatch:
         section_component_id = f"section-{_slug(section.section_id)}"
         section_component_ids.append(section_component_id)
         child_ids: list[str] = []
-        for table in section.tables:
-            component_id = f"table-{_slug(table.table_id)}"
-            child_ids.append(component_id)
-            components.append({
-                "id": component_id,
-                "component": "SpecTable",
-                "table": table.model_dump(mode="json"),
-            })
-        for index, block in enumerate(section.narrative):
+        indexed_narrative = list(enumerate(section.narrative))
+        topology_narrative = [
+            item for item in indexed_narrative
+            if item[1].get("type") == "live_view" and item[1].get("renderer_id") == _TOPOLOGY_RENDERER_ID
+        ]
+        remaining_narrative = [item for item in indexed_narrative if item not in topology_narrative]
+
+        def append_narrative(index: int, block: dict[str, typing.Any]) -> None:
             component_id = f"narrative-{_slug(section.section_id)}-{index}"
             child_ids.append(component_id)
             component = {
@@ -1016,6 +1108,19 @@ def build_a2ui_batch(projection: DocumentProjection) -> A2UIDocumentBatch:
                 "block": copy.deepcopy(block),
                 "documentId": projection.document_id,
             })
+
+        for index, block in topology_narrative:
+            append_narrative(index, block)
+        for table in section.tables:
+            component_id = f"table-{_slug(table.table_id)}"
+            child_ids.append(component_id)
+            components.append({
+                "id": component_id,
+                "component": "SpecTable",
+                "table": table.model_dump(mode="json"),
+            })
+        for index, block in remaining_narrative:
+            append_narrative(index, block)
         for content_section in section.content_sections:
             if content_section.section_type != "sv":
                 continue

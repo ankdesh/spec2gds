@@ -29,7 +29,9 @@ remain visible and disabled. Configured keyboard shortcuts appear beside menu
 commands.
 
 Selection and View remain available for source-owned and locked documents.
-Connect and route-changing commands require an unlocked private draft.
+Connect and route-changing commands require an unlocked private draft. A
+writable source-bound design labels the ordinary save action **Save to
+Specification** and shows it in the header while the draft is dirty.
 
 SVG and PNG downloads are rendered from the same effective layout currently
 shown by the canvas, including automatically computed instance and boundary
@@ -97,9 +99,11 @@ parts remain visible but cannot be dragged. Use the Route menu to lock or
 unlock the complete selected route. Rerouting is disabled until a locked route
 is unlocked.
 
-All movement and manual route edits snap to the circuit's grid. Changes remain
-in the private draft until **File → Save changes**; **File → Cancel changes**
-discards them.
+All movement and manual route edits snap to the circuit's grid. Independent
+changes remain in the private draft until **File → Save changes**. A bound
+design instead uses **File → Save to Specification**, which commits topology
+and the displayed layout to the `.spec` source. **File → Cancel changes**
+discards either kind of private draft.
 
 ## Default action bindings
 

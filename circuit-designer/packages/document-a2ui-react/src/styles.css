@@ -617,6 +617,200 @@
   box-shadow: 0 0 0 4px rgba(53, 167, 113, 0.15);
 }
 
+.spec-topology-card {
+  overflow: hidden;
+  margin: 1.25rem 0 1.75rem;
+  border: 1px solid var(--spec-line, #d9ddd9);
+  border-radius: 0.65rem;
+  background: #f8f7f2;
+  box-shadow: 0 0.55rem 1.5rem rgba(30, 38, 35, 0.07);
+}
+
+.spec-topology-card > figcaption {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0.9rem;
+  border-bottom: 1px solid var(--spec-line, #d9ddd9);
+  background: #fff;
+}
+
+.spec-topology-card > figcaption > div:first-child {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.spec-topology-card > figcaption span {
+  color: var(--spec-muted, #59616c);
+  font-size: 0.72rem;
+}
+
+.spec-topology-card__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.spec-topology-card__actions button,
+.spec-topology-card__actions a,
+.spec-topology-dialog header button {
+  padding: 0.42rem 0.68rem;
+  border: 1px solid #aebdb7;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: #31594e;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.spec-topology-card__actions button:disabled,
+.spec-topology-card__actions a[aria-disabled="true"] {
+  cursor: wait;
+  opacity: 0.45;
+}
+
+.spec-topology-card__preview {
+  display: grid;
+  min-height: 12rem;
+  max-height: 420px;
+  overflow: hidden;
+  place-items: center;
+}
+
+.spec-topology-card__preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain;
+}
+
+.spec-topology-card__loading {
+  color: var(--spec-muted, #59616c);
+  font-size: 0.82rem;
+}
+
+.spec-topology-card__omissions {
+  padding: 0.65rem 0.9rem;
+  border-top: 1px solid #e1c981;
+  background: #fff8df;
+  color: #634c17;
+  font-size: 0.75rem;
+}
+
+.spec-topology-card__omissions summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.spec-topology-card__omissions ul {
+  margin: 0.55rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.spec-topology-card--empty,
+.spec-topology-card--unavailable {
+  padding: 1rem 1.1rem;
+  color: #4b5651;
+}
+
+.spec-topology-card--empty p,
+.spec-topology-card--unavailable p {
+  margin: 0.35rem 0 0;
+}
+
+.spec-topology-card--unavailable {
+  border-color: #ddb8af;
+  background: #fff7f5;
+  color: #7f3328;
+}
+
+.spec-topology-dialog-backdrop {
+  position: fixed;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  padding: 1rem;
+  background: rgba(18, 26, 23, 0.58);
+  place-items: center;
+}
+
+.spec-topology-dialog {
+  display: grid;
+  width: min(94vw, 100rem);
+  height: min(90vh, 64rem);
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid #cbd2cd;
+  border-radius: 0.7rem;
+  background: #fff;
+  box-shadow: 0 1.2rem 4rem rgba(12, 24, 19, 0.32);
+}
+
+.spec-topology-dialog > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--spec-line, #d9ddd9);
+}
+
+.spec-topology-dialog h2 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-size: 1.25rem;
+  font-weight: 500;
+}
+
+.spec-topology-dialog__viewport {
+  overflow: auto;
+  padding: 1rem;
+  background: #e9e8e2;
+}
+
+.spec-topology-dialog__viewport img {
+  display: block;
+  width: auto;
+  max-width: none;
+  height: auto;
+  margin: 0 auto;
+  box-shadow: 0 0.5rem 1.5rem rgba(18, 26, 23, 0.15);
+}
+
+@media (max-width: 640px) {
+  .spec-topology-card > figcaption {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media print {
+  .spec-topology-card {
+    overflow: visible;
+    break-inside: avoid;
+    box-shadow: none;
+  }
+
+  .spec-topology-card__actions,
+  .spec-topology-dialog-backdrop {
+    display: none !important;
+  }
+
+  .spec-topology-card__preview {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .spec-topology-card__preview img {
+    max-height: none;
+  }
+}
+
 .spec-paper a {
   color: var(--spec-accent, #246b5a);
   text-underline-offset: 0.15em;

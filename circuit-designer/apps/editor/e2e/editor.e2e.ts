@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 
 const documentId = "editor_test";
 const revision = "sha256:editor-test";
@@ -172,6 +173,93 @@ const compositePortTable = {
   rows: [],
 };
 
+const designInstancesTable = {
+  table_id: "design-design_top-instances",
+  kind: "design_instances",
+  title: "Component instances",
+  columns: [
+    { key: "name", label: "Instance", schema_path: "/componentInstances/componentInstance/instanceName" },
+    { key: "component", label: "Component VLNV", schema_path: "/componentInstances/componentInstance/componentRef" },
+  ],
+  rows: [
+    { row_id: "producer_0", cells: { name: cell("producer_0", "/componentInstances/componentInstance/instanceName"), component: cell("acme:blocks:Producer:1.0", "/componentInstances/componentInstance/componentRef") } },
+    { row_id: "consumer_0", cells: { name: cell("consumer_0", "/componentInstances/componentInstance/instanceName"), component: cell("acme:blocks:Consumer:1.0", "/componentInstances/componentInstance/componentRef") } },
+  ],
+};
+
+const topologyCircuitDocument = {
+  protocol_version: "circuit-designer.v1",
+  document_id: "editor_test_design_top_editor_test_v2",
+  label: "Processor",
+  components: [
+    {
+      id: "producer",
+      label: "Producer",
+      origin: "provider",
+      editable: false,
+      terminals: [{ id: "data", label: "data", direction: "output", width: 1, category: "port" }],
+      parameters: [],
+      appearance: { renderer_key: "generic", properties: {} },
+    },
+    {
+      id: "consumer",
+      label: "Consumer",
+      origin: "provider",
+      editable: false,
+      terminals: [{ id: "data", label: "data", direction: "input", width: 1, category: "port" }],
+      parameters: [],
+      appearance: { renderer_key: "generic", properties: {} },
+    },
+  ],
+  design: {
+    id: "design_top",
+    label: "Processor",
+    boundary_terminals: [],
+    instances: [
+      { id: "producer_0", label: "producer_0", component_id: "producer", parameter_values: {} },
+      { id: "consumer_0", label: "consumer_0", component_id: "consumer", parameter_values: {} },
+    ],
+    nets: [{
+      id: "data_link",
+      label: "data_link",
+      endpoints: [
+        { kind: "instance", instance_id: "producer_0", terminal_id: "data" },
+        { kind: "instance", instance_id: "consumer_0", terminal_id: "data" },
+      ],
+    }],
+  },
+  layout: {
+    grid_size: 20,
+    direction: "RIGHT",
+    instance_geometry: {},
+    terminal_placements: {},
+    net_routes: {},
+    label_geometry: {},
+  },
+};
+
+const topologyBlock = {
+  block_id: "derived_topology_design_top",
+  type: "live_view",
+  text: "Circuit topology",
+  inlines: [],
+  children: [],
+  ordered: false,
+  rows: [],
+  asset_id: "",
+  alt_text: "",
+  caption: "",
+  entity_refs: [designRef],
+  renderer_id: "design.topology",
+  options: {
+    schema_version: 1,
+    status: "ready",
+    circuit_document: topologyCircuitDocument,
+    omitted_bus_items: ["control_bus"],
+    omitted_ports: [],
+  },
+};
+
 const batch = {
   protocol_version: "v0.9",
   catalog_id: "urn:spec2gds:a2ui:document:v2",
@@ -194,9 +282,21 @@ const batch = {
           section("designs", "Designs", 1, null),
           section("design-design_top", "Processor", 2, designRef, {
             eyebrow: "Entry design",
-            children: ["entity-section-design-top-sv"],
+            tables: [designInstancesTable],
+            children: ["narrative-design-design-top-0", "table-design-design-top-instances", "entity-section-design-top-sv"],
             availableSectionTypes: [],
           }),
+          {
+            id: "narrative-design-design-top-0",
+            component: "LiveView",
+            block: topologyBlock,
+            documentId,
+          },
+          {
+            id: "table-design-design-top-instances",
+            component: "SpecTable",
+            table: designInstancesTable,
+          },
           {
             id: "entity-section-design-top-sv",
             component: "SpecEntitySection",
@@ -290,7 +390,7 @@ type ApiState = {
   staleNextTransaction: boolean;
 };
 
-async function mockEditorApi(page: Page): Promise<ApiState> {
+async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean } = {}): Promise<ApiState> {
   const state: ApiState = {
     activityExecutions: [],
     circuits: [],
@@ -333,7 +433,27 @@ async function mockEditorApi(page: Page): Promise<ApiState> {
     if (path === "/documents/snapshot") {
       return json({ ...snapshot, source_revision_hash: state.currentRevision });
     }
-    if (path === "/documents/a2ui") return json(batch);
+    if (path === "/documents/a2ui") {
+      const currentBatch = structuredClone(batch);
+      const components = currentBatch.messages[1].updateComponents.components as Array<Record<string, any>>;
+      const liveView = components.find((component) => component.component === "LiveView");
+      if (options.topologyUnavailable) {
+        liveView.block.options = {
+          schema_version: 1,
+          status: "unavailable",
+          omitted_bus_items: [],
+          omitted_ports: [],
+          message: "connected structured endpoint cannot be represented",
+        };
+      }
+      if (state.transactions.length) {
+        if (liveView.block.options.circuit_document) {
+          liveView.block.options.circuit_document.design.instances[0].label = "producer_updated";
+        }
+        currentBatch.source_revision_hash = state.currentRevision;
+      }
+      return json(currentBatch);
+    }
     if (path === "/transactions") {
       const body = request.postDataJSON() as { expected_source_revision_hash: string; operations: object[] };
       state.transactions.push(body);
@@ -559,6 +679,59 @@ test("edits the persisted specification name without changing the stable identit
   ]);
 });
 
+test("renders, expands, downloads, and refreshes the derived circuit SVG", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  const card = design.locator(".spec-topology-card");
+  const table = design.getByRole("region", { name: "Component instances" });
+  const image = card.getByRole("img", { name: "Circuit topology circuit diagram" });
+  await expect(image).toBeVisible();
+  const cardBox = await card.boundingBox();
+  const tableBox = await table.boundingBox();
+  expect(cardBox?.y).toBeLessThan(tableBox?.y ?? 0);
+  await card.getByText("1 unsupported item omitted from this preview").click();
+  await expect(card.getByText("Interface connection: control_bus")).toBeVisible();
+
+  await card.getByRole("button", { name: "Open Circuit Designer" }).click();
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+
+  const firstImageUrl = await image.getAttribute("src");
+  const expand = card.getByRole("button", { name: "Expand" });
+  await expand.click();
+  const dialog = page.getByRole("dialog", { name: "Circuit topology" });
+  await expect(dialog.getByRole("img", { name: "Circuit topology circuit diagram" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Close circuit preview" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(expand).toBeFocused();
+
+  const downloadPromise = page.waitForEvent("download");
+  await card.getByRole("link", { name: "Download SVG" }).click();
+  const downloadPath = await (await downloadPromise).path();
+  expect(downloadPath).not.toBeNull();
+  const svg = await readFile(downloadPath!, "utf8");
+  expect(svg).toContain('data-instance-id="producer_0"');
+  expect(svg).toContain('data-terminal-id="producer_0:data"');
+  expect(svg).toContain('fill="url(#canvas-grid)"');
+  expect(svg).toContain('class="net"');
+
+  await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
+  await page.getByLabel("Specification name").fill("Updated topology source");
+  await page.getByRole("button", { name: "Save name" }).click();
+  await expect.poll(async () => image.getAttribute("src")).not.toBe(firstImageUrl);
+});
+
+test("keeps design tables available when a circuit preview is unsafe", async ({ page }) => {
+  await mockEditorApi(page, { topologyUnavailable: true });
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+
+  await expect(design.getByText("Preview unavailable: connected structured endpoint cannot be represented")).toBeVisible();
+  await expect(design.getByRole("region", { name: "Component instances" })).toBeVisible();
+  await expect(design.getByRole("img", { name: "Circuit topology circuit diagram" })).toHaveCount(0);
+});
+
 test("adds an available top-level component instance to the entry design", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
@@ -568,8 +741,8 @@ test("adds an available top-level component instance to the entry design", async
   await options.click();
   await design.getByRole("menuitem", { name: "Add component instance…" }).click();
   await design.getByLabel("Instance name").fill("timer0");
-  await expect(design.getByLabel("Component")).toContainText("Timer");
-  await design.getByLabel("Component").selectOption("acme:blocks:Timer:1.0");
+  await expect(design.getByLabel("Component", { exact: true })).toContainText("Timer");
+  await design.getByLabel("Component", { exact: true }).selectOption("acme:blocks:Timer:1.0");
   await design.getByRole("button", { name: "Add instance" }).click();
 
   await expect.poll(() => state.transactions.length).toBe(1);

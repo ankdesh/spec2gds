@@ -27,19 +27,22 @@ export interface CircuitMenuBarProps {
   onAction: (actionId: CircuitActionId) => void;
   dismissVersion?: number;
   onOpenChange?: (open: boolean) => void;
+  sourceBound?: boolean;
 }
 
-export function CircuitMenuBar({ bindings, inspectorOpen, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange }: CircuitMenuBarProps) {
+export function CircuitMenuBar({ bindings, inspectorOpen, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
   const rootRef = useRef<HTMLElement>(null);
   const effectiveMenus = useMemo(() => menus.map((menu) => ({
     ...menu,
-    entries: menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "toggle-inspector"
+    entries: menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
+      ? { ...entry, label: "Save to Specification" }
+      : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
       : entry.kind === "action" && entry.commandId === "review-proposals"
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
-  })), [inspectorOpen, proposalCount]);
+  })), [inspectorOpen, proposalCount, sourceBound]);
   const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 

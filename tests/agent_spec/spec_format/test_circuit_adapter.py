@@ -1,18 +1,24 @@
 """Direct-port IP-XACT to Circuit Designer adapter tests."""
 
+import copy
+import json
+
 import pytest
 
-from spec2gds.agent_spec.spec_format.archive import SpecPackage
+from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
+    compile_circuit_sync_operations,
     project_component_to_circuit,
     project_design_to_circuit,
+    source_session_document_id,
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
+from spec2gds.agent_spec.spec_format.transactions import SpecEditTransaction
 from spec2gds.agent_spec.spec_format.testing import _xml
 
 
-def _direct_revision(*, connect_structured: bool = False) -> SpecRevision:
+def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool = False) -> SpecRevision:
     package = SpecPackage.create("adapter_demo")
     package.add_document(
         "component",
@@ -69,7 +75,9 @@ def _direct_revision(*, connect_structured: bool = False) -> SpecRevision:
   <ipxact:adHocConnections><ipxact:adHocConnection>
     <ipxact:name>data_link</ipxact:name>
     <ipxact:portReferences>
-      <ipxact:internalPortReference componentInstanceRef="source0" portRef="data"/>
+      <ipxact:internalPortReference componentInstanceRef="source0" portRef="data">
+        {'''<ipxact:partSelect><ipxact:range><ipxact:left>DATA_WIDTH-1</ipxact:left><ipxact:right>0</ipxact:right></ipxact:range></ipxact:partSelect>''' if symbolic_slice else ''}
+      </ipxact:internalPortReference>
       <ipxact:internalPortReference componentInstanceRef="sink0" portRef="data"/>
     </ipxact:portReferences>
   </ipxact:adHocConnection>
@@ -145,3 +153,84 @@ def test_rejects_a_design_connection_that_uses_a_non_wire_port() -> None:
 
     with pytest.raises(CircuitAdapterError, match="bundle is structured"):
         project_design_to_circuit(revision, "design_direct")
+
+
+def test_preserves_symbolic_part_select_in_ir_but_marks_circuit_projection_unavailable() -> None:
+    revision = _direct_revision(symbolic_slice=True)
+    endpoint = revision.designs[0].connections[0].port_endpoints[0]
+
+    assert endpoint.slice is None
+    assert endpoint.symbolic_slice == "DATA_WIDTH-1:0"
+    with pytest.raises(CircuitAdapterError, match="symbolic part-select DATA_WIDTH-1:0"):
+        project_design_to_circuit(revision, "design_direct")
+
+
+def test_round_trips_source_semantic_layout_and_numeric_slices() -> None:
+    revision = _direct_revision()
+    session_id = source_session_document_id(revision, "design_direct")
+    projection = project_design_to_circuit(
+        revision, "design_direct", session_document_id=session_id, include_catalog=True
+    )
+    candidate = copy.deepcopy(projection.document)
+    candidate["layout"]["instance_geometry"]["source0"] = {
+        "x": 40, "y": 60, "width": 180, "height": 100, "pinned": True,
+    }
+    candidate["design"]["nets"][0]["endpoints"][0]["slice"] = {"lsb": 1, "width": 2}
+    operations = compile_circuit_sync_operations(revision, projection, candidate)
+    result = SpecEditTransaction(revision.source_revision_hash, operations).apply(revision)
+
+    assert result.succeeded, result.diagnostics
+    assert result.revision is not None
+    connection = next(item for item in result.revision.designs[0].connections if item.name == "data_link")
+    assert connection.port_endpoints[0].slice is not None
+    assert (connection.port_endpoints[0].slice.lsb, connection.port_endpoints[0].slice.width) == (1, 2)
+    refreshed = project_design_to_circuit(
+        result.revision, "design_direct", session_document_id=session_id, include_catalog=True
+    )
+    assert refreshed.document["layout"]["instance_geometry"]["source0"]["x"] == 40
+    assert refreshed.document["document_id"] == session_id
+
+    package = result.revision.to_package()
+    layout_path = "annotations/circuit-layout/design_direct.json"
+    malformed = json.loads(package.files[layout_path])
+    malformed["instance_geometry"]["unknown_instance"] = {
+        "x": 0, "y": 0, "width": -1, "height": 100,
+    }
+    package.files[layout_path] = json.dumps(malformed).encode()
+    with pytest.raises(SpecValidationError, match="Invalid circuit layouts"):
+        package.require_valid()
+
+
+def test_round_trip_creates_a_real_local_component_and_instance() -> None:
+    revision = _direct_revision()
+    projection = project_design_to_circuit(
+        revision,
+        "design_direct",
+        session_document_id=source_session_document_id(revision, "design_direct"),
+        include_catalog=True,
+    )
+    candidate = copy.deepcopy(projection.document)
+    candidate["components"].append({
+        "id": "alu",
+        "label": "alu",
+        "origin": "local",
+        "editable": True,
+        "terminals": [
+            {"id": "input", "label": "input", "direction": "input", "width": 1, "category": "port"},
+            {"id": "output", "label": "output", "direction": "output", "width": 1, "category": "port"},
+        ],
+        "parameters": [],
+        "appearance": {"renderer_key": "generic", "properties": {}},
+    })
+    candidate["design"]["instances"].append({
+        "id": "alu0", "label": "alu0", "component_id": "alu", "parameter_values": {},
+    })
+    result = SpecEditTransaction(
+        revision.source_revision_hash,
+        compile_circuit_sync_operations(revision, projection, candidate),
+    ).apply(revision)
+
+    assert result.succeeded, result.diagnostics
+    assert result.revision is not None
+    assert result.revision.by_vlnv("component", "spec2gds.local:work:alu:1.0")
+    assert any(item.name == "alu0" for item in result.revision.designs[0].instances)

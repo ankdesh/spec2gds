@@ -6,6 +6,7 @@ import { StructuredLogger } from "@spec2gds/observability/node";
 import { mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
 
 let service: CircuitDesignerService | undefined;
 
@@ -266,6 +267,94 @@ describe("Circuit Designer REST service", () => {
     );
     expect(response.status).toBe(400);
     expect((await response.json() as { message: string }).message).toContain("not loopback");
+  });
+
+  it("commits source-bound drafts through the provider before replacing the session", async () => {
+    let authorization = "";
+    const providerCalls: string[] = [];
+    const provider = createServer((request, response) => {
+      authorization = String(request.headers.authorization ?? "");
+      providerCalls.push(request.url ?? "");
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk) => chunks.push(chunk));
+      request.on("end", () => {
+        const body = JSON.parse(Buffer.concat(chunks).toString()) as { candidate_document: ReturnType<typeof simpleDocumentFixture> };
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({
+          accepted: true,
+          source_revision_hash: "sha256:next",
+          document: body.candidate_document,
+          diagnostics: [],
+        }));
+      });
+    });
+    await new Promise<void>((resolve) => provider.listen(0, "127.0.0.1", resolve));
+    const providerAddress = provider.address();
+    const providerPort = typeof providerAddress === "object" && providerAddress ? providerAddress.port : 0;
+    try {
+      const backend = new EphemeralCircuitSessionBackend({ documents: [simpleDocumentFixture()] });
+      service = new CircuitDesignerService({ backend });
+      const port = await service.listen();
+      const documentBase = `http://127.0.0.1:${port}/api/circuit-designer/v1/documents/fixture_simple`;
+      expect((await fetch(`${documentBase}/source-binding`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          callback_url: `http://127.0.0.1:${providerPort}/source/`,
+          token: "secret-token",
+          binding: {
+            schema_version: 1,
+            binding_id: "source_fixture",
+            source_document_id: "spec_fixture",
+            source_entity: { document_id: "spec_fixture", entity_id: "design_fixture", entity_kind: "design" },
+            editable_design_id: "design_fixture",
+            base_source_revision_hash: "sha256:base",
+            writable: true,
+            capabilities: ["topology", "layout"],
+            omitted_bus_items: [],
+            omitted_ports: [],
+          },
+        }),
+      })).status).toBe(200);
+      const lease = await (await fetch(`${documentBase}/lock`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner_id: "test" }),
+      })).json() as { lease_id: string };
+      const commitBody = {
+        lease_id: lease.lease_id,
+        batch: {
+          request_id: "source_move",
+          expected_revision: "1",
+          operations: [{
+            operation_id: "move",
+            type: "set_instance_geometry",
+            instance_id: "producer_0",
+            geometry: { x: 40, y: 60, width: 180, height: 100, pinned: true },
+          }],
+        },
+      };
+      const response = await fetch(`${documentBase}/source/commit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(commitBody),
+      });
+      expect(response.status).toBe(200);
+      const saved = await response.json() as { accepted: boolean; snapshot: { document: ReturnType<typeof simpleDocumentFixture> } };
+      expect(saved.accepted).toBe(true);
+      expect(saved.snapshot.document.layout.instance_geometry.producer_0.x).toBe(40);
+      expect(authorization).toBe("Bearer secret-token");
+      expect(providerCalls).toEqual(["/source/preview", "/source/commit"]);
+      expect((await (await fetch(`${documentBase}/lock`)).json() as { lease: unknown }).lease).toBeNull();
+      expect((await (await fetch(`${documentBase}/source-binding`)).json() as { base_source_revision_hash: string }).base_source_revision_hash).toBe("sha256:next");
+      const replay = await fetch(`${documentBase}/source/commit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(commitBody),
+      });
+      expect(replay.status).toBe(200);
+      expect((await replay.json() as { accepted: boolean }).accepted).toBe(true);
+      expect(providerCalls).toEqual(["/source/preview", "/source/commit"]);
+    } finally {
+      await new Promise<void>((resolve) => provider.close(() => resolve()));
+    }
   });
 
   it("exports a deterministic PNG from canonical geometry", async () => {

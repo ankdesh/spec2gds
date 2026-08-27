@@ -1,5 +1,12 @@
 """Read-only unified document and A2UI v0.9 projection checks."""
 
+import copy
+import dataclasses
+
+import pytest
+
+from spec2gds.agent_spec.spec_format import document as document_module
+from spec2gds.agent_spec.spec_format.circuit_adapter import CircuitAdapterError
 from spec2gds.agent_spec.spec_format.document import (
     A2UI_CATALOG_ID,
     build_a2ui_batch,
@@ -121,3 +128,78 @@ def test_a2ui_batch_is_adjacency_list_for_the_custom_catalog() -> None:
         and any(isinstance(child, dict) for child in component["children"])
         for component in components
     )
+
+
+def test_every_design_has_a_revision_derived_topology_before_its_tables() -> None:
+    revision = SpecRevision.from_package(build_test_package())
+    narrative_before = revision.narrative.model_dump(mode="json")
+    assets_before = revision.manifest.assets
+    projection = build_document_projection(revision)
+    design_sections = [
+        section for section in projection.sections
+        if section.entity_ref and section.entity_ref.entity_kind == "design"
+    ]
+
+    assert len(design_sections) == len(revision.designs)
+    topology_by_title = {
+        section.title: [
+            block for block in section.narrative
+            if block["type"] == "live_view" and block["renderer_id"] == "design.topology"
+        ]
+        for section in design_sections
+    }
+    assert all(topology_by_title.values())
+    assert topology_by_title["subsystem_internal"][0]["block_id"] == "topology_live_view"
+    assert topology_by_title["subsystem_internal"][0]["options"]["status"] == "ready"
+    assert topology_by_title["subsystem_internal"][0]["options"]["omitted_bus_items"] == ["link0"]
+    assert topology_by_title["top_a"][0]["block_id"].startswith("derived_topology_")
+    assert topology_by_title["top_a"][0]["options"]["circuit_document"]["document_id"].endswith("_v2")
+    assert revision.narrative.model_dump(mode="json") == narrative_before
+    assert revision.manifest.assets == assets_before
+
+    batch = build_a2ui_batch(projection)
+    components = batch.messages[1]["updateComponents"]["components"]
+    component_by_id = {component["id"]: component for component in components}
+    for section in design_sections:
+        section_component = component_by_id[f"section-{section.section_id}"]
+        child_components = [component_by_id[child_id]["component"] for child_id in section_component["children"]]
+        assert child_components[0] == "LiveView"
+        assert "SpecTable" in child_components
+
+
+def test_topology_projection_isolates_unsafe_and_empty_designs(monkeypatch: pytest.MonkeyPatch) -> None:
+    revision = SpecRevision.from_package(build_test_package())
+    original = document_module.project_source_to_circuit
+
+    def controlled_projection(revision_value, entity_kind, entity_id):
+        if entity_id == "design_top_b":
+            raise CircuitAdapterError("connected structured endpoint cannot be represented")
+        projected = original(revision_value, entity_kind, entity_id)
+        if entity_id != "design_top_a":
+            return projected
+        document = copy.deepcopy(projected.document)
+        document["design"]["instances"] = []
+        document["design"]["nets"] = []
+        document["design"]["boundary_terminals"] = []
+        return dataclasses.replace(projected, document=document)
+
+    monkeypatch.setattr(document_module, "project_source_to_circuit", controlled_projection)
+    projection = build_document_projection(revision)
+    states = {
+        section.entity_ref.entity_id: next(
+            block["options"] for block in section.narrative
+            if block["type"] == "live_view" and block["renderer_id"] == "design.topology"
+        )
+        for section in projection.sections
+        if section.entity_ref and section.entity_ref.entity_kind == "design"
+    }
+
+    assert states["design_top_a"]["status"] == "empty"
+    assert "circuit_document" not in states["design_top_a"]
+    assert states["design_top_b"] == {
+        "schema_version": 1,
+        "status": "unavailable",
+        "omitted_bus_items": [],
+        "omitted_ports": [],
+        "message": "connected structured endpoint cannot be represented",
+    }

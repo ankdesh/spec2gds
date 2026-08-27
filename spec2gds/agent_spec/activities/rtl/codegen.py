@@ -578,6 +578,18 @@ class _Analyzer:
 
             endpoints: list[_Endpoint] = []
             for endpoint in connection.port_endpoints:
+                if endpoint.symbolic_slice is not None:
+                    self.errors.append(
+                        f"{label} uses symbolic part-select {endpoint.symbolic_slice} on "
+                        f"{endpoint.instance_name}.{endpoint.port_name}; RTL generation "
+                        "does not support sliced endpoints."
+                    )
+                if endpoint.slice is not None:
+                    self.errors.append(
+                        f"{label} uses a numeric part-select on "
+                        f"{endpoint.instance_name}.{endpoint.port_name}; RTL generation "
+                        "does not yet support sliced endpoints."
+                    )
                 key = ("instance", endpoint.instance_name, endpoint.port_name)
                 previous = first_connection.get(key)
                 if previous == connection.name:
@@ -596,7 +608,18 @@ class _Analyzer:
                 port = next(item for item in component.ports if item.name == endpoint.port_name)
                 endpoints.append(_Endpoint("instance", port, endpoint.instance_name))
 
-            for external_name in connection.external_ports:
+            for external_endpoint in connection.external_ports:
+                external_name = external_endpoint.port_name
+                if external_endpoint.symbolic_slice is not None:
+                    self.errors.append(
+                        f"{label} uses symbolic part-select {external_endpoint.symbolic_slice} on "
+                        f"boundary port {external_name}; RTL generation does not support sliced endpoints."
+                    )
+                if external_endpoint.slice is not None:
+                    self.errors.append(
+                        f"{label} uses a numeric part-select on boundary port "
+                        f"{external_name}; RTL generation does not yet support sliced endpoints."
+                    )
                 key = ("boundary", "", external_name)
                 previous = first_connection.get(key)
                 if previous == connection.name:
@@ -770,7 +793,7 @@ class _Normalizer:
         for connection in analysis.connections:
             if connection.source.external_ports:
                 assert owner is not None
-                external = connection.source.external_ports[0]
+                external = connection.source.external_ports[0].port_name
                 expression = self.port_names[(owner.ref.entity_id, external)]
             else:
                 expression = connection_names[connection.source.name]
