@@ -236,6 +236,13 @@ const topologyCircuitDocument = {
     net_routes: {},
     label_geometry: {},
   },
+  timing: {
+    schema_version: 1,
+    clock_domains: [{ id: "default", label: "clk" }],
+    cycle_edges: [{ id: "edge_1", x: 320, label: "Execute edge", next_stage_label: "Writeback", locked: false }],
+    subject_domain_overrides: {},
+    leading_stage_label: "Decode",
+  },
 };
 
 const topologyBlock = {
@@ -715,6 +722,9 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   expect(svg).toContain('data-terminal-id="producer_0:data"');
   expect(svg).toContain('fill="url(#canvas-grid)"');
   expect(svg).toContain('class="net"');
+  expect(svg).toContain('class="cycle-edge"');
+  expect(svg).toContain("Execute edge");
+  expect(svg).toContain("WRITEBACK");
 
   await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
   await page.getByLabel("Specification name").fill("Updated topology source");

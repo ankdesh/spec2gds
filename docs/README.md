@@ -45,6 +45,9 @@ Read in this order:
 19. [Circuit Designer specification synchronization](circuit-designer-spec-sync.md)
     — source bindings, Save to Specification, layout annotations, conflicts,
     and recovery.
+20. [Circuit Designer timing stages](circuit-designer-timing-stages.md) —
+    vertical cycle edges, single-clock defaults, latency analysis, source
+    persistence, and export behavior.
 
 ## Documentation rule
 

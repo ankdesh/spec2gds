@@ -57,7 +57,7 @@ test("uses a compact menubar and the reclaimed full-width canvas", async ({ page
   await expect(page.locator(".library")).toHaveCount(0);
   await expect(page.locator(".canvas-action-bar")).toHaveCount(0);
   await expect(page.locator(".inspector")).toHaveCount(0);
-  for (const name of ["File", "Edit", "Components", "Selection", "Connect", "Route", "View", "Tools", "Help"]) {
+  for (const name of ["File", "Edit", "Components", "Selection", "Connect", "Route", "Timing", "View", "Tools", "Help"]) {
     await expect(page.getByRole("menuitem", { name, exact: true })).toBeVisible();
   }
   await page.getByRole("menuitem", { name: "Connect", exact: true }).click();
@@ -351,6 +351,49 @@ test("opens clamped semantic context menus from pointer and keyboard", async ({ 
   await connectedPort.click({ button: "right", force: true });
   await expect(page.getByRole("menuitem", { name: "Select connected net", exact: true })).toBeVisible();
   await expect(page.getByRole("menuitem", { name: "Disconnect port", exact: true })).toBeVisible();
+});
+
+test("places, edits, hides, and exports a cycle timing marker", async ({ page }) => {
+  await page.goto("/");
+  await menuAction(page, "Edit", "Begin editing");
+  const pane = page.locator(".react-flow__pane");
+  await pane.click({ button: "right", position: { x: 430, y: 260 } });
+  await page.getByRole("menuitem", { name: "Add cycle edge here", exact: true }).click();
+
+  const edge = page.locator(".cd-cycle-edge");
+  await expect(edge).toHaveCount(1);
+  await expect(edge).toContainText("Cycle edge 1");
+  await expect(page.locator(".cd-cycle-edge__leading-stage")).toHaveText("Stage 0");
+
+  await edge.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Edit cycle edge…", exact: true }).click();
+  await page.getByLabel("Edge label").fill("Execute edge");
+  await page.getByLabel("Following stage label").fill("Writeback");
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(edge).toContainText("Execute edge");
+  await expect(edge).toContainText("Writeback");
+
+  await page.getByRole("menuitem", { name: "View", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: /Show timing overlay/ }).click();
+  await expect(edge).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "View", exact: true }).click();
+  await page.getByRole("menuitemcheckbox", { name: /Show timing overlay/ }).click();
+  await expect(edge).toHaveCount(1);
+
+  const saveDownload = page.waitForEvent("download");
+  await menuAction(page, "File", /Save changes/);
+  await saveDownload;
+  const svgDownload = page.waitForEvent("download");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Download", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Export SVG", exact: true }).click();
+  const svgPath = await (await svgDownload).path();
+  expect(svgPath).not.toBeNull();
+  const svg = await readFile(svgPath!, "utf8");
+  expect(svg).toContain('class="cycle-edge"');
+  expect(svg).toContain("Execute edge");
+  expect(svg).toContain("WRITEBACK");
+  expect(svg).toContain("STAGE 0");
 });
 
 test("keeps right-drag panning without opening a context menu", async ({ page, request }) => {

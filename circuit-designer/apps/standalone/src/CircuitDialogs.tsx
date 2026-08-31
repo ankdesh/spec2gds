@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import type { CircuitDocument, CircuitProposal } from "@spec2gds/circuit-core";
+import { DEFAULT_CLOCK_DOMAIN_ID, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
 
-export type CircuitDialogId = "connect" | "catalog" | "new-component" | "proposals" | "getting-started" | "about";
+export type CircuitDialogId = "connect" | "catalog" | "new-component" | "proposals" | "clock-settings" | "timing-analysis" | "cycle-edge" | "getting-started" | "about";
 
 function CircuitModal({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
   const dialogRef = useRef<HTMLElement>(null);
@@ -96,10 +96,34 @@ export interface CircuitDialogsProps {
   onCreateComponent: () => void;
   onPlaceComponent: (componentId: string) => void;
   onDecideProposal: (proposalId: string, decision: "accept" | "reject") => void;
+  timing: CircuitTimingV1;
+  timingAnalysis: CircuitTimingAnalysis;
+  selectedCycleEdge?: CycleEdgeMarkerV1;
+  selectedTimingSubject?: string;
+  onSetClockDomain: (domain: ClockDomainV1) => void;
+  onRemoveClockDomain: (domainId: string) => void;
+  onAssignClockDomain: (subjectKey: string, domainId?: string) => void;
+  onUpdateCycleEdge: (edge: CycleEdgeMarkerV1) => void;
 }
 
 export function CircuitDialogs(props: CircuitDialogsProps) {
   const [selectedComponentId, setSelectedComponentId] = useState<string>();
+  const [clockLabel, setClockLabel] = useState("clk");
+  const [clockSignal, setClockSignal] = useState("");
+  const [newDomainLabel, setNewDomainLabel] = useState("");
+  const [edgeLabel, setEdgeLabel] = useState("");
+  const [stageLabel, setStageLabel] = useState("");
+  const [edgeX, setEdgeX] = useState(0);
+  useEffect(() => {
+    const domain = props.timing.clock_domains.find((item) => item.id === DEFAULT_CLOCK_DOMAIN_ID);
+    setClockLabel(domain?.label ?? "clk");
+    setClockSignal(domain?.signal ? `${domain.signal.kind}:${domain.signal.id}` : "");
+  }, [props.dialog, props.timing.clock_domains]);
+  useEffect(() => {
+    setEdgeLabel(props.selectedCycleEdge?.label ?? "");
+    setStageLabel(props.selectedCycleEdge?.next_stage_label ?? "");
+    setEdgeX(props.selectedCycleEdge?.x ?? 0);
+  }, [props.dialog, props.selectedCycleEdge]);
   if (!props.dialog) return null;
 
   if (props.dialog === "connect") {
@@ -156,6 +180,58 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         <b>{proposal.title}</b><p>{proposal.summary}</p><small>{proposal.diff.added.length} added · {proposal.diff.changed.length} changed · {proposal.diff.removed.length} removed</small>
         <div className="circuit-dialog__actions"><button onClick={() => props.onDecideProposal(proposal.proposal_id, "reject")} type="button">Reject</button><button className="primary" onClick={() => props.onDecideProposal(proposal.proposal_id, "accept")} type="button">Accept</button></div>
       </article>)}{!props.proposals.length && <p className="empty-copy">No proposals are waiting for review.</p>}</div>
+    </CircuitModal>;
+  }
+
+  if (props.dialog === "clock-settings") {
+    const signalOptions = [
+      ...(props.document?.design.boundary_terminals.map((item) => ({ value: `boundary:${item.id}`, label: `Boundary: ${item.label}` })) ?? []),
+      ...(props.document?.design.nets.map((item) => ({ value: `net:${item.id}`, label: `Net: ${item.label || item.id}` })) ?? []),
+    ];
+    const additional = props.timing.clock_domains.filter((domain) => domain.id !== DEFAULT_CLOCK_DOMAIN_ID);
+    return <CircuitModal onClose={props.onClose} title="Clock settings">
+      <form className="circuit-dialog__form" onSubmit={(event) => {
+        event.preventDefault();
+        const [kind, id] = clockSignal.split(":", 2);
+        props.onSetClockDomain({ id: DEFAULT_CLOCK_DOMAIN_ID, label: clockLabel.trim() || "clk", ...(id ? { signal: { kind: kind as "boundary" | "net", id } } : {}) });
+        props.onClose();
+      }}>
+        <p>All components use this clock automatically. Every cycle edge adds one cycle.</p>
+        <label>Clock name<input autoFocus value={clockLabel} onChange={(event) => setClockLabel(event.target.value)} /></label>
+        <label>Optional clock signal<select value={clockSignal} onChange={(event) => setClockSignal(event.target.value)}><option value="">Not bound</option>{signalOptions.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></label>
+        <details><summary>Multiple clock domains</summary>
+          <p>Use additional domains only for CDC identification. Cycle edges remain global.</p>
+          <div className="clock-domain-list">{additional.map((domain) => <div key={domain.id}><span>{domain.label}</span><button className="danger" onClick={() => props.onRemoveClockDomain(domain.id)} type="button">Remove</button></div>)}</div>
+          <div className="slice-row"><label>New domain<input value={newDomainLabel} onChange={(event) => setNewDomainLabel(event.target.value)} /></label><button disabled={!newDomainLabel.trim()} onClick={() => { props.onSetClockDomain({ id: `clock_${newDomainLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "domain"}`, label: newDomainLabel.trim() }); setNewDomainLabel(""); }} type="button">Add</button></div>
+          {props.selectedTimingSubject && additional.length > 0 && <label>Selected object domain<select value={props.timing.subject_domain_overrides[props.selectedTimingSubject] ?? DEFAULT_CLOCK_DOMAIN_ID} onChange={(event) => props.onAssignClockDomain(props.selectedTimingSubject!, event.target.value)}>{props.timing.clock_domains.map((domain) => <option key={domain.id} value={domain.id}>{domain.label}</option>)}</select></label>}
+        </details>
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" type="submit">Apply</button></div>
+      </form>
+    </CircuitModal>;
+  }
+
+  if (props.dialog === "timing-analysis") {
+    return <CircuitModal onClose={props.onClose} title="Timing analysis">
+      <div className="circuit-dialog__copy"><p>{props.timing.cycle_edges.length} cycle edges · {props.timingAnalysis.subjects.length} placed timing subjects</p>
+        <div className="timing-analysis-list">{props.timingAnalysis.paths.map((path) => <article data-status={path.status} key={`${path.net_id}:${path.source}:${path.target}`}><b>{path.net_id}</b><span>{path.source} → {path.target}</span><strong>{path.status === "ready" ? `${path.cycles ?? 0} cycle${path.cycles === 1 ? "" : "s"}` : path.status.toUpperCase()}</strong>{path.message && <small>{path.message}</small>}</article>)}</div>
+        {!props.timingAnalysis.paths.length && <p className="empty-copy">No directed timing paths are available.</p>}
+      </div>
+      <div className="circuit-dialog__actions"><button autoFocus className="primary" onClick={props.onClose} type="button">Close</button></div>
+    </CircuitModal>;
+  }
+
+  if (props.dialog === "cycle-edge" && props.selectedCycleEdge) {
+    return <CircuitModal onClose={props.onClose} title="Edit cycle edge">
+      <form className="circuit-dialog__form" onSubmit={(event) => {
+        event.preventDefault();
+        props.onUpdateCycleEdge({ ...props.selectedCycleEdge!, x: edgeX, ...(edgeLabel.trim() ? { label: edgeLabel.trim() } : { label: undefined }), ...(stageLabel.trim() ? { next_stage_label: stageLabel.trim() } : { next_stage_label: undefined }) });
+        props.onClose();
+      }}>
+        <label>Edge label<input autoFocus placeholder="Automatic" value={edgeLabel} onChange={(event) => setEdgeLabel(event.target.value)} /></label>
+        <label>Following stage label<input placeholder="Automatic" value={stageLabel} onChange={(event) => setStageLabel(event.target.value)} /></label>
+        <label>X position<input step={props.document?.layout.grid_size ?? 20} type="number" value={edgeX} onChange={(event) => setEdgeX(Number(event.target.value))} /></label>
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" type="submit">Apply</button></div>
+      </form>
     </CircuitModal>;
   }
 

@@ -59,6 +59,7 @@ export interface CircuitContextMenuOptions {
   terminalSide?: "NORTH" | "EAST" | "SOUTH" | "WEST";
   terminalPlacementLocked?: boolean;
   routeLocked?: boolean;
+  cycleEdgeLocked?: boolean;
 }
 
 function placementMenu(options: CircuitContextMenuOptions): CircuitMenuEntry<CircuitCommandId> {
@@ -104,10 +105,17 @@ export function buildCircuitContextMenu(options: CircuitContextMenuOptions): Cir
     separator,
     action("create-local-component", "New local component…"),
     action("open-connect", "New connection…"),
+    action("add-cycle-edge", "Add cycle edge here"),
     separator,
     action("select-all", "Select all"),
     { ...action("toggle-inspector", "Show Inspector"), checked: options.inspectorOpen, checkType: "checkbox" },
     action("fit-circuit", "Fit circuit"),
+  ];
+  if (target.kind === "cycle-edge") return [
+    action("edit-cycle-edge", "Edit cycle edge…"),
+    action(options.cycleEdgeLocked ? "unlock-cycle-edge" : "lock-cycle-edge", options.cycleEdgeLocked ? "Unlock cycle edge" : "Lock cycle edge"),
+    separator,
+    action("delete-cycle-edge", "Delete cycle edge…"),
   ];
   if (target.kind === "node") return [
     action("open-child-design", "Open selected child design"),

@@ -594,7 +594,7 @@ def create_app() -> typing.Any:
                 "base_source_revision_hash": active().revision.source_revision_hash,
                 "writable": writable,
                 "capabilities": ([
-                    "topology", "layout", "local-components", "numeric-part-selects",
+                    "topology", "layout", "timing", "local-components", "numeric-part-selects",
                     *(["boundary-ports"] if projection.owner_component_id else []),
                 ] if writable else []),
                 "omitted_bus_items": list(projection.omitted_bus_items),

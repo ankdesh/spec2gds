@@ -7,10 +7,12 @@ import {
 } from "@spec2gds/circuit-client-http";
 import {
   CircuitDraft,
+  analyzeCircuitTiming,
   createDefaultCircuitDesignerPreferences,
   createEmptyCircuitDocument,
   exportCircuitJson,
   endpointTerminalKey,
+  effectiveCircuitTiming,
   insertRouteBend,
   projectDocument,
   removeRouteBend,
@@ -18,6 +20,8 @@ import {
   renderCircuitSvg,
   uniqueSlug,
   type CircuitDocument,
+  type ClockDomainV1,
+  type CycleEdgeMarkerV1,
   type CircuitDesignerPreferencesV1,
   type CircuitOperation,
   type CircuitProposal,
@@ -168,6 +172,8 @@ export function App() {
   const [contextRequest, setContextRequest] = useState<(CircuitCanvasContextMenuRequest & { selection: CircuitCanvasSelection })>();
   const [componentCreationPoint, setComponentCreationPoint] = useState<{ x: number; y: number }>();
   const [menubarDismissVersion, setMenubarDismissVersion] = useState(0);
+  const [placingCycleEdge, setPlacingCycleEdge] = useState(false);
+  const [viewport, setViewport] = useState({ x: 20, y: 20, zoom: 1 });
   const draftRef = useRef<CircuitDraft>();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
@@ -177,6 +183,7 @@ export function App() {
 
   const actionBindings = preferences.action_bindings;
   const inspectorOpen = preferences.ui.inspector_open;
+  const timingOverlayVisible = preferences.ui.timing_overlay_visible;
 
   useEffect(() => {
     let active = true;
@@ -319,17 +326,23 @@ export function App() {
     () => document ? projectDocument(document, lease ? "draft" : snapshot?.revision ?? "loading") : undefined,
     [document, lease, snapshot?.revision],
   );
+  const timing = useMemo(() => document ? effectiveCircuitTiming(document) : effectiveCircuitTiming({}), [document]);
+  const timingAnalysis = useMemo(
+    () => document ? analyzeCircuitTiming(document, layout?.boundary_geometry) : { subjects: [], paths: [], diagnostics: [] },
+    [document, layout?.boundary_geometry],
+  );
 
   useEffect(() => {
     if (!graph) return;
     const nodeIds = new Set(graph.nodes.map((node) => node.id));
     const boundaryIds = new Set(graph.terminals.filter((terminal) => !terminal.node_id).map((terminal) => terminal.id.replace(/^boundary:/, "")));
     const netIds = new Set(graph.nets.map((net) => net.id));
+    const edgeIds = new Set(timing.cycle_edges.map((edge) => edge.id));
     setSelection((current) => {
-      const next = current.filter((item) => item.kind === "node" ? nodeIds.has(item.id) : item.kind === "boundary" ? boundaryIds.has(item.id) : netIds.has(item.id));
+      const next = current.filter((item) => item.kind === "node" ? nodeIds.has(item.id) : item.kind === "boundary" ? boundaryIds.has(item.id) : item.kind === "cycle-edge" ? edgeIds.has(item.id) : netIds.has(item.id));
       return next.length === current.length ? current : next;
     });
-  }, [graph]);
+  }, [graph, timing.cycle_edges]);
 
   useEffect(() => setContextRequest(undefined), [document]);
 
@@ -640,6 +653,54 @@ export function App() {
       })), `Moved ${Object.keys(changes).length} selected instance${Object.keys(changes).length === 1 ? "" : "s"}.`);
   }
 
+  function edgeIntersectsVisibleObject(x: number): boolean {
+    if (!document) return false;
+    return [
+      ...Object.values(document.layout.instance_geometry),
+      ...Object.values(layout?.boundary_geometry ?? {}),
+    ].some((geometry) => x > geometry.x && x < geometry.x + geometry.width);
+  }
+
+  function addCycleEdgeAt(rawX: number): boolean {
+    if (!document) return false;
+    const x = Math.round(rawX / document.layout.grid_size) * document.layout.grid_size;
+    if (edgeIntersectsVisibleObject(x)) {
+      setMessage("Place the cycle edge between components; it cannot divide an object.");
+      return false;
+    }
+    const id = uniqueSlug(`cycle_edge_${timing.cycle_edges.length + 1}`, timing.cycle_edges.map((edge) => edge.id));
+    const created = mutate({ operation_id: operationId("cycle_edge"), type: "add_cycle_edge", edge: { id, x, locked: false } }, `Added cycle edge at x=${x}.`);
+    if (created) setSelection([{ kind: "cycle-edge", id }]);
+    return created;
+  }
+
+  function updateCycleEdge(edge: CycleEdgeMarkerV1): boolean {
+    if (edgeIntersectsVisibleObject(edge.x)) {
+      setMessage("The cycle edge cannot divide a component or boundary terminal.");
+      return false;
+    }
+    return mutate({ operation_id: operationId("cycle_edge"), type: "update_cycle_edge", edge }, `Updated ${edge.label ?? edge.id}.`);
+  }
+
+  function setClockDomain(domain: ClockDomainV1): void {
+    mutate({ operation_id: operationId("clock_domain"), type: "set_clock_domain", domain }, `Updated clock domain ${domain.label}.`);
+  }
+
+  function removeClockDomain(domainId: string): void {
+    const domain = timing.clock_domains.find((item) => item.id === domainId);
+    if (!domain) return;
+    setConfirmation({
+      title: "Remove clock domain?",
+      message: `Remove “${domain.label}” and return its assigned objects to the default clock?`,
+      confirmLabel: "Remove domain",
+      onConfirm: () => { setConfirmation(undefined); mutate({ operation_id: operationId("clock_domain"), type: "remove_clock_domain", domain_id: domainId }, `Removed clock domain ${domain.label}.`); },
+    });
+  }
+
+  function assignClockDomain(subjectKey: string, domainId?: string): void {
+    mutate({ operation_id: operationId("clock_assignment"), type: "set_subject_clock_domain", subject_key: subjectKey, domain_id: domainId }, `Updated the selected object's clock domain.`);
+  }
+
   function saveRoute(netId: string, route: NetRoute): void {
     mutate({
       operation_id: operationId("route"),
@@ -661,24 +722,26 @@ export function App() {
     });
     try {
       const result = await task.result;
-      for (const [instanceId, geometry] of Object.entries(result.document.layout.instance_geometry)) {
-        mutate({
+      const operations: CircuitOperation[] = [
+        ...Object.entries(result.document.layout.instance_geometry).map(([instanceId, geometry]): CircuitOperation => ({
           operation_id: operationId("layout"),
           type: "set_instance_geometry",
           instance_id: instanceId,
           geometry,
-        }, "Applying automatic layout…");
-      }
-      for (const [terminalKey, placement] of Object.entries(result.document.layout.terminal_placements)) {
-        mutate({
+        })),
+        ...Object.entries(result.document.layout.terminal_placements).map(([terminalKey, placement]): CircuitOperation => ({
           operation_id: operationId("placement"),
           type: "set_terminal_placement",
           terminal_key: terminalKey,
           placement,
-        }, "Applying automatic layout…");
-      }
-      for (const [netId, route] of Object.entries(result.document.layout.net_routes)) saveRoute(netId, route);
-      setMessage(`Automatic layout completed in ${result.elapsed_ms} ms.`);
+        })),
+        ...Object.entries(result.document.layout.net_routes).map(([netId, route]): CircuitOperation => ({ operation_id: operationId("route"), type: "set_net_route", net_id: netId, route })),
+        ...(result.document.timing?.cycle_edges ?? []).flatMap((edge): CircuitOperation[] => {
+          const previous = timing.cycle_edges.find((item) => item.id === edge.id);
+          return previous && previous.x !== edge.x ? [{ operation_id: operationId("cycle_edge"), type: "update_cycle_edge", edge }] : [];
+        }),
+      ];
+      if (mutateBatch(operations, `Automatic layout completed in ${result.elapsed_ms} ms.`)) setLayout(undefined);
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -848,6 +911,12 @@ export function App() {
   const selectedNet = selectedItem?.kind === "net"
     ? document?.design.nets.find((item) => item.id === selectedItem.id)
     : undefined;
+  const selectedCycleEdge = selectedItem?.kind === "cycle-edge"
+    ? timing.cycle_edges.find((edge) => edge.id === selectedItem.id)
+    : undefined;
+  const selectedTimingSubject = selectedItem?.kind === "node" ? `instance:${selectedItem.id}`
+    : selectedItem?.kind === "boundary" ? `boundary:${selectedItem.id}`
+      : undefined;
   const terminals = graph?.terminals ?? [];
   const selectedRoute = selectedNet && layout ? layout.layout.net_routes[selectedNet.id] : undefined;
   const selectedRouteLocked = Boolean(
@@ -862,6 +931,7 @@ export function App() {
       ? { kind: "node", id: target.owner.id }
       : { kind: "boundary", id: target.owner.id };
     if (target.kind === "net" || target.kind === "route-segment" || target.kind === "route-vertex") return { kind: "net", id: target.netId };
+    if (target.kind === "cycle-edge") return { kind: "cycle-edge", id: target.edgeId };
     return undefined;
   };
   const targetTerminalKey = (target: CircuitCanvasContextTarget | undefined): string | undefined => {
@@ -889,6 +959,7 @@ export function App() {
   const contextPlacement = contextTerminalKey ? layout?.layout.terminal_placements[contextTerminalKey] : undefined;
   const contextRouteLocked = Boolean(contextRoute?.segments.some((segment) => segment.locked)
     || contextRoute?.vertices.some((vertex) => vertex.locked));
+  const contextCycleEdgeId = contextRequest?.target.kind === "cycle-edge" ? contextRequest.target.edgeId : undefined;
   const contextEntries = contextRequest ? buildCircuitContextMenu({
     target: contextRequest.target,
     selectionWide: contextSelectionWide,
@@ -897,6 +968,7 @@ export function App() {
     terminalSide: contextPlacement?.side,
     terminalPlacementLocked: contextPlacement?.locked,
     routeLocked: contextRouteLocked,
+    cycleEdgeLocked: contextCycleEdgeId ? timing.cycle_edges.find((edge) => edge.id === contextCycleEdgeId)?.locked : undefined,
   }) : [];
 
   function openCanvasContextMenu(request: CircuitCanvasContextMenuRequest): void {
@@ -944,16 +1016,20 @@ export function App() {
         ...[...selectedNetIds].map((netId): CircuitOperation => ({ operation_id: operationId("delete_net"), type: "delete_net", net_id: netId })),
         ...captured.filter((item) => item.kind === "node").map((item): CircuitOperation => ({ operation_id: operationId("remove"), type: "remove_instance", instance_id: item.id, cascade: true })),
         ...captured.filter((item) => item.kind === "boundary").map((item): CircuitOperation => ({ operation_id: operationId("remove_boundary"), type: "remove_boundary_terminal", terminal_id: item.id, cascade: true })),
+        ...captured.filter((item) => item.kind === "cycle-edge").map((item): CircuitOperation => ({ operation_id: operationId("remove_cycle_edge"), type: "remove_cycle_edge", edge_id: item.id })),
       ];
       const changed = mutateBatch(operations, `Deleted ${captured.length} selected item${captured.length === 1 ? "" : "s"} atomically.`);
       if (changed) setSelection([]);
       return changed;
     };
     const boundaryCount = captured.filter((item) => item.kind === "boundary").length;
-    if (boundaryCount) {
+    const edgeCount = captured.filter((item) => item.kind === "cycle-edge").length;
+    if (boundaryCount || edgeCount) {
       setConfirmation({
-        title: "Delete selected boundary terminals?",
-        message: `This will delete ${boundaryCount} boundary terminal${boundaryCount === 1 ? "" : "s"} and explicitly cascade their connectivity. The complete selection is deleted as one undoable change.`,
+        title: edgeCount ? "Delete selected cycle edge?" : "Delete selected boundary terminals?",
+        message: edgeCount
+          ? "Removing this edge renumbers following stages and reduces affected path latency by one cycle."
+          : `This will delete ${boundaryCount} boundary terminal${boundaryCount === 1 ? "" : "s"} and explicitly cascade their connectivity. The complete selection is deleted as one undoable change.`,
         confirmLabel: "Delete selection",
         onConfirm: () => { setConfirmation(undefined); applyDelete(); },
       });
@@ -1066,6 +1142,8 @@ export function App() {
       : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
         : selectedInstance?.id;
     const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
+    const contextualCycleEdgeId = invocation.target?.kind === "cycle-edge" ? invocation.target.edgeId : selectedCycleEdge?.id;
+    const contextualCycleEdge = timing.cycle_edges.find((edge) => edge.id === contextualCycleEdgeId);
     switch (actionId) {
       case "new-document": return !lease && !openingFile;
       case "open-document": return Boolean(snapshot) && !lease && !openingFile;
@@ -1090,6 +1168,13 @@ export function App() {
       case "lock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && !contextualRouteLocked);
       case "unlock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && contextualRouteLocked);
       case "arrange-all": return Boolean(lease);
+      case "add-cycle-edge": return Boolean(lease && document);
+      case "open-clock-settings": return Boolean(lease && document);
+      case "open-timing-analysis": return Boolean(document);
+      case "edit-cycle-edge": return Boolean(lease && contextualCycleEdge);
+      case "lock-cycle-edge": return Boolean(lease && contextualCycleEdge && !contextualCycleEdge.locked);
+      case "unlock-cycle-edge": return Boolean(lease && contextualCycleEdge?.locked);
+      case "delete-cycle-edge": return Boolean(lease && contextualCycleEdge);
       case "pan-up":
       case "pan-left":
       case "pan-down":
@@ -1100,6 +1185,7 @@ export function App() {
       case "open-assistant": return Boolean(snapshot) && !lease;
       case "open-preferences":
       case "toggle-inspector":
+      case "toggle-timing-overlay":
       case "getting-started":
       case "about": return true;
       case "pan-canvas": return false;
@@ -1135,6 +1221,8 @@ export function App() {
       : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
         : selectedInstance?.id;
     const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
+    const contextualCycleEdgeId = invocation.target?.kind === "cycle-edge" ? invocation.target.edgeId : selectedCycleEdge?.id;
+    const contextualCycleEdge = timing.cycle_edges.find((edge) => edge.id === contextualCycleEdgeId);
     switch (actionId) {
       case "new-document": newDocument(); return true;
       case "open-document": fileInputRef.current?.click(); return true;
@@ -1164,6 +1252,7 @@ export function App() {
       case "select-all": selectAllCanvas(); return true;
       case "clear-selection":
         canvasRef.current?.cancelPendingConnection();
+        setPlacingCycleEdge(false);
         setSelection([]);
         return true;
       case "center-selection":
@@ -1189,8 +1278,24 @@ export function App() {
         saveRoute(contextualNetId, setAllRouteLocks(contextualRoute, actionId === "lock-selected-route"));
         return true;
       case "arrange-all": void autoLayout(); return true;
+      case "add-cycle-edge":
+        if (invocation.source === "context-menu" && invocation.circuitPoint) return addCycleEdgeAt(invocation.circuitPoint.x);
+        setPlacingCycleEdge(true); setMessage("Click empty canvas to place a cycle edge. Press Escape to cancel."); return true;
+      case "open-clock-settings": setDialog("clock-settings"); return true;
+      case "open-timing-analysis": setDialog("timing-analysis"); return true;
+      case "edit-cycle-edge":
+        if (!contextualCycleEdge) return false;
+        setSelection([{ kind: "cycle-edge", id: contextualCycleEdge.id }]); setDialog("cycle-edge"); return true;
+      case "lock-cycle-edge": return contextualCycleEdge ? updateCycleEdge({ ...contextualCycleEdge, locked: true }) : false;
+      case "unlock-cycle-edge": return contextualCycleEdge ? updateCycleEdge({ ...contextualCycleEdge, locked: false }) : false;
+      case "delete-cycle-edge":
+        if (!contextualCycleEdge) return false;
+        return deleteCurrentSelection({ kind: "cycle-edge", id: contextualCycleEdge.id }, [{ kind: "cycle-edge", id: contextualCycleEdge.id }]);
       case "toggle-inspector":
-        setPreferences((current) => ({ ...current, ui: { inspector_open: !current.ui.inspector_open } }));
+        setPreferences((current) => ({ ...current, ui: { ...current.ui, inspector_open: !current.ui.inspector_open } }));
+        return true;
+      case "toggle-timing-overlay":
+        setPreferences((current) => ({ ...current, ui: { ...current.ui, timing_overlay_visible: !current.ui.timing_overlay_visible } }));
         return true;
       case "pan-up":
       case "pan-left":
@@ -1269,6 +1374,7 @@ export function App() {
         bindings={actionBindings}
         dismissVersion={menubarDismissVersion}
         inspectorOpen={inspectorOpen}
+        timingOverlayVisible={timingOverlayVisible}
         isActionEnabled={(commandId) => isCommandEnabled({ commandId, source: "menubar" })}
         onAction={(commandId) => { executeCircuitAction({ commandId, source: "menubar" }); }}
         onOpenChange={(open) => { if (open) closeContextMenu(false); }}
@@ -1313,9 +1419,9 @@ export function App() {
     /> : <section className={`workspace${inspectorOpen ? " workspace--inspector-open" : ""}`}>
       <div className="stage">
         <div
-          className="canvas-surface"
+          className={`canvas-surface${placingCycleEdge ? " canvas-surface--placing-cycle-edge" : ""}`}
           onClick={(event) => {
-            if (event.detail === 1 && emptyCanvasPointer(event)) runCanvasMouseShortcut("primary-click", event);
+            if (!placingCycleEdge && event.detail === 1 && emptyCanvasPointer(event)) runCanvasMouseShortcut("primary-click", event);
           }}
           onDoubleClick={(event) => {
             if (emptyCanvasPointer(event)) runCanvasMouseShortcut("primary-double-click", event);
@@ -1348,6 +1454,16 @@ export function App() {
             viewportPanActivationKeyCode={reactFlowKeyCode(actionBindings["pan-canvas"].keyboard)}
             wheelZoomEnabled={standardWheelZoomEnabled(actionBindings)}
             useDefaultEscapeBinding={false}
+            timing={timing}
+            timingAnalysis={timingAnalysis}
+            showTimingOverlay={timingOverlayVisible}
+            onCycleEdgeChange={updateCycleEdge}
+            onCanvasPointClick={(point) => {
+              if (!placingCycleEdge) return;
+              if (addCycleEdgeAt(point.x)) setPlacingCycleEdge(false);
+            }}
+            viewport={viewport}
+            onViewportChange={setViewport}
           />}
           {layout && <div className="layout-time">Grid router · {layout.elapsed_ms} ms</div>}
         </div>
@@ -1411,6 +1527,11 @@ export function App() {
           <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n")}</p>
           <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedNet, null, 2)}</pre></details>
         </>}
+        {selectedCycleEdge && <><span className="kind">cycle edge</span><h2>{selectedCycleEdge.label ?? `Cycle edge ${timing.cycle_edges.findIndex((edge) => edge.id === selectedCycleEdge.id) + 1}`}</h2><code>x = {selectedCycleEdge.x}</code>
+          <p className="draw-hint">Every same-domain path crossing this marker gains one cycle.</p>
+          <button disabled={!lease} onClick={() => setDialog("cycle-edge")} type="button">Edit edge</button>
+          <button disabled={!lease} onClick={() => updateCycleEdge({ ...selectedCycleEdge, locked: !selectedCycleEdge.locked })} type="button">{selectedCycleEdge.locked ? "Unlock edge" : "Lock edge"}</button>
+        </>}
       </aside>}
     </section>}
     <CircuitDialogs
@@ -1437,6 +1558,14 @@ export function App() {
       sourceDescription={sourceDescription}
       sourceBound={Boolean(sourceBinding)}
       terminals={terminals}
+      timing={timing}
+      timingAnalysis={timingAnalysis}
+      selectedCycleEdge={selectedCycleEdge}
+      selectedTimingSubject={selectedTimingSubject}
+      onSetClockDomain={setClockDomain}
+      onRemoveClockDomain={removeClockDomain}
+      onAssignClockDomain={assignClockDomain}
+      onUpdateCycleEdge={updateCycleEdge}
     />
     {contextRequest && <CircuitContextMenu<CircuitCommandId>
       entries={contextEntries}

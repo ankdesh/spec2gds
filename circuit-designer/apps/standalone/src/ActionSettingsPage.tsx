@@ -68,10 +68,18 @@ export function ActionSettingsPage({ preferences, preferenceStatus, onPreference
       <label className="preference-toggle">
         <input
           checked={preferences.ui.inspector_open}
-          onChange={(event) => onPreferencesChange({ ...preferences, ui: { inspector_open: event.target.checked } })}
+          onChange={(event) => onPreferencesChange({ ...preferences, ui: { ...preferences.ui, inspector_open: event.target.checked } })}
           type="checkbox"
         />
         <span><strong>Show Inspector</strong><small>Keep selection properties visible on the right side of the canvas.</small></span>
+      </label>
+      <label className="preference-toggle">
+        <input
+          checked={preferences.ui.timing_overlay_visible}
+          onChange={(event) => onPreferencesChange({ ...preferences, ui: { ...preferences.ui, timing_overlay_visible: event.target.checked } })}
+          type="checkbox"
+        />
+        <span><strong>Show timing overlay</strong><small>Show cycle edges and latency annotations on the interactive canvas.</small></span>
       </label>
     </section>
 

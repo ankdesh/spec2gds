@@ -26,7 +26,13 @@ export type CircuitOperation =
   | SetTerminalPlacementOperation
   | SetNetRouteOperation
   | SetLabelGeometryOperation
-  | SetLayoutSettingsOperation;
+  | SetLayoutSettingsOperation
+  | AddCycleEdgeOperation
+  | UpdateCycleEdgeOperation
+  | RemoveCycleEdgeOperation
+  | SetClockDomainOperation
+  | RemoveClockDomainOperation
+  | SetSubjectClockDomainOperation;
 export type AddComponentOperation = OperationBase & {
   operation_id: NonEmptyString;
   type: "add_component";
@@ -134,6 +140,37 @@ export type SetLayoutSettingsOperation = OperationBase & {
   grid_size?: number;
   direction?: "RIGHT" | "DOWN";
 };
+export type AddCycleEdgeOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "add_cycle_edge";
+  edge: CycleEdgeMarkerV1;
+};
+export type UpdateCycleEdgeOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "update_cycle_edge";
+  edge: CycleEdgeMarkerV1;
+};
+export type RemoveCycleEdgeOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "remove_cycle_edge";
+  edge_id: Slug;
+};
+export type SetClockDomainOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "set_clock_domain";
+  domain: ClockDomainV1;
+};
+export type RemoveClockDomainOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "remove_clock_domain";
+  domain_id: Slug;
+};
+export type SetSubjectClockDomainOperation = OperationBase & {
+  operation_id: NonEmptyString;
+  type: "set_subject_clock_domain";
+  subject_key: string;
+  domain_id?: Slug | null;
+};
 export type CircuitProposalCreateRequest = {
   proposal_id: NonEmptyString;
   document_id: Slug;
@@ -193,6 +230,7 @@ export interface CircuitDocument {
   components: ComponentDefinition[];
   design: CircuitDesign;
   layout: CircuitLayout;
+  timing?: CircuitTimingV1;
 }
 export interface ComponentDefinition {
   id: Slug;
@@ -345,6 +383,35 @@ export interface LabelGeometry {
   y: number;
   anchor?: "start" | "middle" | "end";
 }
+export interface CircuitTimingV1 {
+  schema_version: 1;
+  /**
+   * @minItems 1
+   */
+  clock_domains: [ClockDomainV1, ...ClockDomainV1[]];
+  cycle_edges: CycleEdgeMarkerV1[];
+  subject_domain_overrides: {
+    [k: string]: Slug;
+  };
+  leading_stage_label?: NonEmptyString;
+}
+export interface ClockDomainV1 {
+  id: Slug;
+  label: NonEmptyString;
+  color?: string;
+  signal?: ClockSignalReference;
+}
+export interface ClockSignalReference {
+  kind: "boundary" | "net";
+  id: Slug;
+}
+export interface CycleEdgeMarkerV1 {
+  id: Slug;
+  x: number;
+  label?: NonEmptyString;
+  next_stage_label?: NonEmptyString;
+  locked: boolean;
+}
 export interface CircuitSnapshot {
   revision: NonEmptyString;
   document: CircuitDocument;
@@ -435,7 +502,7 @@ export interface CircuitDiff {
   connections_changed: Slug[];
 }
 export interface ElementChange {
-  kind: "component" | "instance" | "boundary_terminal" | "net" | "layout";
+  kind: "component" | "instance" | "boundary_terminal" | "net" | "layout" | "timing";
   id: NonEmptyString;
 }
 export interface EditLease {

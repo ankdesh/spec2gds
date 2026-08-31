@@ -41,6 +41,8 @@ header button shown for a dirty draft. Supported source edits include:
 - adding, updating, renaming, or deleting visible ad-hoc connections;
 - numeric LSB/Width endpoint slices;
 - instance geometry, terminal placement, routes, labels, grid, and direction;
+- cycle-edge markers, stage labels, clock references, and optional domain
+  assignments; and
 - boundary-port creation and editing for internal designs.
 
 The Circuit service first asks the Spec API to preview the candidate. The Spec
@@ -103,3 +105,8 @@ Missing layout annotations are valid and use deterministic automatic layout.
 Annotations are schema-versioned and validated for ownership, finite
 coordinates, route references, and payload size as part of the package
 transaction.
+
+Timing metadata is stored separately under `annotations/circuit-timing/` in
+the `spec2gds.circuit-timing` namespace. It uses the same semantic identity
+rule as layout and is committed by the same atomic source transaction. See
+[Circuit Designer timing stages](circuit-designer-timing-stages.md).

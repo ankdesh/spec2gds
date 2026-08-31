@@ -23,7 +23,15 @@ export const circuitActionIds = [
   "lock-selected-route",
   "unlock-selected-route",
   "arrange-all",
+  "add-cycle-edge",
+  "open-clock-settings",
+  "open-timing-analysis",
+  "edit-cycle-edge",
+  "lock-cycle-edge",
+  "unlock-cycle-edge",
+  "delete-cycle-edge",
   "toggle-inspector",
+  "toggle-timing-overlay",
   "pan-canvas",
   "pan-up",
   "pan-left",
@@ -65,6 +73,7 @@ export interface CircuitDesignerPreferencesV1 {
   schema_version: 1;
   ui: {
     inspector_open: boolean;
+    timing_overlay_visible: boolean;
   };
   action_bindings: CircuitActionBindings;
 }
@@ -97,7 +106,7 @@ export function createDefaultCircuitActionBindings(): CircuitActionBindings {
 export function createDefaultCircuitDesignerPreferences(): CircuitDesignerPreferencesV1 {
   return {
     schema_version: 1,
-    ui: { inspector_open: false },
+    ui: { inspector_open: false, timing_overlay_visible: true },
     action_bindings: createDefaultCircuitActionBindings(),
   };
 }
@@ -135,6 +144,7 @@ export function validateCircuitDesignerPreferences(value: unknown): CircuitPrefe
   }
   const preferences = createDefaultCircuitDesignerPreferences();
   preferences.ui.inspector_open = value.ui.inspector_open;
+  preferences.ui.timing_overlay_visible = typeof value.ui.timing_overlay_visible === "boolean" ? value.ui.timing_overlay_visible : true;
   for (const actionId of circuitActionIds) {
     const binding = value.action_bindings[actionId];
     if (!isRecord(binding)) continue;
@@ -145,4 +155,3 @@ export function validateCircuitDesignerPreferences(value: unknown): CircuitPrefe
   }
   return { valid: true, preferences };
 }
-

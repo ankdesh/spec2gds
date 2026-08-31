@@ -14,7 +14,8 @@ const menus: MenuDefinition[] = [
   { id: "selection", label: "Selection", entries: [action("select-all"), action("clear-selection"), action("center-selection")] },
   { id: "connect", label: "Connect", entries: [action("open-connect")] },
   { id: "route", label: "Route", entries: [action("reroute-selected"), action("lock-selected-route"), action("unlock-selected-route"), { kind: "separator" }, action("arrange-all")] },
-  { id: "view", label: "View", entries: [action("toggle-inspector"), { kind: "separator" }, { kind: "submenu", id: "pan", label: "Pan", entries: [action("pan-up"), action("pan-left"), action("pan-down"), action("pan-right")] }, action("zoom-in"), action("zoom-out"), { kind: "separator" }, action("center-selection"), action("fit-circuit")] },
+  { id: "timing", label: "Timing", entries: [action("add-cycle-edge"), action("open-clock-settings"), action("open-timing-analysis"), { kind: "separator" }, action("edit-cycle-edge"), action("lock-cycle-edge"), action("unlock-cycle-edge"), action("delete-cycle-edge")] },
+  { id: "view", label: "View", entries: [action("toggle-inspector"), action("toggle-timing-overlay"), { kind: "separator" }, { kind: "submenu", id: "pan", label: "Pan", entries: [action("pan-up"), action("pan-left"), action("pan-down"), action("pan-right")] }, action("zoom-in"), action("zoom-out"), { kind: "separator" }, action("center-selection"), action("fit-circuit")] },
   { id: "tools", label: "Tools", entries: [action("open-assistant")] },
   { id: "help", label: "Help", entries: [action("getting-started"), { kind: "separator" }, action("about")] },
 ];
@@ -22,6 +23,7 @@ const menus: MenuDefinition[] = [
 export interface CircuitMenuBarProps {
   bindings: ActionBindings;
   inspectorOpen: boolean;
+  timingOverlayVisible: boolean;
   proposalCount: number;
   isActionEnabled: (actionId: CircuitActionId) => boolean;
   onAction: (actionId: CircuitActionId) => void;
@@ -30,7 +32,7 @@ export interface CircuitMenuBarProps {
   sourceBound?: boolean;
 }
 
-export function CircuitMenuBar({ bindings, inspectorOpen, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound }: CircuitMenuBarProps) {
+export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
   const rootRef = useRef<HTMLElement>(null);
   const effectiveMenus = useMemo(() => menus.map((menu) => ({
@@ -39,10 +41,12 @@ export function CircuitMenuBar({ bindings, inspectorOpen, proposalCount, isActio
       ? { ...entry, label: "Save to Specification" }
       : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
+      : entry.kind === "action" && entry.commandId === "toggle-timing-overlay"
+      ? { ...entry, checked: timingOverlayVisible, checkType: "checkbox" as const }
       : entry.kind === "action" && entry.commandId === "review-proposals"
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
-  })), [inspectorOpen, proposalCount, sourceBound]);
+  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound]);
   const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 

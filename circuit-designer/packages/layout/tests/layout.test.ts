@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { crossingFixture, fixtures, setAllRouteLocks, validateNetRoute } from "@spec2gds/circuit-core";
+import { crossingFixture, fixtures, setAllRouteLocks, simpleDocumentFixture, stageForHorizontalSpan, validateNetRoute } from "@spec2gds/circuit-core";
 import {
+  layoutCircuitDocument,
   layoutCircuitGraph,
   reanchorRoutesForNode,
   routeCircuitNets,
@@ -125,6 +126,24 @@ describe("deterministic circuit layout", () => {
     const result = await layoutCircuitGraph(graph, { preserveNodeGeometry: "pinned" });
     expect(result.layout.node_geometry?.producer_0).toMatchObject({ x: 1000, y: 1000, pinned: true });
     expect(result.layout.node_geometry?.consumer_0).not.toMatchObject({ x: 1200, y: 1200 });
+  });
+
+  test("auto layout preserves each instance's timing stage", async () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry.producer_0 = { x: 80, y: 80, width: 180, height: 100, pinned: false };
+    document.layout.instance_geometry.consumer_0 = { x: 420, y: 80, width: 180, height: 100, pinned: false };
+    document.timing = {
+      schema_version: 1,
+      clock_domains: [{ id: "default", label: "clk" }],
+      cycle_edges: [{ id: "edge_1", x: 340, locked: false }],
+      subject_domain_overrides: {},
+    };
+
+    const result = await layoutCircuitDocument(document, { preserveNodeGeometry: "none" });
+    const edge = result.document.timing!.cycle_edges[0];
+    expect(stageForHorizontalSpan(result.document.timing!, result.document.layout.instance_geometry.producer_0.x, result.document.layout.instance_geometry.producer_0.x + result.document.layout.instance_geometry.producer_0.width)).toBe(0);
+    expect(stageForHorizontalSpan(result.document.timing!, result.document.layout.instance_geometry.consumer_0.x, result.document.layout.instance_geometry.consumer_0.x + result.document.layout.instance_geometry.consumer_0.width)).toBe(1);
+    expect(edge.x % document.layout.grid_size).toBe(0);
   });
 
   test("handles the 200-node scale fixture", async () => {

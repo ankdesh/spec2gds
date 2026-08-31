@@ -176,6 +176,10 @@ is regenerated after every accepted source change without
 adding an image asset to the `.spec` package. Unsupported interface topology
 is reported beside the preview; a connection that cannot be represented safely
 shows an unavailable message while leaving the source tables accessible.
+Saved Circuit Designer cycle edges appear in this preview and in SVG/PNG
+exports. They divide the canvas into pipeline stages, default to
+one implicit `clk` domain, and are persisted as validated semantic timing
+annotations; see [the timing-stage guide](docs/circuit-designer-timing-stages.md).
 Leaf-component sections provide separate **Add wire port**, **Add
 transactional port**, and **Add structured port** commands. All ports are shown
 as editable rows in one Ports table. Wire ports use

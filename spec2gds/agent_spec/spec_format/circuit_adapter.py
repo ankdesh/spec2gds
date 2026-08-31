@@ -16,7 +16,17 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 
-from spec2gds.agent_spec.spec_format.circuit_layouts import DesignCircuitLayoutV1, load_design_layout
+from spec2gds.agent_spec.spec_format.circuit_layouts import (
+    DesignCircuitLayoutV1,
+    load_design_layout,
+)
+from spec2gds.agent_spec.spec_format.circuit_timings import (
+    DesignCircuitTimingV1,
+    DesignClockDomainV1,
+    DesignClockSignalV1,
+    DesignCycleEdgeV1,
+    load_design_timing,
+)
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, ConnectionIR, PortIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef
 
@@ -217,6 +227,38 @@ def _project_layout(revision: SpecRevision, design: EntityRef, source_map: Circu
     }
 
 
+def _project_timing(revision: SpecRevision, design: EntityRef, source_map: CircuitSourceMap) -> dict[str, typing.Any] | None:
+    stored = load_design_timing(revision, design)
+    if stored is None:
+        return None
+    instance_id_by_name = {name: circuit_id for circuit_id, name in source_map.instance_name_by_id.items()}
+    boundary_id_by_name = {name: circuit_id for circuit_id, name in source_map.boundary_name_by_id.items()}
+    net_id_by_name = {name: circuit_id for circuit_id, name in source_map.net_name_by_id.items()}
+    overrides: dict[str, str] = {}
+    for key, domain_id in stored.subject_domain_overrides.items():
+        kind, name = key.split(":", 1)
+        circuit_id = instance_id_by_name.get(name) if kind == "instance" else boundary_id_by_name.get(name)
+        if circuit_id:
+            overrides[f"{kind}:{circuit_id}"] = domain_id
+    domains: list[dict[str, typing.Any]] = []
+    for domain in stored.clock_domains:
+        value = domain.model_dump(mode="json", exclude_none=True)
+        if domain.signal is not None:
+            signal_id = boundary_id_by_name.get(domain.signal.id) if domain.signal.kind == "boundary" else net_id_by_name.get(domain.signal.id)
+            if signal_id:
+                value["signal"] = {"kind": domain.signal.kind, "id": signal_id}
+            else:
+                value.pop("signal", None)
+        domains.append(value)
+    return {
+        "schema_version": 1,
+        "clock_domains": domains,
+        "cycle_edges": [item.model_dump(mode="json", exclude_none=True) for item in stored.cycle_edges],
+        "subject_domain_overrides": overrides,
+        **({"leading_stage_label": stored.leading_stage_label} if stored.leading_stage_label else {}),
+    }
+
+
 def project_design_to_circuit(
     revision: SpecRevision,
     design_id: str,
@@ -400,6 +442,7 @@ def project_design_to_circuit(
         net_name_by_id=net_name_by_id,
     )
     layout = _project_layout(revision, design.ref, source_map)
+    timing = _project_timing(revision, design.ref, source_map)
     document = {
         "protocol_version": "circuit-designer.v1",
         "document_id": document_id,
@@ -413,6 +456,7 @@ def project_design_to_circuit(
             "nets": circuit_nets,
         },
         "layout": layout,
+        **({"timing": timing} if timing is not None else {}),
     }
     return CircuitProjection(
         document=document,
@@ -636,13 +680,51 @@ def _semantic_layout(
     )
 
 
+def _semantic_timing(revision: SpecRevision, design_id: str, candidate: dict[str, typing.Any]) -> DesignCircuitTimingV1 | None:
+    raw = candidate.get("timing")
+    if raw is None:
+        return None
+    source_map = _candidate_source_map(candidate)
+    overrides: dict[str, str] = {}
+    for key, domain_id in raw.get("subject_domain_overrides", {}).items():
+        kind, separator, circuit_id = key.partition(":")
+        if not separator:
+            continue
+        name = source_map.instance_name_by_id.get(circuit_id) if kind == "instance" else source_map.boundary_name_by_id.get(circuit_id)
+        if name:
+            overrides[f"{kind}:{name}"] = domain_id
+    domains: list[DesignClockDomainV1] = []
+    for raw_domain in raw.get("clock_domains", []):
+        signal = raw_domain.get("signal")
+        semantic_signal = None
+        if signal:
+            name = source_map.boundary_name_by_id.get(signal["id"]) if signal["kind"] == "boundary" else source_map.net_name_by_id.get(signal["id"])
+            if name:
+                semantic_signal = DesignClockSignalV1(kind=signal["kind"], id=name)
+        domains.append(DesignClockDomainV1(
+            id=raw_domain["id"], label=raw_domain["label"], color=raw_domain.get("color"), signal=semantic_signal,
+        ))
+    return DesignCircuitTimingV1(
+        design=EntityRef(document_id=revision.document_id, entity_id=design_id, entity_kind="design"),
+        clock_domains=tuple(domains),
+        cycle_edges=tuple(DesignCycleEdgeV1.model_validate(item) for item in raw.get("cycle_edges", [])),
+        subject_domain_overrides=overrides,
+        leading_stage_label=raw.get("leading_stage_label"),
+    )
+
+
 def compile_circuit_sync_operations(
     revision: SpecRevision,
     projection: CircuitProjection,
     candidate: dict[str, typing.Any],
 ) -> tuple[typing.Any, ...]:
     """Compile a validated Circuit candidate into one atomic Spec transaction."""
-    from spec2gds.agent_spec.spec_format.ir import EndpointSliceIR, ExternalPortEndpointIR, InstanceIR, PortEndpointIR
+    from spec2gds.agent_spec.spec_format.ir import (
+        EndpointSliceIR,
+        ExternalPortEndpointIR,
+        InstanceIR,
+        PortEndpointIR,
+    )
     from spec2gds.agent_spec.spec_format.models import ID_PATTERN
     from spec2gds.agent_spec.spec_format.transactions import (
         AddComponentPort,
@@ -654,6 +736,7 @@ def compile_circuit_sync_operations(
         RenameInstance,
         UpdateComponentPort,
         UpsertCircuitLayout,
+        UpsertCircuitTiming,
         UpsertConnection,
         UpsertInstance,
         WirePortInput,
@@ -824,6 +907,9 @@ def compile_circuit_sync_operations(
             ),
         ))
     operations.append(UpsertCircuitLayout(_semantic_layout(revision, design_id, candidate)))
+    timing = _semantic_timing(revision, design_id, candidate)
+    if timing is not None:
+        operations.append(UpsertCircuitTiming(timing))
     return tuple(operations)
 
 

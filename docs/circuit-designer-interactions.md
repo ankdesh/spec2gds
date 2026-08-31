@@ -17,7 +17,7 @@ the previous action so two commands never compete for the same shortcut.
 - **Edit** owns edit leases, undo/redo, deletion, and preferences.
 - **Components** opens the catalog, local-component and proposal dialogs, and
   the selected child design.
-- **Selection**, **Connect**, **Route**, and **View** contain the former canvas
+- **Selection**, **Connect**, **Route**, **Timing**, and **View** contain the former canvas
   action-strip commands. The View menu also toggles the properties-only
   Inspector, which defaults closed.
 - **Tools** opens AI Assistant. **Help** contains Getting Started and About.
@@ -36,7 +36,8 @@ Specification** and shows it in the header while the draft is dirty.
 SVG and PNG downloads are rendered from the same effective layout currently
 shown by the canvas, including automatically computed instance and boundary
 positions, terminal placement, route geometry, locked-route styling, and the
-canvas color system. PNG is rasterized directly from that SVG so both image
+canvas color system. Cycle edges, stage labels, and computed path latency are
+included when timing markers exist. PNG is rasterized directly from that SVG so both image
 formats have identical bounds and content. Save or Cancel an active draft
 before downloading an authoritative image.
 
@@ -57,6 +58,12 @@ before downloading an authoritative image.
 | Space+drag | Temporarily activate panning when a different pan mouse binding is configured |
 | Right-click, Context Menu key, or Shift+F10 | Open the target-aware context menu |
 | Escape | Cancel a keyboard connection, otherwise clear selection |
+
+Use **Timing → Add cycle edge** to place a grid-snapped vertical stage
+boundary. Markers can be selected, dragged, locked, renamed, and deleted, and
+cannot bisect a component. See
+[Circuit Designer timing stages](circuit-designer-timing-stages.md) for the
+single-clock default, path analysis, and source persistence.
 
 Ports already used by a net are visibly disabled. Canvas connection gestures
 create new two-terminal nets only; extending a fanout, dropping onto a wire,

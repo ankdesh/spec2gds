@@ -14,8 +14,8 @@ from spec2gds.agent_spec.spec_format.circuit_adapter import (
     source_session_document_id,
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.transactions import SpecEditTransaction
 from spec2gds.agent_spec.spec_format.testing import _xml
+from spec2gds.agent_spec.spec_format.transactions import SpecEditTransaction
 
 
 def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool = False) -> SpecRevision:
@@ -198,6 +198,48 @@ def test_round_trips_source_semantic_layout_and_numeric_slices() -> None:
     }
     package.files[layout_path] = json.dumps(malformed).encode()
     with pytest.raises(SpecValidationError, match="Invalid circuit layouts"):
+        package.require_valid()
+
+
+def test_round_trips_timing_markers_and_semantic_clock_assignments() -> None:
+    revision = _direct_revision()
+    session_id = source_session_document_id(revision, "design_direct")
+    projection = project_design_to_circuit(
+        revision, "design_direct", session_document_id=session_id, include_catalog=True
+    )
+    candidate = copy.deepcopy(projection.document)
+    candidate["timing"] = {
+        "schema_version": 1,
+        "clock_domains": [
+            {"id": "default", "label": "clk", "signal": {"kind": "net", "id": "data_link"}},
+            {"id": "io", "label": "io_clk", "color": "#7c5ce7"},
+        ],
+        "cycle_edges": [
+            {"id": "edge_1", "x": 320, "label": "C1", "next_stage_label": "Execute", "locked": True},
+        ],
+        "subject_domain_overrides": {"instance:sink0": "io"},
+        "leading_stage_label": "Decode",
+    }
+    result = SpecEditTransaction(
+        revision.source_revision_hash,
+        compile_circuit_sync_operations(revision, projection, candidate),
+    ).apply(revision)
+
+    assert result.succeeded, result.diagnostics
+    assert result.revision is not None
+    package = result.revision.to_package()
+    timing_path = "annotations/circuit-timing/design_direct.json"
+    stored = json.loads(package.files[timing_path])
+    assert stored["subject_domain_overrides"] == {"instance:sink0": "io"}
+    assert stored["clock_domains"][0]["signal"] == {"kind": "net", "id": "data_link"}
+    refreshed = project_design_to_circuit(
+        result.revision, "design_direct", session_document_id=session_id, include_catalog=True
+    )
+    assert refreshed.document["timing"] == candidate["timing"]
+
+    stored["subject_domain_overrides"]["instance:missing"] = "io"
+    package.files[timing_path] = json.dumps(stored).encode()
+    with pytest.raises(SpecValidationError, match="Invalid circuit timing"):
         package.require_valid()
 
 

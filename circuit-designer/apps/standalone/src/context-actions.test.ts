@@ -9,11 +9,20 @@ function commandIds(entries: CircuitMenuEntry<CircuitCommandId>[]): CircuitComma
 describe("Circuit Designer context menu composition", () => {
   test("composes the empty canvas and selection-wide menus", () => {
     expect(commandIds(buildCircuitContextMenu({ target: { kind: "canvas" }, inspectorOpen: false }))).toEqual([
-      "begin-edit", "create-local-component", "open-connect", "select-all", "toggle-inspector", "fit-circuit",
+      "begin-edit", "create-local-component", "open-connect", "add-cycle-edge", "select-all", "toggle-inspector", "fit-circuit",
     ]);
     expect(commandIds(buildCircuitContextMenu({ target: { kind: "node", nodeId: "a" }, inspectorOpen: false, selectionWide: true }))).toEqual([
       "center-selection", "delete-selection", "clear-selection",
     ]);
+  });
+
+  test("offers marker-specific edit, lock, and delete commands", () => {
+    expect(commandIds(buildCircuitContextMenu({
+      target: { kind: "cycle-edge", edgeId: "edge_1" }, inspectorOpen: false, cycleEdgeLocked: false,
+    }))).toEqual(["edit-cycle-edge", "lock-cycle-edge", "delete-cycle-edge"]);
+    expect(commandIds(buildCircuitContextMenu({
+      target: { kind: "cycle-edge", edgeId: "edge_1" }, inspectorOpen: false, cycleEdgeLocked: true,
+    }))).toEqual(["edit-cycle-edge", "unlock-cycle-edge", "delete-cycle-edge"]);
   });
 
   test("keeps exact route subparts ahead of whole-net commands", () => {

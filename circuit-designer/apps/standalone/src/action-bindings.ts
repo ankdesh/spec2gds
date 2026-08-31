@@ -12,7 +12,7 @@ export type ActionBindings = CircuitActionBindings;
 export type MouseShortcut = CircuitMouseShortcut;
 export type { CircuitActionId };
 
-export type CircuitActionGroup = "File" | "Edit" | "Components" | "Selection" | "Connect" | "Route" | "View" | "Tools" | "Help";
+export type CircuitActionGroup = "File" | "Edit" | "Components" | "Selection" | "Connect" | "Route" | "Timing" | "View" | "Tools" | "Help";
 export type CircuitActionDefinition = {
   id: CircuitActionId;
   group: CircuitActionGroup;
@@ -51,7 +51,15 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("lock-selected-route", "Route", "Lock selected route", "Prevent changes to the selected route."),
   command("unlock-selected-route", "Route", "Unlock selected route", "Allow the selected route to be edited again."),
   command("arrange-all", "Route", "Arrange and route all", "Run automatic layout and routing for the complete circuit."),
+  command("add-cycle-edge", "Timing", "Add cycle edge", "Place a cycle marker on the canvas."),
+  command("open-clock-settings", "Timing", "Clock settings", "Configure the default clock and optional additional domains."),
+  command("open-timing-analysis", "Timing", "Timing analysis", "Review stage latency and clock-domain crossings."),
+  command("edit-cycle-edge", "Timing", "Edit selected edge", "Edit the selected cycle edge label and position."),
+  command("lock-cycle-edge", "Timing", "Lock selected edge", "Prevent the selected cycle edge from being dragged."),
+  command("unlock-cycle-edge", "Timing", "Unlock selected edge", "Allow the selected cycle edge to be dragged."),
+  command("delete-cycle-edge", "Timing", "Delete selected edge", "Remove the selected cycle edge."),
   command("toggle-inspector", "View", "Show Inspector", "Show or hide the circuit selection Inspector."),
+  command("toggle-timing-overlay", "View", "Show timing overlay", "Show or hide cycle edges and latency labels on the interactive canvas."),
   { id: "pan-canvas", group: "View", label: "Drag canvas", description: "Pan by dragging empty canvas.", mouseOptions: ["none", "primary-drag", "middle-drag", "secondary-drag"] },
   command("pan-up", "View", "Pan up", "Move the viewport upward by one step."),
   command("pan-left", "View", "Pan left", "Move the viewport left by one step."),
@@ -65,7 +73,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("about", "Help", "About Circuit Designer", "Show product and persistence information."),
 ];
 
-export const circuitActionGroups: CircuitActionGroup[] = ["File", "Edit", "Components", "Selection", "Connect", "Route", "View", "Tools", "Help"];
+export const circuitActionGroups: CircuitActionGroup[] = ["File", "Edit", "Components", "Selection", "Connect", "Route", "Timing", "View", "Tools", "Help"];
 
 export const mouseShortcutLabels: Record<MouseShortcut, string> = {
   none: "Not assigned",

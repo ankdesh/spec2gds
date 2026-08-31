@@ -14,6 +14,7 @@ import type {
   NodeGeometry,
 } from "./types.generated";
 import { clone, emptyLayout, endpointKey, endpointTerminalKey, validateDocumentSemantics } from "./model";
+import { DEFAULT_CLOCK_DOMAIN_ID, effectiveCircuitTiming } from "./timing";
 import { createPrimitiveComponent, isPrimitiveTemplate } from "./primitives";
 
 export interface ApplyOperationOptions {
@@ -75,6 +76,7 @@ export function diffDocuments(before: CircuitDocument | undefined, after: Circui
         ...after.design.instances.map((item) => ({ kind: "instance" as const, id: item.id })),
         ...after.design.boundary_terminals.map((item) => ({ kind: "boundary_terminal" as const, id: item.id })),
         ...after.design.nets.map((item) => ({ kind: "net" as const, id: item.id })),
+        ...(after.timing ? [{ kind: "timing" as const, id: after.design.id }] : []),
       ],
       removed: [],
       changed: [],
@@ -88,11 +90,12 @@ export function diffDocuments(before: CircuitDocument | undefined, after: Circui
     changes(before.design.nets, after.design.nets, "net"),
   ];
   const layoutChanged = equal(before.layout, after.layout) ? [] : [{ kind: "layout" as const, id: after.design.id }];
+  const timingChanged = equal(before.timing, after.timing) ? [] : [{ kind: "timing" as const, id: after.design.id }];
   const oldNets = new Map(before.design.nets.map((net) => [net.id, net]));
   return {
     added: groups.flatMap((group) => group.added),
     removed: groups.flatMap((group) => group.removed),
-    changed: [...groups.flatMap((group) => group.changed), ...layoutChanged],
+    changed: [...groups.flatMap((group) => group.changed), ...layoutChanged, ...timingChanged],
     connections_changed: after.design.nets
       .filter((net) => !equal(oldNets.get(net.id)?.endpoints, net.endpoints))
       .map((net) => net.id),
@@ -121,6 +124,7 @@ function removeInstance(document: CircuitDocument, id: string, cascade: boolean,
     endpoints: net.endpoints.filter((endpoint) => endpoint.kind !== "instance" || endpoint.instance_id !== id) as CircuitNet["endpoints"],
   }));
   delete document.layout.instance_geometry[id];
+  if (document.timing) delete document.timing.subject_domain_overrides[`instance:${id}`];
   for (const key of terminalKeys) delete document.layout.terminal_placements[key];
   for (const net of connected) delete document.layout.net_routes[net.id];
   return [];
@@ -236,6 +240,11 @@ function applyOne(document: CircuitDocument, operation: CircuitOperation, option
         endpoints: net.endpoints.filter((endpoint) => endpoint.kind !== "boundary" || endpoint.terminal_id !== operation.terminal_id) as CircuitNet["endpoints"],
       }));
       delete document.layout.terminal_placements[`boundary:${operation.terminal_id}`];
+      if (document.timing) {
+        delete document.timing.subject_domain_overrides[`boundary:${operation.terminal_id}`];
+        document.timing.clock_domains = document.timing.clock_domains.map((domain) =>
+          domain.signal?.kind === "boundary" && domain.signal.id === operation.terminal_id ? { ...domain, signal: undefined } : domain) as typeof document.timing.clock_domains;
+      }
       for (const net of affected) delete document.layout.net_routes[net.id];
       return [];
     }
@@ -249,6 +258,8 @@ function applyOne(document: CircuitDocument, operation: CircuitOperation, option
     case "delete_net":
       if (!document.design.nets.some((item) => item.id === operation.net_id)) return [error("unknown_net", `Unknown net: ${operation.net_id}`, id)];
       document.design.nets = document.design.nets.filter((item) => item.id !== operation.net_id);
+      if (document.timing) document.timing.clock_domains = document.timing.clock_domains.map((domain) =>
+        domain.signal?.kind === "net" && domain.signal.id === operation.net_id ? { ...domain, signal: undefined } : domain) as typeof document.timing.clock_domains;
       delete document.layout.net_routes[operation.net_id]; return [];
     case "connect_endpoint": {
       const net = document.design.nets.find((item) => item.id === operation.net_id);
@@ -285,6 +296,60 @@ function applyOne(document: CircuitDocument, operation: CircuitOperation, option
       if (operation.grid_size !== undefined) document.layout.grid_size = operation.grid_size;
       if (operation.direction !== undefined) document.layout.direction = operation.direction;
       return [];
+    case "add_cycle_edge": {
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      if (timing.cycle_edges.some((edge) => edge.id === operation.edge.id)) return [error("duplicate_cycle_edge", `Cycle edge already exists: ${operation.edge.id}`, id)];
+      timing.cycle_edges.push(clone(operation.edge));
+      document.timing = timing;
+      return [];
+    }
+    case "update_cycle_edge": {
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      if (!timing.cycle_edges.some((edge) => edge.id === operation.edge.id)) return [error("unknown_cycle_edge", `Unknown cycle edge: ${operation.edge.id}`, id)];
+      timing.cycle_edges = timing.cycle_edges.map((edge) => edge.id === operation.edge.id ? clone(operation.edge) : edge);
+      document.timing = timing;
+      return [];
+    }
+    case "remove_cycle_edge": {
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      if (!timing.cycle_edges.some((edge) => edge.id === operation.edge_id)) return [error("unknown_cycle_edge", `Unknown cycle edge: ${operation.edge_id}`, id)];
+      timing.cycle_edges = timing.cycle_edges.filter((edge) => edge.id !== operation.edge_id);
+      document.timing = timing;
+      return [];
+    }
+    case "set_clock_domain": {
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      const found = timing.clock_domains.some((domain) => domain.id === operation.domain.id);
+      timing.clock_domains = (found
+        ? timing.clock_domains.map((domain) => domain.id === operation.domain.id ? clone(operation.domain) : domain)
+        : [...timing.clock_domains, clone(operation.domain)]) as typeof timing.clock_domains;
+      document.timing = timing;
+      return [];
+    }
+    case "remove_clock_domain": {
+      if (operation.domain_id === DEFAULT_CLOCK_DOMAIN_ID) return [error("default_clock_domain_required", "The default clock domain cannot be removed.", id)];
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      if (!timing.clock_domains.some((domain) => domain.id === operation.domain_id)) return [error("unknown_clock_domain", `Unknown clock domain: ${operation.domain_id}`, id)];
+      timing.clock_domains = timing.clock_domains.filter((domain) => domain.id !== operation.domain_id) as typeof timing.clock_domains;
+      for (const [key, domainId] of Object.entries(timing.subject_domain_overrides)) {
+        if (domainId === operation.domain_id) delete timing.subject_domain_overrides[key];
+      }
+      document.timing = timing;
+      return [];
+    }
+    case "set_subject_clock_domain": {
+      const timing = document.timing ?? effectiveCircuitTiming(document);
+      const subjectExists = operation.subject_key.startsWith("instance:")
+        ? document.design.instances.some((item) => item.id === operation.subject_key.slice("instance:".length))
+        : operation.subject_key.startsWith("boundary:")
+          && document.design.boundary_terminals.some((item) => item.id === operation.subject_key.slice("boundary:".length));
+      if (!subjectExists) return [error("unknown_timing_subject", `Unknown timing subject: ${operation.subject_key}`, id)];
+      if (operation.domain_id && !timing.clock_domains.some((domain) => domain.id === operation.domain_id)) return [error("unknown_clock_domain", `Unknown clock domain: ${operation.domain_id}`, id)];
+      if (!operation.domain_id || operation.domain_id === DEFAULT_CLOCK_DOMAIN_ID) delete timing.subject_domain_overrides[operation.subject_key];
+      else timing.subject_domain_overrides[operation.subject_key] = operation.domain_id;
+      document.timing = timing;
+      return [];
+    }
   }
 }
 

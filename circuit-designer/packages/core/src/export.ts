@@ -7,6 +7,7 @@ import type {
   TerminalPlacement,
 } from "./types.generated";
 import { endpointTerminalKey, terminalDefaultPlacement } from "./model";
+import { analyzeCircuitTiming, effectiveCircuitTiming, sortedCycleEdges, stageLabel, type TimingPathAnalysis } from "./timing";
 
 export interface SvgRendererContext {
   component: ComponentDefinition;
@@ -231,8 +232,10 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
     return key.startsWith("boundary:") ? visibleKeys.has(key) : visibleKeys.has(key.slice(0, key.indexOf(":")));
   }));
   const routePoints = nets.flatMap((net) => document.layout.net_routes[net.id]?.vertices.map((vertex) => vertex.point) ?? []);
+  const timing = effectiveCircuitTiming(document);
+  const cycleEdges = document.timing ? sortedCycleEdges(timing) : [];
   const padding = options.padding ?? 40;
-  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...routePoints.map((point) => point.x)];
+  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...routePoints.map((point) => point.x), ...cycleEdges.map((edge) => edge.x)];
   const ys = [...boxes.flatMap((box) => [box.y, box.y + box.height]), ...routePoints.map((point) => point.y)];
   const minX = (xs.length ? Math.min(...xs) : 0) - padding;
   const minY = (ys.length ? Math.min(...ys) : 0) - padding;
@@ -257,13 +260,48 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
     return [`<g data-boundary-id="${escapeXml(terminal.id)}">${genericSvgRenderer({ component, geometry, label: terminal.label })}</g>`];
   }).join("");
   const portMarkup = terminals.map(terminalMarkup).join("");
+  const cycleEdgeMarkup = [
+    ...(cycleEdges.length
+      ? [`<text x="${minX + 8}" y="${minY + 31}" class="stage-label">${escapeXml(stageLabel(timing, 0).toUpperCase())}</text>`]
+      : []),
+    ...cycleEdges.map((edge, index) => [
+      `<line x1="${edge.x}" y1="${minY}" x2="${edge.x}" y2="${minY + height}" class="cycle-edge${edge.locked ? " cycle-edge--locked" : ""}"/>`,
+      `<text x="${edge.x + 6}" y="${minY + 16}" class="cycle-edge-label">${escapeXml(edge.label ?? `CYCLE EDGE ${index + 1}`)}</text>`,
+      `<text x="${edge.x + 6}" y="${minY + 31}" class="stage-label">${escapeXml(stageLabel(timing, index + 1).toUpperCase())}</text>`,
+    ].join("")),
+  ].join("");
+  const timingAnalysis = analyzeCircuitTiming(document, boundaryGeometry);
+  const pathLabels = new Map<string, { text: string; status: TimingPathAnalysis["status"] }>();
+  for (const path of timingAnalysis.paths) {
+    const current = pathLabels.get(path.net_id);
+    if (path.status === "cdc") {
+      pathLabels.set(path.net_id, { text: "CDC", status: path.status });
+    } else if (path.status === "ready" && (path.cycles ?? 0) > 0 && current?.status !== "cdc") {
+      const previousCycles = current?.status === "ready" ? Number(current.text.match(/\d+/)?.[0] ?? 0) : 0;
+      const cycles = Math.max(previousCycles, path.cycles ?? 0);
+      pathLabels.set(path.net_id, { text: `+${cycles} cycle${cycles === 1 ? "" : "s"}`, status: path.status });
+    } else if (!current && path.status !== "ready") {
+      pathLabels.set(path.net_id, { text: "TIMING ?", status: path.status });
+    }
+  }
+  const latencyMarkup = nets.flatMap((net) => {
+    const label = pathLabels.get(net.id);
+    if (!label) return [];
+    const points = document.layout.net_routes[net.id]?.vertices.map((vertex) => vertex.point)
+      ?? net.endpoints.flatMap((endpoint) => terminalPoints.get(endpointTerminalKey(endpoint)) ?? []);
+    if (!points.length) return [];
+    const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const y = Math.min(...points.map((point) => point.y)) - 9;
+    const labelWidth = Math.max(50, label.text.length * 6 + 12);
+    return [`<g class="latency-label latency-label--${label.status}"><rect x="${x - labelWidth / 2}" y="${y - 11}" width="${labelWidth}" height="16" rx="4"/><text x="${x}" y="${y}" text-anchor="middle">${escapeXml(label.text)}</text></g>`];
+  }).join("");
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minY} ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeXml(document.label)}">`,
     "<defs><pattern id=\"canvas-grid\" width=\"20\" height=\"20\" patternUnits=\"userSpaceOnUse\"><circle cx=\"1\" cy=\"1\" r=\"1\" fill=\"#b8c0bd\"/></pattern><filter id=\"component-shadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"7\" flood-color=\"#18282f\" flood-opacity=\"0.12\"/></filter></defs>",
-    "<style>.canvas-background{fill:#f4f2ec}.component{fill:#fffdf7;stroke:#21343d;stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow{fill:#63727a;font:9px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:#17252b;font:600 15px Inter,system-ui,sans-serif}.component-symbol{fill:#4cc9a4;font:12px ui-monospace,monospace}.net{fill:none;stroke:#304b55;stroke-width:1.6}.net--locked{stroke:#204b6a;stroke-width:2;stroke-dasharray:7 3}.junction{fill:#304b55}.port{fill:#156b70;stroke:#fffdf7;stroke-width:2}.port-label{fill:#456068;font:8px ui-monospace,monospace}</style>",
+    "<style>.canvas-background{fill:#f4f2ec}.component{fill:#fffdf7;stroke:#21343d;stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow{fill:#63727a;font:9px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:#17252b;font:600 15px Inter,system-ui,sans-serif}.component-symbol{fill:#4cc9a4;font:12px ui-monospace,monospace}.net{fill:none;stroke:#304b55;stroke-width:1.6}.net--locked{stroke:#204b6a;stroke-width:2;stroke-dasharray:7 3}.junction{fill:#304b55}.port{fill:#156b70;stroke:#fffdf7;stroke-width:2}.port-label{fill:#456068;font:8px ui-monospace,monospace}.cycle-edge{stroke:#4169e1;stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:#3157d5;stroke-width:2.5}.cycle-edge-label{fill:#3157d5;font:600 9px Inter,system-ui,sans-serif}.stage-label{fill:#4f5f67;font:600 8px Inter,system-ui,sans-serif}.latency-label rect{fill:#fffdf7;stroke:#71808a}.latency-label text{fill:#253b45;font:600 8px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:#fff8e8;stroke:#d99a37}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:#8a5913}</style>",
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" class="canvas-background"/>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="url(#canvas-grid)"/>`,
-    `<g class="nets">${netMarkup}</g><g class="instances">${instanceMarkup}${boundaryMarkup}</g><g class="ports">${portMarkup}</g>`,
+    `<g class="cycle-edges">${cycleEdgeMarkup}</g><g class="nets">${netMarkup}</g><g class="instances">${instanceMarkup}${boundaryMarkup}</g><g class="ports">${portMarkup}</g><g class="latencies">${latencyMarkup}</g>`,
     "</svg>",
   ].join("");
 }

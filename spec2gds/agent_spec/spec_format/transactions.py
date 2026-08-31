@@ -16,7 +16,17 @@ from spec2gds.agent_spec.spec_format.circuit_layouts import (
     delete_design_layout,
     upsert_design_layout,
 )
-from spec2gds.agent_spec.spec_format.ir import ConnectionIR, ExternalPortEndpointIR, InstanceIR, SpecRevision
+from spec2gds.agent_spec.spec_format.circuit_timings import (
+    DesignCircuitTimingV1,
+    DesignClockSignalV1,
+    upsert_design_timing,
+)
+from spec2gds.agent_spec.spec_format.ir import (
+    ConnectionIR,
+    ExternalPortEndpointIR,
+    InstanceIR,
+    SpecRevision,
+)
 from spec2gds.agent_spec.spec_format.models import (
     ID_PATTERN,
     ComponentComposition,
@@ -322,6 +332,13 @@ class UpsertCircuitLayout:
     layout: DesignCircuitLayoutV1
 
 
+@dataclass(frozen=True)
+class UpsertCircuitTiming:
+    """Persist one source-semantic circuit timing annotation."""
+
+    timing: DesignCircuitTimingV1
+
+
 EditOperation = typing.Union[
     UpsertDocumentXml,
     DeleteDocument,
@@ -352,6 +369,7 @@ EditOperation = typing.Union[
     UpsertEntitySection,
     DeleteEntitySection,
     UpsertCircuitLayout,
+    UpsertCircuitTiming,
 ]
 
 
@@ -470,6 +488,15 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         if not len(container):
             root.remove(container)
         package.add_document("design", _serialize(root))
+        timing_data = package.files.get(f"annotations/circuit-timing/{operation.design.entity_id}.json")
+        if timing_data is not None:
+            timing = DesignCircuitTimingV1.model_validate_json(timing_data)
+            upsert_design_timing(package, timing.model_copy(update={
+                "subject_domain_overrides": {
+                    key: value for key, value in timing.subject_domain_overrides.items()
+                    if key != f"instance:{operation.instance_name}"
+                }
+            }))
     elif isinstance(operation, RenameInstance):
         _rename_instance(package, operation)
     elif isinstance(operation, ReorderInstances):
@@ -486,6 +513,16 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         if not _delete_connection(root, operation.connection_name):
             raise KeyError(f"Design has no connection named {operation.connection_name}.")
         package.add_document("design", _serialize(root))
+        timing_data = package.files.get(f"annotations/circuit-timing/{operation.design.entity_id}.json")
+        if timing_data is not None:
+            timing = DesignCircuitTimingV1.model_validate_json(timing_data)
+            domains = tuple(
+                domain.model_copy(update={"signal": None})
+                if domain.signal is not None and domain.signal.kind == "net" and domain.signal.id == operation.connection_name
+                else domain
+                for domain in timing.clock_domains
+            )
+            upsert_design_timing(package, timing.model_copy(update={"clock_domains": domains}))
     elif isinstance(operation, ReorderConnections):
         root, _ = _design_root(package, operation.design)
         container = _required_child(root, "interconnections" if operation.kind == "interface" else "adHocConnections")
@@ -553,6 +590,8 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         delete_entity_section(package, operation.owner, operation.section_type, operation.section_id)
     elif isinstance(operation, UpsertCircuitLayout):
         upsert_design_layout(package, operation.layout)
+    elif isinstance(operation, UpsertCircuitTiming):
+        upsert_design_timing(package, operation.timing)
     else:  # pragma: no cover - protects this dispatcher when the union grows.
         raise TypeError(f"Unsupported edit operation: {type(operation).__name__}")
 
@@ -691,6 +730,15 @@ def _rename_instance(package: SpecPackage, operation: RenameInstance) -> None:
             "label_geometry": {rename_key(key): value for key, value in layout.label_geometry.items()},
             "net_routes": routes,
         }))
+    timing_annotation = package.files.get(f"annotations/circuit-timing/{operation.design.entity_id}.json")
+    if timing_annotation is not None:
+        timing = DesignCircuitTimingV1.model_validate_json(timing_annotation)
+        old_key = f"instance:{operation.old_name}"
+        new_key = f"instance:{operation.new_name}"
+        overrides = dict(timing.subject_domain_overrides)
+        if old_key in overrides:
+            overrides[new_key] = overrides.pop(old_key)
+        upsert_design_timing(package, timing.model_copy(update={"subject_domain_overrides": overrides}))
 
 
 def _component_vlnv(package: SpecPackage, component: EntityRef) -> str:
@@ -778,6 +826,21 @@ def _rename_component_port(package: SpecPackage, operation: RenameComponentPort)
                 "label_geometry": rename_keys(layout.label_geometry),
                 "net_routes": routes,
             }))
+        timing_annotation = package.files.get(f"annotations/circuit-timing/{entry.entity_id}.json")
+        if timing_annotation is not None and entry.entity_id in internal_design_ids:
+            timing = DesignCircuitTimingV1.model_validate_json(timing_annotation)
+            old_key = f"boundary:{operation.old_name}"
+            new_key = f"boundary:{operation.new_name}"
+            overrides = dict(timing.subject_domain_overrides)
+            if old_key in overrides:
+                overrides[new_key] = overrides.pop(old_key)
+            domains = tuple(
+                domain.model_copy(update={"signal": DesignClockSignalV1(kind="boundary", id=operation.new_name)})
+                if domain.signal is not None and domain.signal.kind == "boundary" and domain.signal.id == operation.old_name
+                else domain
+                for domain in timing.clock_domains
+            )
+            upsert_design_timing(package, timing.model_copy(update={"subject_domain_overrides": overrides, "clock_domains": domains}))
 
 
 def _delete_component_port(package: SpecPackage, operation: DeleteComponentPort) -> None:
@@ -805,7 +868,8 @@ def _delete_component_port(package: SpecPackage, operation: DeleteComponentPort)
     }
     for entry in [item for item in package.manifest.documents if item.kind == "design"]:
         data = package.files.get(f"annotations/circuit-layout/{entry.entity_id}.json")
-        if data is None:
+        timing_data = package.files.get(f"annotations/circuit-timing/{entry.entity_id}.json")
+        if data is None and timing_data is None:
             continue
         root = ipxact.parse_xml(package.files[entry.path])
         instance_names = set()
@@ -819,11 +883,25 @@ def _delete_component_port(package: SpecPackage, operation: DeleteComponentPort)
         removed_keys = {f"instance:{name}/port:{operation.name}" for name in instance_names}
         if entry.entity_id in internal_design_ids:
             removed_keys.add(f"boundary:{operation.name}")
-        layout = DesignCircuitLayoutV1.model_validate_json(data)
-        upsert_design_layout(package, layout.model_copy(update={
-            "terminal_placements": {key: value for key, value in layout.terminal_placements.items() if key not in removed_keys},
-            "label_geometry": {key: value for key, value in layout.label_geometry.items() if key not in removed_keys},
-        }))
+        if data is not None:
+            layout = DesignCircuitLayoutV1.model_validate_json(data)
+            upsert_design_layout(package, layout.model_copy(update={
+                "terminal_placements": {key: value for key, value in layout.terminal_placements.items() if key not in removed_keys},
+                "label_geometry": {key: value for key, value in layout.label_geometry.items() if key not in removed_keys},
+            }))
+        if timing_data is not None and entry.entity_id in internal_design_ids:
+            timing = DesignCircuitTimingV1.model_validate_json(timing_data)
+            boundary_key = f"boundary:{operation.name}"
+            domains = tuple(
+                domain.model_copy(update={"signal": None})
+                if domain.signal is not None and domain.signal.kind == "boundary" and domain.signal.id == operation.name
+                else domain
+                for domain in timing.clock_domains
+            )
+            upsert_design_timing(package, timing.model_copy(update={
+                "subject_domain_overrides": {key: value for key, value in timing.subject_domain_overrides.items() if key != boundary_key},
+                "clock_domains": domains,
+            }))
 
 
 def _set_composition(package: SpecPackage, component: EntityRef, internal_design: EntityRef) -> None:

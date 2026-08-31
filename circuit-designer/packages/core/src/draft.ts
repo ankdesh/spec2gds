@@ -18,6 +18,9 @@ function coalescingKey(operation: CircuitOperation): string | undefined {
   if (operation.type === "set_net_route") return `${operation.type}:${operation.net_id}`;
   if (operation.type === "set_label_geometry") return `${operation.type}:${operation.element_key}`;
   if (operation.type === "set_layout_settings") return operation.type;
+  if (operation.type === "update_cycle_edge") return `${operation.type}:${operation.edge.id}`;
+  if (operation.type === "set_clock_domain") return `${operation.type}:${operation.domain.id}`;
+  if (operation.type === "set_subject_clock_domain") return `${operation.type}:${operation.subject_key}`;
   return undefined;
 }
 

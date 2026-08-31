@@ -319,6 +319,13 @@ class SpecPackage:
         except (ValueError, pydantic.ValidationError) as exc:
             diagnostics.append(f"Invalid circuit layouts: {exc}")
 
+        try:
+            from spec2gds.agent_spec.spec_format.circuit_timings import validate_timing_annotations
+
+            validate_timing_annotations(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid circuit timing: {exc}")
+
         diagnostics.extend(_reference_diagnostics(self.manifest, self.files))
         return sorted(set(diagnostics))
 

@@ -8,7 +8,7 @@ import type {
   Point,
   TerminalPlacement,
 } from "@spec2gds/circuit-core";
-import { clone, projectDocument, reanchorRouteEndpoints, simplifyRoute, type EndpointAnchor } from "@spec2gds/circuit-core";
+import { clone, effectiveCircuitTiming, projectDocument, reanchorRouteEndpoints, simplifyRoute, sortedCycleEdges, stageForHorizontalSpan, type EndpointAnchor } from "@spec2gds/circuit-core";
 import { routeOrthogonalNets, type RouteObstacle, type RouteRequest } from "./router";
 
 export * from "./router";
@@ -388,8 +388,50 @@ export async function layoutCircuitDocument(
   document: CircuitDocument,
   options: LayoutOptions = {},
 ): Promise<CircuitDocumentLayoutResult> {
-  const result = await layoutCircuitGraph(projectDocument(document, "layout"), options);
+  let result = await layoutCircuitGraph(projectDocument(document, "layout"), options);
   const updated = clone(document);
+  if (document.timing?.cycle_edges.length) {
+    const timing = effectiveCircuitTiming(document);
+    const edges = sortedCycleEdges(timing);
+    const byStage = new Map<number, string[]>();
+    for (const instance of document.design.instances) {
+      const original = document.layout.instance_geometry[instance.id];
+      const stage = original ? stageForHorizontalSpan(timing, original.x, original.x + original.width) : undefined;
+      const resolvedStage = stage ?? Math.min(edges.length, Math.max(0, edges.filter((edge) => edge.x <= (result.layout.node_geometry[instance.id]?.x ?? 0)).length));
+      byStage.set(resolvedStage, [...(byStage.get(resolvedStage) ?? []), instance.id]);
+    }
+    const movedEdges = edges.map((edge) => ({ ...edge }));
+    const padding = Math.max(40, (options.gridSize ?? document.layout.grid_size) * 2);
+    for (let stage = 1; stage < movedEdges.length; stage += 1) {
+      const ids = byStage.get(stage) ?? [];
+      if (!ids.length) continue;
+      const values = ids.map((id) => result.layout.node_geometry[id]).filter(Boolean);
+      const minGenerated = Math.min(...values.map((value) => value.x));
+      const required = Math.max(...values.map((value) => value.x + value.width - minGenerated)) + padding * 2;
+      const available = movedEdges[stage].x - movedEdges[stage - 1].x;
+      if (required <= available) continue;
+      if (movedEdges.slice(stage).some((edge) => edge.locked)) {
+        throw new Error(`Stage ${stage} needs ${Math.ceil(required - available)} more pixels, but a following cycle edge is locked.`);
+      }
+      const delta = Math.ceil((required - available) / (options.gridSize ?? document.layout.grid_size)) * (options.gridSize ?? document.layout.grid_size);
+      for (let index = stage; index < movedEdges.length; index += 1) movedEdges[index].x += delta;
+    }
+    for (const [stage, ids] of byStage) {
+      if (!ids.length) continue;
+      const values = ids.map((id) => result.layout.node_geometry[id]).filter(Boolean);
+      const minGenerated = Math.min(...values.map((value) => value.x));
+      const left = stage === 0
+        ? movedEdges[0].x - (Math.max(...values.map((value) => value.x + value.width - minGenerated)) + padding)
+        : movedEdges[stage - 1]?.x + padding;
+      for (const id of ids) result.layout.node_geometry[id].x = snap(left + (result.layout.node_geometry[id].x - minGenerated), options.gridSize ?? document.layout.grid_size);
+    }
+    updated.timing = { ...timing, cycle_edges: movedEdges };
+    const rerouteDocument = clone(updated);
+    rerouteDocument.layout.instance_geometry = result.layout.node_geometry;
+    rerouteDocument.layout.terminal_placements = result.layout.terminal_placements;
+    rerouteDocument.layout.net_routes = {};
+    result = await layoutCircuitGraph(projectDocument(rerouteDocument, "layout"), { ...options, preserveNodeGeometry: "all" });
+  }
   updated.layout.direction = result.layout.direction;
   updated.layout.instance_geometry = result.layout.node_geometry;
   updated.layout.terminal_placements = result.layout.terminal_placements;

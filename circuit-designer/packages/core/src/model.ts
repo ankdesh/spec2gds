@@ -12,6 +12,7 @@ import type {
   TerminalDefinition,
   TerminalPlacement,
 } from "./types.generated";
+import { validateCircuitTiming } from "./timing";
 
 export interface CircuitDesignViewRef {
   id: string;
@@ -427,6 +428,7 @@ export function validateDocumentSemantics(document: CircuitDocument): Diagnostic
     if (!componentIds.has(instance.component_id)) continue;
     if (!document.layout.instance_geometry[instance.id]) diagnostics.push(diagnostic("warning", "missing_instance_geometry", `Instance ${instance.id} needs automatic placement.`, instance.id));
   }
+  diagnostics.push(...validateCircuitTiming(document));
   return diagnostics;
 }
 

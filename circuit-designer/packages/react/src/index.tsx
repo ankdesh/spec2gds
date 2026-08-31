@@ -11,6 +11,7 @@ import {
   type ForwardedRef,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type RefObject,
 } from "react";
 import {
   Background,
@@ -43,6 +44,9 @@ import type {
   NodeGeometry,
   TerminalPlacement,
   Diagnostic,
+  CircuitTimingV1,
+  CycleEdgeMarkerV1,
+  CircuitTimingAnalysis,
 } from "@spec2gds/circuit-core";
 import {
   ensureRouteIds,
@@ -51,10 +55,12 @@ import {
   moveRouteVertex,
   removeRouteBend,
   projectDocument,
+  sortedCycleEdges,
+  stageLabel,
 } from "@spec2gds/circuit-core";
 import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
 
-export type CircuitCanvasSelectionItem = { kind: "node" | "boundary" | "net"; id: string };
+export type CircuitCanvasSelectionItem = { kind: "node" | "boundary" | "net" | "cycle-edge"; id: string };
 export type CircuitCanvasSelection = CircuitCanvasSelectionItem[];
 export type CircuitConnectionRejectionReason = "same_terminal" | "terminal_in_use" | "invalid_target";
 export type CircuitCanvasPoint = { x: number; y: number };
@@ -66,7 +72,8 @@ export type CircuitCanvasContextTarget =
   | { kind: "terminal"; terminalId: string; owner: { kind: "node" | "boundary"; id: string } }
   | { kind: "net"; netId: string }
   | { kind: "route-segment"; netId: string; segmentId: string }
-  | { kind: "route-vertex"; netId: string; vertexId: string; vertexKind: "bend" | "junction" };
+  | { kind: "route-vertex"; netId: string; vertexId: string; vertexKind: "bend" | "junction" }
+  | { kind: "cycle-edge"; edgeId: string };
 
 export interface CircuitCanvasContextMenuRequest {
   target: CircuitCanvasContextTarget;
@@ -122,6 +129,11 @@ export interface CircuitDesignerCanvasProps {
   wheelZoomEnabled?: boolean;
   useDefaultEscapeBinding?: boolean;
   onContextMenuRequest?: (request: CircuitCanvasContextMenuRequest) => void;
+  timing?: CircuitTimingV1;
+  showTimingOverlay?: boolean;
+  onCycleEdgeChange?: (edge: CycleEdgeMarkerV1) => void;
+  onCanvasPointClick?: (point: CircuitCanvasPoint) => void;
+  timingAnalysis?: CircuitTimingAnalysis;
 }
 
 type CircuitNodeData = {
@@ -464,7 +476,100 @@ export function connectionRejectionReason(
   return undefined;
 }
 
-function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+interface CycleEdgeOverlayProps {
+  timing: CircuitTimingV1;
+  viewport: Viewport;
+  editable: boolean;
+  selectedId?: string;
+  gridSize: number;
+  canvasRef: RefObject<HTMLDivElement | null>;
+  onSelect: (edgeId: string) => void;
+  onChange?: (edge: CycleEdgeMarkerV1) => void;
+  onContextMenu: (target: CircuitCanvasContextTarget, anchor: CircuitContextAnchor) => void;
+  analysis?: CircuitTimingAnalysis;
+  layout: DiagramLayout;
+}
+
+function CycleEdgeOverlay({ timing, viewport, editable, selectedId, gridSize, canvasRef, onSelect, onChange, onContextMenu, analysis, layout }: CycleEdgeOverlayProps) {
+  const drag = useRef<{ pointerId: number; edge: CycleEdgeMarkerV1 }>();
+  const [preview, setPreview] = useState<Record<string, number>>({});
+  const edges = sortedCycleEdges(timing);
+  const clientToFlowX = (clientX: number) => {
+    const bounds = canvasRef.current?.getBoundingClientRect();
+    return Math.round(((clientX - (bounds?.left ?? 0) - viewport.x) / viewport.zoom) / gridSize) * gridSize;
+  };
+  const pathLabels = new Map<string, CircuitTimingAnalysis["paths"][number]>();
+  for (const path of analysis?.paths ?? []) {
+    const current = pathLabels.get(path.net_id);
+    if (!current || path.status !== "ready" || (path.cycles ?? 0) > (current.cycles ?? 0)) pathLabels.set(path.net_id, path);
+  }
+  return <div className="cd-cycle-edges" aria-label="Cycle edges">
+    {edges.length ? <span className="cd-cycle-edge__leading-stage" style={{ left: viewport.x + 8 }}>
+      {stageLabel(timing, 0)}
+    </span> : null}
+    {edges.map((edge, index) => {
+      const x = preview[edge.id] ?? edge.x;
+      const selected = selectedId === edge.id;
+      return <button
+        aria-label={`${edge.label ?? `Cycle edge ${index + 1}`}, starts ${edge.next_stage_label ?? `Stage ${index + 1}`}`}
+        aria-pressed={selected}
+        className={`cd-cycle-edge${selected ? " cd-cycle-edge--selected" : ""}${edge.locked ? " cd-cycle-edge--locked" : ""}`}
+        data-cycle-edge-id={edge.id}
+        key={edge.id}
+        onClick={(event) => { event.stopPropagation(); onSelect(edge.id); }}
+        onContextMenu={(event) => {
+          event.preventDefault(); event.stopPropagation(); onSelect(edge.id);
+          onContextMenu({ kind: "cycle-edge", edgeId: edge.id }, {
+            clientPoint: { x: event.clientX, y: event.clientY }, focusTarget: event.currentTarget, keyboard: false,
+          });
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== "ContextMenu" && !(event.shiftKey && event.key === "F10")) return;
+          event.preventDefault(); event.stopPropagation();
+          const bounds = event.currentTarget.getBoundingClientRect();
+          onContextMenu({ kind: "cycle-edge", edgeId: edge.id }, {
+            clientPoint: { x: bounds.left + bounds.width / 2, y: bounds.top + 28 }, focusTarget: event.currentTarget, keyboard: true,
+          });
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.stopPropagation(); onSelect(edge.id);
+          if (!editable || edge.locked || !onChange) return;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          drag.current = { pointerId: event.pointerId, edge };
+        }}
+        onPointerMove={(event) => {
+          if (drag.current?.pointerId !== event.pointerId) return;
+          setPreview((current) => ({ ...current, [edge.id]: clientToFlowX(event.clientX) }));
+        }}
+        onPointerUp={(event) => {
+          if (drag.current?.pointerId !== event.pointerId) return;
+          event.stopPropagation();
+          const nextX = clientToFlowX(event.clientX);
+          drag.current = undefined;
+          setPreview((current) => { const next = { ...current }; delete next[edge.id]; return next; });
+          onChange?.({ ...edge, x: nextX });
+        }}
+        style={{ left: x * viewport.zoom + viewport.x }}
+        type="button"
+      >
+        <span className="cd-cycle-edge__line" />
+        <span className="cd-cycle-edge__label">{edge.label ?? `Cycle edge ${index + 1}`}</span>
+        <span className="cd-cycle-edge__stage">{edge.next_stage_label ?? `Stage ${index + 1}`}</span>
+      </button>;
+    })}
+    {[...pathLabels.values()].flatMap((path) => {
+      const points = layout.net_routes?.[path.net_id]?.vertices.map((vertex) => vertex.point) ?? [];
+      if (!points.length || (path.status === "ready" && !(path.cycles ?? 0))) return [];
+      const x = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+      const y = Math.min(...points.map((point) => point.y));
+      const label = path.status === "ready" ? `+${path.cycles} cycle${path.cycles === 1 ? "" : "s"}` : path.status === "cdc" ? "CDC" : "Timing warning";
+      return [<span className={`cd-latency-label cd-latency-label--${path.status}`} key={`${path.net_id}:${path.target}`} style={{ left: x * viewport.zoom + viewport.x, top: y * viewport.zoom + viewport.y }}>{label}</span>];
+    })}
+  </div>;
+}
+
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
   const secondaryDragRef = useRef<{ x: number; y: number; moved: boolean }>();
@@ -670,10 +775,13 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         const item = selection[0];
         contextTarget = item.kind === "node" ? { kind: "node", nodeId: item.id }
           : item.kind === "boundary" ? { kind: "boundary", terminalId: item.id }
-            : { kind: "net", netId: item.id };
+            : item.kind === "cycle-edge" ? { kind: "cycle-edge", edgeId: item.id }
+              : { kind: "net", netId: item.id };
         const flowId = item.kind === "boundary" ? `boundary:${item.id}` : item.id;
         selectedElement = canvasRef.current?.querySelector<HTMLElement | SVGElement>(
-          item.kind === "net" ? `.react-flow__edge[data-id="${CSS.escape(flowId)}"]` : `.react-flow__node[data-id="${CSS.escape(flowId)}"]`,
+          item.kind === "cycle-edge" ? `[data-cycle-edge-id="${CSS.escape(item.id)}"]`
+            : item.kind === "net" ? `.react-flow__edge[data-id="${CSS.escape(flowId)}"]`
+              : `.react-flow__node[data-id="${CSS.escape(flowId)}"]`,
         ) ?? null;
       }
       const bounds = (nodeElement ?? edgeElement ?? selectedElement ?? canvasRef.current)?.getBoundingClientRect();
@@ -689,6 +797,17 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     if (event.key === "Escape" && useDefaultEscapeBinding) {
       if (pendingTerminalId) setPendingTerminalId(undefined);
       else onSelectionChange?.([]);
+      return;
+    }
+    const selectedCycleEdge = selection.length === 1 && selection[0].kind === "cycle-edge"
+      ? timing?.cycle_edges.find((edge) => edge.id === selection[0].id)
+      : undefined;
+    if (event.key.startsWith("Arrow") && selectedCycleEdge && editable && onCycleEdgeChange && !selectedCycleEdge.locked) {
+      const delta = gridSize * (event.shiftKey ? 5 : 1);
+      const x = selectedCycleEdge.x + (event.key === "ArrowLeft" ? -delta : event.key === "ArrowRight" ? delta : 0);
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault(); onCycleEdgeChange({ ...selectedCycleEdge, x });
+      }
       return;
     }
     if (!event.key.startsWith("Arrow") || !editable || !onNodeGeometryChanges) return;
@@ -760,6 +879,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         autoPanOnNodeDrag={allowViewportNavigation}
         autoPanOnConnect={allowViewportNavigation}
         onMove={(_, nextViewport) => onViewportChange?.(nextViewport)}
+        onPaneClick={(event) => onCanvasPointClick?.(instanceRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY }) ?? { x: event.clientX, y: event.clientY })}
         onNodesChange={(changes) => applyControlledSelectionChanges("node", changes)}
         onEdgesChange={(changes) => applyControlledSelectionChanges("net", changes)}
         onPaneContextMenu={(event) => {
@@ -817,6 +937,19 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         {showInlineViewportControls && <Controls showInteractive={false} />}
       </ReactFlow>
+      {timing && showTimingOverlay && <CycleEdgeOverlay
+        timing={timing}
+        viewport={viewport ?? { x: gridSize, y: gridSize, zoom: 1 }}
+        editable={editable}
+        selectedId={selection.length === 1 && selection[0].kind === "cycle-edge" ? selection[0].id : undefined}
+        gridSize={gridSize}
+        canvasRef={canvasRef}
+        onSelect={(edgeId) => onSelectionChange?.([{ kind: "cycle-edge", id: edgeId }])}
+        onChange={onCycleEdgeChange}
+        onContextMenu={emitContextMenu}
+        analysis={timingAnalysis}
+        layout={layout}
+      />}
     </div>
   );
 }

@@ -15,6 +15,9 @@ import {
   validateComponentDesignBoundary,
   validateContractDefinition,
   resolveHierarchy,
+  analyzeCircuitTiming,
+  effectiveCircuitTiming,
+  renderCircuitSvg,
   type CircuitConstruction,
 } from "../src/index";
 
@@ -158,6 +161,51 @@ describe("independent circuit core", () => {
       { operation_id: "missing", type: "delete_net", net_id: "missing" },
     ]).some((item) => item.severity === "error")).toBe(true);
     expect(draft.document).toEqual(beforeRejected);
+  });
+
+  it("uses an implicit default clock and counts every crossed marker as one cycle", () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry.producer_0 = { x: 80, y: 80, width: 180, height: 100 };
+    document.layout.instance_geometry.consumer_0 = { x: 420, y: 80, width: 180, height: 100 };
+    expect(effectiveCircuitTiming(document).clock_domains[0]).toEqual({ id: "default", label: "clk" });
+    document.timing = {
+      schema_version: 1,
+      clock_domains: [{ id: "default", label: "clk" }],
+      cycle_edges: [{ id: "cycle_edge_1", x: 320, locked: false }],
+      subject_domain_overrides: {},
+    };
+    const analysis = analyzeCircuitTiming(document);
+    expect(analysis.paths).toEqual([expect.objectContaining({ status: "ready", cycles: 1, source_stage: 0, target_stage: 1 })]);
+    expect(validateCircuitDocument(document).valid).toBe(true);
+    expect(renderCircuitSvg(document)).toContain("CYCLE EDGE 1");
+    expect(renderCircuitSvg(document)).toContain("+1 cycle");
+  });
+
+  it("rejects markers that bisect an instance and reports advanced-domain CDCs", () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry.producer_0 = { x: 80, y: 80, width: 180, height: 100 };
+    document.layout.instance_geometry.consumer_0 = { x: 420, y: 80, width: 180, height: 100 };
+    document.timing = {
+      schema_version: 1,
+      clock_domains: [{ id: "default", label: "clk" }, { id: "io", label: "io_clk" }],
+      cycle_edges: [{ id: "cycle_edge_1", x: 320, locked: false }],
+      subject_domain_overrides: { "instance:consumer_0": "io" },
+    };
+    const cdc = analyzeCircuitTiming(document).paths[0];
+    expect(cdc).toEqual(expect.objectContaining({ status: "cdc", source_domain_id: "default", target_domain_id: "io" }));
+    expect(cdc).not.toHaveProperty("cycles");
+    expect(renderCircuitSvg(document)).toContain(">CDC<");
+    document.timing.cycle_edges[0].x = 100;
+    expect(validateCircuitDocument(document).diagnostics.map((item) => item.code)).toContain("cycle_edge_intersects_instance");
+  });
+
+  it("applies cycle-edge edits through one undoable draft operation", () => {
+    const document = simpleDocumentFixture();
+    const draft = new CircuitDraft(document, "1");
+    expect(draft.apply({ operation_id: "edge", type: "add_cycle_edge", edge: { id: "cycle_edge_1", x: 360, locked: false } }).some((item) => item.severity === "error")).toBe(false);
+    expect(draft.document.timing?.cycle_edges).toHaveLength(1);
+    draft.undo();
+    expect(draft.document.timing).toBeUndefined();
   });
 
   it("compiles aliases and primitive templates into a normalized document", () => {
