@@ -56,17 +56,23 @@ describe("Circuit Designer REST service", () => {
 
   it("retains the legacy service-directory endpoint when a host supplies one", async () => {
     const location = { service_url: "http://127.0.0.1:1", ui_url: "http://127.0.0.1:2" };
+    const specLocation = { service_url: "http://172.24.32.126:6010", ui_url: "http://172.24.32.126:6010/editor" };
     service = new CircuitDesignerService({
       serviceDirectory: {
         schema_version: 2,
-        services: { spec_editor: location, circuit_designer: location, ai_assistant: location },
+        services: { spec_editor: specLocation, circuit_designer: location, ai_assistant: location },
         logging: { enabled: false, level: "info" },
       },
     });
     const port = await service.listen();
     const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
     expect(await (await fetch(`${base}/services`)).json()).toMatchObject({ services: { ai_assistant: location } });
-    expect(await (await fetch(`${base}/capabilities`)).json()).toMatchObject({ integrations: { service_directory: true } });
+    expect(await (await fetch(`${base}/capabilities`)).json()).toMatchObject({
+      integrations: {
+        service_directory: true,
+        callback_provider_allowlist: ["172.24.32.126"],
+      },
+    });
   });
 
   it("loads defaults and atomically persists a shared preference file", async () => {

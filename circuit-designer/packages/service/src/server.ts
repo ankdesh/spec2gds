@@ -59,7 +59,12 @@ export class CircuitDesignerService {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
     this.now = options.now ?? (() => new Date());
     this.serviceDirectory = options.serviceDirectory;
-    this.allowlist = new Set(options.providerAllowlist ?? []);
+    this.allowlist = new Set([
+      ...(this.serviceDirectory
+        ? [new URL(this.serviceDirectory.services.spec_editor.service_url).hostname]
+        : []),
+      ...(options.providerAllowlist ?? []),
+    ]);
     this.logger = options.logger ?? new StructuredLogger("circuit-designer", loadObservabilityConfig());
     this.preferences = new CircuitPreferencesStore(options.preferencesPath
       ?? resolve(process.env.CIRCUIT_DESIGNER_PREFERENCES_FILE ?? ".circuit-designer/preferences.json"));
