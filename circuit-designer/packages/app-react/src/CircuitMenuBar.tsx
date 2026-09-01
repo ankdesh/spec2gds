@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import { useEffect, useMemo, useRef, useState } from "react";
 import { circuitActionDefinitions, formatKeyboardShortcut, type ActionBindings, type CircuitActionId } from "./action-bindings";
 import { CircuitActionMenuPanel, type CircuitMenuEntry } from "./CircuitActionMenu";
@@ -16,7 +17,7 @@ const menus: MenuDefinition[] = [
   { id: "route", label: "Route", entries: [action("reroute-selected"), action("lock-selected-route"), action("unlock-selected-route"), { kind: "separator" }, action("arrange-all")] },
   { id: "timing", label: "Timing", entries: [action("add-cycle-edge"), action("open-clock-settings"), action("open-timing-analysis"), { kind: "separator" }, action("edit-cycle-edge"), action("lock-cycle-edge"), action("unlock-cycle-edge"), action("delete-cycle-edge")] },
   { id: "view", label: "View", entries: [action("toggle-inspector"), action("toggle-timing-overlay"), { kind: "separator" }, { kind: "submenu", id: "pan", label: "Pan", entries: [action("pan-up"), action("pan-left"), action("pan-down"), action("pan-right")] }, action("zoom-in"), action("zoom-out"), { kind: "separator" }, action("center-selection"), action("fit-circuit")] },
-  { id: "tools", label: "Tools", entries: [action("open-assistant")] },
+  { id: "tools", label: "Tools", entries: [action("run-primary-tool")] },
   { id: "help", label: "Help", entries: [action("getting-started"), { kind: "separator" }, action("about")] },
 ];
 
@@ -30,15 +31,19 @@ export interface CircuitMenuBarProps {
   dismissVersion?: number;
   onOpenChange?: (open: boolean) => void;
   sourceBound?: boolean;
+  sourceSaveLabel?: string;
+  toolLabel?: string;
 }
 
-export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound }: CircuitMenuBarProps) {
+export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, toolLabel }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
   const rootRef = useRef<HTMLElement>(null);
-  const effectiveMenus = useMemo(() => menus.map((menu) => ({
+  const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || toolLabel).map((menu) => ({
     ...menu,
     entries: menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
-      ? { ...entry, label: "Save to Specification" }
+      ? { ...entry, label: sourceSaveLabel ?? "Save to Source" }
+      : entry.kind === "action" && entry.commandId === "run-primary-tool" && toolLabel
+      ? { ...entry, label: toolLabel }
       : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
       : entry.kind === "action" && entry.commandId === "toggle-timing-overlay"
@@ -46,7 +51,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
       : entry.kind === "action" && entry.commandId === "review-proposals"
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
-  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound]);
+  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, toolLabel]);
   const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 

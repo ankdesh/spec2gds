@@ -14,11 +14,11 @@ import {
 } from "@spec2gds/circuit-core";
 import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
 import { EphemeralCircuitSessionBackend } from "./session-backend";
-import { resolvedServiceDirectory, type PublicServiceDirectory } from "./service-registry";
+import type { PublicServiceDirectory } from "./service-registry";
 import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observability/node";
 import { randomUUID } from "node:crypto";
 import { CircuitPreferencesStore } from "./preferences-store";
-import { resolvedCircuitPreferencesPath } from "./service-registry";
+import { resolve } from "node:path";
 import {
   HttpSourceDesignProvider,
   type SourceBindingRegistration,
@@ -49,7 +49,7 @@ export class CircuitDesignerService {
   private readonly subscribers = new Map<string, Set<ServerResponse>>();
   private readonly allowlist: Set<string>;
   private readonly now: () => Date;
-  private readonly serviceDirectory: PublicServiceDirectory;
+  private readonly serviceDirectory?: PublicServiceDirectory;
   private readonly logger: StructuredLogger;
   private readonly preferences: CircuitPreferencesStore;
   private readonly sourceBindings = new Map<string, StoredSourceBinding>();
@@ -58,13 +58,11 @@ export class CircuitDesignerService {
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
     this.now = options.now ?? (() => new Date());
-    this.serviceDirectory = options.serviceDirectory ?? resolvedServiceDirectory();
-    this.allowlist = new Set([
-      new URL(this.serviceDirectory.services.spec_editor.service_url).hostname,
-      ...(options.providerAllowlist ?? []),
-    ]);
+    this.serviceDirectory = options.serviceDirectory;
+    this.allowlist = new Set(options.providerAllowlist ?? []);
     this.logger = options.logger ?? new StructuredLogger("circuit-designer", loadObservabilityConfig());
-    this.preferences = new CircuitPreferencesStore(options.preferencesPath ?? resolvedCircuitPreferencesPath());
+    this.preferences = new CircuitPreferencesStore(options.preferencesPath
+      ?? resolve(process.env.CIRCUIT_DESIGNER_PREFERENCES_FILE ?? ".circuit-designer/preferences.json"));
     this.server = createServer((request, response) => void this.handle(request, response));
   }
 
@@ -113,7 +111,25 @@ export class CircuitDesignerService {
       if (method === "GET" && parts[0] === "health" && parts.length === 1) {
         return this.jsonResponse(response, 200, { status: "ok", service: "circuit_designer" });
       }
+      if (method === "GET" && parts[0] === "capabilities" && parts.length === 1) {
+        return this.jsonResponse(response, 200, {
+          schema_version: 1,
+          service: "circuit_designer",
+          api_version: "v1",
+          capabilities: [
+            "canonical-documents", "edit-leases", "operations", "proposals",
+            "component-providers", "source-bindings", "preferences", "events", "exports",
+          ],
+          integrations: {
+            service_directory: Boolean(this.serviceDirectory),
+            callback_provider_allowlist: [...this.allowlist].sort(),
+          },
+        });
+      }
       if (method === "GET" && parts[0] === "services" && parts.length === 1) {
+        if (!this.serviceDirectory) {
+          return this.error(response, 404, "not_found", "No legacy service directory was configured. Use /capabilities for portable discovery.");
+        }
         return this.jsonResponse(response, 200, this.serviceDirectory);
       }
       if (method === "GET" && parts[0] === "preferences" && parts.length === 1) {

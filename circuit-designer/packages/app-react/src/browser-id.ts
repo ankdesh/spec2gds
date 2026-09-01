@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 type BrowserCrypto = {
   randomUUID?: () => string;
   getRandomValues?: (array: Uint8Array) => Uint8Array;

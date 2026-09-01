@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@spec2gds/circuit-app-react": "0.0.0",
     "@spec2gds/circuit-client-http": "0.0.0",
     "@spec2gds/circuit-core": "0.0.0",
     "@spec2gds/circuit-layout": "0.0.0",

@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import { useState, type KeyboardEvent } from "react";
 import { createDefaultCircuitDesignerPreferences, type CircuitDesignerPreferencesV1 } from "@spec2gds/circuit-core";
 import {

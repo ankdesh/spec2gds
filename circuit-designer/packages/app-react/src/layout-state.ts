@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import type { CircuitGraphView } from "@spec2gds/circuit-core";
 import type { LayoutResult } from "@spec2gds/circuit-layout";
 

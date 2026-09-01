@@ -28,6 +28,17 @@ describe("Circuit Designer preferences", () => {
     expect(checked.preferences.action_bindings["select-all"].keyboard).toBe("Mod+A");
   });
 
+  test("migrates the former assistant action to the host-tool action", () => {
+    const checked = validateCircuitDesignerPreferences({
+      schema_version: 1,
+      ui: { inspector_open: false, timing_overlay_visible: true },
+      action_bindings: { "open-assistant": { keyboard: "Mod+J", mouse: "none" } },
+    });
+    expect(checked.valid).toBe(true);
+    if (!checked.valid) return;
+    expect(checked.preferences.action_bindings["run-primary-tool"].keyboard).toBe("Mod+J");
+  });
+
   test("rejects unknown actions, invalid mouse inputs, and oversized keys", () => {
     const defaults = createDefaultCircuitDesignerPreferences();
     expect(validateCircuitDesignerPreferences({

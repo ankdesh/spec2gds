@@ -110,10 +110,11 @@ flowchart LR
     Core --> Service["circuit-service"]
     Core --> Layout["circuit-layout"]
     Core --> React["circuit-react"]
+    React --> Shell["circuit-app-react"]
     Service --> HTTP["circuit-client-http"]
-    HTTP --> App["Circuit app"]
-    Layout --> App
-    React --> App
+    HTTP --> Shell
+    Layout --> Shell
+    Shell --> App["Standalone or embedded host"]
 
     Package["Spec package + IP-XACT"] --> Revision["SpecRevision"]
     Revision --> API["Spec API"]
@@ -123,8 +124,11 @@ flowchart LR
 ```
 
 Circuit packages do not import Python or SpecIR. The specification side owns
-translation because it understands IP-XACT. UI packages consume public
-projections and clients; they do not mutate model objects directly.
+translation because it understands IP-XACT. The reusable React application
+shell consumes host adapters for files, preferences, source synchronization,
+events, telemetry, and tools; the standalone application supplies the current
+browser and Spec integrations. UI packages consume public projections and
+clients; they do not mutate model objects directly.
 
 ## Deliberate limits
 

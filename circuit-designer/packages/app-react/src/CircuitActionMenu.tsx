@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import {
   useEffect,
   useLayoutEffect,

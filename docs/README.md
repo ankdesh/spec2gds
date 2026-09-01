@@ -48,6 +48,15 @@ Read in this order:
 20. [Circuit Designer timing stages](circuit-designer-timing-stages.md) —
     vertical cycle edges, single-clock defaults, latency analysis, source
     persistence, and export behavior.
+21. [Embedding Circuit Designer](circuit-designer-embedding.md) — reusable React
+    shell, host adapters, portable service discovery, and ownership rules.
+22. [Circuit Designer visual profile](circuit-designer-visual-profile.md) —
+    Blueprint Slate tokens, responsive behavior, and theme extension.
+23. [Circuit Designer / Chipmind gap analysis](circuit-designer-chipmind-gap-analysis.md)
+    — current overlap, missing capabilities, and suggested priorities.
+24. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
+    — plain-language ownership, projection, launch, save, refresh, conflict,
+    and security diagrams.
 
 ## Documentation rule
 

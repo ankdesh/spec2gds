@@ -11,6 +11,7 @@ circuit-designer/packages/core/    contracts, validation, operations, drafts, ex
 circuit-designer/packages/service/ REST sessions, leases, proposals, providers
 circuit-designer/packages/layout/  placement and orthogonal routing
 circuit-designer/packages/react/   canvas rendering and gestures
+circuit-designer/packages/app-react/ reusable application shell and host adapters
 circuit-designer/apps/editor/      specification editor frontend
 circuit-designer/apps/standalone/  independent Circuit Designer frontend
 ai-assistant/                      optional AI Assistant service and web client
@@ -21,9 +22,10 @@ docs/                              current architecture and workflows
 
 ## Python environment
 
-Service processes and frontend dev proxies read `config/services.json` at
-startup. Use `SPEC2GDS_SERVICE_CONFIG=/absolute/path/services.json` for an
-untracked machine-specific registry.
+The combined launcher exports `config/services.json` to participating services.
+Use `SPEC2GDS_SERVICE_CONFIG=/absolute/path/services.json` for an untracked
+machine-specific registry. Circuit Designer's service and Vite UI also have
+independent defaults and do not require that shared registry.
 
 Use `uv`; do not install project packages into the system interpreter.
 Running `uv sync` creates the repository-local `.venv`. The AI Assistant is a

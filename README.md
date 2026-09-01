@@ -36,6 +36,18 @@ The two editors have different source-of-truth rules:
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
 
+For a focused explanation of how the two editors cooperate, including launch,
+projection, save, refresh, conflict, and security diagrams, read
+[Spec Editor and Circuit Designer integration architecture](docs/spec-circuit-integration-architecture.md).
+
+Circuit Designer's application shell is also available as the compiled private
+package `@spec2gds/circuit-app-react`. It can be embedded with host-provided
+file, preference, source, telemetry, event, and tool adapters; see
+[Embedding Circuit Designer](docs/circuit-designer-embedding.md). Its
+[Blueprint Slate visual profile](docs/circuit-designer-visual-profile.md) and
+[Chipmind feature-gap inventory](docs/circuit-designer-chipmind-gap-analysis.md)
+document the current professionalization direction.
+
 ## Prerequisites
 
 Install these tools before setting up the repository:
@@ -110,7 +122,8 @@ addresses or ports.
 
 ## Configure service addresses
 
-All three applications read [`config/services.json`](config/services.json).
+The combined spec2gds launcher and its three applications read
+[`config/services.json`](config/services.json).
 It contains the host, port, and base path for each API and browser UI. Change
 that file before starting the services when the defaults are not appropriate;
 set `SPEC2GDS_SERVICE_CONFIG` to point at an alternate registry. Existing
@@ -134,6 +147,18 @@ uv run spec2gds-log-viewer
 
 See [the logging guide](docs/logging.md) for filters, redaction, and the event
 format.
+
+The Circuit service can also run independently without the shared registry:
+
+```bash
+cd circuit-designer
+CIRCUIT_DESIGNER_PORT=6011 npm run service
+```
+
+In independent mode, discover optional functionality through
+`GET /api/circuit-designer/v1/capabilities`. Set
+`SPEC2GDS_SERVICE_CONFIG` only when the legacy shared `/services` directory is
+required.
 
 The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
 uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a

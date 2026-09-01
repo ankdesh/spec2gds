@@ -1,0 +1,97 @@
+import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
+import {
+  validateContractDefinition,
+  type CircuitDesignerPreferencesV1,
+  type CircuitDocument,
+} from "@spec2gds/circuit-core";
+import {
+  cachePreferences,
+  clearCachedPreferences,
+  loadCachedPreferences,
+  type CircuitFileAdapter,
+  type CircuitPreferencesAdapter,
+  type CircuitSourceAdapter,
+} from "@spec2gds/circuit-app-react";
+
+export function createBrowserFileAdapter(): CircuitFileAdapter {
+  return {
+    async open() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,application/json";
+      const file = await new Promise<File | undefined>((resolve) => {
+        input.addEventListener("change", () => resolve(input.files?.[0]), { once: true });
+        input.click();
+      });
+      if (!file) return undefined;
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const result = validateContractDefinition("CircuitDocument", parsed);
+      if (!result.valid) throw new Error(result.errors.map((item) => item.message).join(" · "));
+      return { document: parsed as CircuitDocument, displayName: file.name };
+    },
+    async write(request) {
+      const blob = new Blob([request.data], { type: request.mediaType });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = request.suggestedName;
+      anchor.hidden = true;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    },
+  };
+}
+
+export function createBrowserPreferencesAdapter(backend: HttpCircuitDesignerBackend): CircuitPreferencesAdapter {
+  return {
+    load: () => backend.getPreferences(),
+    save: (preferences: CircuitDesignerPreferencesV1) => backend.putPreferences(preferences),
+    readCached: () => loadCachedPreferences(window.localStorage),
+    cacheFailedSave: (preferences) => cachePreferences(window.localStorage, preferences),
+    clearCache: () => clearCachedPreferences(window.localStorage),
+  };
+}
+
+export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): CircuitSourceAdapter {
+  const state = (binding: Awaited<ReturnType<HttpCircuitDesignerBackend["getSourceBinding"]>>) => binding ? ({
+    id: binding.binding_id,
+    label: "Specification package",
+    revision: binding.base_source_revision_hash,
+    writable: binding.writable,
+    capabilities: binding.capabilities,
+    message: binding.message,
+    saveLabel: "Save to Specification",
+    draftLabel: "Specification draft",
+    boundLabel: "Specification bound",
+    identifierPattern: "^[A-Za-z_][A-Za-z0-9_.-]*$",
+    identifierHint: "Use an XML-compatible name without spaces.",
+    metadata: binding,
+  }) : undefined;
+  return {
+    async load(documentId) {
+      return state(await backend.getSourceBinding(documentId));
+    },
+    async commit(documentId, batch, leaseId) {
+      const result = await backend.commitSource(documentId, batch, leaseId);
+      return {
+        accepted: result.accepted,
+        revision: result.source_revision_hash,
+        diagnostics: result.diagnostics,
+        state: state(result.binding),
+        snapshot: result.snapshot,
+      };
+    },
+    async reload(documentId) {
+      const result = await backend.reloadSource(documentId);
+      return {
+        accepted: result.accepted,
+        revision: result.source_revision_hash,
+        diagnostics: result.diagnostics,
+        state: state(result.binding),
+        snapshot: result.snapshot,
+      };
+    },
+  };
+}

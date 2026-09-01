@@ -51,6 +51,17 @@ export interface CircuitPreferencesResponse {
   persisted: boolean;
 }
 
+export interface CircuitServiceCapabilities {
+  schema_version: 1;
+  service: "circuit_designer";
+  api_version: "v1";
+  capabilities: string[];
+  integrations: {
+    service_directory: boolean;
+    callback_provider_allowlist: string[];
+  };
+}
+
 export type { CircuitSourceBindingV1, CircuitSourceSyncResponse } from "@spec2gds/circuit-core";
 
 /** Versioned HTTP implementation of the common independent backend contract. */
@@ -73,6 +84,10 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
 
   async getPreferences(): Promise<CircuitPreferencesResponse> {
     return this.preferencesResponse(await this.getJson(`${this.baseUrl}/preferences`));
+  }
+
+  async getCapabilities(): Promise<CircuitServiceCapabilities> {
+    return await this.getJson(`${this.baseUrl}/capabilities`) as CircuitServiceCapabilities;
   }
 
   async putPreferences(preferences: CircuitDesignerPreferencesV1): Promise<CircuitPreferencesResponse> {

@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import {
   exportCircuitJson,
   validateCircuitDocument,

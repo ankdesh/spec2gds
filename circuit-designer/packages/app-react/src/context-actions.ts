@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import type { CircuitCanvasContextTarget } from "@spec2gds/circuit-react";
 import type { CircuitActionId } from "./action-bindings";
 import type { CircuitMenuEntry } from "./CircuitActionMenu";

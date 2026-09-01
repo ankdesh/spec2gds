@@ -8,6 +8,7 @@ import type {
 } from "./types.generated";
 import { endpointTerminalKey, terminalDefaultPlacement } from "./model";
 import { analyzeCircuitTiming, effectiveCircuitTiming, sortedCycleEdges, stageLabel, type TimingPathAnalysis } from "./timing";
+import { blueprintSlateTheme, type CircuitThemeDefinition } from "./theme";
 
 export interface SvgRendererContext {
   component: ComponentDefinition;
@@ -56,6 +57,8 @@ export interface SvgExportOptions {
   registry?: RendererRegistry;
   /** Effective boundary boxes from the same layout pass used by the canvas. */
   boundaryGeometry?: Record<string, NodeGeometry>;
+  /** Explicit render profile. Defaults to the Blueprint Slate canvas palette. */
+  theme?: CircuitThemeDefinition;
 }
 
 type ExportTerminal = {
@@ -242,6 +245,8 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   const width = Math.max(1, (xs.length ? Math.max(...xs) : 400) - minX + padding);
   const height = Math.max(1, (ys.length ? Math.max(...ys) : 300) - minY + padding);
   const registry = options.registry ?? defaultRendererRegistry;
+  const theme = options.theme ?? blueprintSlateTheme;
+  const color = theme.colors;
   const components = new Map(document.components.map((component) => [component.id, component]));
   const netMarkup = nets.map((net) => routeMarkup(document, terminalPoints, net.id)).join("");
   const instanceMarkup = instances.flatMap((instance) => {
@@ -297,8 +302,8 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   }).join("");
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minY} ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeXml(document.label)}">`,
-    "<defs><pattern id=\"canvas-grid\" width=\"20\" height=\"20\" patternUnits=\"userSpaceOnUse\"><circle cx=\"1\" cy=\"1\" r=\"1\" fill=\"#b8c0bd\"/></pattern><filter id=\"component-shadow\" x=\"-20%\" y=\"-20%\" width=\"140%\" height=\"160%\"><feDropShadow dx=\"0\" dy=\"5\" stdDeviation=\"7\" flood-color=\"#18282f\" flood-opacity=\"0.12\"/></filter></defs>",
-    "<style>.canvas-background{fill:#f4f2ec}.component{fill:#fffdf7;stroke:#21343d;stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow{fill:#63727a;font:9px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:#17252b;font:600 15px Inter,system-ui,sans-serif}.component-symbol{fill:#4cc9a4;font:12px ui-monospace,monospace}.net{fill:none;stroke:#304b55;stroke-width:1.6}.net--locked{stroke:#204b6a;stroke-width:2;stroke-dasharray:7 3}.junction{fill:#304b55}.port{fill:#156b70;stroke:#fffdf7;stroke-width:2}.port-label{fill:#456068;font:8px ui-monospace,monospace}.cycle-edge{stroke:#4169e1;stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:#3157d5;stroke-width:2.5}.cycle-edge-label{fill:#3157d5;font:600 9px Inter,system-ui,sans-serif}.stage-label{fill:#4f5f67;font:600 8px Inter,system-ui,sans-serif}.latency-label rect{fill:#fffdf7;stroke:#71808a}.latency-label text{fill:#253b45;font:600 8px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:#fff8e8;stroke:#d99a37}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:#8a5913}</style>",
+    `<defs><pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${color.grid}"/></pattern><filter id="component-shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="${color.chrome}" flood-opacity="0.12"/></filter></defs>`,
+    `<style>.canvas-background{fill:${color.canvas}}.component{fill:${color.surface};stroke:${color.border_strong};stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow{fill:${color.text_muted};font:11px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:${color.text};font:600 16px Inter,system-ui,sans-serif}.component-symbol{fill:${color.primary};font:12px ui-monospace,monospace}.net{fill:none;stroke:${color.net};stroke-width:1.8}.net--locked{stroke:${color.net};stroke-width:2;stroke-dasharray:7 3}.junction{fill:${color.net}}.port{fill:${color.primary};stroke:${color.surface};stroke-width:2}.port-label{fill:${color.text_muted};font:10px ui-monospace,monospace}.cycle-edge{stroke:${color.net};stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:${color.net};stroke-width:2.5}.cycle-edge-label{fill:${color.net};font:600 10px Inter,system-ui,sans-serif}.stage-label{fill:${color.text_muted};font:600 10px Inter,system-ui,sans-serif}.latency-label rect{fill:${color.surface};stroke:${color.border_strong}}.latency-label text{fill:${color.text};font:600 10px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:${color.warning_surface};stroke:${color.warning}}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:${color.warning}}</style>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" class="canvas-background"/>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="url(#canvas-grid)"/>`,
     `<g class="cycle-edges">${cycleEdgeMarkup}</g><g class="nets">${netMarkup}</g><g class="instances">${instanceMarkup}${boundaryMarkup}</g><g class="ports">${portMarkup}</g><g class="latencies">${latencyMarkup}</g>`,

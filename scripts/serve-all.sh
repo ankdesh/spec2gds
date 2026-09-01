@@ -116,6 +116,9 @@ start_all() {
   if [[ -z "${SPEC2GDS_PUBLIC_HOST:-}" || "${SPEC2GDS_PUBLIC_HOST}" == "auto" ]]; then
     export SPEC2GDS_PUBLIC_HOST="$(public_host)"
   fi
+  # The combined product explicitly opts Circuit Designer into the legacy
+  # shared directory. Independent Circuit Designer launches do not need it.
+  export SPEC2GDS_SERVICE_CONFIG="${SPEC2GDS_SERVICE_CONFIG:-${PROJECT_ROOT}/config/services.json}"
 
   start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
   start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev

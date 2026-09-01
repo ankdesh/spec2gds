@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createEmptyCircuitDocument, projectDocument, validateCircuitDocument } from "@spec2gds/circuit-core";
-import { assistantCircuitUrl, linkedCircuitDocumentId } from "./launch-state";
+import { linkedCircuitDocumentId } from "./launch-state";
 import { graphLayoutKey, matchingLayout } from "./layout-state";
 
 describe("standalone app state", () => {
@@ -28,15 +28,4 @@ describe("standalone app state", () => {
     expect(linkedCircuitDocumentId("?other=value")).toBeUndefined();
   });
 
-  test("builds a directly bound AI Assistant circuit URL", () => {
-    expect(assistantCircuitUrl(
-      "http://127.0.0.1:6013",
-      "http://127.0.0.1:6011/api/circuit-designer/v1",
-      "design/top",
-    )).toBe(
-      "http://127.0.0.1:6013/launch/circuit"
-      + "?service_base_url=http%3A%2F%2F127.0.0.1%3A6011%2Fapi%2Fcircuit-designer%2Fv1"
-      + "&document_id=design%2Ftop",
-    );
-  });
 });

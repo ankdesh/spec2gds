@@ -1,0 +1,31 @@
+{
+  "name": "@spec2gds/circuit-app-react",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./styles.css": "./dist/styles.css"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').copyFileSync('src/styles.css','dist/styles.css')\"",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@spec2gds/circuit-core": "0.0.0",
+    "@spec2gds/circuit-layout": "0.0.0",
+    "@spec2gds/circuit-react": "0.0.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.20",
+    "@types/react-dom": "18.3.6"
+  }
+}

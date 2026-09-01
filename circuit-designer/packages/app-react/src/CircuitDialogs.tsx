@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { DEFAULT_CLOCK_DOMAIN_ID, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
 
@@ -76,7 +77,8 @@ export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;
   sourceDescription: string;
-  sourceBound?: boolean;
+  sourceIdentifierPattern?: string;
+  sourceIdentifierHint?: string;
   proposals: CircuitProposal[];
   terminals: Array<{ id: string }>;
   netName: string;
@@ -143,7 +145,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
   }
 
   if (props.dialog === "new-component") {
-    const sourceNameValid = !props.sourceBound || /^[A-Za-z_][A-Za-z0-9_.-]*$/.test(props.componentName.trim());
+    const sourceNameValid = !props.sourceIdentifierPattern || new RegExp(props.sourceIdentifierPattern).test(props.componentName.trim());
     return <CircuitModal onClose={props.onClose} title="New local component">
       <form className="circuit-dialog__form" onSubmit={(event) => {
         event.preventDefault();
@@ -151,9 +153,8 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         props.onCreateComponent(); props.onClose();
       }}>
         <p>Create a local two-terminal component definition and its first instance.</p>
-        <label>Name<input autoFocus pattern={props.sourceBound ? "[A-Za-z_][A-Za-z0-9_.-]*" : undefined} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder={props.sourceBound ? "arithmetic_unit" : "Arithmetic unit"} /></label>
-        {props.sourceBound && <small>VLNV: spec2gds.local:work:{props.componentName || "component"}:1.0</small>}
-        {props.sourceBound && !sourceNameValid && <p role="alert">Use an XML-compatible name without spaces.</p>}
+        <label>Name<input autoFocus pattern={props.sourceIdentifierPattern} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder={props.sourceIdentifierPattern ? "arithmetic_unit" : "Arithmetic unit"} /></label>
+        {props.sourceIdentifierPattern && !sourceNameValid && <p role="alert">{props.sourceIdentifierHint ?? "Use a source-compatible name."}</p>}
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim() || !sourceNameValid} type="submit">Create definition + instance</button></div>
       </form>
     </CircuitModal>;
@@ -242,6 +243,6 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
   }
 
   return <CircuitModal onClose={props.onClose} title="About Circuit Designer">
-    <div className="circuit-dialog__copy"><p><strong>spec2gds Circuit Designer</strong></p><p>A deterministic direct-manipulation editor for portable circuit documents.</p><p>Documents use ephemeral service sessions; user interface preferences are stored in the server-managed Circuit Designer preference file.</p></div>
+    <div className="circuit-dialog__copy"><p><strong>Circuit Designer</strong></p><p>A deterministic direct-manipulation editor for portable circuit documents.</p><p>Documents use host-provided service sessions; the host also controls files, preferences, source synchronization, and optional tools.</p></div>
   </CircuitModal>;
 }

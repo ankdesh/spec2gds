@@ -1,5 +1,8 @@
 # Circuit Designer specification synchronization
 
+For a diagram-led explanation of the complete structure and request flow, see
+[Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md).
+
 Circuit Designer can edit a design whose authoritative source is an open
 `.spec` package. The Circuit service still keeps only an ephemeral working
 session: **Save to Specification** is the durable write boundary and the Spec

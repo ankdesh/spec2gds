@@ -1,10 +1,18 @@
-:root { font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #17252b; background: #ebe9e2; }
+/* Blueprint Slate. Every application rule is contained by .cd-app for safe embedding. */
+.cd-app {
+  container: circuit-app / inline-size;
+  min-width: 0;
+  min-height: 0;
+  font-family: "IBM Plex Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--cd-text);
+  background: var(--cd-canvas);
+}
+@scope (.cd-app) {
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 860px; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .42; }
-.standalone-shell { display: grid; grid-template-rows: 44px 30px calc(100vh - 74px); min-height: 100vh; }
+.standalone-shell { display: grid; grid-template-rows: 48px 34px minmax(0, 1fr); width: 100%; height: 100%; min-height: 560px; }
 .topbar { position: relative; z-index: 30; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: stretch; gap: 8px; padding: 0 10px; border-bottom: 1px solid #c9ccc5; background: #fffef9; }
 .source-save-button { align-self: center; border: 1px solid #1d5f61; border-radius: 3px; background: #1d5f61; padding: 5px 8px; color: #fff; font-size: 9px; white-space: nowrap; }
 .brand { display: flex; align-items: center; gap: 11px; }
@@ -158,4 +166,39 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
   .circuit-menu > button { padding: 0 6px; font-size: 9px; }
   .document-status { min-width: 90px; max-width: 140px; }
   .workspace--inspector-open { grid-template-columns: minmax(0, 1fr) 240px; }
+}
+
+/* Blueprint Slate emphasis layer. */
+.topbar { border-color: #17364f; background: var(--cd-chrome); box-shadow: 0 1px 10px rgb(8 31 51 / 18%); }
+.brand-mark { background: var(--cd-primary); color: var(--cd-primary-foreground); }
+.brand span:not(.brand-mark), .brand h1, .document-status, .document-status strong { color: var(--cd-chrome-foreground); }
+.document-status small { color: #a9bdcc; }
+.circuit-menu > button { color: #dce8ef; font-size: 12px; }
+.circuit-menu > button:hover, .circuit-menu > button:focus-visible, .circuit-menu > button[aria-expanded="true"] { background: #123853; color: #fff; }
+.source-save-button, .section .primary, .action-settings button.primary, .circuit-dialog button.primary { border-color: var(--cd-primary); background: var(--cd-primary); }
+.notice { border-color: var(--cd-border); background: var(--cd-surface-subtle); color: var(--cd-text-muted); font-size: 12px; }
+.local-dot { background: var(--cd-success); box-shadow: 0 0 0 3px var(--cd-success-surface); }
+.canvas-surface { background: var(--cd-canvas); }
+.inspector { border-color: #17364f; background: var(--cd-chrome); color: #eef5f8; }
+.inspector h2, .inspector label, .inspector .eyebrow, .inspector .section h3, .inspector .draw-hint, .inspector .empty-inspector p, .inspector .multi-inspector p, .inspector summary { color: #c9d8e2; }
+.inspector input, .inspector select, .inspector button, .inspector .metrics div, .inspector .proposal-card, .inspector .port-card { border-color: #4a667b; background: #102f47; color: #f7fafc; }
+.inspector .section, .inspector .port-editor, .inspector .route-editor, .inspector details { border-color: #34536a; }
+.inspector .kind { background: #103f4a; color: #87e0db; }
+.inspector code { color: #9eb6c7; }
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--cd-focus); outline-offset: 2px; }
+.circuit-menu__panel, .circuit-dialog, .action-settings__table { border-color: var(--cd-border); background: var(--cd-surface); }
+.circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover, .circuit-submenu > button:focus-visible { background: #e4f3f3; color: #075b64; }
+.timing-analysis-list article[data-status="cdc"], .timing-analysis-list article[data-status="backward"] { border-color: var(--cd-warning); background: var(--cd-warning-surface); }
+
+@container circuit-app (max-width: 960px) {
+  .workspace--inspector-open { position: relative; grid-template-columns: minmax(0, 1fr); }
+  .workspace--inspector-open .inspector { position: absolute; z-index: 20; inset: 0 0 0 auto; width: min(320px, 86%); box-shadow: -12px 0 30px rgb(8 31 51 / 28%); }
+  .document-status { display: none; }
+}
+
+@container circuit-app (max-width: 720px) {
+  .brand h1 { display: none; }
+  .circuit-menu > button { padding-inline: 5px; font-size: 11px; }
+  .notice > span:last-child { max-width: 60%; }
+}
 }

@@ -1,0 +1,97 @@
+import type {
+  CircuitDesignerBackend,
+  CircuitDesignerPreferencesV1,
+  CircuitDocument,
+  CircuitOperationBatch,
+  CircuitSnapshot,
+  Diagnostic,
+  ServiceEvent,
+} from "@spec2gds/circuit-core";
+
+export type CircuitLaunch =
+  | { kind: "new"; document?: CircuitDocument }
+  | { kind: "document"; documentId: string };
+
+export interface CircuitFileReadResult {
+  document: CircuitDocument;
+  displayName?: string;
+}
+
+export interface CircuitFileWriteRequest {
+  suggestedName: string;
+  mediaType: "application/json" | "image/svg+xml" | "image/png";
+  data: string | Uint8Array;
+}
+
+export interface CircuitFileAdapter {
+  open(): Promise<CircuitFileReadResult | undefined>;
+  write(request: CircuitFileWriteRequest): Promise<void>;
+}
+
+export interface CircuitPreferencesLoadResult {
+  preferences: CircuitDesignerPreferencesV1;
+  persisted: boolean;
+}
+
+export interface CircuitPreferencesAdapter {
+  load(): Promise<CircuitPreferencesLoadResult>;
+  save(preferences: CircuitDesignerPreferencesV1): Promise<CircuitPreferencesLoadResult>;
+  readCached?(): CircuitDesignerPreferencesV1 | undefined;
+  cacheFailedSave?(preferences: CircuitDesignerPreferencesV1): void;
+  clearCache?(): void;
+}
+
+export interface CircuitSourceState {
+  id: string;
+  label: string;
+  revision: string;
+  writable: boolean;
+  capabilities: string[];
+  message?: string;
+  saveLabel?: string;
+  draftLabel?: string;
+  boundLabel?: string;
+  identifierPattern?: string;
+  identifierHint?: string;
+  metadata?: unknown;
+}
+
+export interface CircuitSourceSaveResult {
+  accepted: boolean;
+  revision: string;
+  diagnostics: Diagnostic[];
+  state?: CircuitSourceState;
+  snapshot?: CircuitSnapshot;
+}
+
+export interface CircuitSourceAdapter {
+  load(documentId: string): Promise<CircuitSourceState | undefined>;
+  commit(documentId: string, batch: CircuitOperationBatch, leaseId: string): Promise<CircuitSourceSaveResult>;
+  reload(documentId: string): Promise<CircuitSourceSaveResult>;
+}
+
+export interface CircuitToolContext {
+  backend: CircuitDesignerBackend;
+  document: CircuitDocument;
+  snapshot: CircuitSnapshot;
+}
+
+export interface CircuitToolContribution {
+  id: string;
+  label: string;
+  description: string;
+  run(context: CircuitToolContext): void | Promise<void>;
+}
+
+export interface CircuitTelemetrySink {
+  captureGlobalErrors?(): void | (() => void);
+  event(component: string, event: string, message: string, severity: "debug" | "info" | "warning" | "error", details?: unknown): void;
+}
+
+export interface CircuitEventAdapter {
+  subscribe(documentId: string, listener: (event: ServiceEvent) => void): () => void;
+}
+
+export const noopCircuitTelemetry: CircuitTelemetrySink = {
+  event: () => undefined,
+};

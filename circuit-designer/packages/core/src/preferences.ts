@@ -40,7 +40,7 @@ export const circuitActionIds = [
   "zoom-in",
   "zoom-out",
   "fit-circuit",
-  "open-assistant",
+  "run-primary-tool",
   "getting-started",
   "about",
 ] as const;
@@ -130,9 +130,10 @@ export function validateCircuitDesignerPreferences(value: unknown): CircuitPrefe
     return { valid: false, message: "Circuit Designer preferences.action_bindings must be an object." };
   }
   const knownActions = new Set<string>(circuitActionIds);
+  const legacyActionAliases: Record<string, CircuitActionId> = { "open-assistant": "run-primary-tool" };
   const knownMouseShortcuts = new Set<string>(circuitMouseShortcuts);
   for (const [actionId, binding] of Object.entries(value.action_bindings)) {
-    if (!knownActions.has(actionId)) {
+    if (!knownActions.has(actionId) && !(actionId in legacyActionAliases)) {
       return { valid: false, message: `Unknown Circuit Designer action: ${actionId}.` };
     }
     if (!isRecord(binding) || typeof binding.keyboard !== "string" || binding.keyboard.length > 64) {
@@ -146,7 +147,8 @@ export function validateCircuitDesignerPreferences(value: unknown): CircuitPrefe
   preferences.ui.inspector_open = value.ui.inspector_open;
   preferences.ui.timing_overlay_visible = typeof value.ui.timing_overlay_visible === "boolean" ? value.ui.timing_overlay_visible : true;
   for (const actionId of circuitActionIds) {
-    const binding = value.action_bindings[actionId];
+    const legacyId = Object.entries(legacyActionAliases).find(([, next]) => next === actionId)?.[0];
+    const binding = value.action_bindings[actionId] ?? (legacyId ? value.action_bindings[legacyId] : undefined);
     if (!isRecord(binding)) continue;
     preferences.action_bindings[actionId] = {
       keyboard: binding.keyboard as string,

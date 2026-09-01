@@ -36,7 +36,7 @@ describe("Circuit Designer REST service", () => {
     expect(record).toMatchObject({ application: "circuit-designer", origin: "browser", session_id: "browser-1" });
   });
 
-  it("exposes health and the shared service directory", async () => {
+  it("boots without shared configuration and exposes portable capabilities", async () => {
     service = new CircuitDesignerService();
     const port = await service.listen();
     const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
@@ -45,10 +45,28 @@ describe("Circuit Designer REST service", () => {
       status: "ok",
       service: "circuit_designer",
     });
-    const directory = await (await fetch(`${base}/services`)).json() as {
-      services: { ai_assistant: { ui_url: string } };
-    };
-    expect(directory.services.ai_assistant.ui_url).toMatch(/^http:\/\/[^/]+:6013$/);
+    expect(await (await fetch(`${base}/capabilities`)).json()).toMatchObject({
+      schema_version: 1,
+      service: "circuit_designer",
+      capabilities: expect.arrayContaining(["canonical-documents", "source-bindings", "exports"]),
+      integrations: { service_directory: false },
+    });
+    expect((await fetch(`${base}/services`)).status).toBe(404);
+  });
+
+  it("retains the legacy service-directory endpoint when a host supplies one", async () => {
+    const location = { service_url: "http://127.0.0.1:1", ui_url: "http://127.0.0.1:2" };
+    service = new CircuitDesignerService({
+      serviceDirectory: {
+        schema_version: 2,
+        services: { spec_editor: location, circuit_designer: location, ai_assistant: location },
+        logging: { enabled: false, level: "info" },
+      },
+    });
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
+    expect(await (await fetch(`${base}/services`)).json()).toMatchObject({ services: { ai_assistant: location } });
+    expect(await (await fetch(`${base}/capabilities`)).json()).toMatchObject({ integrations: { service_directory: true } });
   });
 
   it("loads defaults and atomically persists a shared preference file", async () => {

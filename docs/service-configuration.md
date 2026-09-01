@@ -1,8 +1,16 @@
 # Service configuration
 
-The three applications share the tracked registry at
+The combined spec2gds product shares the tracked registry at
 [`config/services.json`](../config/services.json). It is the single default
-source for bind addresses, API base paths, and browser UI locations.
+source for its bind addresses, API base paths, and browser UI locations. The
+combined launcher explicitly exports this path so Circuit Designer retains its
+legacy `/services` compatibility response.
+
+Circuit Designer can instead start independently with its own environment
+variables and no registry. Its defaults are service port `6011`, UI port
+`6012`, and `.circuit-designer/preferences.json` under the working directory.
+In this mode `GET /api/circuit-designer/v1/capabilities` replaces shared-service
+discovery and `/services` returns 404.
 
 `public_host` controls the hostname or IP address advertised to browsers.
 `"auto"` selects the machine's preferred LAN IPv4 address; set
@@ -61,17 +69,18 @@ do not prevent the built-in `rtl.generate` and
 `systemc.generate_at_skeleton` Activities from loading. A service restart is
 required after changing either setting.
 
-Edit the complete JSON file when an address changes. A service restart is
-required afterward. Frontend development servers also read the file when they
-start. Set `SPEC2GDS_SERVICE_CONFIG` to use another absolute JSON file without
-modifying the tracked local defaults.
+Edit the complete JSON file when a combined-product address changes. A service
+restart is required afterward. Set `SPEC2GDS_SERVICE_CONFIG` to use another
+absolute JSON file without modifying the tracked local defaults.
 
 Existing per-service environment variables remain higher-priority overrides:
 
 - `AGENT_SPEC_HOST`, `AGENT_SPEC_PORT`, and `SPEC_EDITOR_SERVICE_URL`
 - `CIRCUIT_DESIGNER_HOST`, `CIRCUIT_DESIGNER_PORT`,
   `CIRCUIT_DESIGNER_SERVICE_URL`, `CIRCUIT_DESIGNER_UI_URL`, and
-  `CIRCUIT_DESIGNER_PREFERENCES_FILE`
+  `CIRCUIT_DESIGNER_PREFERENCES_FILE`; the standalone Vite host also accepts
+  `CIRCUIT_DESIGNER_UI_HOST`, `CIRCUIT_DESIGNER_UI_PORT`, and
+  `CIRCUIT_DESIGNER_SERVICE_ORIGIN`
 - `ASSISTANT_HOST`, `ASSISTANT_PORT`, and `AI_ASSISTANT_URL`
 
 `SPEC2GDS_PUBLIC_HOST` is the shared advertised-host override. Bind overrides

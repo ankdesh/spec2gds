@@ -22,6 +22,7 @@ export * from "./route-editor";
 export * from "./preferences";
 export * from "./source-binding";
 export * from "./timing";
+export * from "./theme";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const definitions = (protocolSchema as { $defs?: Record<string, unknown> }).$defs ?? {};

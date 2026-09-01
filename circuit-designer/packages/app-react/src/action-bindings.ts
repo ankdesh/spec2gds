@@ -1,3 +1,4 @@
+/* Reusable Circuit Designer application shell. */
 import {
   createDefaultCircuitActionBindings,
   createDefaultCircuitDesignerPreferences,
@@ -68,7 +69,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   { id: "zoom-in", group: "View", label: "Zoom in", description: "Increase the canvas zoom level.", mouseOptions: ["none", "wheel-up", ...commandMouseOptions.slice(1)] },
   { id: "zoom-out", group: "View", label: "Zoom out", description: "Decrease the canvas zoom level.", mouseOptions: ["none", "wheel-down", ...commandMouseOptions.slice(1)] },
   command("fit-circuit", "View", "Fit circuit", "Fit the complete circuit in the viewport."),
-  command("open-assistant", "Tools", "AI Assistant", "Open a chat bound to this circuit."),
+  command("run-primary-tool", "Tools", "Run host tool", "Run the primary tool contributed by this host application."),
   command("getting-started", "Help", "Getting started", "Show a concise Circuit Designer workflow guide."),
   command("about", "Help", "About Circuit Designer", "Show product and persistence information."),
 ];

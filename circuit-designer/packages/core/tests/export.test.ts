@@ -23,10 +23,10 @@ describe("Circuit Designer visual export", () => {
     const svg = renderCircuitSvg(document);
 
     expect(svg).toMatch(/^<svg[^>]+width="560"[^>]+height="180"/);
-    expect(svg).toContain(".canvas-background{fill:#f4f2ec}");
+    expect(svg).toContain(".canvas-background{fill:#f7f9fc}");
     expect(svg).toContain('pattern id="canvas-grid" width="20" height="20"');
     expect(svg).toContain('fill="url(#canvas-grid)"');
-    expect(svg).toContain(".component{fill:#fffdf7;stroke:#21343d");
+    expect(svg).toContain(".component{fill:#ffffff;stroke:#7b8fa1");
     expect(svg).toContain('data-instance-id="producer_0"');
     expect(svg).toContain('data-terminal-id="producer_0:data"');
     expect(svg).toContain('class="net net--locked"');
