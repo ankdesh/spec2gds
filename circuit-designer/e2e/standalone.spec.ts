@@ -52,6 +52,10 @@ test.beforeEach(async ({ request }) => {
 test("uses a compact menubar and the reclaimed full-width canvas", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByTestId("circuit-canvas")).toBeVisible();
+  const appBox = await page.locator(".cd-app").boundingBox();
+  const canvasBox = await page.locator(".canvas-surface").boundingBox();
+  expect(appBox?.height).toBeGreaterThan(500);
+  expect(canvasBox?.height).toBeGreaterThan(400);
   await expect(page.locator(".notice")).toContainText("REST session");
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await expect(page.locator(".library")).toHaveCount(0);

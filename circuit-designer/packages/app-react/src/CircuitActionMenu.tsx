@@ -162,6 +162,7 @@ export function CircuitContextMenu<CommandId extends string>({
   isCommandEnabled,
   onCommand,
   onDismiss,
+  portalContainer,
   shortcutFor,
 }: {
   entries: CircuitMenuEntry<CommandId>[];
@@ -169,6 +170,7 @@ export function CircuitContextMenu<CommandId extends string>({
   isCommandEnabled: (commandId: CommandId) => boolean;
   onCommand: (commandId: CommandId) => void;
   onDismiss: () => void;
+  portalContainer?: Element;
   shortcutFor?: (commandId: CommandId) => string | undefined;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -219,5 +221,5 @@ export function CircuitContextMenu<CommandId extends string>({
       onDismiss={onDismiss}
       shortcutFor={shortcutFor}
     />
-  </div>, document.body);
+  </div>, portalContainer ?? document.body);
 }

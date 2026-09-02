@@ -172,6 +172,7 @@ export function App({
   const [placingCycleEdge, setPlacingCycleEdge] = useState(false);
   const [viewport, setViewport] = useState({ x: 20, y: 20, zoom: 1 });
   const draftRef = useRef<CircuitDraft>();
+  const appRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
   const actionExecutorRef = useRef<(invocation: CircuitActionInvocation) => boolean>(() => false);
   const preferencesHydratedRef = useRef(false);
@@ -1346,7 +1347,7 @@ export function App({
 
   const themeStyle = circuitThemeCssProperties(theme) as CSSProperties;
 
-  return <main className="cd-app standalone-shell" style={themeStyle}>
+  return <main className="cd-app standalone-shell" ref={appRef} style={themeStyle}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark">CD</span><h1>Circuit Designer</h1></div>
       <CircuitMenuBar
@@ -1558,6 +1559,7 @@ export function App({
       }); }}
       onDismiss={closeContextMenu}
       point={contextRequest.clientPoint}
+      portalContainer={appRef.current ?? undefined}
       shortcutFor={(commandId) => commandId in actionBindings
         && actionBindings[commandId as CircuitActionId].keyboard
         ? formatKeyboardShortcut(actionBindings[commandId as CircuitActionId].keyboard)

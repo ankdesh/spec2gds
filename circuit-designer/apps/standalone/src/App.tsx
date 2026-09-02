@@ -40,7 +40,7 @@ export function App() {
     files={files}
     launch={launch}
     onLaunchChange={(next) => {
-      const url = next.kind === "document" ? `?circuit_document_id=${encodeURIComponent(next.documentId)}` : window.location.pathname;
+      const url = next.kind === "document" ? `?document_id=${encodeURIComponent(next.documentId)}` : window.location.pathname;
       window.history.replaceState({}, "", url);
     }}
     preferences={preferences}
