@@ -18,6 +18,22 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL("../../../spec2gds/agent_spec/spec_format/editor_dist", import.meta.url)),
     emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: "assets/[name][extname]",
+      },
+    },
+  },
+  worker: {
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].js",
+        chunkFileNames: "assets/[name].js",
+        assetFileNames: "assets/[name][extname]",
+      },
+    },
   },
   server: {
     port: 6015,

@@ -42,7 +42,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     )
     editor_html = endpoints["editor"]()
     assert "A2UI Document Editor" in editor_html
-    assert "/editor-assets/assets/index-" in editor_html
+    assert "/editor-assets/assets/index.js" in editor_html
     assert "/circuit-designer-ui/" not in editor_html
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "acceptance.spec"
