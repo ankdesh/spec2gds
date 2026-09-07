@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ipxact:design
+    xmlns:ipxact="http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
+    xml:id="design_data_sel">
+
+  <ipxact:vendor>example.org</ipxact:vendor>
+  <ipxact:library>test</ipxact:library>
+  <ipxact:name>data_sel</ipxact:name>
+  <ipxact:version>1.0</ipxact:version>
+
+  <ipxact:componentInstances>
+    <ipxact:componentInstance>
+      <ipxact:instanceName>producer</ipxact:instanceName>
+      <ipxact:componentRef
+          vendor="example.org"
+          library="test"
+          name="producer"
+          version="1.0"/>
+    </ipxact:componentInstance>
+
+    <ipxact:componentInstance>
+      <ipxact:instanceName>consumer</ipxact:instanceName>
+      <ipxact:componentRef
+          vendor="example.org"
+          library="test"
+          name="consumer"
+          version="1.0"/>
+    </ipxact:componentInstance>
+  </ipxact:componentInstances>
+
+  <ipxact:adHocConnections>
+    <ipxact:adHocConnection>
+      <ipxact:name>selected_data</ipxact:name>
+      <ipxact:portReferences>
+        <ipxact:internalPortReference
+            componentInstanceRef="producer"
+            portRef="data">
+          <ipxact:partSelect>
+            <ipxact:range>
+              <ipxact:left>15</ipxact:left>
+              <ipxact:right>8</ipxact:right>
+            </ipxact:range>
+          </ipxact:partSelect>
+        </ipxact:internalPortReference>
+
+        <ipxact:internalPortReference
+            componentInstanceRef="consumer"
+            portRef="data_in"/>
+      </ipxact:portReferences>
+    </ipxact:adHocConnection>
+  </ipxact:adHocConnections>
+</ipxact:design>
