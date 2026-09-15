@@ -122,6 +122,13 @@ class CreateDocumentRequest(pydantic.BaseModel):
     sidecar_root: str | None = None
 
 
+class CreateDirectoryRequest(pydantic.BaseModel):
+    """Create one child folder for the editor's server-local directory picker."""
+
+    parent: str
+    name: str
+
+
 class TransactionRequest(pydantic.BaseModel):
     """Optimistic source edit request expressed in the public operation vocabulary."""
 
@@ -467,6 +474,98 @@ def create_app() -> typing.Any:
             "services": service_urls(),
             "logging": {"enabled": registry.logging.enabled, "level": registry.logging.level},
         }
+
+    @app.get("/filesystem/directories")
+    def filesystem_directories(path: str | None = None) -> dict[str, typing.Any]:
+        """List server-local directories for the editor's portable folder picker."""
+        candidate = Path(path).expanduser() if path else Path.home()
+        try:
+            directory = candidate.resolve(strict=True)
+        except (OSError, RuntimeError) as exc:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=f"Directory is not accessible: {candidate}",
+            ) from exc
+        if not directory.is_dir():
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=f"Path is not a directory: {directory}",
+            )
+
+        children: list[dict[str, str]] = []
+        try:
+            entries = sorted(directory.iterdir(), key=lambda entry: entry.name.casefold())
+            for entry in entries:
+                try:
+                    if entry.is_dir():
+                        children.append({"name": entry.name, "path": str(entry.resolve())})
+                except OSError:
+                    # An unreadable or concurrently removed child should not make its
+                    # parent unusable in the picker.
+                    continue
+        except OSError as exc:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=f"Directory cannot be read: {directory}",
+            ) from exc
+
+        if os.name == "nt":
+            roots = [
+                f"{letter}:\\"
+                for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                if Path(f"{letter}:\\").is_dir()
+            ]
+        else:
+            roots = [str(Path(directory.anchor or os.sep))]
+        parent = None if directory.parent == directory else str(directory.parent)
+        return {
+            "path": str(directory),
+            "parent": parent,
+            "home": str(Path.home().resolve()),
+            "separator": os.sep,
+            "roots": roots,
+            "directories": children,
+        }
+
+    @app.post("/filesystem/directories")
+    def create_directory(request: CreateDirectoryRequest) -> dict[str, typing.Any]:
+        """Create and enter one portable child directory on the specification server."""
+        name = request.name.strip()
+        reserved_stem = name.split(".", 1)[0].casefold()
+        invalid_name = (
+            not name
+            or name in {".", ".."}
+            or any(character in name for character in '<>:"/\\|?*')
+            or any(ord(character) < 32 for character in name)
+            or name.endswith((".", " "))
+            or reserved_stem in {
+                "con", "prn", "aux", "nul",
+                *(f"com{index}" for index in range(1, 10)),
+                *(f"lpt{index}" for index in range(1, 10)),
+            }
+        )
+        if invalid_name:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail="Enter a valid folder name without path separators or reserved characters.",
+            )
+        try:
+            parent = Path(request.parent).expanduser().resolve(strict=True)
+            if not parent.is_dir():
+                raise NotADirectoryError(parent)
+            directory = parent / name
+            directory.mkdir()
+        except FileExistsError as exc:
+            raise fastapi.HTTPException(
+                status_code=409,
+                detail=f"A file or folder named '{name}' already exists.",
+            ) from exc
+        except (OSError, RuntimeError) as exc:
+            raise fastapi.HTTPException(
+                status_code=422,
+                detail=f"Could not create folder '{name}' in {request.parent}.",
+            ) from exc
+        return filesystem_directories(str(directory))
 
     @app.post("/logs/events", status_code=204)
     def browser_log_events(payload: dict[str, typing.Any]) -> None:

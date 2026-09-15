@@ -315,6 +315,10 @@ a:focus-visible {
   box-shadow: 0 1.2rem 4rem rgba(12, 24, 19, 0.28);
 }
 
+.editor-dialog--wide {
+  width: min(42rem, 100%);
+}
+
 .editor-dialog > header {
   display: flex;
   align-items: center;
@@ -352,6 +356,130 @@ a:focus-visible {
   color: #26302c;
   font: inherit;
   font-size: 0.84rem;
+}
+
+.editor-dialog__path-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+}
+
+.editor-dialog__path-field > button,
+.directory-browser button {
+  border: 1px solid #b7bdb9;
+  border-radius: 0.35rem;
+  padding: 0.48rem 0.7rem;
+  background: #fff;
+  color: #354b43;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.editor-dialog__path-field > button:disabled,
+.directory-browser button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+.directory-browser {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+  padding: 0.75rem;
+  border: 1px solid #d4dad6;
+  border-radius: 0.5rem;
+  background: #f7f9f7;
+}
+
+.directory-browser > header {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.directory-browser > header strong {
+  font-size: 0.78rem;
+}
+
+.directory-browser > header code {
+  overflow: hidden;
+  color: #59635e;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-browser__toolbar,
+.directory-browser__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.directory-browser__toolbar-spacer {
+  flex: 1 1 auto;
+}
+
+.directory-browser__new-folder {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.4rem;
+}
+
+.directory-browser__folders {
+  display: grid;
+  align-content: start;
+  max-height: 13rem;
+  overflow-y: auto;
+  border: 1px solid #d4dad6;
+  border-radius: 0.35rem;
+  background: #fff;
+}
+
+.directory-browser__folders button {
+  width: 100%;
+  overflow: hidden;
+  border: 0;
+  border-bottom: 1px solid #edf0ee;
+  border-radius: 0;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-browser__folders button:hover,
+.directory-browser__folders button:focus-visible,
+.directory-browser__folders button.selected {
+  background: #e8f2ee;
+}
+
+.directory-browser__folders button.selected {
+  box-shadow: inset 3px 0 #246b5a;
+  color: #174f43;
+}
+
+.directory-browser__folders p,
+.directory-browser__error,
+.directory-browser__status {
+  margin: 0;
+  padding: 0.65rem;
+  color: #68716c;
+  font-size: 0.75rem;
+}
+
+.directory-browser__error {
+  color: #912c2c;
+}
+
+.directory-browser__actions {
+  justify-content: flex-end;
+}
+
+.directory-browser__actions button {
+  border-color: #246b5a;
+  background: #246b5a;
+  color: #fff;
 }
 
 .editor-dialog__hint {

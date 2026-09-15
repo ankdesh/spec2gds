@@ -38,6 +38,46 @@ describe("SpecEditorHttpClient", () => {
     vi.unstubAllGlobals();
   });
 
+  it("browses directories on the specification server", async () => {
+    const listing = {
+      path: "C:\\Users\\designer",
+      parent: "C:\\Users",
+      home: "C:\\Users\\designer",
+      separator: "\\" as const,
+      roots: ["C:\\"],
+      directories: [{ name: "Specs", path: "C:\\Users\\designer\\Specs" }],
+    };
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(listing), { headers: { "content-type": "application/json" } }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(new SpecEditorHttpClient("/api").browseDirectories("C:\\Users\\designer"))
+      .resolves.toEqual(listing);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/filesystem/directories?path=C%3A%5CUsers%5Cdesigner",
+      undefined,
+    );
+    vi.unstubAllGlobals();
+  });
+
+  it("creates a directory on the specification server", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ path: "/srv/specs/new-project" }), {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await new SpecEditorHttpClient("/api").createDirectory("/srv/specs", "new-project");
+    expect(fetchMock).toHaveBeenCalledWith("/api/filesystem/directories", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ parent: "/srv/specs", name: "new-project" }),
+    });
+    vi.unstubAllGlobals();
+  });
+
   it("opens a package and reads an A2UI batch without renderer dependencies", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ document_id: "demo" }), { headers: { "content-type": "application/json" } }))

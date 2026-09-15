@@ -556,7 +556,9 @@ export default function App() {
         launchingAssistant={launchingAssistant}
         launchingCircuit={launchingCircuit}
         loading={loading}
+        onBrowseDirectories={(directory) => client.browseDirectories(directory)}
         onCreate={createDocument}
+        onCreateDirectory={(parent, name) => client.createDirectory(parent, name)}
         onError={setError}
         onOpen={openDocument}
         onOpenAssistant={launchDocumentAssistant}

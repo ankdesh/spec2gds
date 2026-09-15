@@ -410,7 +410,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
   };
   await page.route("**/api/**", async (route: Route) => {
     const request = route.request();
-    const path = new URL(request.url()).pathname.replace(/^\/api/, "");
+    const requestUrl = new URL(request.url());
+    const path = requestUrl.pathname.replace(/^\/api/, "");
     const json = (value: unknown) => route.fulfill({ json: value, status: 200 });
 
     if (path === "/services") {
@@ -422,6 +423,25 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
           ai_assistant: { service_url: "http://127.0.0.1:6013", ui_url: "http://127.0.0.1:6013" },
         },
         logging: { enabled: false, level: "info" },
+      });
+    }
+
+    if (path === "/filesystem/directories") {
+      const body = request.method() === "POST"
+        ? request.postDataJSON() as { parent: string; name: string }
+        : null;
+      const requestedPath = body
+        ? `${body.parent}/${body.name}`
+        : requestUrl.searchParams.get("path") ?? "/home/designer";
+      return json({
+        path: requestedPath,
+        parent: requestedPath === "/" ? null : requestedPath.split("/").slice(0, -1).join("/") || "/",
+        home: "/home/designer",
+        separator: "/",
+        roots: ["/"],
+        directories: requestedPath === "/home/designer"
+          ? [{ name: "specifications", path: "/home/designer/specifications" }]
+          : [],
       });
     }
 
@@ -578,19 +598,34 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await page.getByRole("menuitem", { name: /New Specification/ }).click();
   await expect(page.getByText("visible to the server running spec2gds")).toBeVisible();
   await page.getByLabel("Specification name").fill("New editor specification");
-  await page.getByLabel("Server-local package path").fill("/tmp/new-editor.spec");
+  await page.getByRole("button", { name: "Browse…" }).click();
+  const specificationsFolder = page.getByRole("button", { name: /specifications/ });
+  await specificationsFolder.dblclick();
+  await expect(page.getByText("/home/designer/specifications", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /New folder/ }).click();
+  await page.getByLabel("New folder name").fill("Project Alpha");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByText("/home/designer/specifications/Project Alpha", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Select folder" }).click();
+  await expect(page.getByLabel("Server-local package path"))
+    .toHaveValue("/home/designer/specifications/Project Alpha/New editor specification.spec");
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("New editor specification", { exact: true })).toBeVisible();
-  expect(state.createdPaths).toEqual(["/tmp/new-editor.spec"]);
+  expect(state.createdPaths).toEqual([
+    "/home/designer/specifications/Project Alpha/New editor specification.spec",
+  ]);
   expect(state.createdTitles).toEqual(["New editor specification"]);
 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toBeDisabled();
   await page.getByRole("menuitem", { name: "Refresh From Disk" }).click();
-  await expect.poll(() => state.openedPaths).toEqual(["/tmp/new-editor.spec"]);
+  await expect.poll(() => state.openedPaths).toEqual([
+    "/home/designer/specifications/Project Alpha/New editor specification.spec",
+  ]);
 
   await page.keyboard.press("Control+O");
-  await expect(page.getByLabel("Server-local package path")).toHaveValue("/tmp/new-editor.spec");
+  await expect(page.getByLabel("Server-local package path"))
+    .toHaveValue("/home/designer/specifications/Project Alpha/New editor specification.spec");
   await page.getByLabel("Server-local package path").fill("/tmp/missing.spec");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Specification package was not found");

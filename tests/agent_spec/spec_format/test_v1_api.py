@@ -2,6 +2,7 @@
 
 import inspect
 import json
+import os
 import tempfile
 import time
 import zipfile
@@ -19,6 +20,7 @@ from spec2gds.agent_spec.spec_format.v1_api import (
     AssistantLaunchRequest,
     CircuitLaunchRequest,
     CircuitSourceSyncRequest,
+    CreateDirectoryRequest,
     CreateDocumentRequest,
     OpenDocumentRequest,
     TransactionRequest,
@@ -120,6 +122,38 @@ def test_v1_api_rejects_stale_edits_and_unsupported_packages() -> None:
         assert rejected.value.status_code == 422
         assert "Unsupported package mimetype" in str(rejected.value.detail)
         assert opened["source_revision_hash"]
+
+
+def test_v1_api_browses_server_local_directories(tmp_path: Path) -> None:
+    endpoints = _endpoints()
+    (tmp_path / "Alpha").mkdir()
+    (tmp_path / "beta").mkdir()
+    (tmp_path / "not-a-directory.txt").write_text("ignored", encoding="utf-8")
+
+    listing = endpoints["filesystem_directories"](str(tmp_path))
+
+    assert listing["path"] == str(tmp_path.resolve())
+    assert listing["parent"] == str(tmp_path.resolve().parent)
+    assert listing["separator"] == os.sep
+    assert listing["roots"]
+    assert [item["name"] for item in listing["directories"]] == ["Alpha", "beta"]
+    assert all(Path(item["path"]).is_absolute() for item in listing["directories"])
+
+    created = endpoints["create_directory"](
+        CreateDirectoryRequest(parent=str(tmp_path), name="New project")
+    )
+    assert created["path"] == str((tmp_path / "New project").resolve())
+    assert (tmp_path / "New project").is_dir()
+
+    with pytest.raises(fastapi.HTTPException) as invalid:
+        endpoints["create_directory"](
+            CreateDirectoryRequest(parent=str(tmp_path), name="CON.txt")
+        )
+    assert invalid.value.status_code == 422
+
+    with pytest.raises(fastapi.HTTPException) as missing:
+        endpoints["filesystem_directories"](str(tmp_path / "missing"))
+    assert missing.value.status_code == 422
 
 
 def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) -> None:

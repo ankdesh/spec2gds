@@ -306,6 +306,15 @@ export interface ServiceDirectory {
   logging: { enabled: boolean; level: "info" | "debug" };
 }
 
+export interface FilesystemDirectoryListing {
+  path: string;
+  parent: string | null;
+  home: string;
+  separator: "/" | "\\";
+  roots: string[];
+  directories: Array<{ name: string; path: string }>;
+}
+
 export interface SourceChangeEvent {
   sequence: number;
   document_id: string;
@@ -387,6 +396,19 @@ export class SpecEditorHttpClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path, title }),
+    });
+  }
+
+  browseDirectories(path?: string): Promise<FilesystemDirectoryListing> {
+    const query = path ? `?${new URLSearchParams({ path }).toString()}` : "";
+    return this.request(`/filesystem/directories${query}`);
+  }
+
+  createDirectory(parent: string, name: string): Promise<FilesystemDirectoryListing> {
+    return this.request("/filesystem/directories", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ parent, name }),
     });
   }
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { DocumentSnapshot } from "@spec2gds/document-core";
+import type { DocumentSnapshot, FilesystemDirectoryListing } from "@spec2gds/document-core";
 
 export type EditorView = "document" | "activity" | "diagnostics";
 
@@ -17,6 +17,8 @@ interface EditorMenuBarProps {
   snapshot: DocumentSnapshot | null;
   view: EditorView;
   onCreate: (path: string, title: string) => Promise<boolean>;
+  onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
+  onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
   onError: (message: string) => void;
   onOpen: (path: string) => Promise<boolean>;
   onOpenAssistant: () => Promise<void>;
@@ -32,6 +34,39 @@ function displayEntityName(vlnv?: string): string {
 
 function displayPathName(path: string): string {
   return path.split(/[\\/]/).filter(Boolean).at(-1) || "No specification open";
+}
+
+function packageDirectory(path: string): string | undefined {
+  const trimmed = path.trim();
+  const separatorIndex = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  const filename = trimmed.slice(separatorIndex + 1);
+  if (!filename.toLowerCase().endsWith(".spec")) return trimmed || undefined;
+  if (separatorIndex < 0) return undefined;
+  if (separatorIndex === 0) return trimmed[0];
+  const directory = trimmed.slice(0, separatorIndex);
+  return /^[a-z]:$/i.test(directory) ? `${directory}\\` : directory;
+}
+
+function portablePackageFilename(path: string, title: string): string {
+  const existing = path.trim().split(/[\\/]/).at(-1) ?? "";
+  if (existing.toLowerCase().endsWith(".spec")) return existing;
+  let safeTitle = title.trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
+    .replace(/[. ]+$/g, "") || "specification";
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(safeTitle)) {
+    safeTitle = `_${safeTitle}`;
+  }
+  return `${safeTitle}.spec`;
+}
+
+function packagePathInDirectory(
+  directory: string,
+  currentPath: string,
+  title: string,
+  separator: string,
+): string {
+  const suffix = directory.endsWith("/") || directory.endsWith("\\") ? "" : separator;
+  return `${directory}${suffix}${portablePackageFilename(currentPath, title)}`;
 }
 
 function nextMenu(current: MenuId, delta: number): MenuId {
@@ -170,11 +205,13 @@ function Modal({
   onClose,
   restoreFocusId,
   title,
+  wide = false,
 }: {
   children: React.ReactNode;
   onClose: () => void;
   restoreFocusId: string;
   title: string;
+  wide?: boolean;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
@@ -220,7 +257,7 @@ function Modal({
       <section
         aria-labelledby="editor-dialog-title"
         aria-modal="true"
-        className="editor-dialog"
+        className={`editor-dialog${wide ? " editor-dialog--wide" : ""}`}
         onMouseDown={(event) => event.stopPropagation()}
         ref={dialogRef}
         role="dialog"
@@ -239,23 +276,64 @@ function PathDialog({
   initialPath,
   loading,
   mode,
+  onBrowseDirectories,
   onClose,
+  onCreateDirectory,
   onSubmit,
 }: {
   initialPath: string;
   loading: boolean;
   mode: "new" | "open";
+  onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
   onClose: () => void;
+  onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
   onSubmit: (path: string, title: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState(initialPath);
   const [title, setTitle] = useState("");
+  const [browserOpen, setBrowserOpen] = useState(false);
+  const [browserLoading, setBrowserLoading] = useState(false);
+  const [browserError, setBrowserError] = useState("");
+  const [listing, setListing] = useState<FilesystemDirectoryListing | null>(null);
+  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [folderName, setFolderName] = useState("");
   const action = mode === "new" ? "Create" : "Open";
+  const browse = async (path?: string) => {
+    setBrowserLoading(true);
+    setBrowserError("");
+    setSelectedDirectory(null);
+    setCreatingFolder(false);
+    try {
+      setListing(await onBrowseDirectories(path));
+    } catch (caught) {
+      setBrowserError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBrowserLoading(false);
+    }
+  };
+  const createFolder = async () => {
+    const name = folderName.trim();
+    if (!listing || !name) return;
+    setBrowserLoading(true);
+    setBrowserError("");
+    try {
+      setListing(await onCreateDirectory(listing.path, name));
+      setFolderName("");
+      setCreatingFolder(false);
+      setSelectedDirectory(null);
+    } catch (caught) {
+      setBrowserError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBrowserLoading(false);
+    }
+  };
   return (
     <Modal
       onClose={onClose}
       restoreFocusId="editor-file-menu-trigger"
       title={`${mode === "new" ? "New" : "Open"} specification`}
+      wide={browserOpen}
     >
       <form
         onSubmit={async (event) => {
@@ -279,16 +357,146 @@ function PathDialog({
           </>
         )}
         <label htmlFor="specification-path">Server-local package path</label>
-        <input
-          autoFocus={mode === "open"}
-          id="specification-path"
-          onChange={(event) => setValue(event.target.value)}
-          placeholder="/path/to/design.spec"
-          value={value}
-        />
+        <div className="editor-dialog__path-field">
+          <input
+            autoFocus={mode === "open"}
+            id="specification-path"
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="/path/to/design.spec"
+            value={value}
+          />
+          {mode === "new" && (
+            <button
+              className="secondary"
+              onClick={() => {
+                if (browserOpen) {
+                  setBrowserOpen(false);
+                  return;
+                }
+                setBrowserOpen(true);
+                void browse(packageDirectory(value));
+              }}
+              type="button"
+            >
+              {browserOpen ? "Hide" : "Browse…"}
+            </button>
+          )}
+        </div>
         <p className="editor-dialog__hint">
           Enter a <code>.spec</code> path visible to the server running spec2gds.
         </p>
+        {mode === "new" && browserOpen && (
+          <section aria-label="Server directory browser" className="directory-browser">
+            <header>
+              <strong>Choose a folder on the server</strong>
+              {listing && <code title={listing.path}>{listing.path}</code>}
+            </header>
+            <div className="directory-browser__toolbar">
+              <button
+                disabled={browserLoading || !listing?.parent}
+                onClick={() => { if (listing?.parent) void browse(listing.parent); }}
+                type="button"
+              >
+                Up
+              </button>
+              <button
+                disabled={browserLoading || !listing || listing.path === listing.home}
+                onClick={() => { if (listing) void browse(listing.home); }}
+                type="button"
+              >
+                Home
+              </button>
+              {listing?.roots.map((root) => (
+                <button
+                  disabled={browserLoading || listing.path === root}
+                  key={root}
+                  onClick={() => void browse(root)}
+                  type="button"
+                >
+                  {root}
+                </button>
+              ))}
+              <span className="directory-browser__toolbar-spacer" />
+              <button
+                disabled={browserLoading || !listing || creatingFolder}
+                onClick={() => {
+                  setCreatingFolder(true);
+                  setFolderName("");
+                  setSelectedDirectory(null);
+                }}
+                type="button"
+              >
+                ＋ New folder
+              </button>
+            </div>
+            {creatingFolder && (
+              <div className="directory-browser__new-folder">
+                <input
+                  aria-label="New folder name"
+                  autoFocus
+                  onChange={(event) => setFolderName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setCreatingFolder(false);
+                    } else if (event.key === "Enter") {
+                      event.preventDefault();
+                      void createFolder();
+                    }
+                  }}
+                  placeholder="Folder name"
+                  value={folderName}
+                />
+                <button disabled={browserLoading || !folderName.trim()} onClick={() => void createFolder()} type="button">
+                  Create
+                </button>
+                <button className="secondary" onClick={() => setCreatingFolder(false)} type="button">
+                  Cancel
+                </button>
+              </div>
+            )}
+            {browserError && <p className="directory-browser__error" role="alert">{browserError}</p>}
+            {browserLoading && <p className="directory-browser__status" role="status">Loading folders…</p>}
+            {!browserLoading && listing && (
+              <div aria-label="Folders" className="directory-browser__folders" role="list">
+                {listing.directories.map((directory) => (
+                  <div key={directory.path} role="listitem">
+                    <button
+                      aria-pressed={selectedDirectory === directory.path}
+                      className={selectedDirectory === directory.path ? "selected" : ""}
+                      onClick={() => setSelectedDirectory(directory.path)}
+                      onDoubleClick={() => void browse(directory.path)}
+                      title={directory.path}
+                      type="button"
+                    >
+                      <span aria-hidden="true">📁</span> {directory.name}
+                    </button>
+                  </div>
+                ))}
+                {!listing.directories.length && <p>No subfolders</p>}
+              </div>
+            )}
+            <div className="directory-browser__actions">
+              <button
+                disabled={browserLoading || !listing}
+                onClick={() => {
+                  if (!listing) return;
+                  setValue(packagePathInDirectory(
+                    selectedDirectory ?? listing.path,
+                    value,
+                    title,
+                    listing.separator,
+                  ));
+                  setBrowserOpen(false);
+                }}
+                type="button"
+              >
+                Select folder
+              </button>
+            </div>
+          </section>
+        )}
         <div className="editor-dialog__actions">
           <button className="secondary" onClick={onClose} type="button">Cancel</button>
           <button disabled={!value.trim() || (mode === "new" && !title.trim()) || loading} type="submit">
@@ -348,6 +556,8 @@ export default function EditorMenuBar({
   snapshot,
   view,
   onCreate,
+  onBrowseDirectories,
+  onCreateDirectory,
   onError,
   onOpen,
   onOpenAssistant,
@@ -549,14 +759,24 @@ export default function EditorMenuBar({
       </header>
 
       {dialog === "new" && (
-        <PathDialog initialPath="" loading={loading} mode="new" onClose={() => setDialog(null)} onSubmit={onCreate} />
+        <PathDialog
+          initialPath=""
+          loading={loading}
+          mode="new"
+          onBrowseDirectories={onBrowseDirectories}
+          onClose={() => setDialog(null)}
+          onCreateDirectory={onCreateDirectory}
+          onSubmit={onCreate}
+        />
       )}
       {dialog === "open" && (
         <PathDialog
           initialPath={path}
           loading={loading}
           mode="open"
+          onBrowseDirectories={onBrowseDirectories}
           onClose={() => setDialog(null)}
+          onCreateDirectory={onCreateDirectory}
           onSubmit={(nextPath) => onOpen(nextPath)}
         />
       )}
