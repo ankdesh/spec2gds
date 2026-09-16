@@ -56,10 +56,12 @@ The `activities` object configures the Spec Editor's background Activity host:
 }
 ```
 
-`workspace_root` is resolved relative to the configuration file. Generated RTL
-and SystemC projects are published below this root. The host also owns
+`workspace_root` is resolved relative to the configuration file. The host owns
 `.spec2gds/activity-jobs.sqlite3` and `.spec2gds/snapshots/` there; keep those
 files when restarting the service so queued and interrupted jobs can resume.
+For editor-launched Activities, generated RTL, SystemC, and extension-owned
+directories are instead published beside the active `.spec` package. Direct
+SDK and script callers continue to select their own workspace root.
 Only one Activity executes at a time to serialize generators that may own the
 same output directory.
 

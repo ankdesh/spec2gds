@@ -29,11 +29,11 @@ preflight.
 
 ## Generated project
 
-The caller supplies a `LocalActivityWorkspace` rooted at the repository's
-`generated/` directory. The Activity publishes:
+The caller supplies a `LocalActivityWorkspace`. The editor roots it at the
+folder containing the active `.spec` package. The Activity publishes:
 
 ```text
-generated/systemc-at/<document-id>/<design-id>/
+systemc-at/<document-id>/<design-id>/
 ├── CMakeLists.txt
 ├── README.md
 ├── generation-manifest.json
@@ -112,7 +112,7 @@ Generated projects require C++17 and a SystemC 2.3.3 installation exporting the
 `SystemCLanguage` CMake package:
 
 ```bash
-cmake -S generated/systemc-at/<document-id>/<design-id> \
+cmake -S "$SPEC_FOLDER/systemc-at/<document-id>/<design-id>" \
   -B /tmp/systemc-at-build \
   -DCMAKE_PREFIX_PATH=/path/to/systemc-dist
 cmake --build /tmp/systemc-at-build

@@ -106,11 +106,12 @@ result = invoke_activity(
 print(result.report["output_path"])
 ```
 
-The workspace root is caller-owned. With the root above, output is published
-at:
+The workspace root is caller-owned. Editor-launched generation uses the folder
+containing the active `.spec` package. With that folder as the root, output is
+published at:
 
 ```text
-generated/rtl/<document-id>/<design-id>/
+rtl/<document-id>/<design-id>/
 ├── Makefile
 ├── README.md
 ├── generation-manifest.json

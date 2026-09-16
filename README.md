@@ -298,10 +298,9 @@ through the `activities` object in `config/services.json`.
 The deterministic `systemc.generate_at_skeleton` Activity generates a
 structural C++17/SystemC TLM 2.0 AT project for one selected design. It preserves
 reachable hierarchy, creates supported initiator/target socket bindings, and
-publishes a managed project under
-`generated/systemc-at/<document-id>/<design-id>/`. The caller supplies a
-`LocalActivityWorkspace(Path("generated"))`; the Activity returns a typed report
-and JSON report artifact. Phase one has no LLM dependency or inferred
+publishes a managed project beside the active package under
+`<spec-folder>/systemc-at/<document-id>/<design-id>/`. The Activity returns a
+typed report and JSON report artifact. Phase one has no LLM dependency or inferred
 performance behavior. Packaged Jinja2 templates format normalized render
 contexts while all topology and naming decisions remain in deterministic
 Python code. See the [SystemC AT Activity guide](docs/systemc-at-activity.md)
@@ -312,7 +311,7 @@ The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
 project for any selected design. It emits one reusable module per
 reachable component, preserves component-owned hierarchy, connects supported
 ad-hoc physical wire nets, and publishes a managed project under
-`generated/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
+`<spec-folder>/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
 compile-safe defaults unless explicit component/design SV bodies provide
 behavior; no clocks, resets, parameters, or testbench are inferred. Bus
 interfaces, non-wire ports, symbolic ranges, and
