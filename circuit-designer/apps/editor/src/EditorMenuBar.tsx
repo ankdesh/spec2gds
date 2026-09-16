@@ -384,6 +384,7 @@ function PathDialog({
         </div>
         <p className="editor-dialog__hint">
           Enter a <code>.spec</code> path visible to the server running spec2gds.
+          {mode === "new" && " Generated output folders will be created beside this package."}
         </p>
         {mode === "new" && browserOpen && (
           <section aria-label="Server directory browser" className="directory-browser">

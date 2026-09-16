@@ -983,10 +983,16 @@ def create_app() -> typing.Any:
     @app.get("/activities")
     def activities() -> dict[str, typing.Any]:
         """List product Activities and isolated extension-load diagnostics."""
+        session = state["active"]
+        workspace_root = (
+            Path(session.path).parent
+            if isinstance(session, V1Session)
+            else registry.activities.workspace_root
+        )
         return {
             "activities": [_jsonable(item) for item in activity_registry.activities()],
             "diagnostics": [_jsonable(item) for item in activity_registry.diagnostics],
-            "workspace_root": str(registry.activities.workspace_root),
+            "workspace_root": str(workspace_root),
         }
 
     @app.get("/entities/{kind}/{entity_id}/activities")
@@ -1041,6 +1047,7 @@ def create_app() -> typing.Any:
                 snapshot=snapshot,
                 package_path=session.path,
                 sidecar_root=str(session.sidecar.root),
+                workspace_root=Path(session.path).parent,
             )
             return _jsonable(record)
         except KeyError as exc:

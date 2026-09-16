@@ -7,7 +7,7 @@ import sqlite3
 import threading
 import time
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -43,6 +43,7 @@ class JobEnvelope:
     package_path: str
     sidecar_root: str
     snapshot_path: str
+    workspace_root: str
 
 
 FinalizeCallback = typing.Callable[
@@ -114,6 +115,7 @@ class ActivityJobManager:
         snapshot: ActivitySnapshot,
         package_path: str,
         sidecar_root: str,
+        workspace_root: str | Path | None = None,
     ) -> ActivityExecutionRecord:
         definition = self.registry.activity(activity_id).definition
         execution_id = new_entity_id("activity_execution")
@@ -133,10 +135,27 @@ class ActivityJobManager:
             created_at=utc_now(),
             events=(ActionEvent(sequence=1, event_type="activity.execution.queued", timestamp=utc_now()),),
         )
+        resolved_workspace = (
+            Path(workspace_root).expanduser().resolve()
+            if workspace_root
+            else self.workspace.root
+        )
         with self._connect() as connection:
             connection.execute(
-                "INSERT INTO jobs(execution_id, package_path, sidecar_root, snapshot_path, record_json) VALUES (?, ?, ?, ?, ?)",
-                (execution_id, str(Path(package_path).resolve()), sidecar_root, str(snapshot_path), self._json(record)),
+                """
+                INSERT INTO jobs(
+                    execution_id, package_path, sidecar_root,
+                    snapshot_path, workspace_root, record_json
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    execution_id,
+                    str(Path(package_path).resolve()),
+                    sidecar_root,
+                    str(snapshot_path),
+                    str(resolved_workspace),
+                    self._json(record),
+                ),
             )
         self._publish(record)
         self._ensure_worker()
@@ -153,16 +172,20 @@ class ActivityJobManager:
     def get(self, execution_id: str) -> JobEnvelope | None:
         with self._connect() as connection:
             row = connection.execute(
-                "SELECT package_path, sidecar_root, snapshot_path, record_json FROM jobs WHERE execution_id = ?",
+                """
+                SELECT package_path, sidecar_root, snapshot_path, workspace_root, record_json
+                FROM jobs WHERE execution_id = ?
+                """,
                 (execution_id,),
             ).fetchone()
         if row is None:
             return None
         return JobEnvelope(
-            record=ActivityExecutionRecord.model_validate_json(row[3]),
+            record=ActivityExecutionRecord.model_validate_json(row[4]),
             package_path=row[0],
             sidecar_root=row[1],
             snapshot_path=row[2],
+            workspace_root=row[3] or str(self.workspace.root),
         )
 
     def cancel(self, execution_id: str) -> ActivityExecutionRecord:
@@ -174,17 +197,17 @@ class ActivityJobManager:
             return record
         if record.status == "queued":
             updated = self._terminal(record, "cancelled", "Activity execution was cancelled before it started.")
-            envelope = JobEnvelope(updated, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+            envelope = replace(envelope, record=updated)
             self._store(envelope)
             try:
                 updated = self.finalize(envelope, None)
-                envelope = JobEnvelope(updated, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+                envelope = replace(envelope, record=updated)
                 self._store(envelope)
             finally:
                 self._publish(envelope.record)
             return envelope.record
         updated = record.model_copy(update={"cancel_requested": True})
-        self._store(JobEnvelope(updated, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path))
+        self._store(replace(envelope, record=updated))
         self._publish(updated)
         return updated
 
@@ -211,10 +234,28 @@ class ActivityJobManager:
                     package_path TEXT NOT NULL,
                     sidecar_root TEXT NOT NULL,
                     snapshot_path TEXT NOT NULL,
+                    workspace_root TEXT,
                     record_json TEXT NOT NULL
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in connection.execute("PRAGMA table_info(jobs)").fetchall()
+            }
+            if "workspace_root" not in columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN workspace_root TEXT")
+            legacy_jobs = connection.execute(
+                """
+                SELECT execution_id, package_path FROM jobs
+                WHERE workspace_root IS NULL OR workspace_root = ''
+                """
+            ).fetchall()
+            for execution_id, package_path in legacy_jobs:
+                connection.execute(
+                    "UPDATE jobs SET workspace_root = ? WHERE execution_id = ?",
+                    (str(Path(package_path).expanduser().resolve().parent), execution_id),
+                )
 
     def _recover_running_jobs(self) -> None:
         with self._connect() as connection:
@@ -281,7 +322,7 @@ class ActivityJobManager:
                 timestamp=utc_now(),
             )),
         })
-        envelope = JobEnvelope(running, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+        envelope = replace(envelope, record=running)
         self._store(envelope)
         self._publish(running)
         result: ActivityResult | None = None
@@ -300,7 +341,8 @@ class ActivityJobManager:
             snapshot = ActivitySnapshot.read(envelope.snapshot_path)
             token = _JobCancellation(self, running.execution_id)
             token.raise_if_cancelled()
-            workspace = _CancellationWorkspace(self.workspace, token)
+            output_workspace = LocalActivityWorkspace(envelope.workspace_root)
+            workspace = _CancellationWorkspace(output_workspace, token)
             result = invoke_activity(
                 self.registry,
                 running.activity_id,
@@ -309,7 +351,7 @@ class ActivityJobManager:
                 cancellation=token,
             )
             relative_output = str(result.report.get("output_path", ""))
-            output_path = str(self.workspace.root / relative_output) if relative_output else ""
+            output_path = str(output_workspace.root / relative_output) if relative_output else ""
             finished = running.model_copy(update={
                 "status": "succeeded",
                 "finished_at": utc_now(),
@@ -326,20 +368,20 @@ class ActivityJobManager:
             finished = self._terminal(running, "cancelled", str(exc))
         except Exception as exc:
             finished = self._terminal(running, "failed", f"{type(exc).__name__}: {exc}")
-        terminal = JobEnvelope(finished, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+        terminal = replace(envelope, record=finished)
         try:
             finished = self.finalize(terminal, result if finished.status == "succeeded" else None)
-            terminal = JobEnvelope(finished, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+            terminal = replace(envelope, record=finished)
         except Exception as exc:
             finished = self._terminal(
                 finished,
                 "failed",
                 f"Could not persist Activity result: {type(exc).__name__}: {exc}",
             )
-            terminal = JobEnvelope(finished, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+            terminal = replace(envelope, record=finished)
             try:
                 finished = self.finalize(terminal, None)
-                terminal = JobEnvelope(finished, envelope.package_path, envelope.sidecar_root, envelope.snapshot_path)
+                terminal = replace(envelope, record=finished)
             except Exception:
                 pass
         self._store(terminal)
