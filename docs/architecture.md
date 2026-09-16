@@ -25,7 +25,7 @@ flowchart TB
     end
 
     subgraph Optional["Optional collaboration"]
-        AU["AI Assistant UI + A2A agent"]
+        AU["DeepSeek Harness assistant + focused UI"]
     end
 
     IR --> ADAPTER["Direct-port adapter"] --> CS

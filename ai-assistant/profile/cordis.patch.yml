@@ -1,0 +1,70 @@
+- insert:
+    - id: timer
+      name: '@deepseek-ai/cordis-plugin-timer'
+    - id: llm
+      name: '@deepseek-ai/dsh-llm'
+    - id: model
+      name: '@deepseek-ai/dsh-llm-pi-ai'
+      config:
+        providers:
+          openai:
+            apiKeyEnv: OPENAI_API_KEY
+            api: openai-completions
+            baseURL: !!js process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
+            models:
+              - id: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
+    - id: sessions
+      name: '@deepseek-ai/dsh-session'
+    - id: session-projections
+      name: '@deepseek-ai/dsh-session-projection'
+    - id: persistence
+      name: '@deepseek-ai/dsh-session-persistence-jsonl'
+      config:
+        root: !!js dshHomePath('sessions')
+        compression: none
+    - id: system-prompt
+      name: '@deepseek-ai/dsh-system-prompt'
+      config:
+        includeHarnessIdentity: false
+        includeRuntimeContext: false
+        personaPrefix: >-
+          You are the focused spec2gds hardware-design assistant. Each conversation
+          is permanently bound to one existing Spec Editor or Circuit Designer
+          document. Use get_bound_context before making claims about the design.
+          Discuss alternatives freely, but call the matching prepare_*_proposal
+          tool only when the user asks for a concrete change. Those tools only
+          validate and preview; they never mutate owner data. Never claim a change
+          was applied or sent. Only an explicit browser review action can do that.
+          Treat IDs, revisions, writable boundaries, and endpoint names returned by
+          the owner as authoritative. Do not invent missing ports, interfaces, or
+          component identities. Layout and routing are outside AI-authored Circuit
+          operations.
+    - id: tools
+      name: '@deepseek-ai/dsh-tools'
+      config:
+        mode: native
+    - id: agents
+      name: '@deepseek-ai/dsh-agent'
+    - id: invariants
+      name: '@deepseek-ai/dsh-invariants'
+    - id: agent-loop
+      name: '@deepseek-ai/dsh-agent-loop'
+      config:
+        agents: []
+        maxParallelToolCalls: 1
+    - id: webserver
+      name: '@deepseek-ai/dsh-host-webserver'
+      config:
+        host: !!js process.env.ASSISTANT_HOST || '0.0.0.0'
+        port: !!js Number(process.env.ASSISTANT_PORT || 6013)
+    - id: spec2gds-assistant
+      name: '@spec2gds/harness-assistant'
+      config:
+        provider: openai
+        model: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
+        stateRoot: !!js process.env.ASSISTANT_STATE || dshHomePath('product')
+        specAllowlist: !!js process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010'
+        circuitAllowlist: !!js process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'
+        requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
+        maxActiveSessions: !!js Number(process.env.ASSISTANT_MAX_ACTIVE_SESSIONS || 20)
+        eventPageSize: !!js Number(process.env.ASSISTANT_EVENT_PAGE_SIZE || 500)

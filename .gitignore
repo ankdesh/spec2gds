@@ -1,4 +1,5 @@
 node_modules/
+ai-assistant/.dev/
 logs/
 generated/
 .npm-cache/

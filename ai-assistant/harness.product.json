@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "releaseFiles": [
+    "deployment",
+    "README.md",
+    "docs",
+    "harness.lock.json"
+  ]
+}

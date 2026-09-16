@@ -106,8 +106,13 @@ stop_service() {
 
 start_all() {
   command -v uv >/dev/null 2>&1 || { echo "uv is required." >&2; return 1; }
+  command -v node >/dev/null 2>&1 || { echo "Node.js is required." >&2; return 1; }
   command -v npm >/dev/null 2>&1 || { echo "npm is required." >&2; return 1; }
   command -v setsid >/dev/null 2>&1 || { echo "setsid is required." >&2; return 1; }
+  node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 19) ? 0 : 1)' || {
+    echo "AI Assistant requires Node.js 22.19 or newer (Node.js 24 LTS is recommended)." >&2
+    return 1
+  }
 
   mkdir -p "${STATE_DIR}"
 
@@ -122,7 +127,7 @@ start_all() {
 
   start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
   start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev
-  start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" uv run spec2gds-ai-assistant
+  start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" npm run dev
 
   # Catch immediate failures such as missing dependencies or occupied ports.
   sleep 1

@@ -6,14 +6,16 @@ connects those modules into the main runtime and data flows.
 
 ## Start with the ownership boundaries
 
-There are three Python distributions:
+There are two Python distributions:
 
 1. The root `spec2gds` project owns `.spec` packages, immutable semantic reads,
    validated edits, imports, Activities, the Spec API, and the Log Viewer.
 2. `runtime/` is the deliberately small shared package for service-independent
    logging configuration and structured events.
-3. `ai-assistant/` is an optional, separately installed service. It owns chats
-   and review records, but it never owns specification or circuit source.
+
+The optional `ai-assistant/` is a TypeScript/Node DeepSeek Harness product, not
+a Python distribution. It owns chats and review records but never owns
+specification or circuit source.
 
 The Circuit Designer service and browser applications are TypeScript. Python
 integrates with them only through their versioned HTTP and JSON contracts.
@@ -60,39 +62,9 @@ and validates the complete reachable source graph before output begins;
 normalization then converts accepted IR into simple template values. Jinja
 templates format text but make no topology or naming decisions.
 
-## Follow an Assistant proposal
-
-The optional Assistant uses a review boundary rather than a source-write
-shortcut:
-
-1. `ai-assistant/src/spec2gds_assistant/app.py` wires FastAPI, A2A execution,
-   agents, clients, and local storage.
-2. `api.py` owns conversation/binding/review HTTP routes.
-3. `database.py` persists only Assistant-owned threads, messages, and review
-   records in SQLite.
-4. `circuit_client.py` and `spec_client.py` validate allowlisted owner URLs and
-   call their public APIs.
-5. `agents/context.py` renders immutable semantic snapshots into deterministic
-   prompt context with exact IDs and writable boundaries.
-6. `agents/circuit_editor.py` and `agents/spec_editor.py` request typed model
-   output; `models.py` rejects extra fields and invalid operation shapes.
-7. `a2a_agent.py` converts domain results into A2A task updates and artifacts.
-
-Discussion and model output never mutate source. Preview and apply cross back
-into the owning Spec or Circuit API, which rechecks the source revision and all
-domain invariants. The Assistant database is not a second source of truth.
-
-## How to read the models
-
-Data-only Pydantic classes mirror JSON wire contracts. Read their discriminated
-`type` or `kind` field first, then their required payload fields. Validators
-explain cross-field rules that are not visible from types alone. In
-`ai-assistant/models.py`, Circuit values and operations precede their proposal
-envelope; Spec values and operations follow in the same order.
-
-Private helpers beginning with `_` are implementation details. Their names and
-nearby comments explain local mechanics; non-obvious security, ownership,
-determinism, and collision behavior is documented at the decision point.
+Assistant proposal execution is documented in [AI Assistant](ai-assistant.md).
+Its TypeScript source lives under `ai-assistant/src`; no Assistant Python,
+FastAPI, Pydantic, or A2A package remains.
 
 ## Verify a Python change
 
@@ -102,14 +74,6 @@ From the repository root:
 uv run python -m pytest -q
 uv run ruff check spec2gds runtime/src
 uv run vulture spec2gds runtime/src --min-confidence 90
-```
-
-From `ai-assistant/`:
-
-```bash
-uv run python -m pytest -q
-uv run python -m ruff check src
-uv run python -m vulture src --min-confidence 90
 ```
 
 The root suite requires GNU Make and Verilator 5.x because generated RTL is

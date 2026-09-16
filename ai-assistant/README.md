@@ -1,131 +1,78 @@
-# Optional AI Assistant
+# spec2gds Harness assistant
 
-This local application provides document- or entity-bound conversations and
-reviewed change proposals for the Spec Editor and Circuit Designer. Both
-editors remain fully usable when it is stopped.
+This is the spec2gds assistant service built on DeepSeek Harness. It owns the
+canonical assistant port `6013`. It binds each conversation to one existing Spec Editor
+or Circuit Designer document, streams durable Harness sessions, and keeps
+bindings and proposal-review decisions in a small SQLite database.
 
-## Run
+The model can read owner context and request non-mutating proposal previews. It
+cannot apply, send, or create owner data. Spec apply and Circuit send are
+available only through explicit browser review actions.
 
-Requirements: Python 3.12+, `uv`, Node.js 24+, npm, and at least one owning
-editor service.
+The domain layer ports the former assistant's deterministic Spec writable/read-
+only context and Circuit endpoint catalog. Proposal tools expose discriminated,
+closed operation schemas, reject unknown fields and invalid supported/unsupported
+shapes, and preserve complete-replacement and revision rules. Circuit context
+also includes metadata from the owner's deterministic SVG export.
+
+## Requirements
+
+- Node.js `^22.19.0` or Node.js 24+
+- a built local Harness checkout on `codex/product-distribution`
+- `OPENAI_API_KEY` for model turns
+- the existing Spec and/or Circuit owner service for bound conversations
+
+## Development
 
 ```bash
-uv sync
-cd web
+cd ai-assistant
 npm install
 npm run build
-cd ..
-
-export OPENAI_API_KEY="..."
-uv run spec2gds-ai-assistant
+HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
 ```
 
-Open `http://SERVER_IP:6013`. For frontend development, run `npm run dev` in
-`web/` and open `http://SERVER_IP:6016`.
+Open `http://127.0.0.1:6013`. The service itself boots without either editor;
+new bindings and owner-backed actions require the selected owner to be running.
 
-The default hosted addresses come from `../config/services.json`. On opening
-an unbound chat, the Assistant probes the configured Spec and Circuit health
-endpoints, displays their status, and pre-fills the corresponding connection
-form. Set `SPEC2GDS_SERVICE_CONFIG` to use another registry.
-
-When creating a chat directly in the AI Assistant, first choose **Circuit
-Designer** or **Spec Editor**. Circuit chats accept a Circuit Designer service
-URL and document ID. The Spec Editor toolbar opens a chat with the complete
-active specification as context. It can propose a new top-level component or
-design, including initial instances that reference existing component VLNVs.
-To change an existing entity, use its **Options → More actions… → Explore with
-AI Assistant** command; it supplies the document and entity identity
-automatically. A manual entity connection form is also available for known
-identifiers.
-
-The default model is `gpt-4o-mini`; override it with `OPENAI_MODEL`. The local
-SQLite database defaults to `data/assistant.db`.
-
-The API serves the production frontend from `web/dist`, which is why the setup
-above runs `npm run build`. `npm run dev` uses port `6016` only for frontend
-development and does not replace the API/A2A service on port `6013`.
-
-Unified logging uses the root `config/services.json`. Set
-`SPEC2GDS_LOGGING=ON` and optionally `SPEC2GDS_LOG_LEVEL=debug` before starting
-the service to include Assistant activity in the shared log. Debug mode records
-the redacted request immediately before each OpenAI call and its response
-immediately afterward.
-
-## Flow and safety
-
-```mermaid
-sequenceDiagram
-    actor User
-    participant UI as Assistant UI
-    participant Agent as A2A agent
-    participant Owner as Spec or Circuit API
-
-    User->>UI: Open document- or entity-bound chat
-    UI->>Agent: Message + current context
-    Agent->>Owner: Read semantic snapshot
-    Agent-->>UI: Discussion or typed proposal
-    User->>Owner: Accept or reject preview
-    Owner->>Owner: Revalidate revision and operations
-    Owner-->>UI: Committed result or diagnostics
-```
-
-Conversation does not mutate source. A user must request a proposal and accept
-its preview. The owning API performs the final revision and validation checks.
-If an owning editor rejects a preview, the review card shows its returned error
-codes, messages, and affected element, operation, or path so the next proposal
-can address the concrete failure.
-
-Circuit Designer chats can propose logical component definitions, placed
-instances, component pins, top-level design ports, nets, and endpoint
-connections. The Assistant maps short requests such as “add a component,”
-“create an input port,” and “connect these ports” to typed Circuit Designer
-operations. Existing semantic IDs and the endpoint catalog in the current
-snapshot are authoritative. Geometry, routes, labels, and layout are not
-AI-authored.
-
-Document-bound Spec Editor chats can propose only a new top-level component or
-design. A new design may include all requested initial instances as one atomic
-operation; each instance must use the exact VLNV of an existing component.
-Existing entities remain read-only in that scope. Entity-bound chats can propose
-metadata, component-instance, and editor-profiled port changes. Port proposals
-use the same Wire, Transactional, and packed Structured families as the editor.
-Port names and families remain fixed, and ports on components with internal
-designs remain read-only. Specification renaming remains outside both workflows.
-
-For design connections, available component references include their exact
-ports and interfaces. Ad-hoc connections use port endpoints, while interface
-connections use bus-interface endpoints; the Assistant does not invent missing
-endpoint names or propose connections when directions or interfaces are
-incompatible.
-
-Spec and Circuit service URLs must match the allowlists derived from the shared
-registry. `SPEC_SERVICE_ALLOWLIST` and `CIRCUIT_SERVICE_ALLOWLIST` can override
-them. The reference deployment has no user authentication.
-
-## Useful configuration
+Useful overrides:
 
 | Variable | Default |
 | --- | --- |
-| `OPENAI_MODEL` | `gpt-4o-mini` |
 | `ASSISTANT_HOST` | `0.0.0.0` |
 | `ASSISTANT_PORT` | `6013` |
-| `ASSISTANT_DATABASE_PATH` | `data/assistant.db` |
-| `ASSISTANT_WEB_DIST_PATH` | `web/dist` |
-| `CIRCUIT_REQUEST_TIMEOUT_SECONDS` | `30` |
-| `SPEC_REQUEST_TIMEOUT_SECONDS` | `30` |
-| `SPEC_SERVICE_ALLOWLIST` | configured public Spec API origin on port `6010` |
-| `CIRCUIT_SERVICE_ALLOWLIST` | configured Circuit API base URL |
-| `SPEC2GDS_SERVICE_CONFIG` | `../config/services.json` |
-| `SPEC2GDS_PUBLIC_HOST` | automatically detected LAN IPv4 address |
+| `ASSISTANT_STATE` | `ai-assistant/.dev` |
+| `OPENAI_MODEL` | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
+| `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
+| `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |
+
+Comma-separate allowlist values when the owner is advertised through both a
+loopback address and a configured LAN address. Stored owner URLs are checked
+against the current allowlist before every owner-backed use.
 
 ## Verify
 
 ```bash
-uv run python -m pytest -q
-cd web
+npm test
+npm run typecheck
 npm run build
+npm run test:harness
 ```
 
-System boundaries and full sequences are documented in
-[`../docs/architecture.md`](../docs/architecture.md) and
-[`../docs/flows.md`](../docs/flows.md).
+The Harness integration test uses a local OpenAI-compatible fixture and does
+not require a live API key. Native packaging additionally requires a clean
+Harness checkout whose `HEAD` matches `harness.lock.json`:
+
+```bash
+npm run package -- /tmp/spec2gds-assistant-release
+```
+
+Empty owner-document creation, legacy Python-assistant chat migration, and A2A
+compatibility are not supported. The removed service's last local SQLite state
+is preserved under `generated/legacy-ai-assistant-state/` for manual recovery;
+the Harness service does not read it.
+
+The focused UI supports rename, archive/unarchive, owner/model status, explicit
+review actions, structured diagnostics, Spec field diffs, and Circuit diff
+summaries. Permanent transcript deletion is not exposed because the current
+Harness persistence contract is append-only and has no safe delete operation.

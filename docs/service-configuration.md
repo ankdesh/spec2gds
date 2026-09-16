@@ -31,8 +31,9 @@ working-directory-relative path. See
 [Circuit Designer preferences](circuit-designer-preferences.md).
 
 The default allocation is Spec Editor `6010`, Circuit API `6011`, Circuit UI
-`6012`, AI Assistant `6013`, and Log Viewer `6014`. Development-only Vite UIs
-use `6015` and `6016`. The schema also contains the unified logging policy.
+`6012`, AI Assistant `6013`, and Log Viewer `6014`. The specification editor's
+development-only Vite UI uses `6015`. The schema also contains the unified
+logging policy.
 Logging has only two environment overrides:
 
 - `SPEC2GDS_LOGGING=ON|OFF`
@@ -99,7 +100,7 @@ an arbitrary URL supplied by a browser request.
   durable execution endpoints, and `GET /activity-events` for live status.
 - Circuit Designer exposes `GET /api/circuit-designer/v1/services` and
   `/health`.
-- AI Assistant exposes `GET /api/services`, probes both owning services, and
+- AI Assistant exposes `GET /api/capabilities`, probes both owning services, and
   reports `Available` or `Not detected` in its workspace chooser.
 
 The **AI Assistant ↗** button in Spec Editor opens the Assistant with the Spec

@@ -36,6 +36,11 @@ The two editors have different source-of-truth rules:
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
 
+The AI Assistant is implemented as a focused DeepSeek Harness product with
+deterministic domain context, strict proposal schemas, review diffs, and
+conversation archive/rename support. It owns the canonical `ai-assistant/`
+workspace and port `6013`; see the [AI Assistant guide](docs/ai-assistant.md).
+
 For a focused explanation of how the two editors cooperate, including launch,
 projection, save, refresh, conflict, and security diagrams, read
 [Spec Editor and Circuit Designer integration architecture](docs/spec-circuit-integration-architecture.md).
@@ -59,17 +64,16 @@ Install these tools before setting up the repository:
   listeners; and
 - GNU Make and Verilator 5.x when running the complete Python/RTL test suite.
 
-`uv` creates and manages a root `.venv` and a separate
-`ai-assistant/.venv`; do not install either project into the system Python.
+`uv` creates and manages the root `.venv`; the AI Assistant is a Node/Harness
+product and has no Python environment.
 The combined `scripts/serve-all.sh` launcher targets Linux or WSL because it
 uses `setsid` and other Unix process-management commands.
 
 ## Set up and run everything
 
-From a clean checkout, install both Python projects and both JavaScript
+From a clean checkout, install the root Python project and both JavaScript
 workspaces. The Assistant service serves the built files in `web/dist`, so its
-web build is part of setup even when you plan to use only the combined
-launcher.
+build is part of setup even when you plan to use only the combined launcher.
 
 ```bash
 # Root Spec Editor, Activities, and shared Python runtime
@@ -80,14 +84,15 @@ cd circuit-designer
 npm install
 cd ..
 
-# AI Assistant API and its production web bundle
+# Harness AI Assistant and its production web bundle
 cd ai-assistant
-uv sync
-cd web
 npm install
 npm run build
-cd ../..
+cd ..
 ```
+
+See [AI Assistant](docs/ai-assistant.md) for Harness checkout setup, owner
+allowlists, tests, state, and packaging constraints.
 
 To enable model-backed Assistant replies, export an API key before launch.
 Without it, the Spec Editor and Circuit Designer still run and the Assistant
@@ -378,17 +383,14 @@ save, conflict, layout, and recovery behavior.
 
 ```bash
 cd ai-assistant
-uv sync
-cd web
 npm install
 npm run build
-cd ..
 export OPENAI_API_KEY="..."
-uv run spec2gds-ai-assistant
+HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
 ```
 
-Open `http://SERVER_IP:6013`. The production service reads the frontend from
-`web/dist`, so repeat `npm run build` after changing Assistant web code.
+Open `http://SERVER_IP:6013`. Repeat `npm run build` after changing Assistant
+server or web code.
 
 The AI Assistant is optional and does not sit on either editor's critical path.
 It checks the configured Spec and Circuit health endpoints when its workspace
@@ -415,8 +417,10 @@ npm run test:e2e          # Circuit Designer only
 npm run test:e2e:editor   # specification editor only
 
 cd ../ai-assistant
-uv run python -m pytest -q
-cd web && npm run build
+npm run typecheck
+npm test
+npm run build
+npm run test:harness
 ```
 
 Detailed source locations and focused commands are in

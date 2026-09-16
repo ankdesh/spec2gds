@@ -1,127 +1,111 @@
 # AI Assistant
 
-The optional `ai-assistant/` application provides conversations and reviewed
-change proposals without becoming part of either editor's critical path. It is
-a separate FastAPI/A2A service with a React client and its own `uv` environment.
+The optional `ai-assistant/` application is a focused DeepSeek Harness product.
+It owns model execution, durable conversations, cancellation, streaming, and a
+small React review UI without becoming part of either editor's critical path.
+The former Python/FastAPI/A2A and assistant-ui implementation has been removed.
 
-## Specification editor connection
+Each conversation is permanently bound to one existing Spec document, Spec
+entity, or Circuit document. The model can read fresh owner context and prepare
+typed previews, but it has no apply, send, source-creation, filesystem, shell,
+browser, or general code-execution tools. A Spec apply or Circuit proposal send
+is available only through an explicit browser review action.
 
-The specification editor owns the source and both integration scopes:
+## Editor integration
 
-1. `POST /assistant/launch/document` returns a URL for a fresh chat bound to the
-   active document.
-2. `POST /assistant/launch` returns a URL for a fresh entity-bound chat.
-3. The AI Assistant reads the corresponding document or entity context from
-   the editor service.
-4. A document- or entity-bound typed proposal is sent to
-   `/assistant/proposals/preview`.
-5. Only an explicitly accepted, current proposal is sent to
-   `/assistant/proposals/apply`.
-6. The editor backend revalidates ownership, the source revision, IP-XACT, and
-   the spec2gds editing profile before committing atomically.
+The existing launch URLs remain stable:
 
-Rejected previews retain and display the owning editor's diagnostic codes,
-messages, and affected element, operation, or path instead of only reporting a
-generic rejection.
+- `/launch/spec-document` creates a document-scoped Spec conversation;
+- `/launch/spec` creates an entity-scoped Spec conversation;
+- `/launch/circuit` creates a Circuit conversation.
 
-Discussion never writes the `.spec` package. A toolbar chat receives
-document-scoped context rendered from a deterministic full-source Activity
-snapshot. It may propose `create_entity` for a new top-level component or design;
-a design can carry its initial component instances in the same atomic operation.
-All existing entities are read-only in document scope. An entity chat stays bound
-to one existing component, design, protocol definition, or narrative block and
-retains the review-gated proposal workflow. Document-level specification
-renaming remains outside the Assistant editing profile.
+Spec Editor continues to own semantic context, preview, validation, revision
+checks, and atomic application. Circuit Designer continues to own snapshots,
+operation preview, diagnostics, revisions, and submitted proposals. Discussion
+and model output never mutate either source.
 
-## Choosing the owning application
+Document-scoped Spec conversations may only propose `create_entity` for a new
+component or design. Entity-scoped conversations stay inside the owner's
+writable boundary and support metadata, parameters, ports, interfaces,
+instances, connections, internal designs, bus/abstraction definitions,
+narrative blocks, and SystemVerilog sections. The complete 28-operation Spec
+vocabulary is represented by closed discriminated schemas.
 
-A chat created from the AI Assistant home screen begins unbound and presents a
-choice between Circuit Designer and Spec Editor. The choice controls which
-connection form, context loader, agent behavior, proposal preview, and apply
-action are used. Once connected, the domain badge in the sidebar identifies
-the owning application and the binding cannot be changed.
+Circuit conversations receive complete component/instance/net values, an exact
+endpoint catalog, and metadata from the deterministic SVG export. They support
+the complete 14-operation logical vocabulary for definitions, instances,
+boundary terminals, nets, and endpoints. Geometry, routes, labels, and layout
+remain outside AI-authored operations.
 
-The chooser reads the shared service directory and probes the owning APIs. It
-shows their availability and pre-fills the resolved service URLs. Circuit
-Designer's **Tools → AI Assistant** command bypasses the manual form by calling `/launch/circuit` with
-the active document; the Assistant validates that document before creating the
-bound chat. Spec Editor's top button similarly creates a validated,
-document-bound chat with top-level creation capability. Its entity action
-creates an editable, entity-bound Spec chat.
+## Run locally
 
-Circuit Designer chats are connected manually using the circuit service URL
-and document ID. Spec Editor chats should normally be opened from an entity's
-**Options → More actions… → Explore with AI Assistant** command, which supplies
-the service URL, document ID, entity kind, and entity ID. The AI Assistant also
-exposes an advanced manual Spec connection form when those identifiers are
-already known.
+Use Node.js 22.19+ or Node.js 24+ and a built checkout of the pinned Harness
+fork. The combined product expects the Harness checkout at
+`/home/ankdesh/explore/deepseek-harness` unless `HARNESS_SOURCE` is set.
 
-## Circuit editing profile
+```bash
+cd ai-assistant
+npm install
+npm run build
+export OPENAI_API_KEY="..."
+HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
+```
 
-Circuit chats receive a semantic snapshot, an exact endpoint catalog, and an
-optional rendering. The semantic snapshot is authoritative; SVG and PNG are
-visual aids. The context distinguishes four commonly confused objects:
+Open `http://127.0.0.1:6013`. The combined `scripts/serve-all.sh start`
+launcher uses the same workspace and port.
 
-- A component definition is a reusable type.
-- An instance places one use of a component definition in the design.
-- A component terminal is a pin repeated on every instance of its definition.
-- A boundary terminal is a top-level design port.
+Important settings:
 
-The Assistant can propose local component definitions, component instances,
-component-terminal updates, boundary terminals, nets, and endpoint connections.
-For example, “add a component” normally places an instance of an available
-definition, “add an input port” creates a boundary terminal, and “connect A to
-B” creates a net containing both endpoints. If the user explicitly requests a
-new component type, the proposal can add its definition before placing it.
+| Variable | Default |
+| --- | --- |
+| `ASSISTANT_HOST` | `0.0.0.0` |
+| `ASSISTANT_PORT` | `6013` |
+| `ASSISTANT_STATE` | `ai-assistant/.dev` |
+| `OPENAI_MODEL` | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
+| `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
+| `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |
 
-Updates to component definitions, instances, boundary terminals, and nets are
-complete replacements rather than partial patches. The prompt therefore
-includes exact current JSON for copy-forward fields and orders dependent
-operations so definitions and terminals exist before instances and nets refer
-to them. Layout, routes, and geometry remain outside AI-authored proposals.
+Owner allowlists accept comma-separated exact URLs. Stored owner URLs are
+rechecked before every owner-backed use. This is a trusted single-user service
+with same-origin browser checks; do not expose it as a public multi-user API.
 
-Both proposal models are kept within the OpenAI Structured Outputs JSON Schema
-subset: object variants use `anyOf` rather than the unsupported `oneOf`, and
-arbitrary parameter/property maps are presented as key/value lists to the model
-before being normalized back to the owning API's map representation.
+## State and recovery
 
-Design-bound Spec context includes each available component's exact ports and
-bus interfaces, not only its VLNV. The proposal schema keeps interface
-connections and ad-hoc port connections as separate shapes. Interface
-connections may contain only interface endpoints; ad-hoc connections may
-contain only internal/external port endpoints. The agent must return an
-unsupported result when the referenced components do not expose compatible,
-named endpoints instead of inventing a port or interface.
+Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores
+immutable bindings and review metadata in the same state root. Back up the
+complete state root as one unit. The UI supports rename and archive/unarchive;
+permanent deletion is not exposed because the current Harness persistence
+contract is append-only.
 
-## Entity editing profile
+The removed Python assistant's local SQLite files were not migrated. They are
+preserved under `generated/legacy-ai-assistant-state/` and are not loaded by the
+Harness application. A2A endpoints and old REST/chat compatibility are gone.
 
-Entity metadata and design component instances use the same semantic values as
-the direct editor. Component-port proposals support three families:
+Circuit documents and pending Circuit proposals remain process-local to
+Circuit Designer. Harness conversations survive a Circuit restart, but the
+document must be reopened before a stale or interrupted review can reconcile.
 
-- Wire: `in`, `out`, or `inout`, plus an optional compact Range.
-- Transactional: `requires`, `provides`, or `both`, plus optional Kind, Custom
-  kind, and Bus width.
-- Structured: `in`, `out`, or `inout`; packing and hidden type definitions are
-  server-owned.
+## Verification and packaging
 
-Every port has an immutable Name and Family plus optional Display name and
-Description. An upsert is a complete value, so unchanged fields must be copied
-from context. Family conversion is rejected, and ports on components owning an
-internal design are read-only just as they are in the direct editor.
+```bash
+cd ai-assistant
+npm run typecheck
+npm test
+npm run build
+npm run test:harness
+```
 
-Component/design context also includes the complete SystemVerilog body up to
-the 256 KiB package limit. Entity-bound proposals may create/replace it with
-`upsert_entity_section` or remove it with `delete_entity_section`. Preview and
-acceptance use the same portable checks and Verilator validation as human
-edits, including blocking diagnostics and `unverified` fallback warnings.
+The integration test boots the real Harness profile against local owner and
+OpenAI-compatible fixtures. It covers context dispatch, proposal preview,
+browser-only apply, restart/resume, rename, archive, and unarchive without a
+live API key.
 
-## Naming and configuration
+Native release assembly additionally requires the Harness checkout to be clean
+and at the commit recorded in `harness.lock.json`:
 
-Run the service with `uv run spec2gds-ai-assistant`. The editor uses the shared
-`config/services.json`, with `AI_ASSISTANT_URL` as its URL override. The neutral
-`/assistant/*` routes, `assistant_url` response field, internal
-`spec2gds_assistant` Python package, and `ASSISTANT_*` service settings remain
-stable.
+```bash
+npm run package -- /tmp/spec2gds-assistant-release
+```
 
-The Assistant permits non-loopback owning services only when their resolved
-URLs are present in its configured allowlists.
+The package command intentionally refuses dirty or unpinned Harness input.

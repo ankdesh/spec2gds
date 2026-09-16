@@ -26,8 +26,8 @@ Read in this order:
    SystemVerilog scaffolding, direct-wire validation, and Verilator checks.
 10. [RTL semantics examples](rtl-semantics-examples.md) — body-only component
     behavior, one-/two-cycle samples, and configured output generation.
-11. [AI Assistant](ai-assistant.md) — document- and entity-bound editor
-    integration, review boundary, and proposal contracts.
+11. [AI Assistant](ai-assistant.md) — DeepSeek Harness runtime, editor
+    integration, review boundary, proposal contracts, setup, and recovery.
 12. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
     browser viewer.
 13. [Python code-reading guide](python-code-guide.md) — package ownership,
@@ -54,7 +54,7 @@ Read in this order:
     Blueprint Slate tokens, responsive behavior, and theme extension.
 23. [Circuit Designer / Chipmind gap analysis](circuit-designer-chipmind-gap-analysis.md)
     — current overlap, missing capabilities, and suggested priorities.
-24. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
+25. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
     — plain-language ownership, projection, launch, save, refresh, conflict,
     and security diagrams.
 

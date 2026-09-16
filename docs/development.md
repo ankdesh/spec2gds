@@ -14,7 +14,7 @@ circuit-designer/packages/react/   canvas rendering and gestures
 circuit-designer/packages/app-react/ reusable application shell and host adapters
 circuit-designer/apps/editor/      specification editor frontend
 circuit-designer/apps/standalone/  independent Circuit Designer frontend
-ai-assistant/                      optional AI Assistant service and web client
+ai-assistant/                      DeepSeek Harness assistant product and web client
 config/services.json               shared hosted-service IP/port registry
 tests/                             Python contract and integration tests
 docs/                              current architecture and workflows
@@ -29,8 +29,7 @@ independent defaults and do not require that shared registry.
 
 Use `uv`; do not install project packages into the system interpreter.
 Running `uv sync` creates the repository-local `.venv`. The AI Assistant is a
-separate Python project and creates `ai-assistant/.venv` when synchronized from
-that directory.
+Node product and does not use Python or `uv`.
 
 The deterministic RTL Activity tests also require GNU Make and Verilator 5.x
 on `PATH`. This is a required external toolchain check, not an optional test.
@@ -95,21 +94,21 @@ default startup.
 
 ## Optional AI Assistant
 
-The AI Assistant is a separate Python project with its own `uv` environment.
+The AI Assistant is a separate DeepSeek Harness Node workspace.
 
 ```bash
 cd ai-assistant
-uv sync
-uv run python -m pytest -q
-cd web
 npm install
 npm run build
+npm run typecheck
+npm test
+npm run test:harness
 ```
 
 ## Combined local launcher
 
 For a first-time setup from the repository root, install every runtime and
-build the static Assistant frontend:
+build the Harness Assistant:
 
 ```bash
 uv sync
@@ -119,11 +118,9 @@ npm install
 cd ..
 
 cd ai-assistant
-uv sync
-cd web
 npm install
 npm run build
-cd ../..
+cd ..
 ```
 
 Then run all three services with their default settings from the repository

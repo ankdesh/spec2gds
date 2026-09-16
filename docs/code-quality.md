@@ -22,8 +22,8 @@ uv run ruff check spec2gds runtime/src
 uv run vulture spec2gds runtime/src --min-confidence 90
 
 cd ai-assistant
-uv run python -m ruff check src
-uv run python -m vulture src --min-confidence 90
+npm run typecheck
+npm test
 ```
 
 TypeScript enables `noUnusedLocals` and `noUnusedParameters` in both UI
