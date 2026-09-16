@@ -82,7 +82,11 @@ def test_activity_job_manager_cancels_queued_and_running_jobs(tmp_path: Path) ->
         snapshot=snapshot,
         package_path=str(package),
         sidecar_root=str(tmp_path / "artifacts"),
+        workspace_root=tmp_path / "document-outputs",
     )
+    second_envelope = manager.get(second.execution_id)
+    assert second_envelope is not None
+    assert Path(second_envelope.workspace_root) == tmp_path / "document-outputs"
     for _ in range(100):
         current = manager.get(first.execution_id)
         assert current is not None
@@ -122,3 +126,29 @@ def test_activity_job_manager_resumes_a_running_record(tmp_path: Path) -> None:
     assert completed.status == "succeeded"
     assert any(event.event_type == "activity.execution.recovered" for event in completed.events)
     resumed.close()
+
+
+def test_activity_job_manager_migrates_existing_database(tmp_path: Path) -> None:
+    _, _, registry, _, finalize = setup_job(tmp_path)
+    root = tmp_path / "generated"
+    runtime = root / ".spec2gds"
+    runtime.mkdir(parents=True)
+    database = runtime / "activity-jobs.sqlite3"
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            """
+            CREATE TABLE jobs(
+                execution_id TEXT PRIMARY KEY,
+                package_path TEXT NOT NULL,
+                sidecar_root TEXT NOT NULL,
+                snapshot_path TEXT NOT NULL,
+                record_json TEXT NOT NULL
+            )
+            """
+        )
+
+    manager = ActivityJobManager(registry, root, finalize)
+    with sqlite3.connect(database) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(jobs)")}
+    assert "workspace_root" in columns
+    manager.close()

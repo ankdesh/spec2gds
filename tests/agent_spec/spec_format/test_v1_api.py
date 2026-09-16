@@ -215,9 +215,29 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
             break
         time.sleep(0.02)
     assert execution["status"] == "succeeded", execution
-    assert Path(execution["workspace_output_path"]).is_dir()
+    output_path = Path(execution["workspace_output_path"])
+    assert output_path.is_dir()
+    assert output_path == tmp_path / "rtl" / "activity_api" / target["entity_id"]
+    assert not (tmp_path / "generated" / "rtl").exists()
     assert execution["artifact_ids"]
+    assert endpoints["activities"]()["workspace_root"] == str(tmp_path)
     assert endpoints["artifacts"]()["artifacts"][0]["producer_action_id"] == "rtl.generate"
+
+    systemc_execution = endpoints["launch_activity"](
+        "design",
+        target["entity_id"],
+        "systemc.generate_at_skeleton",
+        ActivityExecutionRequest(expected_source_revision_hash=created["source_revision_hash"]),
+    )
+    for _ in range(100):
+        systemc_execution = endpoints["execution"](systemc_execution["execution_id"])
+        if systemc_execution["status"] in {"succeeded", "failed", "cancelled"}:
+            break
+        time.sleep(0.02)
+    assert systemc_execution["status"] == "succeeded", systemc_execution
+    assert Path(systemc_execution["workspace_output_path"]) == (
+        tmp_path / "systemc-at" / "activity_api" / target["entity_id"]
+    )
 
     endpoints["open_document"](OpenDocumentRequest(path=str(path)))
     persisted = endpoints["executions"]()["executions"]
