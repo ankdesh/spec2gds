@@ -85,7 +85,7 @@ normalization.
 
 ## RTL behavior
 
-`rtl.generate` 1.1.1 inserts generated nets and instances first, then the
+`rtl.generate` 1.1.2 inserts generated nets and instances first, then the
 component body, then the owned/design body. Generated `` `line`` mappings point
 tool diagnostics at the stored section path. Active modules use `input logic`,
 `output logic`, and `inout wire`. A non-empty leaf body removes automatic

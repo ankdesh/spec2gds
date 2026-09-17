@@ -263,7 +263,7 @@ def test_activity_generates_hierarchy_report_warnings_and_name_map(tmp_path: Pat
     definition = registry.activity("rtl.generate").definition
     availability = activity_availability(registry, "rtl.generate", snapshot)
 
-    assert definition.version == "1.1.1"
+    assert definition.version == "1.1.2"
     assert definition.scopes.entity_kinds == ("design",)
     assert definition.requires_workspace_output
     assert availability.available
@@ -383,6 +383,7 @@ def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
     assert "output logic [7:0] dout" in unit_source
     assert "inout wire pad" in unit_source
     assert "assign dout = '0;" not in unit_source
+    assert "_unused_ok" not in unit_source
     assert "assign dout = din;" in unit_source
     assert cluster_source.index("unit u0") < cluster_source.index("logic component_marker")
     assert cluster_source.index("logic component_marker") < cluster_source.index("logic design_marker")

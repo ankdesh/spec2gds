@@ -20,7 +20,7 @@ from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "rtl.generate"
-GENERATOR_VERSION = "1.1.1"
+GENERATOR_VERSION = "1.1.2"
 GENERATION_SCHEMA = "spec2gds.rtl-generation.v2"
 
 _TEMPLATES = Environment(
@@ -961,7 +961,9 @@ def _render_module(module: _RtlModule) -> str:
     )
     has_body = bool(body_sections)
     unused_inputs = tuple(
-        port.name for port in module.ports if module.leaf and port.direction in {"in", "inout"}
+        port.name
+        for port in module.ports
+        if module.leaf and not has_body and port.direction in {"in", "inout"}
     )
     direction = {"in": "input", "out": "output", "inout": "inout"}
     port_lines = tuple(

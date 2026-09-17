@@ -1,6 +1,6 @@
 # Deterministic RTL Generation Activity
 
-`rtl.generate` version `1.1.1` generates a SystemVerilog 2017
+`rtl.generate` version `1.1.2` generates a SystemVerilog 2017
 project for one selected design. It preserves reachable component hierarchy,
 emits one reusable module per component definition, and translates direct
 physical wire connections. It does not call an LLM, inspect narrative intent,
@@ -40,11 +40,12 @@ tied to `'z`, and input/inout values are consumed by an `_unused_ok` sink so
 the scaffold passes strict lint without pretending to implement behavior.
 
 With a non-whitespace SV body, the module instead declares inputs/outputs as
-`logic` and inouts as `wire`, removes automatic leaf output/inout tie-offs, and
-expects the body to drive required outputs. Generated nets and instances appear
-first, followed by the component body and then the owned/design body. Line
-mappings retain the stored section path in diagnostics. Missing or whitespace
-bodies keep the original scaffold behavior.
+`logic` and inouts as `wire`, removes the automatic leaf output/inout tie-offs
+and `_unused_ok` input sink, and expects the body to implement the required
+behavior. Generated nets and instances appear first, followed by the component
+body and then the owned/design body. Line mappings retain the stored section
+path in diagnostics. Missing or whitespace bodies keep the original scaffold
+behavior.
 
 Composite modules contain only child instances and structural nets. An
 unconnected child input is tied to `'0`; unconnected child outputs and inouts
