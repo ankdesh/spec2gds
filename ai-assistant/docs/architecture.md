@@ -1,38 +1,81 @@
 # Harness assistant architecture
 
-Harness owns the agent loop, OpenAI-compatible model adapter, tool dispatch,
-cancellation, session event log, and JSONL persistence. The product plugin owns
-the focused REST/SSE API, immutable document bindings, owner clients, review
-state machine, React UI, prompt, and scoped tools.
+The implementation is a layered DSH product with two profiles:
 
-The model-visible tools are deliberately non-mutating:
+- `spec2gds-web` composes `dsh-base`, `dsh-web-app`, the spec2gds host bundle,
+  and the spec2gds client bundle;
+- `spec2gds-headless` composes `dsh-base`, `dsh-headless`, and the same host
+  bundle for one-off terminal requests.
 
-- `get_bound_context` reads the current owner revision and semantic context;
-- `prepare_spec_proposal` creates and previews a revision-bound Spec artifact;
-- `prepare_circuit_proposal` creates and previews a Circuit operation batch.
+`harness.product.json` is the profile recipe. The two product-owned Cordis
+patches are deliberately separate: `profile/cordis.patch.yml` defines shared
+agent policy and host behavior, while `bundles/web/cordis.patch.yml` defines
+browser-only UI policy.
 
-Each bound agent receives the full domain editing contract as a scoped system-
-prompt section. `get_bound_context` validates binding identity and emits a
-canonical, deterministic model context. Spec context separates writable and
-read-only data; Circuit context includes complete replacement values, a valid
-endpoint catalog, list-form map projections, and deterministic SVG metadata.
-Proposal operations use closed `oneOf` schemas plus cross-field semantic checks.
+## Ownership
 
-Apply and send routes load the server-stored artifact by proposal ID, compare
-the current owner revision, atomically claim the review state, and then call the
-owner. A browser never supplies replacement artifact content during approval.
+DSH owns session creation after the product reserves an ID, JSONL persistence,
+the agent/model loop, tool call/result pairing, streaming, cancellation,
+reconnect, rename, archive/restore, export, and conversation rendering. The web
+profile disables DSH coding presets so a session cannot silently regain shell,
+filesystem, web, workflow, subagent, or skill tools from the default `standard`
+preset.
 
-Harness JSONL is the transcript source of truth. SQLite stores only binding and
-review metadata. A tool call ID connects a review to its durable transcript
-event, and an artifact digest protects the reviewed content. SQLite state
-transitions use a version compare-and-swap to reject concurrent actions.
+The host plugin in `src/index.ts` owns:
 
-Circuit Designer remains process-local. Assistant sessions and review records
-survive its restart, but Circuit documents and pending owner proposals do not.
-Those reviews become unavailable or stale when the bound Circuit document is
-not recreated. This milestone does not claim end-to-end Circuit durability.
+- immutable Spec/Circuit bindings and SQLite review metadata;
+- exact owner allowlists and owner clients;
+- `get_bound_context`, `prepare_spec_proposal`, and
+  `prepare_circuit_proposal`;
+- reservation, activation, review-action, launch, health, and readiness routes;
+- binding the domain tools and editing contract to the DSH agent lifecycle.
 
-Harness persistence is append-only and does not expose deletion. The product
-therefore supports archive/unarchive and rename, but intentionally does not
-pretend that deleting only the SQLite binding would permanently delete the
-conversation transcript.
+The browser plugin in `client/index.js` owns only product presentation:
+
+- brand slots;
+- the new-session binding dialog;
+- the reserve → DSH create → activate transaction;
+- keyed tool views for the two proposal tools;
+- Spec before/after field diffs and Circuit before/after topology diagrams;
+- explicit discard, apply, send, and reconcile actions.
+
+It does not rebuild the transcript or pair tool events. DSH's
+`ui-conversation` and `ui-tool` plugins remain authoritative, and the product
+registers keyed replacements through `tool.call.toolview`.
+
+## Binding transaction
+
+For a fresh browser session, the product validates the existing owner document
+and writes a `creating` binding, asks DSH to create a session with the reserved
+ID and scratch directory, then activates the binding and attaches the tools. A
+failed DSH creation abandons the reservation. On startup, creating bindings
+whose DSH transcript exists are activated; orphan reservations are removed.
+
+The headless profile carries the same binding as `SPEC2GDS_BINDING_JSON` for a
+fresh request. The host plugin validates and attaches it when DSH publishes the
+agent. A resumed `--session-id` uses the existing persisted binding.
+
+## Proposal safety
+
+Model-visible tools are non-mutating. `get_bound_context` reads current owner
+state. Proposal tools normalize typed operations, bind them to the current
+revision, request an owner preview, and persist the exact artifact plus a digest.
+The model cannot call apply or send.
+
+Review-card actions reload the server-stored artifact, validate its digest and
+revision, atomically claim the review state, and then call the owner. Uncertain
+mutation outcomes enter `reconcile`; later actions query owner history using the
+stable proposal ID before retrying. Browser requests never supply replacement
+artifact content.
+
+Circuit Designer remains process-local. Conversation and review metadata survive
+its restart, but a bound document must be reopened before an old Circuit review
+can be reconciled.
+
+## State boundaries
+
+DSH JSONL is the durable transcript. SQLite stores bindings and proposal review
+records only. Scratch directories exist because DSH sessions require a working
+directory, but the product exposes no filesystem or shell tools. Permanent
+transcript deletion is not added because DSH persistence is append-only;
+archive/restore is retained.

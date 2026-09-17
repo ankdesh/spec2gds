@@ -1,0 +1,61 @@
+# Browser-only policy layered after dsh-web-app.
+- insert:
+    - id: spec2gds-ui
+      name: '@spec2gds/harness-web'
+
+- id: webserver
+  config:
+    host: !!js process.env.ASSISTANT_HOST || '0.0.0.0'
+    port: !!js Number(process.env.ASSISTANT_PORT || 6013)
+    compression: gzip
+    compressionLevel: 1
+    compressionThresholdBytes: 1024
+
+- id: locale
+  config:
+    allowedLocales: [en]
+    defaultLocale: en
+    showLanguageSetting: false
+
+- id: ui-brand-official
+  disabled: true
+- id: ui-open-in-app
+  disabled: true
+- id: ui-sidebar-terminal
+  disabled: true
+- id: ui-sidebar-files
+  disabled: true
+- id: ui-sidebar-documentpreview
+  disabled: true
+- id: ui-deliverables
+  disabled: true
+- id: ui-attachment
+  disabled: true
+- id: ui-reference
+  disabled: true
+- id: ui-skill
+  disabled: true
+- id: ui-subagent
+  disabled: true
+- id: ui-schedule
+  disabled: true
+- id: ui-jobs
+  disabled: true
+- id: ui-agent-preset
+  disabled: true
+- id: agent-presets
+  disabled: true
+- id: ui-plan
+  disabled: true
+- id: ui-message-feedback
+  disabled: true
+- id: ui-settings-plugins
+  disabled: true
+- id: ui-settings-plugin-inventory
+  disabled: true
+- id: ui-workflow-run
+  disabled: true
+- id: ui-cordis
+  disabled: true
+- id: ui-permission
+  disabled: true

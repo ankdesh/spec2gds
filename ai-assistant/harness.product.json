@@ -1,7 +1,21 @@
 {
   "schemaVersion": 1,
+  "defaultProfile": "spec2gds-web",
+  "profiles": {
+    "spec2gds-web": {
+      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@spec2gds/harness-assistant", "@spec2gds/harness-web"],
+      "localBundles": [".", "bundles/web"],
+      "patchReload": "startup"
+    },
+    "spec2gds-headless": {
+      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "@spec2gds/harness-assistant"],
+      "localBundles": ["."],
+      "patchReload": "startup"
+    }
+  },
   "releaseFiles": [
     "deployment",
+    "harness.product.json",
     "README.md",
     "docs",
     "harness.lock.json"

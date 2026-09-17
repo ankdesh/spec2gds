@@ -38,6 +38,11 @@ function reviewResult(review: ProposalReview): JsonValue {
     proposal_id: review.proposalId,
     state: review.state,
     diagnostics: review.diagnostics,
+    review: {
+      proposalId: review.proposalId, sessionId: review.sessionId, domain: review.domain,
+      state: review.state, artifact: review.artifact, preview: review.preview,
+      diagnostics: review.diagnostics, ownerResult: review.ownerResult, version: review.version,
+    },
     instruction: review.state === "ready"
       ? "The preview is ready. Tell the user to inspect the review card and use its explicit action button."
       : "The owner did not accept this preview. Explain the diagnostics and do not claim any change was made.",

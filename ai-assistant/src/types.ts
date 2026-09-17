@@ -58,11 +58,10 @@ export interface ServiceConfig {
   provider: string;
   model: string;
   stateRoot: string;
+  scratchRoot: string;
   specAllowlist: string[];
   circuitAllowlist: string[];
   requestTimeoutMs: number;
-  maxActiveSessions: number;
-  eventPageSize: number;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

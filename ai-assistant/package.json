@@ -11,7 +11,7 @@
   "files": [
     "lib",
     "profile",
-    "web/dist"
+    "bundles"
   ],
   "dsh": {
     "bundle": {
@@ -22,20 +22,23 @@
     "node": "^22.19.0 || >=24.0.0"
   },
   "scripts": {
-    "build": "npm run build:server && npm run build:web",
+    "build": "npm run build:server && npm run build:client",
     "build:server": "tsc -p tsconfig.json",
-    "build:web": "vite build --config web/vite.config.ts",
+    "build:client": "node scripts/build-client.mjs",
     "dev": "node scripts/dev.mjs",
     "package": "node scripts/package.mjs",
     "test": "tsx --test tests/*.test.ts",
     "test:harness": "node --test tests/harness.integration.test.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit"
+    "request": "node scripts/request.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.2",
     "@deepseek-ai/cordis-plugin-timer": "1.1.4",
     "@deepseek-ai/dsh-agent": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-agent-loop": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-base": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-headless": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-host-webserver": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-invariants": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-llm": "0.1.6-alpha.1",
@@ -46,17 +49,12 @@
     "@deepseek-ai/dsh-system-prompt": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-tools": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-util-values": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-web-app": "0.1.6-alpha.1",
     "@deepseek-ai/schemastery": "3.18.2"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",
-    "@types/react": "18.3.20",
-    "@types/react-dom": "18.3.6",
-    "@vitejs/plugin-react": "^4.3.4",
-    "react": "18.3.1",
-    "react-dom": "18.3.1",
     "tsx": "^4.20.5",
-    "typescript": "5.8.3",
-    "vite": "^6.0.7"
+    "typescript": "5.8.3"
   }
 }

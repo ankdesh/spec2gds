@@ -28,6 +28,8 @@ Read in this order:
     behavior, one-/two-cycle samples, and configured output generation.
 11. [AI Assistant](ai-assistant.md) — DeepSeek Harness runtime, editor
     integration, review boundary, proposal contracts, setup, and recovery.
+    Its [DSH UI migration map](dsh-ui-migration.md) documents the plugin layers
+    and retained, extended, and removed UI features.
 12. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
     browser viewer.
 13. [Python code-reading guide](python-code-guide.md) — package ownership,

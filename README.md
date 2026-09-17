@@ -72,8 +72,8 @@ uses `setsid` and other Unix process-management commands.
 ## Set up and run everything
 
 From a clean checkout, install the root Python project and both JavaScript
-workspaces. The Assistant service serves the built files in `web/dist`, so its
-build is part of setup even when you plan to use only the combined launcher.
+workspaces. The Assistant build compiles its host plugin and product-owned DSH
+client bundle, so it is part of setup even when using the combined launcher.
 
 ```bash
 # Root Spec Editor, Activities, and shared Python runtime
