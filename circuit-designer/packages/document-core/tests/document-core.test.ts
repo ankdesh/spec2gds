@@ -46,6 +46,7 @@ describe("SpecEditorHttpClient", () => {
       separator: "\\" as const,
       roots: ["C:\\"],
       directories: [{ name: "Specs", path: "C:\\Users\\designer\\Specs" }],
+      specifications: [{ name: "design.spec", path: "C:\\Users\\designer\\design.spec" }],
     };
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify(listing), { headers: { "content-type": "application/json" } }),

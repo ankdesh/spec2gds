@@ -365,31 +365,29 @@ function PathDialog({
             placeholder="/path/to/design.spec"
             value={value}
           />
-          {mode === "new" && (
-            <button
-              className="secondary"
-              onClick={() => {
-                if (browserOpen) {
-                  setBrowserOpen(false);
-                  return;
-                }
-                setBrowserOpen(true);
-                void browse(packageDirectory(value));
-              }}
-              type="button"
-            >
-              {browserOpen ? "Hide" : "Browse…"}
-            </button>
-          )}
+          <button
+            className="secondary"
+            onClick={() => {
+              if (browserOpen) {
+                setBrowserOpen(false);
+                return;
+              }
+              setBrowserOpen(true);
+              void browse(packageDirectory(value));
+            }}
+            type="button"
+          >
+            {browserOpen ? "Hide" : "Browse…"}
+          </button>
         </div>
         <p className="editor-dialog__hint">
           Enter a <code>.spec</code> path visible to the server running spec2gds.
           {mode === "new" && " Generated output folders will be created beside this package."}
         </p>
-        {mode === "new" && browserOpen && (
+        {browserOpen && (
           <section aria-label="Server directory browser" className="directory-browser">
             <header>
-              <strong>Choose a folder on the server</strong>
+              <strong>{mode === "new" ? "Choose a folder on the server" : "Choose a specification on the server"}</strong>
               {listing && <code title={listing.path}>{listing.path}</code>}
             </header>
             <div className="directory-browser__toolbar">
@@ -460,40 +458,67 @@ function PathDialog({
             {browserError && <p className="directory-browser__error" role="alert">{browserError}</p>}
             {browserLoading && <p className="directory-browser__status" role="status">Loading folders…</p>}
             {!browserLoading && listing && (
-              <div aria-label="Folders" className="directory-browser__folders" role="list">
-                {listing.directories.map((directory) => (
-                  <div key={directory.path} role="listitem">
+              <div
+                aria-label={mode === "new" ? "Folders" : "Folders and specifications"}
+                className="directory-browser__folders"
+                role="list"
+              >
+                {listing.directories
+                  .filter((directory) => mode === "new" || !directory.name.toLowerCase().endsWith(".spec"))
+                  .map((directory) => (
+                    <div key={directory.path} role="listitem">
+                      <button
+                        aria-pressed={selectedDirectory === directory.path}
+                        className={selectedDirectory === directory.path ? "selected" : ""}
+                        onClick={() => setSelectedDirectory(directory.path)}
+                        onDoubleClick={() => void browse(directory.path)}
+                        title={directory.path}
+                        type="button"
+                      >
+                        <span aria-hidden="true">📁</span> {directory.name}
+                      </button>
+                    </div>
+                  ))}
+                {mode === "open" && (listing.specifications ?? []).map((specification) => (
+                  <div key={specification.path} role="listitem">
                     <button
-                      aria-pressed={selectedDirectory === directory.path}
-                      className={selectedDirectory === directory.path ? "selected" : ""}
-                      onClick={() => setSelectedDirectory(directory.path)}
-                      onDoubleClick={() => void browse(directory.path)}
-                      title={directory.path}
+                      aria-pressed={selectedDirectory === specification.path}
+                      className={selectedDirectory === specification.path ? "selected" : ""}
+                      onClick={() => setSelectedDirectory(specification.path)}
+                      onDoubleClick={() => {
+                        setValue(specification.path);
+                        setBrowserOpen(false);
+                      }}
+                      title={specification.path}
                       type="button"
                     >
-                      <span aria-hidden="true">📁</span> {directory.name}
+                      <span aria-hidden="true">📄</span> {specification.name}
                     </button>
                   </div>
                 ))}
-                {!listing.directories.length && <p>No subfolders</p>}
+                {!listing.directories.length && (mode === "new" || !(listing.specifications ?? []).length) && (
+                  <p>{mode === "new" ? "No subfolders" : "No folders or specifications"}</p>
+                )}
               </div>
             )}
             <div className="directory-browser__actions">
               <button
-                disabled={browserLoading || !listing}
+                disabled={browserLoading || !listing || (mode === "open" && !selectedDirectory?.toLowerCase().endsWith(".spec"))}
                 onClick={() => {
                   if (!listing) return;
-                  setValue(packagePathInDirectory(
-                    selectedDirectory ?? listing.path,
-                    value,
-                    title,
-                    listing.separator,
-                  ));
+                  setValue(mode === "new"
+                    ? packagePathInDirectory(
+                      selectedDirectory ?? listing.path,
+                      value,
+                      title,
+                      listing.separator,
+                    )
+                    : selectedDirectory ?? value);
                   setBrowserOpen(false);
                 }}
                 type="button"
               >
-                Select folder
+                {mode === "new" ? "Select folder" : "Select specification"}
               </button>
             </div>
           </section>

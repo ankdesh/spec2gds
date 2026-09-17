@@ -128,6 +128,8 @@ def test_v1_api_browses_server_local_directories(tmp_path: Path) -> None:
     endpoints = _endpoints()
     (tmp_path / "Alpha").mkdir()
     (tmp_path / "beta").mkdir()
+    (tmp_path / "design.spec").mkdir()
+    (tmp_path / "portable.spec").write_bytes(b"package")
     (tmp_path / "not-a-directory.txt").write_text("ignored", encoding="utf-8")
 
     listing = endpoints["filesystem_directories"](str(tmp_path))
@@ -136,8 +138,9 @@ def test_v1_api_browses_server_local_directories(tmp_path: Path) -> None:
     assert listing["parent"] == str(tmp_path.resolve().parent)
     assert listing["separator"] == os.sep
     assert listing["roots"]
-    assert [item["name"] for item in listing["directories"]] == ["Alpha", "beta"]
+    assert [item["name"] for item in listing["directories"]] == ["Alpha", "beta", "design.spec"]
     assert all(Path(item["path"]).is_absolute() for item in listing["directories"])
+    assert [item["name"] for item in listing["specifications"]] == ["design.spec", "portable.spec"]
 
     created = endpoints["create_directory"](
         CreateDirectoryRequest(parent=str(tmp_path), name="New project")

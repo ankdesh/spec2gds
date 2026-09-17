@@ -493,10 +493,13 @@ def create_app() -> typing.Any:
             )
 
         children: list[dict[str, str]] = []
+        specifications: list[dict[str, str]] = []
         try:
             entries = sorted(directory.iterdir(), key=lambda entry: entry.name.casefold())
             for entry in entries:
                 try:
+                    if entry.name.casefold().endswith(".spec") and (entry.is_dir() or entry.is_file()):
+                        specifications.append({"name": entry.name, "path": str(entry.resolve())})
                     if entry.is_dir():
                         children.append({"name": entry.name, "path": str(entry.resolve())})
                 except OSError:
@@ -525,6 +528,7 @@ def create_app() -> typing.Any:
             "separator": os.sep,
             "roots": roots,
             "directories": children,
+            "specifications": specifications,
         }
 
     @app.post("/filesystem/directories")

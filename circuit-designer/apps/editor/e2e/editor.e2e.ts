@@ -442,6 +442,9 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
         directories: requestedPath === "/home/designer"
           ? [{ name: "specifications", path: "/home/designer/specifications" }]
           : [],
+        specifications: requestedPath === "/home/designer/specifications"
+          ? [{ name: "existing.spec", path: "/home/designer/specifications/existing.spec" }]
+          : [],
       });
     }
 
@@ -626,6 +629,13 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await page.keyboard.press("Control+O");
   await expect(page.getByLabel("Server-local package path"))
     .toHaveValue("/home/designer/specifications/Project Alpha/New editor specification.spec");
+  await page.getByRole("button", { name: "Browse…" }).click();
+  await page.getByRole("button", { name: "Home" }).click();
+  await page.getByRole("button", { name: /specifications/ }).dblclick();
+  await page.getByRole("button", { name: /existing\.spec/ }).click();
+  await page.getByRole("button", { name: "Select specification" }).click();
+  await expect(page.getByLabel("Server-local package path"))
+    .toHaveValue("/home/designer/specifications/existing.spec");
   await page.getByLabel("Server-local package path").fill("/tmp/missing.spec");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Specification package was not found");

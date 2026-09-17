@@ -313,6 +313,7 @@ export interface FilesystemDirectoryListing {
   separator: "/" | "\\";
   roots: string[];
   directories: Array<{ name: string; path: string }>;
+  specifications: Array<{ name: string; path: string }>;
 }
 
 export interface SourceChangeEvent {
