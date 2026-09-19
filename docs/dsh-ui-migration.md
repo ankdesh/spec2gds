@@ -36,6 +36,13 @@ instead of importing the whole UI. The most important extension points are:
 - DSH session-controller services, which remain the single path for prompts,
   streaming, cancellation, rename, archive, restore, and export.
 
+Editor launch URLs enter through the product-owned `/launch/*` routes. Those
+routes reserve the immutable document binding, redirect through DSH's normal
+one-time browser authentication exchange on the current authority, and carry
+the reservation in a URL fragment. The fragment survives DSH's security
+redirect without being sent in HTTP requests; the product client removes it
+before creating and activating the bound session.
+
 ## Retain, extend, and drop
 
 | DSH UI capability | Decision | Product behavior |

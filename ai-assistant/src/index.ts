@@ -30,7 +30,10 @@ type AppContext = {
   sessionPersistence: { list(): Promise<Array<{ header: { id: string } }>> };
   on(event: string, listener: (...args: any[]) => unknown): () => void;
   effect(effect: () => void | (() => void)): void;
-  inject(dependencies: string[], callback: (ctx: AppContext & { webServer: { register(route: unknown): () => void } }) => void): void;
+  inject(dependencies: string[], callback: (ctx: AppContext & {
+    webServer: { register(route: unknown): () => void };
+    connection: { authenticatedUrl(baseUrl: string): string };
+  }) => void): void;
 };
 
 class HttpError extends Error {
@@ -92,6 +95,22 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
 function publicReview(review: ProposalReview): Omit<ProposalReview, "artifactDigest"> {
   const { artifactDigest: _digest, ...value } = review;
   return value;
+}
+
+/**
+ * Enter DSH through its one-time browser token while retaining product launch
+ * data across the token exchange's deliberate redirect to a clean root URL.
+ * A relative target prevents an untrusted Host header from receiving the
+ * process credential; URL fragments are browser-local and survive the 303.
+ */
+export function authenticatedLaunchLocation(
+  connection: { authenticatedUrl(baseUrl: string): string },
+  sessionId: string,
+  cwd: string,
+): string {
+  const authenticated = new URL(connection.authenticatedUrl("http://127.0.0.1"));
+  const launch = new URLSearchParams({ spec2gds_session: sessionId, spec2gds_cwd: cwd });
+  return `${authenticated.pathname}${authenticated.search}#${launch}`;
 }
 
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
@@ -196,7 +215,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     throw new HttpError(400, "Action does not match this review domain.");
   }
 
-  ctx.inject(["webServer"], (webCtx) => {
+  ctx.inject(["webServer", "connection"], (webCtx) => {
     webCtx.effect(() => webCtx.webServer.register({ kind: "prefix", path: "/spec2gds-api", handler: async (request: any, response: any) => {
       try {
         await ready;
@@ -242,8 +261,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         try {
           const url = new URL(request.url ?? route, "http://localhost");
           const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
-          const query = new URLSearchParams({ spec2gds_session: result.binding.sessionId, spec2gds_cwd: result.cwd });
-          response.writeHead(303, { Location: `/?${query}`, "Cache-Control": "no-store" }); response.end();
+          response.writeHead(303, {
+            Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId, result.cwd),
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+          });
+          response.end();
         } catch (error) {
           const status = error instanceof OwnerError || error instanceof HttpError ? error.status : 400;
           writeJson(response, status, { error: error instanceof Error ? error.message : String(error) });

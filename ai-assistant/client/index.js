@@ -202,10 +202,13 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
     for (const key of ["prepare_spec_proposal", "prepare_circuit_proposal"]) ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, ProposalToolView));
-    const params = new URLSearchParams(location.search), sessionId = params.get("spec2gds_session"), cwd = params.get("spec2gds_cwd");
+    const params = new URLSearchParams(location.search);
+    const launch = new URLSearchParams(location.hash.replace(/^#/, ""));
+    const sessionId = params.get("spec2gds_session") || launch.get("spec2gds_session");
+    const cwd = params.get("spec2gds_cwd") || launch.get("spec2gds_cwd");
     if (sessionId && cwd) {
       params.delete("spec2gds_session"); params.delete("spec2gds_cwd");
-      history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+      history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
       queueMicrotask(() => createBoundSession(ctx, { session: { sessionId }, cwd }).catch(error => window.alert(error instanceof Error ? error.message : String(error))));
     }
   };
