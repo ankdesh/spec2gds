@@ -14,6 +14,7 @@ const env = {
   ASSISTANT_STATE: state,
   DSH_HOME: resolve(state, "harness-dsh-ui"),
   SPEC2GDS_SCRATCH_ROOT: resolve(process.env.SPEC2GDS_SCRATCH_ROOT || resolve(state, "workspaces")),
+  SPEC_DOCUMENT_ROOT: resolve(process.env.SPEC_DOCUMENT_ROOT || resolve(state, "spec-documents")),
 };
 const profile = env.ASSISTANT_PROFILE || "spec2gds-web";
 const registryPath = resolve(env.SPEC2GDS_SERVICE_CONFIG || resolve(root, "../config/services.json"));

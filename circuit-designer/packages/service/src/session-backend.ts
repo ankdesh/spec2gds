@@ -102,6 +102,10 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
     return result;
   }
 
+  async listDocuments(): Promise<DocumentSummary[]> {
+    return Promise.all([...this.records.keys()].map((documentId) => this.summary(documentId)));
+  }
+
   async get(documentId: string): Promise<CircuitSnapshot> {
     return clone(this.record(documentId).snapshot);
   }

@@ -11,6 +11,12 @@ export interface SessionBinding {
   entityKind: string | null;
   entityId: string | null;
   title: string;
+  workspaceKey: string;
+  workspaceTitle: string;
+  workspacePath: string;
+  workspaceDomain: Domain;
+  workspaceOwnerUrl: string;
+  workspaceDocumentId: string;
   archived: boolean;
   createdAt: string;
   updatedAt: string;
@@ -59,9 +65,19 @@ export interface ServiceConfig {
   model: string;
   stateRoot: string;
   scratchRoot: string;
+  specDocumentRoot: string;
   specAllowlist: string[];
   circuitAllowlist: string[];
   requestTimeoutMs: number;
+}
+
+export interface WorkspaceDescriptor {
+  key: string;
+  title: string;
+  path: string;
+  domain: Domain;
+  ownerUrl: string;
+  documentId: string;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

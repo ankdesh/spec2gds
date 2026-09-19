@@ -21,8 +21,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     .s2g-mask{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;padding:20px;background:rgba(8,18,16,.48);backdrop-filter:blur(3px)}
     .s2g-dialog{width:min(520px,100%);padding:20px;border:1px solid color-mix(in srgb,#176b5b 35%,transparent);border-radius:14px;background:var(--dsw-surface-primary,#fff);box-shadow:0 18px 55px rgba(0,0,0,.24);color:var(--text-primary,#17211f);font:14px/1.45 system-ui}
     .s2g-dialog h2{margin:0 0 5px;font-size:20px}.s2g-dialog>p{margin:0 0 16px;color:var(--text-secondary,#52615e)}
-    .s2g-form{display:grid;gap:12px}.s2g-form label{display:grid;gap:5px;font-weight:600}.s2g-form input,.s2g-form select{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:7px;background:transparent;color:inherit;font:inherit}
+    .s2g-form{display:grid;gap:12px}.s2g-form label{display:grid;gap:5px;font-weight:600}.s2g-form input,.s2g-form select{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:7px;background:var(--dsw-surface-primary,#fff);color:inherit;font:inherit}
     .s2g-form .s2g-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}.s2g-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:5px}.s2g-dialog-actions button{padding:8px 12px;border:1px solid #176b5b;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.s2g-dialog-actions button.primary{background:#176b5b;color:#fff}.s2g-dialog-actions button:disabled{opacity:.55;cursor:wait}
+    .s2g-choice{display:flex;gap:16px}.s2g-choice label{display:flex;align-items:center;gap:6px;font-weight:600}.s2g-choice input{width:auto}.s2g-hint{margin:0;color:var(--text-secondary,#52615e);font-size:12px}.s2g-empty{padding:10px;border:1px dashed color-mix(in srgb,currentColor 25%,transparent);border-radius:7px;color:var(--text-secondary,#52615e)}
   `;
   document.head.appendChild(style);
 
@@ -37,77 +38,172 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return value;
   }
 
-  function reserveBindingDialog() {
+  const escapeHtml = value => String(value).replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;",
+  })[character]);
+
+  const configuredServices = owners => ["spec", "circuit"].flatMap(domain =>
+    (Array.isArray(owners?.[domain]) ? owners[domain] : []).map(item => ({ domain, url: item.url, available: item.available })));
+
+  function targetRows(payload) {
+    if (payload.domain === "spec" && payload.document) {
+      const document = payload.document;
+      return [{ domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
+        title: String(document.title || document.document_id), scope: "document" },
+      ...(Array.isArray(payload.entities) ? payload.entities : []).map(entity => ({
+        domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
+        title: `${entity.title || entity.entity_id} · ${entity.entity_kind || "entity"}`,
+        scope: "entity", entityKind: String(entity.entity_kind || "entity"), entityId: String(entity.entity_id),
+      }))];
+    }
+    return (Array.isArray(payload.documents) ? payload.documents : []).map(document => ({
+      domain: "circuit", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
+      title: String(document.label || document.title || document.document_id), scope: "document",
+      sourceBinding: document.source_binding || null,
+    }));
+  }
+
+  function belongsToWorkspace(target, workspace) {
+    if (!workspace) return true;
+    if (workspace.domain === target.domain && workspace.ownerUrl === target.serviceBaseUrl && workspace.documentId === target.documentId) return true;
+    const source = target.sourceBinding;
+    return target.domain === "circuit" && workspace.domain === "spec" && source
+      && String(source.source_service_url || "").replace(/\/$/, "") === workspace.ownerUrl
+      && source.source_document_id === workspace.documentId;
+  }
+
+  async function discoverTargets(services, workspace) {
+    const results = await Promise.allSettled(services.filter(item => item.available !== false).map(async service => {
+      const query = new URLSearchParams({ domain: service.domain, service_base_url: service.url });
+      return targetRows(await api(`/targets?${query}`));
+    }));
+    return results.flatMap(result => result.status === "fulfilled" ? result.value : []).filter(target => belongsToWorkspace(target, workspace));
+  }
+
+  function reserveBindingDialog(workspace) {
     return new Promise(resolve => {
       const mask = document.createElement("div");
       mask.className = "s2g-mask";
       mask.innerHTML = `<section class="s2g-dialog" role="dialog" aria-modal="true" aria-labelledby="s2g-new-title">
-        <h2 id="s2g-new-title">Connect an existing design</h2>
-        <p>Each conversation stays bound to this owner and document.</p>
+        <h2 id="s2g-new-title">${workspace ? `New conversation in ${escapeHtml(workspace.title)}` : "Start a design conversation"}</h2>
+        <p>${workspace ? "Choose the Spec or a Circuit derived from this design source." : "Choose an existing design source or create a new one."}</p>
         <form class="s2g-form">
-          <label>Owner<select name="domain"><option value="spec">Spec Editor</option><option value="circuit">Circuit Designer</option></select></label>
-          <label>Owner service URL<input name="serviceBaseUrl" required value="http://127.0.0.1:6010" spellcheck="false"></label>
-          <label>Document ID<input name="documentId" required autocomplete="off" spellcheck="false"></label>
-          <label data-spec>Scope<select name="scope"><option value="document">Complete specification</option><option value="entity">One entity</option></select></label>
-          <div class="s2g-pair" data-entity hidden><label>Entity kind<input name="entityKind" value="component" spellcheck="false"></label><label>Entity ID<input name="entityId" spellcheck="false"></label></div>
+          <div class="s2g-choice" data-mode ${workspace ? "hidden" : ""}><label><input type="radio" name="mode" value="existing" checked> Existing</label><label><input type="radio" name="mode" value="create"> Create new</label></div>
+          <label data-service>Design service<select name="service"></select></label>
+          <div data-manual hidden class="s2g-pair"><label>Service type<select name="manualDomain"><option value="spec">Spec Editor</option><option value="circuit">Circuit Designer</option></select></label><label>Service URL<input name="manualUrl" spellcheck="false" placeholder="http://127.0.0.1:6010"></label></div>
+          <div data-existing><label>Target<select name="target"></select></label><p class="s2g-hint">The list is browse-only. A conversation remains permanently bound to the selected target.</p></div>
+          <div data-create hidden class="s2g-form"><div class="s2g-pair"><label>Document ID<input name="documentId" autocomplete="off" spellcheck="false" placeholder="my_design"></label><label>Title<input name="title" autocomplete="off" placeholder="My design"></label></div><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
+          <p class="s2g-empty" data-empty hidden>No matching documents are available from the connected services.</p>
           <p class="s2g-error" hidden></p>
-          <div class="s2g-dialog-actions"><button type="button" data-cancel>Cancel</button><button class="primary" type="submit">Connect</button></div>
+          <div class="s2g-dialog-actions"><button type="button" data-cancel>Cancel</button><button class="primary" type="submit">Start conversation</button></div>
         </form>
       </section>`;
       document.body.appendChild(mask);
-      const form = mask.querySelector("form"), domain = form.elements.domain, scope = form.elements.scope;
-      const entity = mask.querySelector("[data-entity]"), error = mask.querySelector(".s2g-error");
+      const form = mask.querySelector("form"), serviceSelect = form.elements.service, targetSelect = form.elements.target;
+      const error = mask.querySelector(".s2g-error"), empty = mask.querySelector("[data-empty]");
+      let services = [], targets = [];
       const close = value => { document.removeEventListener("keydown", escape); mask.remove(); resolve(value); };
       const escape = event => { if (event.key === "Escape") close(null); };
-      const sync = () => {
-        const circuit = domain.value === "circuit";
-        mask.querySelector("[data-spec]").hidden = circuit;
-        entity.hidden = circuit || scope.value !== "entity";
+      const setBusy = busy => [...form.querySelectorAll("button,select,input")].forEach(element => { element.disabled = busy; });
+      const selectedMode = () => workspace ? "existing" : form.elements.mode.value;
+      const renderTargets = () => {
+        const selectedService = services[Number(serviceSelect.value)];
+        const visible = targets.filter(target => !selectedService || (target.domain === selectedService.domain && target.serviceBaseUrl === selectedService.url));
+        targetSelect.innerHTML = visible.map(target => `<option value="${targets.indexOf(target)}">${target.domain === "spec" ? "Spec" : "Circuit"} · ${escapeHtml(target.title)}</option>`).join("");
+        empty.hidden = visible.length > 0;
+        targetSelect.closest("label").hidden = visible.length === 0;
       };
-      const syncDomain = () => {
-        const circuit = domain.value === "circuit";
-        form.elements.serviceBaseUrl.value = circuit ? "http://127.0.0.1:6011/api/circuit-designer/v1" : "http://127.0.0.1:6010";
-        sync();
+      const renderServices = () => {
+        serviceSelect.innerHTML = services.map((service, index) => `<option value="${index}">${service.domain === "spec" ? "Spec Editor" : "Circuit Designer"} · ${escapeHtml(service.url)}${service.available === false ? " (offline)" : ""}</option>`).join("")
+          + (workspace ? "" : `<option value="manual">Connect another service…</option>`);
+        renderTargets();
       };
-      domain.addEventListener("change", syncDomain);
-      scope.addEventListener("change", sync);
+      const syncMode = () => {
+        const create = selectedMode() === "create";
+        mask.querySelector("[data-existing]").hidden = create;
+        mask.querySelector("[data-create]").hidden = !create;
+        empty.hidden = create || targetSelect.options.length > 0;
+      };
+      serviceSelect.addEventListener("change", () => {
+        const manual = serviceSelect.value === "manual";
+        mask.querySelector("[data-manual]").hidden = !manual;
+        if (!manual) renderTargets();
+      });
+      for (const input of form.querySelectorAll("input[name=mode]")) input.addEventListener("change", syncMode);
       mask.querySelector("[data-cancel]").addEventListener("click", () => close(null));
       mask.addEventListener("mousedown", event => { if (event.target === mask) close(null); });
       document.addEventListener("keydown", escape);
       form.addEventListener("submit", async event => {
         event.preventDefault();
-        const circuit = domain.value === "circuit", entityScope = !circuit && scope.value === "entity";
-        if (entityScope && (!form.elements.entityKind.value.trim() || !form.elements.entityId.value.trim())) {
-          error.textContent = "Entity kind and ID are required for entity scope."; error.hidden = false; return;
-        }
-        const buttons = [...form.querySelectorAll("button")]; buttons.forEach(button => { button.disabled = true; });
-        error.hidden = true;
+        setBusy(true); error.hidden = true;
         try {
-          close(await api("/bindings/reserve", {
-            domain: domain.value,
-            serviceBaseUrl: form.elements.serviceBaseUrl.value.trim(),
-            documentId: form.elements.documentId.value.trim(),
-            scope: circuit ? "document" : scope.value,
-            ...(entityScope ? { entityKind: form.elements.entityKind.value.trim(), entityId: form.elements.entityId.value.trim() } : {}),
-          }));
+          let service = services[Number(serviceSelect.value)];
+          if (serviceSelect.value === "manual") {
+            const manualUrl = form.elements.manualUrl.value.trim();
+            const domain = form.elements.manualDomain.value;
+            const connected = (await api("/services/connect", { domain, serviceBaseUrl: manualUrl })).service;
+            service = { domain, url: connected.url, available: true };
+            services.push(service);
+            targets.push(...targetRows(await api(`/targets?${new URLSearchParams({ domain, service_base_url: connected.url })}`)));
+            renderServices(); serviceSelect.value = String(services.length - 1); renderTargets(); syncMode(); setBusy(false);
+            return;
+          }
+          if (!service) throw new Error("Choose a design service.");
+          if (selectedMode() === "create") {
+            const documentId = form.elements.documentId.value.trim(), title = form.elements.title.value.trim();
+            if (!documentId || !title) throw new Error("Document ID and title are required.");
+            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title }));
+          } else {
+            const target = targets[Number(targetSelect.value)];
+            if (!target) throw new Error("Choose an available target.");
+            close(await api("/bindings/reserve", target));
+          }
         } catch (caught) {
           error.textContent = caught instanceof Error ? caught.message : String(caught); error.hidden = false;
-          buttons.forEach(button => { button.disabled = false; });
+          setBusy(false);
         }
       });
-      queueMicrotask(() => form.elements.documentId.focus());
+      queueMicrotask(async () => {
+        setBusy(true);
+        try {
+          const capabilities = await api("/capabilities");
+          services = configuredServices(capabilities.owners);
+          if (workspace) services = services.filter(service => service.available !== false);
+          targets = await discoverTargets(services, workspace);
+          if (workspace) {
+            const used = new Set(targets.map(target => `${target.domain}\0${target.serviceBaseUrl}`));
+            services = services.filter(service => used.has(`${service.domain}\0${service.url}`));
+          }
+          renderServices(); syncMode();
+        } catch (caught) {
+          error.textContent = caught instanceof Error ? caught.message : String(caught); error.hidden = false;
+        } finally { setBusy(false); }
+      });
     });
   }
 
-  async function createBoundSession(ctx, reserved) {
+  async function ensureWorkspace(ctx, descriptor) {
+    const existing = ctx.workspaces.list.getSnapshot().items.find(item => item.path === descriptor.path);
+    const workspace = existing || await ctx.workspaces.create({ path: descriptor.path });
+    if (workspace.title !== descriptor.title) return ctx.workspaces.rename(workspace.workspaceId, descriptor.title);
+    return workspace;
+  }
+
+  async function createBoundSession(ctx, reserved, workspaceContext) {
     let reservation = reserved;
     if (!reservation) {
-      reservation = await reserveBindingDialog();
+      reservation = await reserveBindingDialog(workspaceContext);
       if (!reservation) return;
     }
     const id = reservation.session.sessionId;
     try {
-      await ctx.sessions.create({ sessionId: id, cwd: reservation.cwd });
+      const descriptor = reservation.workspace || {
+        key: reservation.session.workspaceKey,
+        title: reservation.session.workspaceTitle,
+        path: reservation.session.workspacePath,
+      };
+      const workspace = await ensureWorkspace(ctx, descriptor);
+      await ctx.sessions.create({ sessionId: id, workspaceId: workspace.workspaceId });
       await api(`/bindings/${encodeURIComponent(id)}/activate`, {});
       ctx.sessions.open(id);
     } catch (error) {
@@ -196,20 +292,39 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
   function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds assistant"); }
 
-  module.exports.inject = ["slots", "uiSession", "sessions"];
+  module.exports.inject = ["slots", "uiSession", "sessions", "workspaces"];
   module.exports.apply = function apply(ctx) {
-    ctx.uiSession.registerNewSessionHandler({ id: "spec2gds", priority: -100, async handle() { await createBoundSession(ctx); return true; } });
+    ctx.uiSession.registerNewSessionHandler({ id: "spec2gds", priority: -100, async handle(intent) {
+      let workspace;
+      if (intent?.source === "workspace") {
+        const local = ctx.workspaces.list.getSnapshot().items.find(item => item.workspaceId === intent.workspaceId);
+        if (!local) throw new Error("The selected design workspace is no longer available.");
+        const product = (await api("/workspaces")).workspaces.find(item => item.path === local.path);
+        if (!product) throw new Error("This workspace is not connected to a spec2gds design source.");
+        workspace = product;
+      }
+      await createBoundSession(ctx, undefined, workspace);
+      return true;
+    } });
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
     for (const key of ["prepare_spec_proposal", "prepare_circuit_proposal"]) ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, ProposalToolView));
+    queueMicrotask(async () => {
+      try {
+        const stored = await api("/workspaces");
+        for (const descriptor of stored.workspaces || []) await ensureWorkspace(ctx, descriptor);
+      } catch (error) { console.warn("spec2gds workspace synchronization failed", error); }
+    });
     const params = new URLSearchParams(location.search);
     const launch = new URLSearchParams(location.hash.replace(/^#/, ""));
     const sessionId = params.get("spec2gds_session") || launch.get("spec2gds_session");
-    const cwd = params.get("spec2gds_cwd") || launch.get("spec2gds_cwd");
-    if (sessionId && cwd) {
-      params.delete("spec2gds_session"); params.delete("spec2gds_cwd");
+    if (sessionId) {
+      params.delete("spec2gds_session");
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
-      queueMicrotask(() => createBoundSession(ctx, { session: { sessionId }, cwd }).catch(error => window.alert(error instanceof Error ? error.message : String(error))));
+      queueMicrotask(async () => {
+        try { await createBoundSession(ctx, await api(`/bindings/${encodeURIComponent(sessionId)}`)); }
+        catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
+      });
     }
   };
   return module.exports;

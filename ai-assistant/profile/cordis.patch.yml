@@ -82,6 +82,7 @@
         model: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
         stateRoot: !!js process.env.ASSISTANT_STATE || dshHomePath('product')
         scratchRoot: !!js process.env.SPEC2GDS_SCRATCH_ROOT || dshHomePath('workspaces')
+        specDocumentRoot: !!js process.env.SPEC_DOCUMENT_ROOT || dshHomePath('spec-documents')
         specAllowlist: !!js process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010'
         circuitAllowlist: !!js process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)

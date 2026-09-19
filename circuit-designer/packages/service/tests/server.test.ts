@@ -163,6 +163,26 @@ describe("Circuit Designer REST service", () => {
     expect((await fetch(`${base}/documents/${document.document_id}`)).status).toBe(404);
   });
 
+  it("lists documents and creates a canonical empty document for assistant discovery", async () => {
+    service = new CircuitDesignerService();
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
+    expect(await (await fetch(`${base}/documents`)).json()).toEqual({ documents: [] });
+
+    const created = await fetch(`${base}/documents/empty`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ document_id: "assistant_design", label: "Assistant design" }),
+    });
+    expect(created.status).toBe(200);
+    expect(await (await fetch(`${base}/documents`)).json()).toMatchObject({
+      documents: [{ document_id: "assistant_design", label: "Assistant design" }],
+    });
+    expect(await (await fetch(`${base}/documents/assistant_design`)).json()).toMatchObject({
+      document: { document_id: "assistant_design", label: "Assistant design" },
+    });
+  });
+
   it("creates, reads, commits, and maps revision conflicts", async () => {
     const backend = new EphemeralCircuitSessionBackend();
     service = new CircuitDesignerService({ backend });

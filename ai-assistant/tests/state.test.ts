@@ -12,6 +12,8 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     state.createBinding("session-1", {
       domain: "spec", serviceBaseUrl: "http://ignored", ownerUrl: "http://127.0.0.1:6010",
       documentId: "doc-1", scope: "document", title: "Spec: doc-1",
+      workspaceKey: "workspace-1", workspaceTitle: "Spec: doc-1", workspacePath: join(root, "workspace-1"),
+      workspaceDomain: "spec", workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
     });
     assert.equal(state.getBinding("session-1")?.status, "creating");
     state.activateBinding("session-1");

@@ -54,6 +54,7 @@ export interface ComponentDesignProvider {
  */
 export interface CircuitDesignerBackend {
   create(document: CircuitDocument, requestId: string): Promise<CircuitChangeResult>;
+  listDocuments(): Promise<DocumentSummary[]>;
   get(documentId: string): Promise<CircuitSnapshot>;
   replace(
     documentId: string,

@@ -28,8 +28,9 @@ Cordis profile rows are composed in order. `dsh-base` supplies the runtime,
 override or disable rows by stable ID. Browser plugins use dependency injection
 instead of importing the whole UI. The most important extension points are:
 
-- `uiSession.registerNewSessionHandler`, which lets the product own the binding
-  flow while DSH still creates and navigates the session;
+- `uiSession.registerNewSessionHandler`, whose merge-extensible intent carries
+  global or Workspace-row origin so the product owns target selection while DSH
+  still creates and navigates the session;
 - `sidebar.brand.mark` and `sidebar.brand.name`, which replace branding;
 - keyed `tool.call.toolview` entries, which replace only the views for
   `prepare_spec_proposal` and `prepare_circuit_proposal`;
@@ -43,6 +44,12 @@ the reservation in a URL fragment. The fragment survives DSH's security
 redirect without being sent in HTTP requests; the product client removes it
 before creating and activating the bound session.
 
+The product maps DSH Workspaces to logical design sources through stable private
+paths. A Spec package owns a Workspace, source-derived Circuits share it, and an
+independent Circuit owns a separate Workspace. Product state stores that logical
+owner alongside every immutable conversation binding; generic directory
+adoption and automatic recent-Workspace startup are disabled.
+
 ## Retain, extend, and drop
 
 | DSH UI capability | Decision | Product behavior |
@@ -54,7 +61,7 @@ before creating and activating the bound session.
 | Model status/selection | Retain | Defaults to `openai/gpt-4o-mini` |
 | `/goal` and goal bar | Retain for now | Generic DSH semantics; later replace with spec2gds milestone/design-goal semantics |
 | Generic tool renderer | Retain as fallback | Product keyed views replace only proposal tools |
-| New-session behavior | Extend | Product binding dialog validates an existing owner before DSH session creation |
+| New-session behavior | Extend | Global service/target/create chooser and a Workspace-scoped design-source chooser |
 | Brand slots | Extend | spec2gds identity |
 | Spec proposal card | Add | Semantic before/after values, exact operations, diagnostics, apply/discard |
 | Circuit proposal card | Add | Before/after topology SVG, diff counts, exact operations, send/discard/reconcile |
@@ -66,6 +73,7 @@ before creating and activating the bound session.
 | Schedules, plugin management, Cordis debug UI | Drop | Deployment/operator concerns, not end-user workflows |
 | Permission chooser | Drop | Product enforces fixed read-only/no-general-tool policy |
 | Official DSH branding and open-in-app | Drop | Replaced by product identity and editor launch links |
+| DSH testing and official-provider onboarding | Drop | Models settings remain; the product profile disables both generic first-run dialogs |
 | Feedback controls | Drop | No product feedback backend or workflow |
 | Language picker | Drop | Deployment is English-only for now |
 

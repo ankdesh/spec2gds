@@ -30,6 +30,12 @@ export class ProductState {
         entity_kind TEXT,
         entity_id TEXT,
         title TEXT NOT NULL,
+        workspace_key TEXT NOT NULL,
+        workspace_title TEXT NOT NULL,
+        workspace_path TEXT NOT NULL,
+        workspace_domain TEXT NOT NULL CHECK(workspace_domain IN ('spec', 'circuit')),
+        workspace_owner_url TEXT NOT NULL,
+        workspace_document_id TEXT NOT NULL,
         archived INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
@@ -56,18 +62,28 @@ export class ProductState {
 
   close(): void { this.database.close(); }
 
-  createBinding(sessionId: string, input: BindingInput & { ownerUrl: string }): SessionBinding {
+  createBinding(sessionId: string, input: BindingInput & {
+    ownerUrl: string;
+    workspaceKey: string;
+    workspaceTitle: string;
+    workspacePath: string;
+    workspaceDomain: "spec" | "circuit";
+    workspaceOwnerUrl: string;
+    workspaceDocumentId: string;
+  }): SessionBinding {
     const timestamp = now();
     const scope = input.domain === "circuit" ? "document" : input.scope ?? "document";
     if (scope === "entity" && (!input.entityKind || !input.entityId)) {
       throw new Error("Entity bindings require entityKind and entityId.");
     }
     this.database.prepare(`
-      INSERT INTO bindings(session_id,status,domain,owner_url,document_id,scope,entity_kind,entity_id,title,created_at,updated_at)
-      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bindings(session_id,status,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at)
+      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(sessionId, input.domain, input.ownerUrl, input.documentId, scope,
       input.entityKind ?? null, input.entityId ?? null,
       input.title?.trim() || `${input.domain === "spec" ? "Spec" : "Circuit"}: ${input.documentId}`,
+      input.workspaceKey, input.workspaceTitle, input.workspacePath,
+      input.workspaceDomain, input.workspaceOwnerUrl, input.workspaceDocumentId,
       timestamp, timestamp);
     return this.getBinding(sessionId)!;
   }
@@ -194,6 +210,10 @@ export class ProductState {
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),
       entityId: row.entity_id === null ? null : String(row.entity_id), title: String(row.title),
+      workspaceKey: String(row.workspace_key), workspaceTitle: String(row.workspace_title),
+      workspacePath: String(row.workspace_path),
+      workspaceDomain: row.workspace_domain as SessionBinding["workspaceDomain"],
+      workspaceOwnerUrl: String(row.workspace_owner_url), workspaceDocumentId: String(row.workspace_document_id),
       archived: Boolean(row.archived), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     };
   }

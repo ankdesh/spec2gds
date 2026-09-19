@@ -17,6 +17,32 @@
     defaultLocale: en
     showLanguageSetting: false
 
+- id: web-runtime
+  config:
+    openBrowser: !!js ctx.webStartup.openBrowser
+    printUrl: true
+    surfaceContext: false
+    trustedHosts: !!js ctx.webStartup.trustedHosts
+
+- id: ui-settings-models
+  config:
+    showTestingNotice: false
+    showDeepSeekOnboarding: false
+
+- id: ui-workspace
+  config:
+    autoOpenRecent: false
+    allowDirectoryWorkspaceCreation: false
+
+- id: session-title-llm
+  config:
+    targetWords: 5
+    targetCjkCharacters: 10
+    maxInputBytes: 4096
+    maxOutputTokens: 64
+    timeoutMs: 60000
+    languagePolicy: english
+
 - id: ui-brand-official
   disabled: true
 - id: ui-open-in-app

@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
+  createEmptyCircuitDocument,
   isCircuitSourceBindingV1,
   validateContractDefinition,
   type CircuitChangeResult,
@@ -167,6 +168,21 @@ export class CircuitDesignerService {
       if (method === "POST" && parts[0] === "documents" && parts.length === 1) {
         const body = await this.json(request) as { request_id: string; document: CircuitDocument };
         return this.change(response, await this.backend.create(body.document, body.request_id), body.document.document_id);
+      }
+      if (method === "GET" && parts[0] === "documents" && parts.length === 1) {
+        const documents = await this.backend.listDocuments();
+        return this.jsonResponse(response, 200, { documents });
+      }
+      if (method === "POST" && parts[0] === "documents" && parts[1] === "empty" && parts.length === 2) {
+        const body = await this.json(request) as { document_id?: string; label?: string; request_id?: string };
+        if (!body.document_id?.trim() || !body.label?.trim()) {
+          return this.error(response, 422, "validation_failed", "document_id and label are required.");
+        }
+        const document = createEmptyCircuitDocument(body.document_id.trim(), body.label.trim());
+        return this.change(response, await this.backend.create(
+          document,
+          body.request_id?.trim() || `create-empty:${body.document_id.trim()}`,
+        ), document.document_id);
       }
       if (method === "POST" && parts[0] === "constructions" && parts[1] === "validate") {
         const body = await this.json(request);

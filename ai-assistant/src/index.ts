@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { OwnerClients, OwnerError } from "./owner-clients.js";
 import { artifactDigest, ProductState } from "./state.js";
 import { findProposal, findSpecChange, registerDomainTools } from "./tools.js";
-import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding } from "./types.js";
+import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, WorkspaceDescriptor } from "./types.js";
 import { isRecord } from "./types.js";
+import { workspaceDescriptor } from "./workspaces.js";
 
 export const name = "spec2gds-harness-assistant";
 export const inject = ["agents", "sessionPersistence"];
@@ -16,6 +17,7 @@ export const Config = z.object({
   model: z.string().min(1).required(),
   stateRoot: z.string().min(1).required(),
   scratchRoot: z.string().min(1).required(),
+  specDocumentRoot: z.string().min(1).required(),
   specAllowlist: z.string().min(1).required(),
   circuitAllowlist: z.string().min(1).required(),
   requestTimeoutMs: z.number().min(100).max(300_000).required(),
@@ -106,10 +108,9 @@ function publicReview(review: ProposalReview): Omit<ProposalReview, "artifactDig
 export function authenticatedLaunchLocation(
   connection: { authenticatedUrl(baseUrl: string): string },
   sessionId: string,
-  cwd: string,
 ): string {
   const authenticated = new URL(connection.authenticatedUrl("http://127.0.0.1"));
-  const launch = new URLSearchParams({ spec2gds_session: sessionId, spec2gds_cwd: cwd });
+  const launch = new URLSearchParams({ spec2gds_session: sessionId });
   return `${authenticated.pathname}${authenticated.search}#${launch}`;
 }
 
@@ -117,6 +118,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const config: ServiceConfig = {
     provider: String(rawConfig.provider), model: String(rawConfig.model), stateRoot: resolve(String(rawConfig.stateRoot)),
     scratchRoot: resolve(String(rawConfig.scratchRoot)), specAllowlist: splitAllowlist(String(rawConfig.specAllowlist)),
+    specDocumentRoot: resolve(String(rawConfig.specDocumentRoot)),
     circuitAllowlist: splitAllowlist(String(rawConfig.circuitAllowlist)), requestTimeoutMs: Number(rawConfig.requestTimeoutMs),
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
@@ -124,6 +126,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const attached = new Set<string>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
+    await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
     state.recoverInterruptedReviews();
@@ -145,14 +148,26 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       try { input = bindingInput(JSON.parse(serialized) as Record<string, unknown>); }
       catch (error) { throw new Error(`Invalid SPEC2GDS_BINDING_JSON: ${error instanceof Error ? error.message : String(error)}`); }
       const validated = await owners.validateBinding(input);
-      state.createBinding(String(agent.id), { ...input, ownerUrl: validated.ownerUrl });
+      const temporary = {
+        sessionId: String(agent.id), status: "creating" as const, domain: input.domain, ownerUrl: validated.ownerUrl,
+        documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
+        entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
+        workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
+        workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
+      };
+      const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
+        await owners.circuitSourceBinding(temporary));
+      await mkdir(workspace.path, { recursive: true, mode: 0o700 });
+      state.createBinding(String(agent.id), { ...input, ownerUrl: validated.ownerUrl,
+        workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
+        workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
       binding = state.activateBinding(String(agent.id));
     }
     if (binding) attach(agent, binding);
   });
   ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => { attached.delete(String(agent.id)); });
 
-  async function reserve(input: BindingInput, requestedId?: string): Promise<{ binding: SessionBinding; cwd: string }> {
+  async function reserve(input: BindingInput, requestedId?: string): Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }> {
     await ready;
     let validated: Awaited<ReturnType<OwnerClients["validateBinding"]>>;
     try { validated = await owners.validateBinding(input); }
@@ -162,10 +177,20 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
     const sessionId = requestedId?.trim() || randomUUID();
     if (state.getBinding(sessionId)) throw new HttpError(409, "This session already has a document binding.");
-    const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl });
-    const cwd = resolve(config.scratchRoot, sessionId);
-    await mkdir(cwd, { recursive: true, mode: 0o700 });
-    return { binding, cwd };
+    const temporary = {
+      sessionId, status: "creating" as const, domain: input.domain, ownerUrl: validated.ownerUrl,
+      documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
+      entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
+      workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
+      workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
+    };
+    const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
+      await owners.circuitSourceBinding(temporary));
+    await mkdir(workspace.path, { recursive: true, mode: 0o700 });
+    const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl,
+      workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
+      workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
+    return { binding, workspace };
   }
 
   async function activate(sessionId: string): Promise<SessionBinding> {
@@ -220,12 +245,50 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       try {
         await ready;
         if (!sameOrigin(request)) throw new HttpError(403, "Origin refused.");
-        const path = new URL(request.url ?? "/", "http://localhost").pathname;
+        const requestUrl = new URL(request.url ?? "/", "http://localhost");
+        const path = requestUrl.pathname;
         if (path === "/spec2gds-api/capabilities" && request.method === "GET") return writeJson(response, 200, { model: config.model, provider: config.provider, owners: await owners.capabilities() });
+        if (path === "/spec2gds-api/services/connect" && request.method === "POST") {
+          const body = await readBody(request);
+          if (body.domain !== "spec" && body.domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");
+          if (typeof body.serviceBaseUrl !== "string") throw new HttpError(400, "serviceBaseUrl is required.");
+          return writeJson(response, 200, { service: await owners.connect(body.domain, body.serviceBaseUrl) });
+        }
+        if (path === "/spec2gds-api/targets" && request.method === "GET") {
+          const domain = requestUrl.searchParams.get("domain");
+          const serviceBaseUrl = requestUrl.searchParams.get("service_base_url") ?? "";
+          if (domain !== "spec" && domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");
+          return writeJson(response, 200, await owners.targets(domain, serviceBaseUrl));
+        }
+        if (path === "/spec2gds-api/sources/create" && request.method === "POST") {
+          const body = await readBody(request);
+          if (body.domain !== "spec" && body.domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");
+          if (typeof body.serviceBaseUrl !== "string" || typeof body.documentId !== "string" || typeof body.title !== "string") {
+            throw new HttpError(400, "serviceBaseUrl, documentId, and title are required.");
+          }
+          const documentId = body.documentId.trim();
+          const title = body.title.trim();
+          if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
+          if (body.domain === "spec") {
+            const destination = resolve(config.specDocumentRoot, `${documentId}.spec`);
+            if (dirname(destination) !== config.specDocumentRoot) throw new HttpError(400, "Document path escaped the configured root.");
+            await owners.createSpec(body.serviceBaseUrl, destination, documentId, title);
+          } else await owners.createCircuit(body.serviceBaseUrl, documentId, title);
+          const result = await reserve({ domain: body.domain, serviceBaseUrl: body.serviceBaseUrl,
+            documentId, scope: "document", title });
+          return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
+        }
+        if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
+          const workspaces = [...new Map(state.listBindings().map(binding => [binding.workspaceKey, {
+            key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
+            domain: binding.workspaceDomain, ownerUrl: binding.workspaceOwnerUrl, documentId: binding.workspaceDocumentId,
+          }])).values()];
+          return writeJson(response, 200, { workspaces });
+        }
         if (path === "/spec2gds-api/bindings/reserve" && request.method === "POST") {
           const body = await readBody(request);
           const result = await reserve(bindingInput(body), typeof body.sessionId === "string" ? body.sessionId : undefined);
-          return writeJson(response, 201, { session: result.binding, cwd: result.cwd });
+          return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
         }
         const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews))?$/);
         if (bindingMatch) {
@@ -262,7 +325,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const url = new URL(request.url ?? route, "http://localhost");
           const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
           response.writeHead(303, {
-            Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId, result.cwd),
+            Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId),
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",
           });

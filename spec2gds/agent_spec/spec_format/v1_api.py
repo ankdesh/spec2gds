@@ -688,6 +688,7 @@ def create_app() -> typing.Any:
                 "schema_version": 1,
                 "binding_id": binding_id,
                 "source_document_id": active().revision.document_id,
+                "source_service_url": service_urls()["spec_editor"]["service_url"],
                 "source_entity": {
                     "document_id": active().revision.document_id,
                     "entity_id": projection.source_entity_id,

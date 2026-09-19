@@ -15,6 +15,33 @@ test("owner URLs require exact configured origins", () => {
   assert.throws(() => normalizeCircuitUrl("http://localhost:6011/api/circuit-designer/v2", ["http://localhost:6011/api/circuit-designer/v1"]), /must end/);
 });
 
+test("Spec target discovery uses canonical entity references", async () => {
+  const server = createServer((_request, response) => {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      document_id: "doc-1",
+      narrative: { title: "Demo specification" },
+      components: [{ ref: { entity_id: "component-1" }, vlnv: "acme:demo:component:1.0" }],
+      designs: [{ ref: { entity_id: "design-1" }, vlnv: "acme:demo:design:1.0" }],
+      bus_definitions: [], abstraction_definitions: [],
+    }));
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const ownerUrl = `http://127.0.0.1:${address.port}`;
+  try {
+    const targets = await new OwnerClients([ownerUrl], [], 5_000).targets("spec", ownerUrl);
+    assert.deepEqual(targets.document, { document_id: "doc-1", title: "Demo specification" });
+    assert.deepEqual(targets.entities, [
+      { document_id: "doc-1", entity_id: "component-1", entity_kind: "component", title: "acme:demo:component:1.0" },
+      { document_id: "doc-1", entity_id: "design-1", entity_kind: "design", title: "acme:demo:design:1.0" },
+    ]);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});
+
 test("Circuit client uses the public snapshot, preview, and proposal routes", async () => {
   const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
   const server = createServer(async (request, response) => {
@@ -51,6 +78,8 @@ test("Circuit client uses the public snapshot, preview, and proposal routes", as
     sessionId: "session-1", status: "active", domain: "circuit", ownerUrl,
     documentId: "doc-1", scope: "document", entityKind: null, entityId: null,
     title: "Circuit: doc-1", archived: false, createdAt: "", updatedAt: "",
+    workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
+    workspaceDomain: "circuit", workspaceOwnerUrl: ownerUrl, workspaceDocumentId: "doc-1",
   };
   try {
     assert.equal((await clients.context(binding)).revision, "rev-1");

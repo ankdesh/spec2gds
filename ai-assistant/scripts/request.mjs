@@ -1,5 +1,5 @@
 /** Submit one non-interactive spec2gds request through the DSH headless profile. */
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,7 +26,13 @@ for (let index = 0; index < args.length; index += 1) {
 if (!task.length) throw new Error("Usage: npm run request -- [binding options] -- <one-off request>");
 const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 const scratchRoot = resolve(process.env.SPEC2GDS_SCRATCH_ROOT || resolve(state, "workspaces"));
-const env = { ...process.env, ASSISTANT_PROFILE: "spec2gds-headless", ASSISTANT_STATE: state, SPEC2GDS_SCRATCH_ROOT: scratchRoot };
+const env = {
+  ...process.env,
+  ASSISTANT_PROFILE: "spec2gds-headless",
+  ASSISTANT_STATE: state,
+  SPEC2GDS_SCRATCH_ROOT: scratchRoot,
+  SPEC_DOCUMENT_ROOT: resolve(process.env.SPEC_DOCUMENT_ROOT || resolve(state, "spec-documents")),
+};
 const headless = [];
 if (options.json) headless.push("--json");
 if (options["session-id"]) {
@@ -44,7 +50,22 @@ if (options["session-id"]) {
     ...(options["entity-id"] ? { entityId: options["entity-id"] } : {}),
   };
   env.SPEC2GDS_BINDING_JSON = JSON.stringify(binding);
-  env.DSH_PRODUCT_RUN_CWD = resolve(scratchRoot, `request-${randomUUID()}`);
+  const service = new URL(binding.serviceBaseUrl);
+  service.pathname = domain === "spec" ? "/" : service.pathname.replace(/\/$/, "");
+  let workspaceIdentity = { domain, ownerUrl: service.toString().replace(/\/$/, ""), documentId: binding.documentId };
+  if (domain === "circuit") {
+    try {
+      const response = await fetch(`${workspaceIdentity.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`);
+      if (response.ok) {
+        const source = await response.json();
+        if (source && typeof source.source_service_url === "string" && typeof source.source_document_id === "string") {
+          workspaceIdentity = { domain: "spec", ownerUrl: source.source_service_url.replace(/\/$/, ""), documentId: source.source_document_id };
+        }
+      }
+    } catch { /* The Circuit binding remains independently grouped when its optional source metadata is unavailable. */ }
+  }
+  const workspaceKey = createHash("sha256").update(JSON.stringify(workspaceIdentity)).digest("hex");
+  env.DSH_PRODUCT_RUN_CWD = resolve(scratchRoot, "design-sources", workspaceKey);
   mkdirSync(env.DSH_PRODUCT_RUN_CWD, { recursive: true, mode: 0o700 });
 }
 headless.push(task.join(" "));

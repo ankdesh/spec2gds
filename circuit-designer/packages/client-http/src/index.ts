@@ -78,6 +78,12 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
     return this.change(await this.sendJson(`${this.baseUrl}/documents`, "POST", { request_id: requestId, document }));
   }
 
+  async listDocuments(): Promise<DocumentSummary[]> {
+    const value = await this.getJson(`${this.baseUrl}/documents`) as { documents?: DocumentSummary[] };
+    if (!Array.isArray(value.documents)) throw new Error("Circuit service returned an invalid document list.");
+    return value.documents;
+  }
+
   async get(documentId: string): Promise<CircuitSnapshot> {
     return this.validated("CircuitSnapshot", await this.getJson(this.documentUrl(documentId))) as CircuitSnapshot;
   }

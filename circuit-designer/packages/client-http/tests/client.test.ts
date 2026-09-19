@@ -20,6 +20,17 @@ describe("HTTP circuit designer client", () => {
     expect(fetch.mock.calls[0][0]).toBe("http://example.test/circuit/v1/documents/fixture_simple");
   });
 
+  test("lists document summaries for target discovery", async () => {
+    const summary = {
+      document_id: "fixture_simple", label: "Simple", design_id: "simple",
+      component_count: 2, instance_count: 2, net_count: 1, warning_count: 0,
+    };
+    const fetch = vi.fn().mockResolvedValue(response({ documents: [summary] }));
+    const client = new HttpCircuitDesignerBackend({ baseUrl: "http://example.test/circuit/v1", fetch });
+    await expect(client.listDocuments()).resolves.toEqual([summary]);
+    expect(fetch.mock.calls[0][0]).toBe("http://example.test/circuit/v1/documents");
+  });
+
   test("rejects invalid transport data", async () => {
     const client = new HttpCircuitDesignerBackend({ fetch: vi.fn().mockResolvedValue(response({ revision: "1" })) });
     await expect(client.get("fixture_simple")).rejects.toMatchObject({ status: 502 });

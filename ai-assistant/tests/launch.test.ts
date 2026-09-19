@@ -11,11 +11,10 @@ test("editor launch uses a relative DSH authentication target and fragment paylo
   const location = authenticatedLaunchLocation(
     { authenticatedUrl: base => `${base}/?token=one-time-secret` },
     "session/with spaces",
-    "/tmp/spec2gds work",
   );
   assert.equal(
     location,
-    "/?token=one-time-secret#spec2gds_session=session%2Fwith+spaces&spec2gds_cwd=%2Ftmp%2Fspec2gds+work",
+    "/?token=one-time-secret#spec2gds_session=session%2Fwith+spaces",
   );
   assert.ok(!location.includes("127.0.0.1"), "redirect must stay on the browser's current authority");
 });
@@ -33,7 +32,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
     location: {
       pathname: "/",
       search: "",
-      hash: "#spec2gds_session=bound-session&spec2gds_cwd=%2Ftmp%2Fbound-session",
+      hash: "#spec2gds_session=bound-session",
     },
     history: { replaceState: (_state: unknown, _title: string, url: string) => { replaced = url; } },
     document: {
@@ -41,7 +40,15 @@ test("browser plugin owns New Session and consumes launch data from the fragment
       createElement: () => ({ dataset: {}, textContent: "" }),
       head: { appendChild: () => undefined },
     },
-    fetch: async () => ({ ok: true, json: async () => ({}) }),
+    fetch: async (url: string) => ({ ok: true, json: async () => {
+      if (url === "/spec2gds-api/workspaces") return { workspaces: [] };
+      if (url === "/spec2gds-api/bindings/bound-session") return { session: {
+        sessionId: "bound-session", workspaceKey: "workspace-1", workspaceTitle: "Bound design",
+        workspacePath: "/tmp/bound-design", workspaceDomain: "spec",
+        workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
+      } };
+      return {};
+    } }),
     queueMicrotask: (callback: () => unknown) => { microtasks.push(callback); },
     window: {
       alert: (message: unknown) => { throw new Error(`unexpected alert: ${String(message)}`); },
@@ -61,14 +68,19 @@ test("browser plugin owns New Session and consumes launch data from the fragment
       create: async (value: unknown) => { created.push(value); },
       open: (value: unknown) => { opened.push(value); },
     },
+    workspaces: {
+      list: { getSnapshot: () => ({ items: [] }) },
+      create: async () => ({ workspaceId: "workspace-1", title: "Bound design", path: "/tmp/bound-design" }),
+      rename: async () => undefined,
+    },
   });
 
   assert.equal(newSessionHandler?.id, "spec2gds");
   assert.equal(newSessionHandler?.priority, -100);
   assert.equal(replaced, "/");
-  assert.equal(microtasks.length, 1);
-  await microtasks[0]?.();
+  assert.equal(microtasks.length, 2);
+  for (const task of microtasks) await task();
   await new Promise(resolvePromise => setImmediate(resolvePromise));
-  assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", cwd: "/tmp/bound-session" }]));
+  assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1" }]));
   assert.deepEqual(opened, ["bound-session"]);
 });

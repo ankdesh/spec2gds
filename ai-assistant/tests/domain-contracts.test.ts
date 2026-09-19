@@ -9,6 +9,8 @@ const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "doc
   sessionId: "session-1", status: "active", domain, ownerUrl: "http://owner", documentId: "doc-1", scope,
   entityKind: scope === "entity" ? "component" : null, entityId: scope === "entity" ? "component-1" : null,
   title: "Test", archived: false, createdAt: "", updatedAt: "",
+  workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
+  workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",
 });
 
 test("domain instructions retain the critical old proposal rules", () => {

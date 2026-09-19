@@ -56,6 +56,62 @@ export class OwnerClients {
     this.timeoutMs = timeoutMs;
   }
 
+  async connect(domain: "spec" | "circuit", value: string): Promise<Record<string, unknown>> {
+    const url = domain === "spec"
+      ? normalizeSpecUrl(value, [value])
+      : normalizeCircuitUrl(value, [value]);
+    const detail = await this.request("GET", domain === "spec" ? `${url}/health` : `${url}/capabilities`);
+    const list = domain === "spec" ? this.specAllowlist : this.circuitAllowlist;
+    if (!list.includes(url)) list.push(url);
+    return { domain, url, detail };
+  }
+
+  async targets(domain: "spec" | "circuit", value: string): Promise<Record<string, unknown>> {
+    const url = domain === "spec"
+      ? normalizeSpecUrl(value, this.specAllowlist)
+      : normalizeCircuitUrl(value, this.circuitAllowlist);
+    if (domain === "spec") {
+      const snapshot = await this.request("GET", `${url}/documents/snapshot`);
+      const entities = ([
+        ["components", "component"], ["designs", "design"],
+        ["bus_definitions", "bus_definition"], ["abstraction_definitions", "abstraction_definition"],
+      ] as const).flatMap(([key, kind]) => (Array.isArray(snapshot[key]) ? snapshot[key] as unknown[] : [])
+        .filter(isRecord)
+        .flatMap(item => {
+          const ref = isRecord(item.ref) ? item.ref : {};
+          const entityId = ref.entity_id ?? item.id ?? item.name;
+          return typeof entityId === "string" ? [{ document_id: snapshot.document_id, entity_id: entityId,
+            entity_kind: kind, title: item.title ?? item.name ?? item.vlnv ?? entityId }] : [];
+        }));
+      return { domain, serviceBaseUrl: url, document: {
+        document_id: snapshot.document_id,
+        title: isRecord(snapshot.narrative) ? snapshot.narrative.title : snapshot.document_id,
+      }, entities };
+    }
+    const listed = await this.request("GET", `${url}/documents`);
+    const summaries = Array.isArray(listed.documents) ? listed.documents.filter(isRecord) : [];
+    const documents = await Promise.all(summaries.map(async summary => {
+      const documentId = String(summary.document_id ?? "");
+      let source_binding: Record<string, unknown> | null = null;
+      try { source_binding = await this.request("GET", `${url}/documents/${encodeURIComponent(documentId)}/source-binding`); }
+      catch (error) { if (!(error instanceof OwnerError && error.status === 404)) throw error; }
+      return { ...summary, source_binding };
+    }));
+    return { domain, serviceBaseUrl: url, documents };
+  }
+
+  async createSpec(value: string, path: string, documentId: string, title: string): Promise<Record<string, unknown>> {
+    const url = normalizeSpecUrl(value, this.specAllowlist);
+    return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title });
+  }
+
+  async createCircuit(value: string, documentId: string, title: string): Promise<Record<string, unknown>> {
+    const url = normalizeCircuitUrl(value, this.circuitAllowlist);
+    return this.request("POST", `${url}/documents/empty`, {
+      document_id: documentId, label: title, request_id: `assistant-create:${documentId}`,
+    });
+  }
+
   normalize(input: BindingInput): string {
     return input.domain === "spec"
       ? normalizeSpecUrl(input.serviceBaseUrl, this.specAllowlist)
@@ -76,6 +132,8 @@ export class OwnerClients {
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" : input.scope ?? "document",
       entityKind: input.entityKind ?? null, entityId: input.entityId ?? null,
       title: input.title ?? input.documentId, archived: false, createdAt: "", updatedAt: "",
+      workspaceKey: "validation", workspaceTitle: input.documentId, workspacePath: "validation",
+      workspaceDomain: input.domain, workspaceOwnerUrl: ownerUrl, workspaceDocumentId: input.documentId,
     };
     return { ownerUrl, context: await this.context(binding, signal) };
   }
@@ -95,6 +153,16 @@ export class OwnerClients {
       entity_id: binding.entityId ?? "",
     });
     return this.request("GET", `${binding.ownerUrl}/assistant/context?${query}`, undefined, signal);
+  }
+
+  async circuitSourceBinding(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+    if (binding.domain !== "circuit") return null;
+    try {
+      return await this.request("GET", `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`, undefined, signal);
+    } catch (error) {
+      if (error instanceof OwnerError && error.status === 404) return null;
+      throw error;
+    }
   }
 
   async previewSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {

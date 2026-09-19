@@ -6,7 +6,7 @@ permanent document bindings, owner-aware tools, and proposal review cards. The
 former Python/FastAPI/A2A service and custom assistant-ui application have been
 removed.
 
-Each conversation is bound to one existing Spec document, Spec entity, or
+Each conversation is immutably bound to one Spec document, Spec entity, or
 Circuit document. The model can read fresh owner context and prepare typed
 previews. It has no owner mutation, source creation, filesystem, shell, browser,
 workflow, skill, or subagent tools. Spec apply and Circuit send happen only from
@@ -48,8 +48,22 @@ HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
 
 Open `http://127.0.0.1:6013`. The combined `scripts/serve-all.sh start`
 launcher uses the same profile and port. The browser new-session button opens a
-binding dialog; editor launch links bypass the dialog with an already validated
-binding.
+design-source chooser for configured Spec and Circuit services. It can connect
+another service for the current process or create a new Spec or empty Circuit.
+Editor launch links bypass the chooser with an already validated exact target.
+
+## Design-source workspaces
+
+A Workspace represents a logical design source, not an arbitrary directory.
+One `.spec` package owns one Workspace. Circuit documents projected from that
+specification join the same Workspace through their source binding; an
+independent Circuit document owns its own Workspace. The stable private path
+under `SPEC2GDS_SCRATCH_ROOT` is only a DSH grouping identity.
+
+Opening the Assistant from an editor always starts a new conversation focused
+on the launch target. Starting from a Workspace offers only that Spec and its
+source-derived Circuits. Starting globally can browse configured services or
+create a design source. A conversation never changes target after creation.
 
 ## Submit one request from the command line
 
@@ -75,6 +89,7 @@ same interface as `node deployment/request.mjs`.
 | `ASSISTANT_PORT` | `6013` |
 | `ASSISTANT_STATE` | `ai-assistant/.dev` in development |
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces` |
+| `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents` |
 | `OPENAI_MODEL` | `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
@@ -88,7 +103,7 @@ multi-user application.
 ## State and recovery
 
 DSH JSONL is the transcript source of truth. `assistant.sqlite3` stores immutable
-bindings and review metadata. Back up the complete state root together. DSH
+bindings, Workspace identities, and review metadata. Back up the complete state root together. DSH
 provides rename, archive/restore, and export. Permanent deletion is not exposed
 because the current persistence contract is append-only.
 
