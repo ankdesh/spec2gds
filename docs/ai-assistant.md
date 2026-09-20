@@ -51,6 +51,14 @@ launcher uses the same profile and port. The browser new-session button opens a
 design-source chooser for configured Spec and Circuit services. It can connect
 another service for the current process or create a new Spec or empty Circuit.
 Editor launch links bypass the chooser with an already validated exact target.
+After rebuilding either the product bundle or the pinned Harness checkout, run
+`scripts/serve-all.sh restart`; `start` deliberately refuses a stale or partial
+stack already occupying the default ports.
+
+The focused browser profile omits DSH's generic Models settings/onboarding
+plugin. Configure the OpenAI provider through `OPENAI_API_KEY`,
+`OPENAI_BASE_URL`, and `OPENAI_MODEL`; the conversation model selector remains
+available for configured models.
 
 ## Design-source workspaces
 

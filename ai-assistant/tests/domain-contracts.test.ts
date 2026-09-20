@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateArgs } from "@deepseek-ai/dsh-tools";
-import { shapeBoundContext, SPEC_INSTRUCTIONS, CIRCUIT_INSTRUCTIONS } from "../src/domain-context.js";
+import { shapeBoundContext, instructionsFor, SPEC_INSTRUCTIONS, CIRCUIT_INSTRUCTIONS } from "../src/domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "../src/operation-schemas.js";
 import type { SessionBinding } from "../src/types.js";
 
@@ -16,6 +16,15 @@ const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "doc
 test("domain instructions retain the critical old proposal rules", () => {
   for (const phrase of ["WRITABLE BOUNDARY", "supported=false", "SystemVerilog", "component_vlnv"]) assert.match(SPEC_INSTRUCTIONS, new RegExp(phrase));
   for (const phrase of ["complete replacements", "VALID ENDPOINT CATALOG", "cascade=false", "supported=false"]) assert.match(CIRCUIT_INSTRUCTIONS, new RegExp(phrase));
+});
+
+test("bound prompt names the immutable target and requires a fresh owner context read", () => {
+  const prompt = instructionsFor(binding("spec", "entity"));
+  assert.match(prompt, /Owner: Spec Editor/);
+  assert.match(prompt, /Document ID: doc-1/);
+  assert.match(prompt, /Selected target: component component-1/);
+  assert.match(prompt, /MUST call get_bound_context before answering/);
+  assert.match(prompt, /Never ask the user which document or design they mean/);
 });
 
 test("deterministic Spec context checks identity and exposes boundaries", () => {

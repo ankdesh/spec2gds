@@ -126,6 +126,10 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     assert.ok(ownerReads >= 3, `Expected validation, context, and proposal reads; got ${ownerReads}.\n${output}`);
     assert.equal(previews, 1);
     assert.ok(modelRequests.length >= 3);
+    const systemMessage = modelRequests[0].messages.find(message => message.role === "system");
+    assert.match(String(systemMessage?.content), /Document ID: doc-test/);
+    assert.match(String(systemMessage?.content), /MUST call get_bound_context before answering/);
+    assert.match(String(systemMessage?.content), /Never ask the user which document or design they mean/);
     const toolNames = modelRequests[0].tools.map(tool => tool.function.name);
     assert.ok(toolNames.includes("get_bound_context"));
     assert.ok(toolNames.includes("prepare_spec_proposal"));

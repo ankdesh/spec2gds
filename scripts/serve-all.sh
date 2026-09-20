@@ -10,7 +10,7 @@ SERVICES=(spec-editor circuit-designer ai-assistant)
 DEFAULT_PORTS=(6010 6011 6012 6013 6014)
 
 usage() {
-  echo "Usage: scripts/serve-all.sh {start|stop}"
+  echo "Usage: scripts/serve-all.sh {start|restart|stop}"
 }
 
 pid_file() {
@@ -68,6 +68,41 @@ start_service() {
   echo "Started ${name} (PID ${pid}); log: $(log_file "${name}")"
 }
 
+assert_clean_start() {
+  local running=0
+  local name
+  for name in "${SERVICES[@]}"; do
+    if is_running "${name}"; then
+      running=$((running + 1))
+    fi
+  done
+
+  if [[ ${running} -eq ${#SERVICES[@]} ]]; then
+    echo "The spec2gds stack is already running. Use 'scripts/serve-all.sh restart' after rebuilding or changing source." >&2
+    return 2
+  fi
+  if [[ ${running} -ne 0 ]]; then
+    echo "Only ${running} of ${#SERVICES[@]} tracked services are running. Use 'scripts/serve-all.sh restart' to recover a consistent stack." >&2
+    return 1
+  fi
+
+  if ! command -v lsof >/dev/null 2>&1; then
+    echo "lsof is required to verify that the default ports are available." >&2
+    return 1
+  fi
+  local occupied=()
+  local port
+  for port in "${DEFAULT_PORTS[@]}"; do
+    if lsof -nP -t -iTCP:"${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+      occupied+=("${port}")
+    fi
+  done
+  if [[ ${#occupied[@]} -ne 0 ]]; then
+    echo "Cannot start: untracked listeners already own default port(s) ${occupied[*]}. Use 'scripts/serve-all.sh restart' to replace the stale stack." >&2
+    return 1
+  fi
+}
+
 stop_service() {
   local name="$1"
   local pid
@@ -114,6 +149,11 @@ start_all() {
     return 1
   }
 
+  assert_clean_start
+  local startable=$?
+  [[ ${startable} -eq 2 ]] && return 0
+  [[ ${startable} -eq 0 ]] || return 1
+
   mkdir -p "${STATE_DIR}"
 
   # Resolve auto once and export it so Python, Node, and printed browser URLs
@@ -130,7 +170,7 @@ start_all() {
   start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" npm run dev
 
   # Catch immediate failures such as missing dependencies or occupied ports.
-  sleep 1
+  sleep 3
   local failed=0
   local name
   for name in "${SERVICES[@]}"; do
@@ -211,9 +251,17 @@ stop_all() {
   stop_default_port_listeners
 }
 
+restart_all() {
+  stop_all
+  start_all
+}
+
 case "${1:-}" in
   start)
     start_all
+    ;;
+  restart)
+    restart_all
     ;;
   stop)
     stop_all

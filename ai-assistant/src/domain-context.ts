@@ -22,7 +22,20 @@ New components are local and editable. Updates are complete replacements. Use ca
 Never author geometry, routes, labels, or layout. Reuse exact IDs for existing objects and unique lowercase slug-like IDs for new objects. Do not invent terminal or component IDs. List every material assumption. If the request is unsupported, return supported=false with an empty operations list and a concise unsupported_reason.`;
 
 export function instructionsFor(binding: SessionBinding): string {
-  return binding.domain === "spec" ? SPEC_INSTRUCTIONS : CIRCUIT_INSTRUCTIONS;
+  const owner = binding.domain === "spec" ? "Spec Editor" : "Circuit Designer";
+  const target = binding.scope === "entity"
+    ? `${binding.entityKind ?? "entity"} ${binding.entityId ?? "(missing id)"}`
+    : "the complete document";
+  const boundContext = `BOUND CONVERSATION
+- Owner: ${owner}
+- Document ID: ${binding.documentId}
+- Scope: ${binding.scope}
+- Selected target: ${target}
+
+This binding is immutable for the lifetime of the conversation. References such as "this document", "this component", "the design", or "the components" mean the bound target above. Never ask the user which document or design they mean.
+
+For every message about the current specification or circuit, you MUST call get_bound_context before answering, including explanation, description, comparison, and change requests. Do not rely on a previous turn's context because owner revisions can change. Answer only after the tool returns. If the context read fails, explain that the bound owner is unavailable instead of asking the user to restate the design.`;
+  return `${boundContext}\n\n${binding.domain === "spec" ? SPEC_INSTRUCTIONS : CIRCUIT_INSTRUCTIONS}`;
 }
 
 export function shapeBoundContext(binding: SessionBinding, context: Record<string, unknown>, svg?: string): { text: string; warnings: string[] } {

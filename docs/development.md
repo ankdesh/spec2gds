@@ -128,6 +128,7 @@ root:
 
 ```bash
 scripts/serve-all.sh start
+scripts/serve-all.sh restart  # replace a running stack after source changes
 scripts/serve-all.sh stop
 ```
 
@@ -138,7 +139,9 @@ service writes to a separate log in the same directory. The `stop` command also
 uses `lsof` to terminate untracked listeners on the default service ports
 `6010` through `6014`. Services read their bind configuration from
 `config/services.json`, while the displayed URLs and cleanup list describe the
-tracked defaults. The script deliberately does not install dependencies or own
+tracked defaults. `start` refuses partial and untracked stacks on those ports;
+use `restart` after rebuilding so an older browser bundle cannot remain active.
+The script deliberately does not install dependencies or own
 the longer-term service monitoring mechanism.
 
 ## Change rules

@@ -121,6 +121,16 @@ TCP ports `6010` through `6014` for the LAN. Logs and PID files are under
 scripts/serve-all.sh stop
 ```
 
+After rebuilding or changing source, replace the running development stack so
+the browser cannot remain attached to an older Assistant bundle:
+
+```bash
+scripts/serve-all.sh restart
+```
+
+`start` refuses a partial or untracked stack on the default ports instead of
+reporting success while an older process continues serving the UI.
+
 The commands above use the tracked defaults in `config/services.json`. See
 [Service configuration](docs/service-configuration.md) before using different
 addresses or ports.
@@ -252,6 +262,9 @@ Editor, Circuit Designer service and UI, and AI Assistant together:
 ```bash
 scripts/serve-all.sh start
 ```
+
+Use `scripts/serve-all.sh restart` after rebuilding or changing source; it
+stops tracked and stale default-port listeners before starting the new stack.
 
 Stop the tracked processes and any other services listening on the same default
 ports with:

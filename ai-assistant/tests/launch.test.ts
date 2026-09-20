@@ -19,6 +19,17 @@ test("editor launch uses a relative DSH authentication target and fragment paylo
   assert.ok(!location.includes("127.0.0.1"), "redirect must stay on the browser's current authority");
 });
 
+test("focused web profile removes the generic DSH provider onboarding plugin", () => {
+  const patch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
+  assert.match(patch, /- id: ui-settings-models\n  disabled: true/);
+  assert.doesNotMatch(patch, /showTestingNotice|showDeepSeekOnboarding/);
+});
+
+test("product dialog preserves the HTML hidden contract over layout styles", () => {
+  const source = readFileSync(resolve(root, "client/index.js"), "utf8");
+  assert.match(source, /\.s2g-dialog \[hidden\]\{display:none!important\}/);
+});
+
 test("browser plugin owns New Session and consumes launch data from the fragment", async () => {
   let definition: { factory(require: (name: string) => unknown): { apply(ctx: unknown): void } } | undefined;
   let newSessionHandler: Record<string, unknown> | undefined;
@@ -77,6 +88,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
 
   assert.equal(newSessionHandler?.id, "spec2gds");
   assert.equal(newSessionHandler?.priority, -100);
+  assert.equal(context.document.title, "spec2gds Assistant");
   assert.equal(replaced, "/");
   assert.equal(microtasks.length, 2);
   for (const task of microtasks) await task();

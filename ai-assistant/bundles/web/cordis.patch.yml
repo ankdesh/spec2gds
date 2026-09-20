@@ -25,9 +25,7 @@
     trustedHosts: !!js ctx.webStartup.trustedHosts
 
 - id: ui-settings-models
-  config:
-    showTestingNotice: false
-    showDeepSeekOnboarding: false
+  disabled: true
 
 - id: ui-workspace
   config:
