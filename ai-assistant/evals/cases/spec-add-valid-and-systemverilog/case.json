@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-add-valid-and-systemverilog",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "component", "fixture_target": "primary_component" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Add valid_out and update the SystemVerilog implementation together.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["upsert_component_port", "upsert_entity_section"] }],
+  "semantic_assertions": ["valid_out exists as an output", "SystemVerilog body drives valid_out", "existing ports are unchanged"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["valid_out was added"] }
+}

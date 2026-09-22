@@ -14,6 +14,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     .s2g-review{margin:6px 0;padding:12px;border:1px solid color-mix(in srgb,#176b5b 28%,transparent);border-radius:10px;background:color-mix(in srgb,#176b5b 5%,transparent);font:13px/1.45 system-ui}
     .s2g-review header{display:flex;justify-content:space-between;gap:12px}.s2g-review h4{margin:0;font-size:14px}.s2g-state{text-transform:uppercase;font-size:10px;letter-spacing:.08em;color:#176b5b}
     .s2g-review details{margin-top:8px}.s2g-review pre{overflow:auto;max-height:260px;padding:8px;border-radius:7px;background:color-mix(in srgb,currentColor 5%,transparent);font-size:11px}
+    .s2g-summary{margin:9px 0}.s2g-summary ul{margin:5px 0;padding-left:20px}.s2g-summary code{font-size:11px}
     .s2g-diff{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.s2g-diff small{display:block;margin-bottom:3px;font-weight:600}
     .s2g-actions{display:flex;gap:8px;margin-top:10px}.s2g-actions button{padding:5px 9px;border:1px solid #176b5b;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.s2g-actions button.primary{background:#176b5b;color:#fff}
     .s2g-circuit{width:100%;height:180px;border-radius:8px;background:color-mix(in srgb,currentColor 3%,transparent)}
@@ -186,7 +187,16 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   async function ensureWorkspace(ctx, descriptor) {
     const existing = ctx.workspaces.list.getSnapshot().items.find(item => item.path === descriptor.path);
     const workspace = existing || await ctx.workspaces.create({ path: descriptor.path });
-    if (workspace.title !== descriptor.title) return ctx.workspaces.rename(workspace.workspaceId, descriptor.title);
+    if (workspace.title !== descriptor.title) {
+      try { return await ctx.workspaces.rename(workspace.workspaceId, descriptor.title); }
+      catch (error) {
+        if (!String(error instanceof Error ? error.message : error).includes("workspace/name-conflict")) throw error;
+        let owner = "design source";
+        try { owner = new URL(descriptor.ownerUrl).host; } catch { /* Use the stable fallback below. */ }
+        const disambiguated = `${descriptor.title} · ${owner} · ${String(descriptor.key).slice(0, 8)}`;
+        return ctx.workspaces.rename(workspace.workspaceId, disambiguated);
+      }
+    }
     return workspace;
   }
 
@@ -202,11 +212,15 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         key: reservation.session.workspaceKey,
         title: reservation.session.workspaceTitle,
         path: reservation.session.workspacePath,
+        domain: reservation.session.workspaceDomain,
+        ownerUrl: reservation.session.workspaceOwnerUrl,
+        documentId: reservation.session.workspaceDocumentId,
       };
       const workspace = await ensureWorkspace(ctx, descriptor);
-      await ctx.sessions.create({ sessionId: id, workspaceId: workspace.workspaceId });
+      const createdId = await ctx.sessions.create({ sessionId: id, workspaceId: workspace.workspaceId });
+      if (createdId !== id) throw new Error(`The Harness created session ${createdId} instead of reserved binding ${id}.`);
       await api(`/bindings/${encodeURIComponent(id)}/activate`, {});
-      ctx.sessions.open(id);
+      ctx.sessions.open(createdId);
     } catch (error) {
       await api(`/bindings/${encodeURIComponent(id)}/abandon`, {}).catch(() => undefined);
       throw error;
@@ -276,16 +290,36 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     }
     return h("article", { className: "s2g-review" },
       h("header", null, h("h4", null, artifact.title || "Design proposal"), h("span", { className: "s2g-state" }, review.state)),
-      h("p", null, artifact.summary || ""),
+      h("section", { className: "s2g-summary" },
+        h("p", null, record(review.changeSummary).text || "Proposal summary unavailable."),
+        Array.isArray(record(review.changeSummary).changedTargets) && record(review.changeSummary).changedTargets.length
+          ? h("ul", null, record(review.changeSummary).changedTargets.map(target => h("li", { key: target }, h("code", null, target))))
+          : null),
+      review.error ? h("section", { className: "s2g-error" },
+        h("strong", null, String(record(review.error).error_code || "PROPOSAL_ERROR")),
+        h("p", null, String(record(review.error).details || "The proposal was not accepted.")),
+        h("small", null, record(review.error).retryable ? "This may be retried after the underlying condition changes." : "No automatic retry will be attempted.")) : null,
       review.domain === "spec" ? h(SpecDiff, { preview: review.preview }) : h(CircuitDiff, { preview: review.preview }),
       h("details", null, h("summary", null, "Exact operations"), h("pre", null, pretty(operations))),
-      h("details", null, h("summary", null, "Rationale, assumptions, and owner preview"), h("pre", null, pretty({ rationale: artifact.rationale, assumptions: artifact.assumptions, preview: review.preview, diagnostics: review.diagnostics }))),
+      h("details", null, h("summary", null, "Requested change, rationale, assumptions, and owner preview"), h("pre", null, pretty({ requested_change: artifact.summary, rationale: artifact.rationale, assumptions: artifact.assumptions, preview: review.preview, diagnostics: review.diagnostics }))),
       actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Approve and apply" : "Send to Circuit Designer") : null) : null,
       error ? h("p", { className: "s2g-error" }, error) : null);
   }
 
+  function ProposalErrorCard({ error }) {
+    const value = record(error);
+    const actions = Array.isArray(value.suggested_actions) ? value.suggested_actions : [];
+    return h("article", { className: "s2g-review" },
+      h("header", null, h("h4", null, "Proposal not created"), h("span", { className: "s2g-state" }, value.error_code || "ERROR")),
+      h("p", { className: "s2g-error" }, value.details || "The request could not be represented safely."),
+      value.target ? h("p", null, "Target: ", h("code", null, String(value.target))) : null,
+      actions.length ? h("ul", null, actions.map(action => h("li", { key: action }, action))) : null,
+      h("small", null, value.retryable ? "Retryable after the underlying condition changes." : "No automatic retry will be attempted."));
+  }
+
   function ProposalToolView({ block, toolName }) {
     const value = resultValue(block);
+    if (value?.error && !value?.review) return h(ProposalErrorCard, { error: value.error });
     if (!value?.review) return h("div", { className: "s2g-review" }, block?.kind === "tool-result" ? "Proposal result unavailable." : `${toolName.replaceAll("_", " ")}…`);
     return h(ReviewCard, { review: value.review });
   }

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { proposalError } from "./proposal-presentation.js";
 import type { BindingInput, ProposalReview, ReviewState, SessionBinding } from "./types.js";
 
 const now = (): string => new Date().toISOString();
@@ -58,6 +59,9 @@ export class ProductState {
       );
       CREATE INDEX IF NOT EXISTS reviews_session_created ON reviews(session_id, created_at);
     `);
+    const reviewColumns = new Set((this.database.prepare("PRAGMA table_info(reviews)").all() as Array<Record<string, unknown>>)
+      .map(row => String(row.name)));
+    if (!reviewColumns.has("error_json")) this.database.exec("ALTER TABLE reviews ADD COLUMN error_json TEXT");
   }
 
   close(): void { this.database.close(); }
@@ -142,11 +146,11 @@ export class ProductState {
     const timestamp = now();
     const digest = artifactDigest(input.artifact);
     this.database.prepare(`
-      INSERT INTO reviews(proposal_id,session_id,call_id,domain,state,base_revision,artifact_json,artifact_digest,preview_json,diagnostics_json,owner_result_json,created_at,updated_at)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)
+      INSERT INTO reviews(proposal_id,session_id,call_id,domain,state,base_revision,artifact_json,artifact_digest,preview_json,diagnostics_json,error_json,owner_result_json,created_at,updated_at)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(input.proposalId, input.sessionId, input.callId, input.domain, input.state,
       input.baseRevision, json(input.artifact), digest, json(input.preview), json(input.diagnostics),
-      json(input.ownerResult), timestamp, timestamp);
+      json(input.error), json(input.ownerResult), timestamp, timestamp);
     this.touchBinding(input.sessionId);
     return this.getReview(input.sessionId, input.proposalId)!;
   }
@@ -172,12 +176,17 @@ export class ProductState {
   }
 
   markRevisionStale(sessionId: string, revision: string): number {
-    const result = this.database.prepare(`
-      UPDATE reviews SET state='stale', diagnostics_json=?, version=version+1, updated_at=?
-      WHERE session_id=? AND base_revision<>? AND state IN ('ready','rejected')
-    `).run(json("The owner revision changed after this preview."), now(), sessionId, revision);
-    if (result.changes) this.touchBinding(sessionId);
-    return Number(result.changes);
+    const binding = this.getBinding(sessionId);
+    if (!binding) return 0;
+    const stale = this.listReviews(sessionId).filter(review => review.baseRevision !== revision && ["ready", "rejected"].includes(review.state));
+    const detail = "The owner revision changed after this preview.";
+    for (const review of stale) {
+      this.transitionReview(sessionId, review.proposalId, [review.state], "stale", {
+        diagnostics: detail,
+        error: proposalError(binding, review.proposalId, "STALE_REVISION", detail, true),
+      });
+    }
+    return stale.length;
   }
 
   transitionReview(
@@ -185,17 +194,18 @@ export class ProductState {
     proposalId: string,
     expected: ReviewState[],
     state: ReviewState,
-    values: { preview?: unknown; diagnostics?: unknown; ownerResult?: unknown } = {},
+    values: { preview?: unknown; diagnostics?: unknown; error?: unknown; ownerResult?: unknown } = {},
   ): ProposalReview {
     const current = this.getReview(sessionId, proposalId);
     if (!current) throw new Error("Unknown proposal review.");
     if (!expected.includes(current.state)) throw new Error(`Review is ${current.state}; expected ${expected.join(" or ")}.`);
     const result = this.database.prepare(`
-      UPDATE reviews SET state=?, preview_json=?, diagnostics_json=?, owner_result_json=?, version=version+1, updated_at=?
+      UPDATE reviews SET state=?, preview_json=?, diagnostics_json=?, error_json=?, owner_result_json=?, version=version+1, updated_at=?
       WHERE session_id=? AND proposal_id=? AND version=?
     `).run(state,
       values.preview === undefined ? json(current.preview) : json(values.preview),
       values.diagnostics === undefined ? json(current.diagnostics) : json(values.diagnostics),
+      values.error === undefined ? json(current.error) : json(values.error),
       values.ownerResult === undefined ? json(current.ownerResult) : json(values.ownerResult),
       now(), sessionId, proposalId, current.version);
     if (result.changes !== 1) throw new Error("Review changed concurrently; reload and retry.");
@@ -224,7 +234,7 @@ export class ProductState {
       domain: row.domain as ProposalReview["domain"], state: row.state as ReviewState,
       baseRevision: String(row.base_revision), artifact: parse(row.artifact_json) as Record<string, unknown>,
       artifactDigest: String(row.artifact_digest), preview: parse(row.preview_json) as Record<string, unknown> | null,
-      diagnostics: parse(row.diagnostics_json), ownerResult: parse(row.owner_result_json),
+      diagnostics: parse(row.diagnostics_json), error: parse(row.error_json) as ProposalReview["error"], ownerResult: parse(row.owner_result_json),
       version: Number(row.version), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     };
   }

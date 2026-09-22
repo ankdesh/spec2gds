@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { validateArgs } from "@deepseek-ai/dsh-tools";
-import { shapeBoundContext, instructionsFor, SPEC_INSTRUCTIONS, CIRCUIT_INSTRUCTIONS } from "../src/domain-context.js";
+import { promptSectionsFor, shapeBoundContext } from "../src/domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "../src/operation-schemas.js";
 import type { SessionBinding } from "../src/types.js";
 
@@ -13,18 +13,52 @@ const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "doc
   workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",
 });
 
-test("domain instructions retain the critical old proposal rules", () => {
-  for (const phrase of ["WRITABLE BOUNDARY", "supported=false", "SystemVerilog", "component_vlnv"]) assert.match(SPEC_INSTRUCTIONS, new RegExp(phrase));
-  for (const phrase of ["complete replacements", "VALID ENDPOINT CATALOG", "cascade=false", "supported=false"]) assert.match(CIRCUIT_INSTRUCTIONS, new RegExp(phrase));
+const sectionText = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): string =>
+  promptSectionsFor(binding(domain, scope)).map(section => section.text).join("\n\n");
+
+test("bound domain prompts use four typed composable sections", () => {
+  const expectedNames = [
+    "spec2gds:domain-persona",
+    "spec2gds:binding-context",
+    "spec2gds:operation-constraints",
+    "spec2gds:output-contract",
+  ];
+  for (const domain of ["spec", "circuit"] as const) {
+    const sections = promptSectionsFor(binding(domain));
+    assert.deepEqual(sections.map(section => section.name), expectedNames);
+    assert.deepEqual(sections.map(section => section.order), [100, 150, 200, 300]);
+    assert.equal(new Set(sections.map(section => section.name)).size, sections.length);
+    assert.ok(sections.every(section => typeof section.text === "string" && section.text.length > 0));
+    assert.ok(sections.every(section => !Object.hasOwn(section, "complete")));
+  }
 });
 
-test("bound prompt names the immutable target and requires a fresh owner context read", () => {
-  const prompt = instructionsFor(binding("spec", "entity"));
-  assert.match(prompt, /Owner: Spec Editor/);
-  assert.match(prompt, /Document ID: doc-1/);
-  assert.match(prompt, /Selected target: component component-1/);
-  assert.match(prompt, /MUST call get_bound_context before answering/);
-  assert.match(prompt, /Never ask the user which document or design they mean/);
+test("composed domain prompts retain proposal and safety rules", () => {
+  const spec = sectionText("spec", "entity");
+  for (const phrase of [
+    "WRITABLE BOUNDARY", "exact entity IDs", "supported=false", "SystemVerilog", "component_vlnv",
+    "List every material assumption", "Do not emit XML", "claim that a change was applied",
+  ]) assert.match(spec, new RegExp(phrase));
+  const circuit = sectionText("circuit");
+  for (const phrase of [
+    "complete replacements", "VALID ENDPOINT CATALOG", "cascade=false", "supported=false",
+    "List every material assumption", "Never claim a proposal was applied or sent",
+  ]) assert.match(circuit, new RegExp(phrase));
+});
+
+test("binding section names immutable entity and document targets and requires fresh context", () => {
+  const entity = sectionText("spec", "entity");
+  assert.match(entity, /Owner: Spec Editor/);
+  assert.match(entity, /Document ID: doc-1/);
+  assert.match(entity, /Scope: entity/);
+  assert.match(entity, /Selected target: component component-1/);
+  assert.match(entity, /MUST call get_bound_context before answering/);
+  assert.match(entity, /Never ask the user which document or design they mean/);
+
+  const document = sectionText("circuit");
+  assert.match(document, /Owner: Circuit Designer/);
+  assert.match(document, /Scope: document/);
+  assert.match(document, /Selected target: the complete document/);
 });
 
 test("deterministic Spec context checks identity and exposes boundaries", () => {

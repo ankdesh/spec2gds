@@ -94,12 +94,18 @@ npm run typecheck
 npm test
 npm run build
 npm run test:harness
+npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
 The integration test uses local owner and OpenAI-compatible fixtures. Packaging
 requires the Harness checkout to be clean and at the commit in
 `harness.lock.json`.
+
+The integration suite records its successful Session and replays it through
+the pinned DSH keyless replay adapter, proving that replay does not contact the
+provider. The evaluation command validates the versioned corpus and writes raw
+results and metrics; see `docs/ai-assistant-evaluation.md` in the repository.
 
 Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores only
 bindings and review state. Back up the complete state root together. Old Python

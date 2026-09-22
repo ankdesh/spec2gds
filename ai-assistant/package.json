@@ -29,6 +29,7 @@
     "package": "node scripts/package.mjs",
     "test": "tsx --test tests/*.test.ts",
     "test:harness": "node --test tests/harness.integration.test.mjs",
+    "eval": "npm run build:server && node scripts/evaluate.mjs",
     "request": "node scripts/request.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

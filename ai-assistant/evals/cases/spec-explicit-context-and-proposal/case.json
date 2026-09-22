@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-explicit-context-and-proposal",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "component", "fixture_target": "primary_component" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Read the bound context and prepare a formal proposal that documents the component's two-cycle latency.",
+  "allowed_outcomes": [{ "kind": "ready", "required_tool_sequence": ["get_bound_context", "prepare_spec_proposal"] }],
+  "semantic_assertions": ["description records two-cycle latency", "proposal uses the bound component identity"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["documentation was applied"] }
+}

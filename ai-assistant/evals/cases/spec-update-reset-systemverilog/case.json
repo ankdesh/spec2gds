@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-update-reset-systemverilog",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "component", "fixture_target": "primary_component" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Update the reset value in the existing SystemVerilog while preserving its active-low reset behavior.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["upsert_entity_section"] }],
+  "semantic_assertions": ["SystemVerilog body changes", "active-low rst_n sensitivity is preserved", "module wrappers remain absent"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["RTL was updated"] }
+}

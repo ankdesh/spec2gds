@@ -1,0 +1,19 @@
+{
+  "schema_version": "spec2gds.assistant-eval-manifest.v1",
+  "cases": [
+    "spec-change-description",
+    "spec-add-enable-port",
+    "spec-change-data-out-description",
+    "spec-update-reset-systemverilog",
+    "spec-add-valid-and-systemverilog",
+    "spec-rename-identity-unsupported",
+    "spec-explicit-context-and-proposal",
+    "spec-document-create-entity",
+    "spec-invalid-reference",
+    "spec-stale-revision",
+    "circuit-stale-revision",
+    "circuit-add-place-connect",
+    "circuit-invalid-endpoint",
+    "ambiguous-safe-outcome"
+  ]
+}

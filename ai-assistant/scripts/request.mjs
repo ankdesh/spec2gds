@@ -28,7 +28,7 @@ const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 const scratchRoot = resolve(process.env.SPEC2GDS_SCRATCH_ROOT || resolve(state, "workspaces"));
 const env = {
   ...process.env,
-  ASSISTANT_PROFILE: "spec2gds-headless",
+  ASSISTANT_PROFILE: process.env.ASSISTANT_PROFILE || "spec2gds-headless",
   ASSISTANT_STATE: state,
   SPEC2GDS_SCRATCH_ROOT: scratchRoot,
   SPEC_DOCUMENT_ROOT: resolve(process.env.SPEC_DOCUMENT_ROOT || resolve(state, "spec-documents")),

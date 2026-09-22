@@ -47,13 +47,22 @@ mkdirSync(runtimeProduct, { recursive: true, mode: 0o700 });
 const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 manifest.dependencies = Object.fromEntries(Object.entries(manifest.dependencies || {})
   .filter(([name]) => name !== "react" && name !== "react-dom"));
+if (profile === "spec2gds-replay") manifest.dependencies["@deepseek-ai/dsh-llm-replay"] = "0.1.6-alpha.1";
 writeFileSync(resolve(runtimeProduct, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 for (const directory of ["lib", "profile", "bundles"]) {
   const target = resolve(runtimeProduct, directory);
   mkdirSync(dirname(target), { recursive: true });
   cpSync(resolve(root, directory), target, { recursive: true });
 }
-cpSync(resolve(root, "harness.product.json"), resolve(runtimeProduct, "harness.product.json"));
+const productConfig = JSON.parse(readFileSync(resolve(root, "harness.product.json"), "utf8"));
+if (profile === "spec2gds-replay") {
+  productConfig.profiles[profile] = {
+    bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "@spec2gds/harness-assistant", "@spec2gds/harness-replay"],
+    localBundles: [".", "bundles/replay"],
+    patchReload: "startup",
+  };
+}
+writeFileSync(resolve(runtimeProduct, "harness.product.json"), `${JSON.stringify(productConfig, null, 2)}\n`);
 if (profile === "spec2gds-web") console.log(`spec2gds Harness assistant: http://127.0.0.1:${env.ASSISTANT_PORT || 6013}`);
 if (!env.OPENAI_API_KEY) console.error("OPENAI_API_KEY is unset; model turns will fail.");
 const child = spawn(process.execPath, [resolve(harness, "scripts/product-runtime.mjs"), "dev", runtimeProduct, profile, ...process.argv.slice(2)], { cwd: env.DSH_PRODUCT_RUN_CWD || runtimeProduct, env, stdio: "inherit" });

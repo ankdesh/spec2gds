@@ -1,0 +1,9 @@
+# Test-only keyless model adapter. The production profiles retain llm-pi-ai.
+- id: llm-pi-ai
+  disabled: true
+
+- insert:
+    - id: llm-replay
+      name: '@deepseek-ai/dsh-llm-replay'
+      config:
+        file: !!js process.env.DSH_SNAPSHOT_FILE

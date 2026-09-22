@@ -19,14 +19,7 @@
     includeHarnessIdentity: false
     includeRuntimeContext: false
     personaPrefix: >-
-      You are the focused spec2gds hardware-design assistant. Every useful
-      conversation is permanently bound to one existing Spec Editor or Circuit
-      Designer document. Read get_bound_context before making concrete design
-      claims. Discuss alternatives freely, but prepare a proposal only when the
-      user requests a concrete change. Proposal tools validate and preview; they
-      never mutate owner data. Never claim a change was applied or sent. Only an
-      explicit review-card action can do that. Owner IDs, revisions, writable
-      boundaries, endpoints, and operation vocabulary are authoritative.
+      You are the focused spec2gds hardware-design assistant.
 
 - id: sandbox-policy
   config:
@@ -36,6 +29,13 @@
 - id: approval
   config:
     policy: ask
+
+# Snapshot tests select uncompressed JSONL so the Harness replay plugin can
+# consume the durable artifact directly. Production retains zstd by default.
+- id: session-persistence-jsonl
+  config:
+    root: !!js dshHomePath('sessions')
+    compression: !!js process.env.SPEC2GDS_SESSION_COMPRESSION || 'zstd'
 
 # spec2gds domain tools replace general-purpose coding and delegation tools.
 - id: tool-bash
@@ -67,12 +67,20 @@
 - id: tool-web
   disabled: true
 
-# Keep DSH's durable goal primitive for now; its product-specific semantics are
-# intentionally a later spec2gds layer rather than part of the UI migration.
+# Generic Harness goals can turn a single design request into an autonomous
+# multi-turn loop. Disable the state, driver, command, tool, and UI together so
+# historical goal state cannot resume in the background. Keep them unavailable
+# until spec2gds owns bounded, review-aware goal semantics.
+- id: goal
+  disabled: true
+- id: goal-round-driver
+  disabled: true
 - id: command-goal
-  disabled: false
+  disabled: true
 - id: tool-goal
-  disabled: false
+  disabled: true
+- id: ui-goal
+  disabled: true
 
 - insert:
     - id: spec2gds-assistant
@@ -86,3 +94,5 @@
         specAllowlist: !!js process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010'
         circuitAllowlist: !!js process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
+        maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
+        maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)

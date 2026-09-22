@@ -1,13 +1,20 @@
 import { randomUUID } from "node:crypto";
+import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import { defineTool, type ToolRunContext } from "@deepseek-ai/dsh-tools";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import type { OwnerClients } from "./owner-clients.js";
-import { OwnerError } from "./owner-clients.js";
-import { normalizeCircuitOperations, normalizeSpecOperations } from "./normalize.js";
-import { instructionsFor, shapeBoundContext } from "./domain-context.js";
+import { promptSectionsFor, shapeBoundContext } from "./domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "./operation-schemas.js";
+import { buildCircuitArtifact, buildSpecArtifact, reviewStateForPreview } from "./proposal-pipeline.js";
+import {
+  errorFromException,
+  errorFromOwnerResult,
+  logProposalFailure,
+  proposalError,
+  publicReview,
+} from "./proposal-presentation.js";
 import type { ProductState } from "./state.js";
-import type { ProposalReview, SessionBinding } from "./types.js";
+import type { ProposalError, ProposalReview, SessionBinding } from "./types.js";
 import { isRecord } from "./types.js";
 
 const resultOutput = {
@@ -35,18 +42,20 @@ function json(value: unknown): JsonValue {
 
 function reviewResult(review: ProposalReview): JsonValue {
   return json({
+    success: review.state === "ready",
     proposal_id: review.proposalId,
     state: review.state,
     diagnostics: review.diagnostics,
-    review: {
-      proposalId: review.proposalId, sessionId: review.sessionId, domain: review.domain,
-      state: review.state, artifact: review.artifact, preview: review.preview,
-      diagnostics: review.diagnostics, ownerResult: review.ownerResult, version: review.version,
-    },
+    ...(review.error ? { error: review.error } : {}),
+    review: publicReview(review),
     instruction: review.state === "ready"
       ? "The preview is ready. Tell the user to inspect the review card and use its explicit action button."
       : "The owner did not accept this preview. Explain the diagnostics and do not claim any change was made.",
   });
+}
+
+function failureResult(error: ProposalError, instruction: string): JsonValue {
+  return json({ success: false, error, instruction });
 }
 
 function diagnostics(value: Record<string, unknown>): unknown {
@@ -54,17 +63,12 @@ function diagnostics(value: Record<string, unknown>): unknown {
 }
 
 export function registerDomainTools(
-  agentContext: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } },
+  agentContext: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: PromptSection): () => void } },
   binding: SessionBinding,
   state: ProductState,
   owners: OwnerClients,
 ): void {
-  agentContext.systemPrompt?.section({
-    name: `spec2gds:${binding.domain}-editing-contract`,
-    order: 150,
-    complete: true,
-    text: instructionsFor(binding),
-  });
+  for (const section of promptSectionsFor(binding)) agentContext.systemPrompt?.section(section);
   agentContext.tools.register(defineTool({
     name: "get_bound_context",
     description: "Read the current authoritative semantic context and revision for this conversation's immutable Spec or Circuit binding. Call this before discussing concrete design facts or preparing a proposal. It never mutates owner data.",
@@ -125,41 +129,63 @@ function registerSpecProposalTool(
     output: resultOutput,
     timeoutMs: 35_000,
     async execute(args, exec) {
-      validateProposalSemantics("spec", args.supported, args.unsupported_reason, args.operations);
-      if (!args.supported) return json({ supported: false, unsupported_reason: args.unsupported_reason, instruction: "Explain why the request cannot be represented safely and do not claim a proposal was created." });
-      if (binding.scope === "document" && args.operations.some(operation => !isRecord(operation) || operation.type !== "create_entity")) {
-        throw new Error("Document-scoped Spec conversations may only propose create_entity operations.");
+      try { validateProposalSemantics("spec", args.supported, args.unsupported_reason, args.operations); }
+      catch (error) {
+        const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain the validation failure and do not claim a proposal was created.");
       }
-      const context = await owners.context(binding, exec.signal);
+      if (!args.supported) {
+        const normalized = proposalError(binding, callId(exec), "UNSUPPORTED_REQUEST", args.unsupported_reason);
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain why the request cannot be represented safely and do not claim a proposal was created.");
+      }
+      if (binding.scope === "document" && args.operations.some(operation => !isRecord(operation) || operation.type !== "create_entity")) {
+        const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", "Document-scoped Spec conversations may only propose create_entity operations.");
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain the validation failure and do not claim a proposal was created.");
+      }
+      let context: Record<string, unknown>;
+      try { context = await owners.context(binding, exec.signal); }
+      catch (error) {
+        const normalized = errorFromException(binding, callId(exec), error);
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "The authoritative context could not be read. Do not claim a proposal was created.");
+      }
       const revision = context.source_revision_hash;
-      if (typeof revision !== "string" || !revision) throw new Error("Spec context did not include a source revision.");
+      if (typeof revision !== "string" || !revision) {
+        const normalized = proposalError(binding, callId(exec), "OWNER_CONTRACT_ERROR", "Spec context did not include a source revision.");
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "The owner response was incomplete. Do not claim a proposal was created.");
+      }
       const proposalId = id("proposal");
       state.discardOpenReviews(binding.sessionId, "spec");
-      const artifact: Record<string, unknown> = {
-        schema_version: "1.0", kind: "spec_change_proposal", proposal_id: proposalId,
-        document_id: binding.documentId, scope: binding.scope,
-        target: binding.scope === "entity" ? {
-          document_id: binding.documentId, entity_kind: binding.entityKind, entity_id: binding.entityId,
-        } : null,
-        base_source_revision_hash: revision,
-        title: args.title, summary: args.summary, rationale: args.rationale,
-        assumptions: args.assumptions, operations: normalizeSpecOperations(args.operations),
-      };
+      let artifact: Record<string, unknown>;
+      try { artifact = buildSpecArtifact(binding, revision, proposalId, args); }
+      catch (error) {
+        const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain the validation failure and do not claim a proposal was created.");
+      }
       state.createReview({
         proposalId, sessionId: binding.sessionId, callId: callId(exec), domain: "spec",
-        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], ownerResult: null,
+        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, ownerResult: null,
       });
       try {
         const preview = await owners.previewSpec(binding, artifact, exec.signal);
-        const status = preview.status;
-        const next = status === "valid" ? "ready" : status === "stale" ? "stale" : "rejected";
+        const next = reviewStateForPreview("spec", preview.status);
+        const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);
+        if (normalized) logProposalFailure(binding, normalized, proposalId);
         return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
-          preview, diagnostics: diagnostics(preview),
+          preview, diagnostics: diagnostics(preview), error: normalized,
         }));
       } catch (error) {
-        const detail = error instanceof OwnerError ? error.detail : error instanceof Error ? error.message : String(error);
+        const normalized = errorFromException(binding, proposalId, error);
+        logProposalFailure(binding, normalized, proposalId);
         return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"],
-          error instanceof OwnerError && error.status === 409 ? "stale" : "rejected", { diagnostics: detail }));
+          normalized.error_code === "STALE_REVISION" ? "stale" : "rejected", {
+            diagnostics: normalized.owner_diagnostics, error: normalized,
+          }));
       }
     },
   }));
@@ -186,38 +212,59 @@ function registerCircuitProposalTool(
     output: resultOutput,
     timeoutMs: 35_000,
     async execute(args, exec) {
-      validateProposalSemantics("circuit", args.supported, args.unsupported_reason, args.operations);
-      if (!args.supported) return json({ supported: false, unsupported_reason: args.unsupported_reason, instruction: "Explain why the request cannot be represented safely and do not claim a proposal was created." });
-      const snapshot = await owners.context(binding, exec.signal);
+      try { validateProposalSemantics("circuit", args.supported, args.unsupported_reason, args.operations); }
+      catch (error) {
+        const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain the validation failure and do not claim a proposal was created.");
+      }
+      if (!args.supported) {
+        const normalized = proposalError(binding, callId(exec), "UNSUPPORTED_REQUEST", args.unsupported_reason);
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain why the request cannot be represented safely and do not claim a proposal was created.");
+      }
+      let snapshot: Record<string, unknown>;
+      try { snapshot = await owners.context(binding, exec.signal); }
+      catch (error) {
+        const normalized = errorFromException(binding, callId(exec), error);
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "The authoritative context could not be read. Do not claim a proposal was created.");
+      }
       const revision = snapshot.revision;
-      if (typeof revision !== "string" || !revision) throw new Error("Circuit snapshot did not include a revision.");
+      if (typeof revision !== "string" || !revision) {
+        const normalized = proposalError(binding, callId(exec), "OWNER_CONTRACT_ERROR", "Circuit snapshot did not include a revision.");
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "The owner response was incomplete. Do not claim a proposal was created.");
+      }
       const proposalId = id("proposal");
       state.discardOpenReviews(binding.sessionId, "circuit");
-      const batch = {
-        request_id: id("request"), expected_revision: revision,
-        operations: normalizeCircuitOperations(args.operations),
-      };
-      const artifact: Record<string, unknown> = {
-        schema_version: "1", kind: "circuit_change_proposal", proposal_id: proposalId,
-        document_id: binding.documentId, base_revision: revision,
-        title: args.title, summary: args.summary, rationale: args.rationale,
-        assumptions: args.assumptions, batch,
-      };
+      let artifact: Record<string, unknown>;
+      try { artifact = buildCircuitArtifact(binding, revision, proposalId, id("request"), args); }
+      catch (error) {
+        const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
+        logProposalFailure(binding, normalized);
+        return failureResult(normalized, "Explain the validation failure and do not claim a proposal was created.");
+      }
+      const batch = artifact.batch as Record<string, unknown>;
       state.createReview({
         proposalId, sessionId: binding.sessionId, callId: callId(exec), domain: "circuit",
-        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], ownerResult: null,
+        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, ownerResult: null,
       });
       try {
         const preview = await owners.previewCircuit(binding, batch, exec.signal);
-        const status = preview.status;
-        const next = status === "accepted" ? "ready" : status === "conflict" || status === "revision_conflict" ? "stale" : "rejected";
+        const next = reviewStateForPreview("circuit", preview.status);
+        const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);
+        if (normalized) logProposalFailure(binding, normalized, proposalId);
         return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
-          preview: { ...preview, base_document: snapshot.document }, diagnostics: diagnostics(preview),
+          preview: { ...preview, base_document: snapshot.document }, diagnostics: diagnostics(preview), error: normalized,
         }));
       } catch (error) {
-        const detail = error instanceof OwnerError ? error.detail : error instanceof Error ? error.message : String(error);
+        const normalized = errorFromException(binding, proposalId, error);
+        logProposalFailure(binding, normalized, proposalId);
         return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"],
-          error instanceof OwnerError && error.status === 409 ? "stale" : "rejected", { diagnostics: detail }));
+          normalized.error_code === "STALE_REVISION" ? "stale" : "rejected", {
+            diagnostics: normalized.owner_diagnostics, error: normalized,
+          }));
       }
     },
   }));

@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "circuit-add-place-connect",
+  "domain": "circuit",
+  "binding": { "scope": "document", "document_id": "fixture_simple" },
+  "initial_fixture": "../../../../circuit-designer/packages/core/src/fixtures.ts",
+  "intent": "Add a timer definition, place one timer instance, and connect its clock endpoint to the existing clock net.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["add_component", "add_instance", "connect_endpoint"] }],
+  "semantic_assertions": ["timer component exists", "one timer instance references it", "clock net contains the timer clock endpoint"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["circuit was updated"] }
+}

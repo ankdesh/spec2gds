@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { OwnerClients, OwnerError } from "./owner-clients.js";
+import { errorFromException, logProposalFailure, proposalError, publicReview } from "./proposal-presentation.js";
 import { artifactDigest, ProductState } from "./state.js";
 import { findProposal, findSpecChange, registerDomainTools } from "./tools.js";
 import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, WorkspaceDescriptor } from "./types.js";
@@ -21,6 +22,8 @@ export const Config = z.object({
   specAllowlist: z.string().min(1).required(),
   circuitAllowlist: z.string().min(1).required(),
   requestTimeoutMs: z.number().min(100).max(300_000).required(),
+  maxStepsPerTurn: z.number().step(1).min(1).max(20).required(),
+  maxOutputTokens: z.number().step(1).min(128).max(32_768).required(),
 });
 
 type ProductAgent = {
@@ -94,11 +97,6 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
   };
 }
 
-function publicReview(review: ProposalReview): Omit<ProposalReview, "artifactDigest"> {
-  const { artifactDigest: _digest, ...value } = review;
-  return value;
-}
-
 /**
  * Enter DSH through its one-time browser token while retaining product launch
  * data across the token exchange's deliberate redirect to a clean root URL.
@@ -120,10 +118,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     scratchRoot: resolve(String(rawConfig.scratchRoot)), specAllowlist: splitAllowlist(String(rawConfig.specAllowlist)),
     specDocumentRoot: resolve(String(rawConfig.specDocumentRoot)),
     circuitAllowlist: splitAllowlist(String(rawConfig.circuitAllowlist)), requestTimeoutMs: Number(rawConfig.requestTimeoutMs),
+    maxStepsPerTurn: Number(rawConfig.maxStepsPerTurn), maxOutputTokens: Number(rawConfig.maxOutputTokens),
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
   const attached = new Set<string>();
+  const unboundGuards = new Map<string, () => void>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
@@ -134,10 +134,37 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
 
   const attach = (agent: ProductAgent, binding: SessionBinding): void => {
     if (attached.has(agent.id)) return;
+    unboundGuards.get(agent.id)?.();
+    unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
     registerDomainTools(agent.ctx, binding, state, owners);
     attached.add(agent.id);
   };
+
+  const guardUnbound = (agent: ProductAgent): void => {
+    if (unboundGuards.has(agent.id) || !agent.ctx.systemPrompt) return;
+    unboundGuards.set(agent.id, agent.ctx.systemPrompt.section({
+      name: "spec2gds:unbound-session",
+      order: 150,
+      complete: true,
+      text: `This conversation is not bound to a Spec Editor design source.
+Do not answer questions about a document, component, design, or requested edit. Do not claim that work was completed and do not create a goal.
+Tell the user to start a new conversation and choose a Spec Editor document or entity.`,
+    }));
+  };
+
+  // DSH deliberately leaves turn budgeting to product policy. Spec work is
+  // narrow: one context read and one proposal call normally settle in two or
+  // three model steps. Refuse a fourth model call and cap each response so a
+  // malformed tool trajectory cannot silently consume an unbounded budget.
+  ctx.on("agent/pre-step", async (
+    { step }: { agent: ProductAgent; step: number },
+    next: () => Promise<unknown>,
+  ) => step > config.maxStepsPerTurn ? { kind: "reject" } : next());
+  ctx.on("agent/request", async (
+    _payload: { agent: ProductAgent; turn: number; step: number },
+    next: () => Promise<Record<string, unknown>>,
+  ) => ({ ...await next(), maxTokens: config.maxOutputTokens }));
 
   ctx.on("agent/created", async ({ agent }: { agent: ProductAgent }) => {
     await ready;
@@ -164,8 +191,13 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       binding = state.activateBinding(String(agent.id));
     }
     if (binding) attach(agent, binding);
+    else guardUnbound(agent);
   });
-  ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => { attached.delete(String(agent.id)); });
+  ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => {
+    attached.delete(String(agent.id));
+    unboundGuards.get(String(agent.id))?.();
+    unboundGuards.delete(String(agent.id));
+  });
 
   async function reserve(input: BindingInput, requestedId?: string): Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }> {
     await ready;
@@ -207,34 +239,52 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     if (action === "discard") return state.transitionReview(binding.sessionId, review.proposalId, ["ready", "rejected", "stale", "reconcile"], "discarded");
     if (binding.domain === "spec" && action === "apply") {
       if (review.state === "reconcile") {
-        try { const found = findSpecChange(await owners.specChanges(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { ownerResult: found }); }
+        try { const found = findSpecChange(await owners.specChanges(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, ownerResult: found }); }
         catch { /* Retry the idempotent apply below. */ }
       }
       state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
       try {
         const current = await owners.context(binding);
-        if (current.source_revision_hash !== review.baseRevision) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", { diagnostics: "The Spec source revision changed." });
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { ownerResult: await owners.applySpec(binding, review.artifact) });
+        if (current.source_revision_hash !== review.baseRevision) {
+          const detail = "The Spec source revision changed.";
+          const normalized = proposalError(binding, review.proposalId, "STALE_REVISION", detail, true);
+          logProposalFailure(binding, normalized, review.proposalId);
+          return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", {
+            diagnostics: detail, error: normalized,
+          });
+        }
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, ownerResult: await owners.applySpec(binding, review.artifact) });
       } catch (error) {
-        if (error instanceof OwnerError && error.uncertain) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "reconcile", { diagnostics: error.detail });
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], error instanceof OwnerError && error.status === 409 ? "stale" : "rejected", { diagnostics: error instanceof OwnerError ? error.detail : String(error) });
+        const normalized = errorFromException(binding, review.proposalId, error);
+        logProposalFailure(binding, normalized, review.proposalId);
+        if (error instanceof OwnerError && error.uncertain) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "reconcile", { diagnostics: error.detail, error: normalized });
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], normalized.error_code === "STALE_REVISION" ? "stale" : "rejected", { diagnostics: normalized.owner_diagnostics, error: normalized });
       }
     }
     if (binding.domain === "circuit" && action === "send") {
       if (review.state === "reconcile") {
-        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "sent", { ownerResult: found }); }
+        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "sent", { error: null, ownerResult: found }); }
         catch { /* Retry with the persisted identity below. */ }
       }
       state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
       try {
         const current = await owners.context(binding);
-        if (current.revision !== review.baseRevision) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", { diagnostics: "The Circuit revision changed." });
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { ownerResult: await owners.sendCircuit(binding, review.artifact) });
+        if (current.revision !== review.baseRevision) {
+          const detail = "The Circuit revision changed.";
+          const normalized = proposalError(binding, review.proposalId, "STALE_REVISION", detail, true);
+          logProposalFailure(binding, normalized, review.proposalId);
+          return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", {
+            diagnostics: detail, error: normalized,
+          });
+        }
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, ownerResult: await owners.sendCircuit(binding, review.artifact) });
       } catch (error) {
-        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { ownerResult: found }); }
+        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, ownerResult: found }); }
         catch { /* Preserve the original outcome. */ }
         const uncertain = error instanceof OwnerError && (error.uncertain || error.status === 409);
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], uncertain ? "reconcile" : "rejected", { diagnostics: error instanceof OwnerError ? error.detail : String(error) });
+        const normalized = errorFromException(binding, review.proposalId, error);
+        logProposalFailure(binding, normalized, review.proposalId);
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], uncertain ? "reconcile" : "rejected", { diagnostics: normalized.owner_diagnostics, error: normalized });
       }
     }
     throw new HttpError(400, "Action does not match this review domain.");

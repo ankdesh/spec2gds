@@ -1,32 +1,45 @@
+import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import type { SessionBinding } from "./types.js";
 import { isRecord } from "./types.js";
 
 const json = (value: unknown, pretty = false): string => JSON.stringify(canonical(value), null, pretty ? 2 : 0);
 
-export const SPEC_INSTRUCTIONS = `You are a hardware specification design partner. Explore the user's idea using immutable semantic specification context. Explain concrete implications, alternatives, and open assumptions. Do not emit XML or claim that a change was applied. Create a formal operation proposal only when the user asks for a concrete change.
+type DomainPromptSection = Pick<PromptSection, "name" | "order"> & { readonly text: string };
 
+const SPEC_PERSONA = `DOMAIN PERSONA
+You are a hardware specification design partner. Explore the user's idea using immutable semantic specification context. Explain concrete implications, alternatives, and open assumptions. Create a formal operation proposal only when the user asks for a concrete change.`;
+
+const CIRCUIT_PERSONA = `DOMAIN PERSONA
+You are a Circuit Designer editing planner. Discuss the existing logical circuit and prepare safe, reviewable operations only when the user requests a concrete change.`;
+
+const SPEC_OPERATION_CONSTRAINTS = `OPERATION CONSTRAINTS
 For proposals, stay strictly inside the WRITABLE BOUNDARY; surrounding and shared context is read-only. Reuse exact entity IDs, VLNV values, instance names, interface names, port names, and narrative block IDs. Never change vendor/library/name/version, create or delete a top-level source document, or edit assets.
 
 Document scope only supports create_entity. A component must use kind=component and instances=[]. A design may include all requested initial instances, each with a unique name and exact component_vlnv from EXISTING REFERENCES. Do not mix entity-bound operations into document scope.
 
 Entity scope mappings: on a component, add a port means upsert_component_port; on a design, add a component means upsert_instance using an existing component_vlnv; connect ports means upsert_connection. Physical wiring is kind=ad_hoc with port_endpoints and external_ports only. Bus-interface wiring is kind=interface with interface_endpoints and hierarchy_interfaces only. Connections require at least two compatible endpoints. If context lacks compatible named endpoints, return supported=false.
 
-Replacement values are complete: preserve unchanged component ports, interfaces, instances, connections, bus-definition properties, and SystemVerilog sections. Port name/family are immutable; ports on components owning internal designs are read-only. Nullable fields not changing remain null; clear metadata or bus fields only through clear_fields. SystemVerilog content is module-body text only, with no module/endmodule, include, or line directive. Narrative options are {key,value} entries. List every material assumption. If a change is outside the typed vocabulary or writable boundary, return supported=false with an empty operations list and a concise reason.`;
+Replacement values are complete: preserve unchanged component ports, interfaces, instances, connections, bus-definition properties, and SystemVerilog sections. Port name/family are immutable; ports on components owning internal designs are read-only. Nullable fields not changing remain null; clear metadata or bus fields only through clear_fields. SystemVerilog content is module-body text only, with no module/endmodule, include, or line directive. Narrative options are {key,value} entries.`;
 
-export const CIRCUIT_INSTRUCTIONS = `You are a Circuit Designer editing planner. Discuss the existing logical circuit and prepare safe, reviewable operations only when the user requests a concrete change. Never claim a proposal was applied or sent.
-
+const CIRCUIT_OPERATION_CONSTRAINTS = `OPERATION CONSTRAINTS
 Intent mapping: create a component type/definition -> add_component; place a component -> add_instance using an existing component_id; add a pin -> update_component with the complete current definition plus the terminal; add a top-level port -> add_boundary_terminal; connect A to B -> create_net with all endpoints, or connect_endpoint for an existing net.
 
 New components are local and editable. Updates are complete replacements. Use cascade=false unless the user explicitly requests dependent instances/connections be removed. Instance parameter_values and appearance properties use {name,value} lists in model output. Endpoints are exactly an instance or boundary endpoint with slice=null, unless the user explicitly requests a numeric {lsb,width} subrange. Use only IDs in the VALID ENDPOINT CATALOG or IDs introduced by an earlier operation in the same proposal. Order dependent operations and prefer the fewest atomic operations.
 
-Never author geometry, routes, labels, or layout. Reuse exact IDs for existing objects and unique lowercase slug-like IDs for new objects. Do not invent terminal or component IDs. List every material assumption. If the request is unsupported, return supported=false with an empty operations list and a concise unsupported_reason.`;
+Never author geometry, routes, labels, or layout. Reuse exact IDs for existing objects and unique lowercase slug-like IDs for new objects. Do not invent terminal or component IDs.`;
 
-export function instructionsFor(binding: SessionBinding): string {
+const SPEC_OUTPUT_CONTRACT = `OUTPUT CONTRACT
+Do not emit XML or claim that a change was applied. List every material assumption. If a change is outside the typed vocabulary or writable boundary, return supported=false with an empty operations list and a concise reason.`;
+
+const CIRCUIT_OUTPUT_CONTRACT = `OUTPUT CONTRACT
+Never claim a proposal was applied or sent. List every material assumption. If the request is unsupported, return supported=false with an empty operations list and a concise unsupported_reason.`;
+
+function bindingContext(binding: SessionBinding): string {
   const owner = binding.domain === "spec" ? "Spec Editor" : "Circuit Designer";
   const target = binding.scope === "entity"
     ? `${binding.entityKind ?? "entity"} ${binding.entityId ?? "(missing id)"}`
     : "the complete document";
-  const boundContext = `BOUND CONVERSATION
+  return `BOUND CONVERSATION
 - Owner: ${owner}
 - Document ID: ${binding.documentId}
 - Scope: ${binding.scope}
@@ -35,7 +48,16 @@ export function instructionsFor(binding: SessionBinding): string {
 This binding is immutable for the lifetime of the conversation. References such as "this document", "this component", "the design", or "the components" mean the bound target above. Never ask the user which document or design they mean.
 
 For every message about the current specification or circuit, you MUST call get_bound_context before answering, including explanation, description, comparison, and change requests. Do not rely on a previous turn's context because owner revisions can change. Answer only after the tool returns. If the context read fails, explain that the bound owner is unavailable instead of asking the user to restate the design.`;
-  return `${boundContext}\n\n${binding.domain === "spec" ? SPEC_INSTRUCTIONS : CIRCUIT_INSTRUCTIONS}`;
+}
+
+export function promptSectionsFor(binding: SessionBinding): readonly DomainPromptSection[] {
+  const spec = binding.domain === "spec";
+  return [
+    { name: "spec2gds:domain-persona", order: 100, text: spec ? SPEC_PERSONA : CIRCUIT_PERSONA },
+    { name: "spec2gds:binding-context", order: 150, text: bindingContext(binding) },
+    { name: "spec2gds:operation-constraints", order: 200, text: spec ? SPEC_OPERATION_CONSTRAINTS : CIRCUIT_OPERATION_CONSTRAINTS },
+    { name: "spec2gds:output-contract", order: 300, text: spec ? SPEC_OUTPUT_CONTRACT : CIRCUIT_OUTPUT_CONTRACT },
+  ];
 }
 
 export function shapeBoundContext(binding: SessionBinding, context: Record<string, unknown>, svg?: string): { text: string; warnings: string[] } {

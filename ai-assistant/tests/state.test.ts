@@ -3,6 +3,7 @@ import test from "node:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { ProductState } from "../src/state.js";
 
 test("persists immutable bindings and compare-and-swap review transitions", async () => {
@@ -24,14 +25,15 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     const review = state.createReview({
       proposalId: "proposal-1", sessionId: "session-1", callId: "call-1", domain: "spec",
       state: "previewing", baseRevision: "rev-1", artifact: { proposal_id: "proposal-1" },
-      preview: null, diagnostics: [], ownerResult: null,
+      preview: null, diagnostics: [], error: null, ownerResult: null,
     });
     assert.match(review.artifactDigest, /^sha256:/);
     const ready = state.transitionReview("session-1", "proposal-1", ["previewing"], "ready", { preview: { status: "valid" } });
     assert.equal(ready.version, 1);
     assert.equal(state.markRevisionStale("session-1", "rev-2"), 1);
     assert.equal(state.getReview("session-1", "proposal-1")?.state, "stale");
-    state.transitionReview("session-1", "proposal-1", ["stale"], "ready");
+    assert.equal(state.getReview("session-1", "proposal-1")?.error?.error_code, "STALE_REVISION");
+    state.transitionReview("session-1", "proposal-1", ["stale"], "ready", { error: null });
     assert.throws(() => state.transitionReview("session-1", "proposal-1", ["previewing"], "discarded"), /Review is ready/);
     state.transitionReview("session-1", "proposal-1", ["ready"], "applying");
     assert.equal(state.recoverInterruptedReviews(), 1);
@@ -41,6 +43,38 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     const reopened = new ProductState(join(root, "product.sqlite3"));
     assert.equal(reopened.getBinding("session-1")?.documentId, "doc-1");
     assert.equal(reopened.getReview("session-1", "proposal-1")?.state, "reconcile");
+    assert.equal(reopened.getReview("session-1", "proposal-1")?.error, null);
     reopened.close();
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("migrates pre-error-envelope review databases in place", async () => {
+  const root = await mkdtemp(join(tmpdir(), "spec2gds-assistant-migration-"));
+  const path = join(root, "legacy.sqlite3");
+  try {
+    const legacy = new DatabaseSync(path);
+    legacy.exec(`
+      CREATE TABLE reviews (
+        proposal_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL,
+        call_id TEXT NOT NULL,
+        domain TEXT NOT NULL,
+        state TEXT NOT NULL,
+        base_revision TEXT NOT NULL,
+        artifact_json TEXT NOT NULL,
+        artifact_digest TEXT NOT NULL,
+        preview_json TEXT,
+        diagnostics_json TEXT,
+        owner_result_json TEXT,
+        version INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    legacy.close();
+    const migrated = new ProductState(path);
+    const columns = migrated.database.prepare("PRAGMA table_info(reviews)").all() as Array<Record<string, unknown>>;
+    assert.ok(columns.some(column => column.name === "error_json"));
+    migrated.close();
   } finally { await rm(root, { recursive: true, force: true }); }
 });

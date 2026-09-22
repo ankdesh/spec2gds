@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-change-data-out-description",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "component", "fixture_target": "primary_component" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Change only the data_out description.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["upsert_component_port"], "complete_replacement": true }],
+  "semantic_assertions": ["data_out.description changes", "all other data_out fields are unchanged"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["description was changed"] }
+}

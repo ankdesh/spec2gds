@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-add-enable-port",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "component", "fixture_target": "primary_component" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Add a one-bit enable input.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["upsert_component_port"] }],
+  "semantic_assertions": ["component port enable exists with direction in and width 1", "existing ports are unchanged"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["port was added", "source was updated"] }
+}

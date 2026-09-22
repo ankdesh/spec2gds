@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "circuit-invalid-endpoint",
+  "domain": "circuit",
+  "binding": { "scope": "document", "document_id": "fixture_simple" },
+  "initial_fixture": "../../../../circuit-designer/packages/core/src/fixtures.ts",
+  "intent": "Connect net clock to missing_instance.missing_terminal.",
+  "allowed_outcomes": [{ "kind": "rejected", "error_code": "OWNER_REJECTED" }, { "kind": "unsupported", "error_code": "UNSUPPORTED_REQUEST" }],
+  "semantic_assertions": ["no net contains the missing endpoint", "candidate graph is not accepted"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["endpoint was connected"] }
+}

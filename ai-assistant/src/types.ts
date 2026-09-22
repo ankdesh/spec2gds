@@ -33,6 +33,42 @@ export type ReviewState =
   | "sent"
   | "discarded";
 
+export type ProposalErrorCode =
+  | "UNSUPPORTED_REQUEST"
+  | "INVALID_PROPOSAL"
+  | "STALE_REVISION"
+  | "OWNER_REJECTED"
+  | "OWNER_LOCKED"
+  | "OWNER_UNAVAILABLE"
+  | "OWNER_CONTRACT_ERROR"
+  | "INTERNAL_ERROR";
+
+export interface ProposalIssue {
+  error_code: string;
+  target: string | null;
+  details: string;
+  suggested_actions: string[];
+}
+
+export interface ProposalError {
+  error_code: ProposalErrorCode;
+  target: string | null;
+  details: string;
+  retryable: boolean;
+  suggested_actions: string[];
+  issues: ProposalIssue[];
+  owner_diagnostics: unknown;
+  correlation_id: string;
+}
+
+export interface ProposalChangeSummary {
+  text: string;
+  operationCounts: Array<{ type: string; count: number }>;
+  changedTargets: string[];
+  assumptions: string[];
+  diagnostics: string[];
+}
+
 export interface ProposalReview {
   proposalId: string;
   sessionId: string;
@@ -44,11 +80,16 @@ export interface ProposalReview {
   artifactDigest: string;
   preview: Record<string, unknown> | null;
   diagnostics: unknown;
+  error: ProposalError | null;
   ownerResult: unknown;
   version: number;
   createdAt: string;
   updatedAt: string;
 }
+
+export type PublicProposalReview = Omit<ProposalReview, "artifactDigest"> & {
+  changeSummary: ProposalChangeSummary;
+};
 
 export interface BindingInput {
   domain: Domain;
@@ -69,6 +110,8 @@ export interface ServiceConfig {
   specAllowlist: string[];
   circuitAllowlist: string[];
   requestTimeoutMs: number;
+  maxStepsPerTurn: number;
+  maxOutputTokens: number;
 }
 
 export interface WorkspaceDescriptor {

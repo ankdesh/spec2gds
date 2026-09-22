@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-document-create-entity",
+  "domain": "spec",
+  "binding": { "scope": "document" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Create a timer component definition.",
+  "allowed_outcomes": [{ "kind": "ready", "required_operation_types": ["create_entity"] }],
+  "semantic_assertions": ["one new component named timer exists", "pre-existing entities are unchanged"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["component was created"] }
+}

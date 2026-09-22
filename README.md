@@ -183,6 +183,12 @@ propose new top-level components or designs (including a design's initial
 instances); use an entity's **Options → More actions… → Explore with AI
 Assistant** when a reviewed change should target an existing entity.
 
+Assistant editing conversations fail closed unless they are bound to an exact
+editor document or entity. Generic DSH goals and their background driver are
+disabled; each user turn is also capped at three model steps and 1,200 output
+tokens per model response so a repeated tool trajectory cannot run unattended.
+See the Assistant guide for the optional limit overrides.
+
 ## Run only the specification editor
 
 Python development uses `uv` and the repository virtual environment.
@@ -433,6 +439,7 @@ npm run typecheck
 npm test
 npm run build
 npm run test:harness
+npm run eval -- --output /tmp/spec2gds-assistant-eval
 ```
 
 Detailed source locations and focused commands are in

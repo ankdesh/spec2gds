@@ -28,6 +28,13 @@ checks, and atomic application. Circuit Designer continues to own snapshots,
 operation preview, diagnostics, revisions, and submitted proposals. Discussion
 and model output alone never mutate either source.
 
+For a bound conversation, the model prompt composes the shared product identity
+with four ordered sections: the domain persona, immutable binding and mandatory
+fresh-context rule, owner-specific operation constraints, and output contract.
+These sections coexist with deliberately enabled Harness prompt content. An
+unbound conversation instead receives a single complete fail-closed prompt and
+no domain tools, so it cannot make design claims or prepare proposals.
+
 Document-scoped Spec conversations can propose only `create_entity`. Entity
 scope supports the complete Spec assistant operation vocabulary and enforces
 the owner's writable boundary. Circuit scope supports the complete logical
@@ -59,6 +66,15 @@ The focused browser profile omits DSH's generic Models settings/onboarding
 plugin. Configure the OpenAI provider through `OPENAI_API_KEY`,
 `OPENAI_BASE_URL`, and `OPENAI_MODEL`; the conversation model selector remains
 available for configured models.
+
+Generic DSH goals are intentionally unavailable. Their state service,
+background round driver, command, model tools, and UI are disabled together;
+spec2gds will add its own bounded, review-aware workflow before restoring any
+goal-like behavior. A model turn is limited to three model steps and each model
+response is limited to 1,200 output tokens by default. Reaching the step limit
+blocks the turn instead of silently continuing. Both limits are configurable,
+but increasing them should be accompanied by an evaluation of the affected
+Spec request.
 
 ## Design-source workspaces
 
@@ -102,6 +118,8 @@ same interface as `node deployment/request.mjs`.
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
 | `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |
+| `ASSISTANT_MAX_STEPS_PER_TURN` | `3` |
+| `ASSISTANT_MAX_OUTPUT_TOKENS` | `1200` |
 
 Owner allowlists accept comma-separated exact URLs and are rechecked on every
 owner-backed operation. The web routes enforce same-origin requests. This is a
@@ -131,6 +149,7 @@ npm run typecheck
 npm test
 npm run build
 npm run test:harness
+npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
@@ -139,3 +158,9 @@ operation vocabularies. The integration test boots the real headless profile
 against local owner/model fixtures and verifies context dispatch, proposal
 preview, and durable SQLite state. Packaging refuses a dirty Harness checkout
 or a commit different from `harness.lock.json`.
+
+Proposal failures use one structured Spec/Circuit envelope, and review cards
+lead with a deterministic summary derived from owner preview rather than model
+prose. The Harness test records and keylessly replays the model trajectory; the
+versioned corpus and metric definitions are documented in
+[AI assistant evaluation](ai-assistant-evaluation.md).

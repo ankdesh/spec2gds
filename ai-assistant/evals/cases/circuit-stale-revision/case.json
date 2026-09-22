@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "circuit-stale-revision",
+  "domain": "circuit",
+  "binding": { "scope": "document", "document_id": "fixture_simple" },
+  "initial_fixture": "../../../../circuit-designer/packages/core/src/fixtures.ts",
+  "intent": "Add an instance after the Circuit revision advances before preview.",
+  "allowed_outcomes": [{ "kind": "stale", "error_code": "STALE_REVISION" }],
+  "semantic_assertions": ["the Circuit graph remains at the newer owner revision"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["instance was added"] }
+}

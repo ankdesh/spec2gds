@@ -25,6 +25,26 @@ test("focused web profile removes the generic DSH provider onboarding plugin", (
   assert.doesNotMatch(patch, /showTestingNotice|showDeepSeekOnboarding/);
 });
 
+test("focused product profile disables generic autonomous goals", () => {
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  assert.match(patch, /- id: goal\n  disabled: true/);
+  assert.match(patch, /- id: goal-round-driver\n  disabled: true/);
+  assert.match(patch, /- id: command-goal\n  disabled: true/);
+  assert.match(patch, /- id: tool-goal\n  disabled: true/);
+  assert.match(patch, /- id: ui-goal\n  disabled: true/);
+});
+
+test("product policy bounds model steps and output tokens", () => {
+  const source = readFileSync(resolve(root, "src/index.ts"), "utf8");
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  assert.match(source, /ctx\.on\("agent\/pre-step"/);
+  assert.match(source, /step > config\.maxStepsPerTurn \? \{ kind: "reject" \}/);
+  assert.match(source, /ctx\.on\("agent\/request"/);
+  assert.match(source, /maxTokens: config\.maxOutputTokens/);
+  assert.match(patch, /ASSISTANT_MAX_STEPS_PER_TURN \|\| 3/);
+  assert.match(patch, /ASSISTANT_MAX_OUTPUT_TOKENS \|\| 1200/);
+});
+
 test("product dialog preserves the HTML hidden contract over layout styles", () => {
   const source = readFileSync(resolve(root, "client/index.js"), "utf8");
   assert.match(source, /\.s2g-dialog \[hidden\]\{display:none!important\}/);
@@ -36,9 +56,11 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   let replaced = "";
   const created: unknown[] = [];
   const opened: unknown[] = [];
+  const renamed: unknown[] = [];
   const microtasks: Array<() => unknown> = [];
   const source = readFileSync(resolve(root, "client/index.js"), "utf8");
   const context = {
+    URL,
     URLSearchParams,
     location: {
       pathname: "/",
@@ -76,13 +98,17 @@ test("browser plugin owns New Session and consumes launch data from the fragment
     uiSession: { registerNewSessionHandler: (handler: Record<string, unknown>) => { newSessionHandler = handler; } },
     slots: { inject: () => undefined },
     sessions: {
-      create: async (value: unknown) => { created.push(value); },
+      create: async (value: unknown) => { created.push(value); return "bound-session"; },
       open: (value: unknown) => { opened.push(value); },
     },
     workspaces: {
-      list: { getSnapshot: () => ({ items: [] }) },
+      list: { getSnapshot: () => ({ items: [{ workspaceId: "workspace-1", title: "workspace-1", path: "/tmp/bound-design" }] }) },
       create: async () => ({ workspaceId: "workspace-1", title: "Bound design", path: "/tmp/bound-design" }),
-      rename: async () => undefined,
+      rename: async (_workspaceId: string, title: string) => {
+        renamed.push(title);
+        if (title === "Bound design") throw new Error("workspace rename failed: workspace/name-conflict");
+        return { workspaceId: "workspace-1", title, path: "/tmp/bound-design" };
+      },
     },
   });
 
@@ -93,6 +119,30 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   assert.equal(microtasks.length, 2);
   for (const task of microtasks) await task();
   await new Promise(resolvePromise => setImmediate(resolvePromise));
+  assert.deepEqual(renamed, ["Bound design", "Bound design · 127.0.0.1:6010 · workspac"]);
   assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1" }]));
   assert.deepEqual(opened, ["bound-session"]);
+});
+
+test("browser plugin fails closed if Harness does not preserve the reserved session identity", () => {
+  const source = readFileSync(resolve(root, "client/index.js"), "utf8");
+  assert.match(source, /if \(createdId !== id\) throw new Error/);
+  assert.match(source, /instead of reserved binding/);
+});
+
+test("unbound sessions receive a product guard instead of design-editing claims", () => {
+  const source = readFileSync(resolve(root, "src/index.ts"), "utf8");
+  const guard = source.match(/name: "spec2gds:unbound-session",[\s\S]*?\}\)\);/)?.[0];
+  assert.ok(guard, "Expected the unbound prompt guard registration.");
+  assert.match(guard, /complete: true/);
+  assert.match(guard, /Do not claim that work was completed and do not create a goal/);
+  for (const name of ["domain-persona", "binding-context", "operation-constraints", "output-contract"]) {
+    assert.doesNotMatch(guard, new RegExp(name));
+  }
+});
+
+test("deployment persona contains identity only", () => {
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  assert.match(patch, /personaPrefix: >-\n      You are the focused spec2gds hardware-design assistant\./);
+  assert.doesNotMatch(patch, /Every useful conversation is permanently bound/);
 });

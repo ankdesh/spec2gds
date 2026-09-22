@@ -30,6 +30,13 @@ Read in this order:
     integration, review boundary, proposal contracts, setup, and recovery.
     Its [DSH UI migration map](dsh-ui-migration.md) documents the plugin layers
     and retained, extended, and removed UI features.
+    The [AI Assistant improvement plan](ai-assistant-improvement-plan.md) is the
+    living, topic- and readiness-organized backlog for future assistant work.
+    The [evaluation guide](ai-assistant-evaluation.md) defines the golden
+    corpus, DSH replay checks, raw metrics, and commands.
+    Its preserved [Spec-to-RTL research guide](research/ai-spec-to-rtl-design-research-guide.md)
+    provides research provenance for refining open questions; it is reference
+    material rather than current product behavior.
 12. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
     browser viewer.
 13. [Python code-reading guide](python-code-guide.md) — package ownership,

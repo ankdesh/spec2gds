@@ -1,0 +1,11 @@
+{
+  "schema_version": "spec2gds.assistant-eval.v1",
+  "id": "spec-invalid-reference",
+  "domain": "spec",
+  "binding": { "scope": "entity", "entity_kind": "design", "fixture_target": "primary_design" },
+  "initial_fixture": "../../../../samples/minimal/single_component_with_2cycle_rtl.spec",
+  "intent": "Instantiate component VLNV acme:missing:component:1.0.",
+  "allowed_outcomes": [{ "kind": "rejected", "error_code": "OWNER_REJECTED" }, { "kind": "unsupported", "error_code": "UNSUPPORTED_REQUEST" }],
+  "semantic_assertions": ["no instance references a missing component", "candidate state is not accepted"],
+  "safety": { "no_mutation_before_action": true, "max_model_steps": 3, "forbidden_completion_claims": ["instance was created"] }
+}
