@@ -12,7 +12,7 @@ import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
 
 export const name = "spec2gds-harness-assistant";
-export const inject = ["agents", "sessionPersistence"];
+export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "sWorkflow", "sWorkflowYaml"];
 export const Config = z.object({
   provider: z.string().min(1).required(),
   model: z.string().min(1).required(),
@@ -28,11 +28,52 @@ export const Config = z.object({
 
 type ProductAgent = {
   id: string;
+  session?: { header: { agentPreset?: string; parentSession?: string; delegationDepth?: number } };
   ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } };
+};
+type PromptCatalogService = {
+  get(ref: { id: string; version: string }): unknown;
+  bind(ref: { id: string; version: string }, variables: Readonly<Record<string, string>>): {
+    sections: readonly { id: string; order: number; text: string }[];
+  };
+  seal(): void;
+};
+type SWorkflowService = {
+  catalog(service?: string, preset?: "focused" | "goal" | "orchestrated"): {
+    definitions: readonly { value: { metadata: { id: string; version: string } } }[];
+    adapters: readonly { value: { metadata: { id: string; version: string } } }[];
+  };
+  get(agent: ProductAgent): null | {
+    runId: string;
+    revision: number;
+    status: string;
+    preset: "focused" | "goal" | "orchestrated";
+    budget: { maxChildren: number; maxConcurrency: number; maxDelegationDepth: number };
+    draft?: unknown;
+  };
+  start(agent: ProductAgent, request: Record<string, unknown>): unknown;
+  checkpoint(
+    agent: ProductAgent,
+    ref: { runId: string; revision: number },
+    stepId: string,
+    note: string,
+    usage?: { children?: number },
+  ): unknown;
+  updateDraft(agent: ProductAgent, ref: { runId: string; revision: number }, draft: unknown, summary: string): unknown;
+  requestCompletion(agent: ProductAgent, ref: { runId: string; revision: number }, prompt: string): unknown;
+  answerInput(agent: ProductAgent, ref: { runId: string; revision: number }, answer: string): unknown;
+  approveCompletion(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
+  pause(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
+  resume(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
+  cancel(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
+  raiseBudgets(agent: ProductAgent, ref: { runId: string; revision: number }, patch: Record<string, number>): unknown;
+  seal(): void;
 };
 type AppContext = {
   agents: { get(id: unknown): ProductAgent | undefined };
   sessionPersistence: { list(): Promise<Array<{ header: { id: string } }>> };
+  promptCatalog: PromptCatalogService;
+  sWorkflow: SWorkflowService;
   on(event: string, listener: (...args: any[]) => unknown): () => void;
   effect(effect: () => void | (() => void)): void;
   inject(dependencies: string[], callback: (ctx: AppContext & {
@@ -80,6 +121,9 @@ async function readBody(request: any, limit = 65_536): Promise<Record<string, un
 
 function bindingInput(value: Record<string, unknown>): BindingInput {
   if (value.domain !== "spec" && value.domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");
+  if (value.preset !== undefined && value.preset !== "focused" && value.preset !== "goal" && value.preset !== "orchestrated") {
+    throw new HttpError(400, "preset must be focused, goal, or orchestrated.");
+  }
   if (typeof value.serviceBaseUrl !== "string" || !value.serviceBaseUrl.trim()) throw new HttpError(400, "serviceBaseUrl is required.");
   if (typeof value.documentId !== "string" || !value.documentId.trim()) throw new HttpError(400, "documentId is required.");
   const scope = value.domain === "circuit" ? "document" : value.scope === "entity" ? "entity" : "document";
@@ -88,6 +132,7 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
   }
   return {
     domain: value.domain,
+    preset: value.preset ?? "focused",
     serviceBaseUrl: value.serviceBaseUrl.trim(),
     documentId: value.documentId.trim(),
     scope,
@@ -124,12 +169,26 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
   const attached = new Set<string>();
   const unboundGuards = new Map<string, () => void>();
+  const delegatedParents = new Map<string, string>();
+  const activeDelegations = new Map<string, Set<string>>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
     state.recoverInterruptedReviews();
+    for (const domain of ["spec", "circuit"] as const) {
+      ctx.promptCatalog.get({ id: `spec2gds.${domain}`, version: "1.0.0" });
+      const catalog = ctx.sWorkflow.catalog(domain);
+      if (!catalog.definitions.some(entry => entry.value.metadata.id === "prepare-reviewed-change" && entry.value.metadata.version === "1.0.0")) {
+        throw new Error(`Missing workflow prepare-reviewed-change@1.0.0 for ${domain}.`);
+      }
+      if (!catalog.adapters.some(entry => entry.value.metadata.id === `${domain}-editor` && entry.value.metadata.version === "1.0.0")) {
+        throw new Error(`Missing service adapter ${domain}-editor@1.0.0.`);
+      }
+    }
+    ctx.promptCatalog.seal();
+    ctx.sWorkflow.seal();
   })();
 
   const attach = (agent: ProductAgent, binding: SessionBinding): void => {
@@ -137,7 +196,24 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
-    registerDomainTools(agent.ctx, binding, state, owners);
+    registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog, (review) => {
+      if (binding.preset === "focused") return;
+      try {
+        const workflow = ctx.sWorkflow.get(agent);
+        if (!workflow || workflow.status !== "active") return;
+        const summary = typeof review.artifact.summary === "string" && review.artifact.summary.trim()
+          ? review.artifact.summary
+          : `Prepared ${review.domain} proposal ${review.proposalId}.`;
+        ctx.sWorkflow.updateDraft(
+          agent,
+          { runId: workflow.runId, revision: workflow.revision },
+          review.artifact,
+          summary,
+        );
+      } catch (error) {
+        console.error("Failed to synchronize the owner-previewed proposal into workflow draft state:", error);
+      }
+    });
     attached.add(agent.id);
   };
 
@@ -153,14 +229,21 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     }));
   };
 
+  const agentPreset = (agent: ProductAgent): "focused" | "goal" | "orchestrated" => {
+    const selected = agent.session?.header.agentPreset;
+    return selected === "goal" || selected === "orchestrated" ? selected : "focused";
+  };
+
   // DSH deliberately leaves turn budgeting to product policy. Spec work is
   // narrow: one context read and one proposal call normally settle in two or
   // three model steps. Refuse a fourth model call and cap each response so a
   // malformed tool trajectory cannot silently consume an unbounded budget.
   ctx.on("agent/pre-step", async (
-    { step }: { agent: ProductAgent; step: number },
+    { agent, step }: { agent: ProductAgent; step: number },
     next: () => Promise<unknown>,
-  ) => step > config.maxStepsPerTurn ? { kind: "reject" } : next());
+  ) => step > (agentPreset(agent) === "focused" ? config.maxStepsPerTurn : 8)
+    ? { kind: "reject" }
+    : next());
   ctx.on("agent/request", async (
     _payload: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<Record<string, unknown>>,
@@ -169,6 +252,36 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
   ctx.on("agent/created", async ({ agent }: { agent: ProductAgent }) => {
     await ready;
     let binding = state.getBinding(String(agent.id));
+    const parentSession = agent.session?.header.parentSession;
+    if (!binding && parentSession) {
+      const parentBinding = state.getBinding(String(parentSession));
+      const parent = ctx.agents.get(SessionId(String(parentSession)));
+      if (!parentBinding || !parent) throw new Error("Delegated assistant child has no live bound parent.");
+      const workflow = ctx.sWorkflow.get(parent);
+      const depth = agent.session?.header.delegationDepth ?? 0;
+      if (!workflow || workflow.status !== "active" || workflow.preset !== "orchestrated") {
+        throw new Error("Delegation requires an active orchestrated workflow.");
+      }
+      if (depth < 1 || depth > workflow.budget.maxDelegationDepth) {
+        throw new Error("Delegation depth exceeds the workflow budget.");
+      }
+      const active = activeDelegations.get(String(parentSession)) ?? new Set<string>();
+      if (active.size >= workflow.budget.maxConcurrency) {
+        throw new Error("Workflow delegation concurrency budget is exhausted.");
+      }
+      ctx.sWorkflow.checkpoint(
+        parent,
+        { runId: workflow.runId, revision: workflow.revision },
+        "delegation",
+        `Started read-only delegated analysis ${String(agent.id)}.`,
+        { children: 1 },
+      );
+      active.add(String(agent.id));
+      activeDelegations.set(String(parentSession), active);
+      delegatedParents.set(String(agent.id), String(parentSession));
+      attach(agent, parentBinding);
+      return;
+    }
     const serialized = process.env.SPEC2GDS_BINDING_JSON;
     if (!binding && serialized) {
       let input: BindingInput;
@@ -176,7 +289,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
       catch (error) { throw new Error(`Invalid SPEC2GDS_BINDING_JSON: ${error instanceof Error ? error.message : String(error)}`); }
       const validated = await owners.validateBinding(input);
       const temporary = {
-        sessionId: String(agent.id), status: "creating" as const, domain: input.domain, ownerUrl: validated.ownerUrl,
+        sessionId: String(agent.id), status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
         documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
         entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
         workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
@@ -193,7 +306,55 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     if (binding) attach(agent, binding);
     else guardUnbound(agent);
   });
+  ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
+    if (event.type !== "user/message" || event.data?.source?.kind !== "user") return;
+    const binding = state.getBinding(String(session.id));
+    if (!binding || binding.preset === "focused") return;
+    const objective = Array.isArray(event.data.content)
+      ? event.data.content.filter((item: unknown) => isRecord(item) && item.type === "text" && typeof item.text === "string")
+        .map((item: Record<string, unknown>) => String(item.text)).join("\n").trim()
+      : "";
+    if (!objective) return;
+    queueMicrotask(() => { void (async () => {
+      await ready;
+      const agent = ctx.agents.get(session.id);
+      if (!agent) return;
+      const current = ctx.sWorkflow.get(agent);
+      if (current?.status === "awaiting-user-input") {
+        ctx.sWorkflow.answerInput(agent, { runId: current.runId, revision: current.revision }, objective);
+        return;
+      }
+      if (current !== null) return;
+      ctx.sWorkflow.start(agent, {
+        definition: { id: "prepare-reviewed-change", version: "1.0.0" },
+        adapter: { id: `${binding.domain}-editor`, version: "1.0.0" },
+        preset: binding.preset,
+        objective,
+        contract: {
+          binding: {
+            domain: binding.domain,
+            ownerUrl: binding.ownerUrl,
+            documentId: binding.documentId,
+            scope: binding.scope,
+            ...(binding.entityKind ? { entityKind: binding.entityKind } : {}),
+            ...(binding.entityId ? { entityId: binding.entityId } : {}),
+          },
+          review: {
+            kind: binding.domain === "spec" ? "spec-proposal" : "circuit-proposal",
+            mutationBoundary: "explicit-review-card-action",
+          },
+        },
+      });
+    })().catch(error => console.error("Failed to start bound workflow:", error)); });
+  });
   ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => {
+    const parentSession = delegatedParents.get(String(agent.id));
+    if (parentSession) {
+      const active = activeDelegations.get(parentSession);
+      active?.delete(String(agent.id));
+      if (active?.size === 0) activeDelegations.delete(parentSession);
+      delegatedParents.delete(String(agent.id));
+    }
     attached.delete(String(agent.id));
     unboundGuards.get(String(agent.id))?.();
     unboundGuards.delete(String(agent.id));
@@ -210,7 +371,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     const sessionId = requestedId?.trim() || randomUUID();
     if (state.getBinding(sessionId)) throw new HttpError(409, "This session already has a document binding.");
     const temporary = {
-      sessionId, status: "creating" as const, domain: input.domain, ownerUrl: validated.ownerUrl,
+      sessionId, status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
       entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
       workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
@@ -290,6 +451,57 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     throw new HttpError(400, "Action does not match this review domain.");
   }
 
+  function workflowFor(sessionId: string): { agent: ProductAgent; workflow: NonNullable<ReturnType<SWorkflowService["get"]>> } {
+    const agent = ctx.agents.get(SessionId(sessionId));
+    if (!agent) throw new HttpError(409, "The workflow session is not currently active.");
+    const workflow = ctx.sWorkflow.get(agent);
+    if (!workflow) throw new HttpError(404, "This session has no workflow.");
+    return { agent, workflow };
+  }
+
+  function exactWorkflowRef(workflow: NonNullable<ReturnType<SWorkflowService["get"]>>, body: Record<string, unknown>) {
+    if (body.runId !== workflow.runId || body.revision !== workflow.revision) {
+      throw new HttpError(409, "The workflow changed; reload its exact run ID and revision.");
+    }
+    return { runId: workflow.runId, revision: workflow.revision };
+  }
+
+  function settleReviewedWorkflow(binding: SessionBinding, review: ProposalReview): void {
+    if (binding.preset === "focused") return;
+    const agent = ctx.agents.get(SessionId(binding.sessionId));
+    if (!agent) return;
+    let workflow = ctx.sWorkflow.get(agent);
+    if (!workflow || ["complete", "cancelled"].includes(workflow.status)) return;
+    if (review.state === "discarded") {
+      ctx.sWorkflow.cancel(agent, { runId: workflow.runId, revision: workflow.revision });
+      return;
+    }
+    if (review.state !== "applied" && review.state !== "sent") return;
+    if (workflow.status === "active") {
+      if (workflow.draft === undefined) {
+        const summary = typeof review.artifact.summary === "string" && review.artifact.summary.trim()
+          ? review.artifact.summary
+          : `Prepared ${review.domain} proposal ${review.proposalId}.`;
+        ctx.sWorkflow.updateDraft(
+          agent,
+          { runId: workflow.runId, revision: workflow.revision },
+          review.artifact,
+          summary,
+        );
+        workflow = ctx.sWorkflow.get(agent)!;
+      }
+      ctx.sWorkflow.requestCompletion(
+        agent,
+        { runId: workflow.runId, revision: workflow.revision },
+        "The owner-backed proposal is ready for explicit approval.",
+      );
+      workflow = ctx.sWorkflow.get(agent)!;
+    }
+    if (workflow.status === "awaiting-user-completion") {
+      ctx.sWorkflow.approveCompletion(agent, { runId: workflow.runId, revision: workflow.revision });
+    }
+  }
+
   ctx.inject(["webServer", "connection"], (webCtx) => {
     webCtx.effect(() => webCtx.webServer.register({ kind: "prefix", path: "/spec2gds-api", handler: async (request: any, response: any) => {
       try {
@@ -324,8 +536,8 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
             if (dirname(destination) !== config.specDocumentRoot) throw new HttpError(400, "Document path escaped the configured root.");
             await owners.createSpec(body.serviceBaseUrl, destination, documentId, title);
           } else await owners.createCircuit(body.serviceBaseUrl, documentId, title);
-          const result = await reserve({ domain: body.domain, serviceBaseUrl: body.serviceBaseUrl,
-            documentId, scope: "document", title });
+          const result = await reserve(bindingInput({ domain: body.domain, serviceBaseUrl: body.serviceBaseUrl,
+            documentId, scope: "document", title, preset: body.preset }));
           return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
         }
         if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
@@ -340,7 +552,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
           const result = await reserve(bindingInput(body), typeof body.sessionId === "string" ? body.sessionId : undefined);
           return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
         }
-        const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews))?$/);
+        const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews|workflow))?$/);
         if (bindingMatch) {
           const sessionId = decodeURIComponent(bindingMatch[1]!);
           const resource = bindingMatch[2];
@@ -352,13 +564,56 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
           if (resource === "activate" && request.method === "POST") return writeJson(response, 200, { session: await activate(sessionId) });
           if (resource === "abandon" && request.method === "POST") { if (state.getBinding(sessionId)?.status === "creating") state.deleteBinding(sessionId); return writeJson(response, 200, { abandoned: true }); }
           if (resource === "reviews" && request.method === "GET") return writeJson(response, 200, { reviews: state.listReviews(sessionId).map(publicReview) });
+          if (resource === "workflow" && request.method === "GET") {
+            const binding = state.getBinding(sessionId);
+            if (!binding) throw new HttpError(404, "Unknown binding.");
+            const agent = ctx.agents.get(SessionId(sessionId));
+            return writeJson(response, 200, { workflow: agent ? ctx.sWorkflow.get(agent) : null });
+          }
+        }
+        const workflowActionMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/workflow\/actions$/);
+        if (workflowActionMatch && request.method === "POST") {
+          const sessionId = decodeURIComponent(workflowActionMatch[1]!);
+          const binding = state.getBinding(sessionId);
+          if (!binding || binding.preset === "focused") throw new HttpError(404, "This binding has no long-running workflow controls.");
+          const body = await readBody(request);
+          const { agent, workflow } = workflowFor(sessionId);
+          const ref = exactWorkflowRef(workflow, body);
+          const action = String(body.action ?? "");
+          let next: unknown;
+          if (action === "pause") next = ctx.sWorkflow.pause(agent, ref);
+          else if (action === "resume") next = ctx.sWorkflow.resume(agent, ref);
+          else if (action === "cancel") next = ctx.sWorkflow.cancel(agent, ref);
+          else if (action === "answer") {
+            if (typeof body.answer !== "string") throw new HttpError(400, "answer is required.");
+            next = ctx.sWorkflow.answerInput(agent, ref, body.answer);
+          } else if (action === "approve") next = ctx.sWorkflow.approveCompletion(agent, ref);
+          else if (action === "raise-budgets") {
+            if (!isRecord(body.budget)) throw new HttpError(400, "budget must be an object.");
+            const allowed = new Set(["maxRounds", "maxRequests", "maxTokens", "maxActiveMinutes", "maxChildren", "maxConcurrency", "maxDelegationDepth"]);
+            const budget = Object.fromEntries(Object.entries(body.budget).map(([key, value]) => {
+              if (!allowed.has(key)) throw new HttpError(400, `Unknown budget field ${key}.`);
+              if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new HttpError(400, `budget.${key} must be an integer.`);
+              return [key, value];
+            }));
+            next = ctx.sWorkflow.raiseBudgets(agent, ref, budget);
+          } else throw new HttpError(400, "Unknown workflow action.");
+          return writeJson(response, 200, { workflow: next });
         }
         const reviewMatch = path.match(/^\/spec2gds-api\/reviews\/([^/]+)\/actions$/);
         if (reviewMatch && request.method === "POST") {
           const proposalId = decodeURIComponent(reviewMatch[1]!);
           const binding = state.listBindings(true).find(item => state.getReview(item.sessionId, proposalId));
           if (!binding) throw new HttpError(404, "Unknown proposal review.");
-          const updated = await reviewAction(binding, state.getReview(binding.sessionId, proposalId)!, String((await readBody(request)).action ?? ""));
+          const action = String((await readBody(request)).action ?? "");
+          if (binding.preset !== "focused" && (action === "apply" || action === "send")) {
+            const { workflow } = workflowFor(binding.sessionId);
+            if (workflow.status !== "active" && workflow.status !== "awaiting-user-completion") {
+              throw new HttpError(409, `Workflow status ${workflow.status} does not permit owner mutation.`);
+            }
+          }
+          const updated = await reviewAction(binding, state.getReview(binding.sessionId, proposalId)!, action);
+          settleReviewedWorkflow(binding, updated);
           return writeJson(response, 200, { review: publicReview(updated) });
         }
         throw new HttpError(404, "Unknown spec2gds endpoint.");

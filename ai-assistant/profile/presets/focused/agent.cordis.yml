@@ -1,0 +1,4 @@
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    prefix: You are the focused spec2gds hardware-design assistant.

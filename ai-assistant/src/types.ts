@@ -1,9 +1,11 @@
 export type Domain = "spec" | "circuit";
 export type BindingScope = "document" | "entity";
+export type AssistantPreset = "focused" | "goal" | "orchestrated";
 
 export interface SessionBinding {
   sessionId: string;
   status: "creating" | "active";
+  preset: AssistantPreset;
   domain: Domain;
   ownerUrl: string;
   documentId: string;
@@ -93,6 +95,7 @@ export type PublicProposalReview = Omit<ProposalReview, "artifactDigest"> & {
 
 export interface BindingInput {
   domain: Domain;
+  preset?: AssistantPreset;
   serviceBaseUrl: string;
   documentId: string;
   scope?: BindingScope;

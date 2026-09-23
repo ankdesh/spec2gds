@@ -9,8 +9,10 @@ removed.
 Each conversation is immutably bound to one Spec document, Spec entity, or
 Circuit document. The model can read fresh owner context and prepare typed
 previews. It has no owner mutation, source creation, filesystem, shell, browser,
-workflow, skill, or subagent tools. Spec apply and Circuit send happen only from
-an explicit review-card action using the artifact persisted by the server.
+or skill tools. The selected `focused`, `goal`, or `orchestrated` preset controls
+whether bounded workflow, goal, and read-only delegation capabilities are
+present. Spec apply and Circuit send happen only from an explicit review-card
+action using the artifact persisted by the server.
 
 See [DSH UI migration and extension map](dsh-ui-migration.md) for the plugin
 architecture and the retained/extended/dropped feature table.
@@ -62,19 +64,33 @@ After rebuilding either the product bundle or the pinned Harness checkout, run
 `scripts/serve-all.sh restart`; `start` deliberately refuses a stale or partial
 stack already occupying the default ports.
 
-The focused browser profile omits DSH's generic Models settings/onboarding
+The browser profile omits DSH's generic Models settings/onboarding
 plugin. Configure the OpenAI provider through `OPENAI_API_KEY`,
 `OPENAI_BASE_URL`, and `OPENAI_MODEL`; the conversation model selector remains
 available for configured models.
 
-Generic DSH goals are intentionally unavailable. Their state service,
-background round driver, command, model tools, and UI are disabled together;
-spec2gds will add its own bounded, review-aware workflow before restoring any
-goal-like behavior. A model turn is limited to three model steps and each model
-response is limited to 1,200 output tokens by default. Reaching the step limit
-blocks the turn instead of silently continuing. Both limits are configurable,
-but increasing them should be accompanied by an evaluation of the affected
-Spec request.
+The new-conversation dialog offers three immutable execution presets:
+
+| Preset | Behavior |
+| --- | --- |
+| `focused` | One-shot Q&A and ordinary typed proposals; no goal or delegation tools |
+| `goal` | A durable, review-aware workflow plus DSH's bounded goal loop |
+| `orchestrated` | Goal behavior plus one-shot, depth-one, read-only analysis children |
+
+Service instructions remain identical across presets and come from exact,
+versioned YAML prompt bundles. The generic `prepare-reviewed-change` workflow
+is specialized by exact Spec/Circuit adapter manifests. Its full snapshots,
+catalog digests, budgets, draft, checkpoint, and pending human decision are
+durable DSH Session events. The browser dock exposes human pause, resume,
+cancel, and answer controls. Proposal apply/send is the completion approval;
+discard cancels the workflow.
+
+Focused turns default to three model steps. Goal and orchestrated turns allow
+eight steps while the workflow adds round, request, token, time, child,
+concurrency, and depth budgets. Each model response remains capped at 1,200
+output tokens. Orchestrated children inherit the immutable binding but can use
+only `get_bound_context`; they cannot propose, ask the user, mutate workflow
+state, or delegate again.
 
 ## Design-source workspaces
 
@@ -114,6 +130,7 @@ same interface as `node deployment/request.mjs`.
 | `ASSISTANT_STATE` | `ai-assistant/.dev` in development |
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces` |
 | `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents` |
+| `SPEC2GDS_CATALOG_ROOT` | Product package's `profile/catalog` (set by launch scripts) |
 | `OPENAI_MODEL` | `gpt-4o-mini` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
@@ -153,7 +170,8 @@ npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
-The unit suite protects the transferred prompt/domain rules and complete
+The unit suite protects the catalog prompt/domain rules, preset capability
+boundaries, workflow controls, and complete
 operation vocabularies. The integration test boots the real headless profile
 against local owner/model fixtures and verifies context dispatch, proposal
 preview, and durable SQLite state. Packaging refuses a dirty Harness checkout

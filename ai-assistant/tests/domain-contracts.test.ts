@@ -6,7 +6,7 @@ import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemant
 import type { SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): SessionBinding => ({
-  sessionId: "session-1", status: "active", domain, ownerUrl: "http://owner", documentId: "doc-1", scope,
+  sessionId: "session-1", status: "active", preset: "focused", domain, ownerUrl: "http://owner", documentId: "doc-1", scope,
   entityKind: scope === "entity" ? "component" : null, entityId: scope === "entity" ? "component-1" : null,
   title: "Test", archived: false, createdAt: "", updatedAt: "",
   workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",

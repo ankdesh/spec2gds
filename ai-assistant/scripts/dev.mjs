@@ -54,6 +54,7 @@ for (const directory of ["lib", "profile", "bundles"]) {
   mkdirSync(dirname(target), { recursive: true });
   cpSync(resolve(root, directory), target, { recursive: true });
 }
+env.SPEC2GDS_CATALOG_ROOT = resolve(runtimeProduct, "profile", "catalog");
 const productConfig = JSON.parse(readFileSync(resolve(root, "harness.product.json"), "utf8"));
 if (profile === "spec2gds-replay") {
   productConfig.profiles[profile] = {

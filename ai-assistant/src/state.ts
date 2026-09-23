@@ -24,6 +24,7 @@ export class ProductState {
       CREATE TABLE IF NOT EXISTS bindings (
         session_id TEXT PRIMARY KEY,
         status TEXT NOT NULL CHECK(status IN ('creating', 'active')),
+        preset TEXT NOT NULL DEFAULT 'focused',
         domain TEXT NOT NULL CHECK(domain IN ('spec', 'circuit')),
         owner_url TEXT NOT NULL,
         document_id TEXT NOT NULL,
@@ -62,6 +63,9 @@ export class ProductState {
     const reviewColumns = new Set((this.database.prepare("PRAGMA table_info(reviews)").all() as Array<Record<string, unknown>>)
       .map(row => String(row.name)));
     if (!reviewColumns.has("error_json")) this.database.exec("ALTER TABLE reviews ADD COLUMN error_json TEXT");
+    const bindingColumns = new Set((this.database.prepare("PRAGMA table_info(bindings)").all() as Array<Record<string, unknown>>)
+      .map(row => String(row.name)));
+    if (!bindingColumns.has("preset")) this.database.exec("ALTER TABLE bindings ADD COLUMN preset TEXT NOT NULL DEFAULT 'focused'");
   }
 
   close(): void { this.database.close(); }
@@ -81,9 +85,9 @@ export class ProductState {
       throw new Error("Entity bindings require entityKind and entityId.");
     }
     this.database.prepare(`
-      INSERT INTO bindings(session_id,status,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at)
-      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(sessionId, input.domain, input.ownerUrl, input.documentId, scope,
+      INSERT INTO bindings(session_id,status,preset,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at)
+      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(sessionId, input.preset ?? "focused", input.domain, input.ownerUrl, input.documentId, scope,
       input.entityKind ?? null, input.entityId ?? null,
       input.title?.trim() || `${input.domain === "spec" ? "Spec" : "Circuit"}: ${input.documentId}`,
       input.workspaceKey, input.workspaceTitle, input.workspacePath,
@@ -216,6 +220,7 @@ export class ProductState {
   private binding(row: Record<string, unknown>): SessionBinding {
     return {
       sessionId: String(row.session_id), status: row.status as SessionBinding["status"],
+      preset: (row.preset ?? "focused") as SessionBinding["preset"],
       domain: row.domain as SessionBinding["domain"], ownerUrl: String(row.owner_url),
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),

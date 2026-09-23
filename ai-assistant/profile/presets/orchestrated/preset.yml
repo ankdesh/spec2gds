@@ -1,0 +1,3 @@
+name: Orchestrated
+description: Bounded goal work with one-shot subagents for independent analysis steps.
+order: 3

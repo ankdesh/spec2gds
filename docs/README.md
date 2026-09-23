@@ -32,6 +32,12 @@ Read in this order:
     and retained, extended, and removed UI features.
     The [AI Assistant improvement plan](ai-assistant-improvement-plan.md) is the
     living, topic- and readiness-organized backlog for future assistant work.
+    The [configurable assistant architecture](configurable-assistant-architecture.md)
+    documents the implemented prompt/workflow catalogs, presets, budgets,
+    delegation boundary, and service-extension path.
+    The [DSH configurable assistant tutorial](dsh-configurable-assistant-tutorial.md)
+    explains the DSH plugins, composition layers, execution paths, authority
+    boundaries, persistence, and extension process used by that architecture.
     The [evaluation guide](ai-assistant-evaluation.md) defines the golden
     corpus, DSH replay checks, raw metrics, and commands.
     Its preserved [Spec-to-RTL research guide](research/ai-spec-to-rtl-design-research-guide.md)

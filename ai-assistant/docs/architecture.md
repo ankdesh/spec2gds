@@ -17,9 +17,9 @@ browser-only UI policy.
 DSH owns session creation after the product reserves an ID, JSONL persistence,
 the agent/model loop, tool call/result pairing, streaming, cancellation,
 reconnect, rename, archive/restore, export, and conversation rendering. The web
-profile disables DSH coding presets so a session cannot silently regain shell,
-filesystem, web, workflow, subagent, or skill tools from the default `standard`
-preset.
+profile replaces DSH's general coding presets with the product-owned
+`focused`, `goal`, and `orchestrated` catalog. Shell, filesystem, web, skill,
+and arbitrary workflow tools remain unavailable in every preset.
 
 The host plugin in `src/index.ts` owns:
 
@@ -62,6 +62,52 @@ An unbound agent is the deliberate exception. It receives one `complete: true`
 fail-closed section, no domain tools, and instructions to open a new bound
 conversation. In the pinned Harness, an effective complete section becomes the
 entire system prompt after assembly, suppressing every other prompt section.
+
+The four service sections live in strict startup YAML bundles
+(`spec2gds.spec@1.0.0` and `spec2gds.circuit@1.0.0`). The DSH prompt catalog
+validates, binds, hashes, and seals them. The product requests an exact version,
+binds scalar owner/document/scope values, verifies the required section IDs,
+and then registers them on the bound agent. Catalog loading has an explicit
+readiness service, so the product cannot seal or use a partially loaded
+catalog. There is no hot reload or implicit latest-version selection.
+
+## Presets and workflows
+
+User-selected execution shape and service specialization are independent:
+
+| Preset | Intended use | Model-visible DSH capabilities |
+| --- | --- | --- |
+| `focused` | One-shot questions and ordinary proposals | Bound context plus the domain proposal tool |
+| `goal` | Bounded multi-round work | Focused tools, DSH goal tools, and restricted workflow progress tools |
+| `orchestrated` | Bounded work needing independent analysis | Goal capabilities plus one-shot read-only delegation |
+
+The selected preset is stored with the immutable binding and DSH session
+header. Headless requests remain `focused`; the browser chooser is the only
+surface that currently selects another preset.
+
+`prepare-reviewed-change@1.0.0` is a generic declarative workflow. Exact Spec
+and Circuit adapter manifests contribute prompt refs, tool-package identities,
+review kind, and service identity. DSH persists each `s-workflow/change` as a
+complete snapshot containing exact definition/adapter digests, revision,
+status, budget, usage, draft, checkpoint, and pending human decision. Replay
+fails closed on revision gaps, replacement of a nonterminal run, or missing
+catalog identity.
+
+Model tools can read workflow state, replace the complete draft, checkpoint
+progress, or request user/completion review. They cannot start, pause, resume,
+cancel, raise budgets, approve completion, apply a proposal, or send it. Those
+operations remain in the product host/API and browser workflow dock. A direct
+human answer resumes `awaiting-user-input`; explicit proposal apply/send
+completes the workflow, and discard cancels it. A successful owner preview is
+also synchronized into the workflow as its complete review draft. Owner
+mutation is rejected while the workflow is paused, blocked, or awaiting input,
+so lifecycle state cannot drift from the applied artifact.
+
+Orchestrated children inherit the parent's immutable binding but are filtered
+to `get_bound_context` only. They receive a read-only specialist persona, run
+one-shot with depth one, and cannot ask the user, prepare proposals, mutate
+workflow state, or delegate. Child count and concurrent child creation are
+checked against the parent workflow budget before the child runs.
 
 ## Binding transaction
 

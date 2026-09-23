@@ -70,8 +70,8 @@ Priority labels are provisional:
 
 | Topic | Ready now | Needs refinement | Deferred or triggered later |
 | --- | --- | --- | --- |
-| Agent architecture | Direct execution seam verified | Clarification contract; complexity routing | Multi-agent orchestration; plan approval tier |
-| Prompt architecture | PA-01 and PA-02 verified; evaluate before the next prompt change | Few-shot placement and corpus | DSH skills migration |
+| Agent architecture | Direct execution seam plus bounded preset/workflow foundation verified | Clarification contract; complexity routing | Specialist routing; plan approval tier |
+| Prompt architecture | PA-01 and PA-02 verified and moved to a sealed versioned catalog | Few-shot placement and corpus | DSH skills migration |
 | Tool design | Preserve atomic batch proposal tools | None currently | Dynamic masking; specialist tools |
 | Review UX | Owner-derived natural-language summary verified | Semantic diff ownership and interaction model | Per-change approval |
 | Context and scope | Preserve immutable binding and fresh reads | Three-tier context contract and measurements | Scope elevation; conversation state cache |
@@ -89,6 +89,21 @@ Priority labels are provisional:
 | TQ-01 | Versioned non-production cases and manifest under `ai-assistant/evals/`, validated by `scripts/evaluate.mjs`. | Fourteen Spec, Circuit, stale, invalid, unsupported, and ambiguous cases plus owner-native semantic tests. | None for corpus storage; it intentionally remains independent of a provider transcript. |
 | TQ-02 | A test-only replay bundle under `ai-assistant/bundles/replay/` and dynamic replay profile wiring in `scripts/dev.mjs`. | Harness integration records then replays the exact context/proposal/final-response trajectory with a dead provider endpoint. | Pinned `@deepseek-ai/dsh-session-persistence-jsonl` and `@deepseek-ai/dsh-llm-replay`; production retains compressed sessions and no replay profile. |
 | TQ-03 | `eval-metrics.ts` calculates raw counts from DSH JSONL and `evaluate.mjs` emits versioned event, result, and metric artifacts. | `eval-metrics.test.ts` plus metrics assertions against the recorded Harness session. | DSH Session event schema and model usage fields; no analytics service or new runtime plugin. |
+
+### Configurable assistant foundation
+
+| Improvement | Product/runtime changes | Tests and evaluation | DSH capability used |
+| --- | --- | --- | --- |
+| CF-01 — Prompt catalog | Exact Spec/Circuit YAML bundles replace runtime-owned prompt text; the product binds immutable target variables and verifies the four required sections. | Catalog parser/unit tests, product prompt contracts, and real system-prompt integration assertions. | New sealed Cordis prompt catalog and strict startup YAML provider. |
+| CF-02 — Preset catalog | Browser sessions select immutable `focused`, `goal`, or `orchestrated`; headless remains focused. | Profile composition assertions and focused Harness integration. | Existing DSH agent presets, persona, goal command/tool, and goal UI. |
+| CF-03 — Generic workflow | `prepare-reviewed-change@1.0.0` composes with exact Spec/Circuit adapter manifests and immutable owner/review contracts. | Strict YAML and projection tests plus startup exact-ref checks. | New sealed workflow catalog and strict startup YAML provider. |
+| CF-04 — Durable lifecycle | Full workflow snapshots preserve refs/digests, status, budgets, usage, draft, checkpoint, and pending human decision. | Projection replay/invariant tests and persistence catalog/change records. | DSH Session v3 event/projection contract using `s-workflow/change`. |
+| CF-05 — Restricted workflow tools | Five model tools read state, replace a draft, checkpoint, or request input/completion. Lifecycle, budget, approval, apply, and send remain host-only. | Tool schema catalog, model-experience gate, typecheck, and product capability tests. | DSH typed tool registry and system-prompt sections. |
+| CF-06 — Human controls | Browser workflow dock and CAS HTTP endpoints pause, resume, cancel, answer, and raise budgets; review apply/send completes and discard cancels. | Product build/unit suite and real focused integration regression. | Client input-dock slot and live DSH Session projection. |
+| CF-07 — Bounded delegation | Orchestrated children inherit the binding but receive only `get_bound_context`, a read-only persona, depth one, and child/concurrency budget checks. | Preset assertions, compile checks, and DSH subagent capability reuse. | Stock one-shot in-process subagent provider, tool filters, persona shadowing, and depth caps. |
+
+The complete implemented design and extension procedure are documented in
+[Configurable Assistant Architecture](configurable-assistant-architecture.md).
 
 ## 1. Agent architecture and interaction
 
@@ -109,8 +124,10 @@ Priority labels are provisional:
 - **Definition maturity:** baseline
 - **Delivery state:** implemented, with current worktree validation in progress
 - **Priority:** P0
-- The current focused product exposes owner context and coarse proposal tools,
-  while general-purpose goals, skills, and subagents are disabled.
+- The focused preset exposes owner context and coarse proposal tools. Goal and
+  orchestrated presets add only the bounded, catalog-defined capabilities
+  documented in CF-02 through CF-07; general coding tools and skills remain
+  disabled.
 - Future orchestration must not reintroduce unbounded background loops or false
   completion claims.
 
@@ -220,6 +237,9 @@ Priority labels are provisional:
 - `promptSectionsFor(binding)` now constructs typed persona, binding, operation,
   and output sections while the existing context shapers retain runtime owner
   identity checks.
+- The runtime sections are sourced from exact sealed YAML bundles through
+  `catalogPromptSectionsFor`; the original typed helper remains as a regression
+  oracle for instruction-equivalence tests.
 - Unit tests protect section names, order, content, binding interpolation, and
   the absence of a bound complete override. The real Harness integration test
   protects final prompt composition and the context-to-proposal path.
@@ -706,6 +726,8 @@ matrix.
 | 2026-09-21 | Treat claimed benchmark effects as hypotheses | Tool-count accuracy, masking improvement, context reduction, and proposed quality targets require project-specific measurement before they become requirements. |
 | 2026-09-21 | Compose bound prompts; retain a complete unbound guard | PA-01 and PA-02 are verified. The pinned Harness confirms that `complete: true` restores that section as the entire prompt after assembly, so bound conversations use four ordinary sections while the fail-closed unbound prompt intentionally remains complete. |
 | 2026-09-21 | Keep proposal presentation owner-derived and replay at the DSH event boundary | AA-03, UX-01, VE-01, VE-02, and TQ-01 through TQ-03 are verified. Deterministic summaries and errors come from typed artifacts and owner previews; the existing review action remains the only mutation boundary. Test-only replay uses the pinned Harness `dsh-llm-replay` capability without adding a production profile or forking DSH. |
+| 2026-09-22 | Separate service adapters from execution presets | Exact prompt/workflow catalogs now provide service-specific instructions and review contracts, while immutable `focused`, `goal`, and `orchestrated` presets choose execution shape. This is the reusable foundation for future services. |
+| 2026-09-22 | Reuse stock DSH goal and subagent capabilities behind a product workflow boundary | Goal continuation/UI and one-shot in-process children are reused. New DSH packages own only the missing prompt catalog, durable generic workflow, strict YAML providers, and restricted workflow tools. Children are read-only and budgeted; host/review surfaces retain lifecycle and mutation authority. |
 
 ## 12. Source coverage
 

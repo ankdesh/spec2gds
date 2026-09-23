@@ -66,9 +66,18 @@
 - id: ui-jobs
   disabled: true
 - id: ui-agent-preset
-  disabled: true
+  disabled: false
 - id: agent-presets
-  disabled: true
+  disabled: false
+  config:
+    default: focused
+    includeShippedRoot: false
+    includeUserRoot: false
+    roots:
+      - path: !!js process.cwd() + '/profile/presets'
+        trust: system
+- id: ui-goal
+  disabled: false
 - id: ui-plan
   disabled: true
 - id: ui-message-feedback

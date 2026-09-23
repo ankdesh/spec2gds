@@ -1,0 +1,3 @@
+name: Goal
+description: Bounded long-running work using durable Harness goals and reviewed workflow checkpoints.
+order: 2

@@ -3,7 +3,7 @@ import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import { defineTool, type ToolRunContext } from "@deepseek-ai/dsh-tools";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import type { OwnerClients } from "./owner-clients.js";
-import { promptSectionsFor, shapeBoundContext } from "./domain-context.js";
+import { catalogPromptSectionsFor, promptSectionsFor, shapeBoundContext, type BoundPromptCatalog } from "./domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "./operation-schemas.js";
 import { buildCircuitArtifact, buildSpecArtifact, reviewStateForPreview } from "./proposal-pipeline.js";
 import {
@@ -67,8 +67,11 @@ export function registerDomainTools(
   binding: SessionBinding,
   state: ProductState,
   owners: OwnerClients,
+  promptCatalog?: BoundPromptCatalog,
+  onReviewPrepared?: (review: ProposalReview) => void,
 ): void {
-  for (const section of promptSectionsFor(binding)) agentContext.systemPrompt?.section(section);
+  const sections = promptCatalog ? catalogPromptSectionsFor(promptCatalog, binding) : promptSectionsFor(binding);
+  for (const section of sections) agentContext.systemPrompt?.section(section);
   agentContext.tools.register(defineTool({
     name: "get_bound_context",
     description: "Read the current authoritative semantic context and revision for this conversation's immutable Spec or Circuit binding. Call this before discussing concrete design facts or preparing a proposal. It never mutates owner data.",
@@ -104,8 +107,8 @@ export function registerDomainTools(
     },
   }));
 
-  if (binding.domain === "spec") registerSpecProposalTool(agentContext, binding, state, owners);
-  else registerCircuitProposalTool(agentContext, binding, state, owners);
+  if (binding.domain === "spec") registerSpecProposalTool(agentContext, binding, state, owners, onReviewPrepared);
+  else registerCircuitProposalTool(agentContext, binding, state, owners, onReviewPrepared);
 }
 
 function registerSpecProposalTool(
@@ -113,6 +116,7 @@ function registerSpecProposalTool(
   binding: SessionBinding,
   state: ProductState,
   owners: OwnerClients,
+  onReviewPrepared?: (review: ProposalReview) => void,
 ): void {
   agentContext.tools.register(defineTool({
     name: "prepare_spec_proposal",
@@ -176,9 +180,11 @@ function registerSpecProposalTool(
         const next = reviewStateForPreview("spec", preview.status);
         const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);
         if (normalized) logProposalFailure(binding, normalized, proposalId);
-        return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
+        const review = state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
           preview, diagnostics: diagnostics(preview), error: normalized,
-        }));
+        });
+        if (review.state === "ready") onReviewPrepared?.(review);
+        return reviewResult(review);
       } catch (error) {
         const normalized = errorFromException(binding, proposalId, error);
         logProposalFailure(binding, normalized, proposalId);
@@ -196,6 +202,7 @@ function registerCircuitProposalTool(
   binding: SessionBinding,
   state: ProductState,
   owners: OwnerClients,
+  onReviewPrepared?: (review: ProposalReview) => void,
 ): void {
   agentContext.tools.register(defineTool({
     name: "prepare_circuit_proposal",
@@ -255,9 +262,11 @@ function registerCircuitProposalTool(
         const next = reviewStateForPreview("circuit", preview.status);
         const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);
         if (normalized) logProposalFailure(binding, normalized, proposalId);
-        return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
+        const review = state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
           preview: { ...preview, base_document: snapshot.document }, diagnostics: diagnostics(preview), error: normalized,
-        }));
+        });
+        if (review.state === "ready") onReviewPrepared?.(review);
+        return reviewResult(review);
       } catch (error) {
         const normalized = errorFromException(binding, proposalId, error);
         logProposalFailure(binding, normalized, proposalId);

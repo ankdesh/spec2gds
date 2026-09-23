@@ -4,7 +4,7 @@ import { buildCircuitArtifact, buildSpecArtifact, reviewStateForPreview } from "
 import type { SessionBinding } from "../src/types.js";
 
 const base: SessionBinding = {
-  sessionId: "session", status: "active", domain: "spec", ownerUrl: "http://owner", documentId: "doc", scope: "entity",
+  sessionId: "session", status: "active", preset: "focused", domain: "spec", ownerUrl: "http://owner", documentId: "doc", scope: "entity",
   entityKind: "component", entityId: "component-1", title: "Test", workspaceKey: "workspace", workspaceTitle: "Test",
   workspacePath: "/tmp/test", workspaceDomain: "spec", workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc",
   archived: false, createdAt: "", updatedAt: "",

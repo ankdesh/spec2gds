@@ -128,7 +128,7 @@ export class OwnerClients {
   async validateBinding(input: BindingInput, signal?: AbortSignal): Promise<{ ownerUrl: string; context: Record<string, unknown> }> {
     const ownerUrl = this.normalize(input);
     const binding: SessionBinding = {
-      sessionId: "validation", status: "creating", domain: input.domain, ownerUrl,
+      sessionId: "validation", status: "creating", preset: input.preset ?? "focused", domain: input.domain, ownerUrl,
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" : input.scope ?? "document",
       entityKind: input.entityKind ?? null, entityId: input.entityId ?? null,
       title: input.title ?? input.documentId, archived: false, createdAt: "", updatedAt: "",

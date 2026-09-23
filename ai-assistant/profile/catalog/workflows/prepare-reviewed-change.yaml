@@ -1,0 +1,23 @@
+apiVersion: dsh.deepseek.ai/v1
+kind: WorkflowDefinition
+metadata:
+  id: prepare-reviewed-change
+  version: 1.0.0
+service: generic
+presets:
+  - focused
+  - goal
+  - orchestrated
+steps:
+  - id: read-context
+    kind: model
+    description: Read fresh authoritative bound context.
+  - id: prepare-draft
+    kind: model
+    description: Prepare a complete typed replacement proposal.
+  - id: owner-preview
+    kind: checkpoint
+    description: Validate and preview the proposal with the owning service.
+  - id: user-review
+    kind: review
+    description: Wait for an explicit user action on the review card.

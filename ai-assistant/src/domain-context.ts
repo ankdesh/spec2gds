@@ -6,6 +6,13 @@ const json = (value: unknown, pretty = false): string => JSON.stringify(canonica
 
 type DomainPromptSection = Pick<PromptSection, "name" | "order"> & { readonly text: string };
 
+export interface BoundPromptCatalog {
+  bind(
+    ref: { id: string; version: string },
+    variables: Readonly<Record<string, string>>,
+  ): { readonly sections: readonly { readonly id: string; readonly order: number; readonly text: string }[] };
+}
+
 const SPEC_PERSONA = `DOMAIN PERSONA
 You are a hardware specification design partner. Explore the user's idea using immutable semantic specification context. Explain concrete implications, alternatives, and open assumptions. Create a formal operation proposal only when the user asks for a concrete change.`;
 
@@ -58,6 +65,36 @@ export function promptSectionsFor(binding: SessionBinding): readonly DomainPromp
     { name: "spec2gds:operation-constraints", order: 200, text: spec ? SPEC_OPERATION_CONSTRAINTS : CIRCUIT_OPERATION_CONSTRAINTS },
     { name: "spec2gds:output-contract", order: 300, text: spec ? SPEC_OUTPUT_CONTRACT : CIRCUIT_OUTPUT_CONTRACT },
   ];
+}
+
+/** Bind the deployment catalog's exact service prompt bundle for one immutable target. */
+export function catalogPromptSectionsFor(
+  catalog: BoundPromptCatalog,
+  binding: SessionBinding,
+): readonly DomainPromptSection[] {
+  const owner = binding.domain === "spec" ? "Spec Editor" : "Circuit Designer";
+  const target = binding.scope === "entity"
+    ? `${binding.entityKind ?? "entity"} ${binding.entityId ?? "(missing id)"}`
+    : "the complete document";
+  const bound = catalog.bind(
+    { id: `spec2gds.${binding.domain}`, version: "1.0.0" },
+    {
+      "binding.owner": owner,
+      "binding.document_id": binding.documentId,
+      "binding.scope": binding.scope,
+      "binding.target": target,
+    },
+  );
+  const sections = bound.sections.map(section => ({
+    name: `spec2gds:${section.id}`,
+    order: section.order,
+    text: section.text,
+  }));
+  const expected = ["domain-persona", "binding-context", "operation-constraints", "output-contract"];
+  if (sections.length !== expected.length || sections.some((section, index) => section.name !== `spec2gds:${expected[index]}`)) {
+    throw new Error(`Prompt bundle spec2gds.${binding.domain}@1.0.0 does not expose the required ordered sections.`);
+  }
+  return sections;
 }
 
 export function shapeBoundContext(binding: SessionBinding, context: Record<string, unknown>, svg?: string): { text: string; warnings: string[] } {

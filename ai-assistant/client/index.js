@@ -26,6 +26,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     .s2g-form{display:grid;gap:12px}.s2g-form label{display:grid;gap:5px;font-weight:600}.s2g-form input,.s2g-form select{box-sizing:border-box;width:100%;padding:9px 10px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:7px;background:var(--dsw-surface-primary,#fff);color:inherit;font:inherit}
     .s2g-form .s2g-pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}.s2g-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:5px}.s2g-dialog-actions button{padding:8px 12px;border:1px solid #176b5b;border-radius:7px;background:transparent;color:inherit;cursor:pointer}.s2g-dialog-actions button.primary{background:#176b5b;color:#fff}.s2g-dialog-actions button:disabled{opacity:.55;cursor:wait}
     .s2g-choice{display:flex;gap:16px}.s2g-choice label{display:flex;align-items:center;gap:6px;font-weight:600}.s2g-choice input{width:auto}.s2g-hint{margin:0;color:var(--text-secondary,#52615e);font-size:12px}.s2g-empty{padding:10px;border:1px dashed color-mix(in srgb,currentColor 25%,transparent);border-radius:7px;color:var(--text-secondary,#52615e)}
+    .s2g-workflow{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px;margin:4px 8px;padding:7px 9px;border:1px solid color-mix(in srgb,#176b5b 28%,transparent);border-radius:8px;background:color-mix(in srgb,#176b5b 5%,transparent);font:12px/1.35 system-ui}
+    .s2g-workflow strong{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#176b5b}.s2g-workflow-main{min-width:0}.s2g-workflow-objective{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.s2g-workflow-meta{color:var(--text-secondary,#52615e);font-size:10px}.s2g-workflow-controls{display:flex;align-items:center;gap:5px}.s2g-workflow button{padding:3px 7px;border:1px solid #176b5b;border-radius:5px;background:transparent;color:inherit;cursor:pointer}.s2g-workflow button:disabled{opacity:.5}.s2g-workflow input{min-width:170px;padding:4px 6px;border:1px solid color-mix(in srgb,currentColor 22%,transparent);border-radius:5px;background:var(--dsw-surface-primary,#fff);color:inherit}
   `;
   document.head.appendChild(style);
 
@@ -95,6 +97,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           <div data-manual hidden class="s2g-pair"><label>Service type<select name="manualDomain"><option value="spec">Spec Editor</option><option value="circuit">Circuit Designer</option></select></label><label>Service URL<input name="manualUrl" spellcheck="false" placeholder="http://127.0.0.1:6010"></label></div>
           <div data-existing><label>Target<select name="target"></select></label><p class="s2g-hint">The list is browse-only. A conversation remains permanently bound to the selected target.</p></div>
           <div data-create hidden class="s2g-form"><div class="s2g-pair"><label>Document ID<input name="documentId" autocomplete="off" spellcheck="false" placeholder="my_design"></label><label>Title<input name="title" autocomplete="off" placeholder="My design"></label></div><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
+          <label>Assistant workflow<select name="preset"><option value="focused">Focused · one-shot Q&amp;A and proposals</option><option value="goal">Goal · bounded long-running work</option><option value="orchestrated">Orchestrated · bounded work with subagents</option></select></label>
+          <p class="s2g-hint">The workflow is fixed for this conversation. Service-specific context, tools, and review rules are added separately.</p>
           <p class="s2g-empty" data-empty hidden>No matching documents are available from the connected services.</p>
           <p class="s2g-error" hidden></p>
           <div class="s2g-dialog-actions"><button type="button" data-cancel>Cancel</button><button class="primary" type="submit">Start conversation</button></div>
@@ -151,14 +155,15 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
             return;
           }
           if (!service) throw new Error("Choose a design service.");
+          const preset = form.elements.preset.value;
           if (selectedMode() === "create") {
             const documentId = form.elements.documentId.value.trim(), title = form.elements.title.value.trim();
             if (!documentId || !title) throw new Error("Document ID and title are required.");
-            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title }));
+            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title, preset }));
           } else {
             const target = targets[Number(targetSelect.value)];
             if (!target) throw new Error("Choose an available target.");
-            close(await api("/bindings/reserve", target));
+            close(await api("/bindings/reserve", { ...target, preset }));
           }
         } catch (caught) {
           error.textContent = caught instanceof Error ? caught.message : String(caught); error.hidden = false;
@@ -217,7 +222,11 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         documentId: reservation.session.workspaceDocumentId,
       };
       const workspace = await ensureWorkspace(ctx, descriptor);
-      const createdId = await ctx.sessions.create({ sessionId: id, workspaceId: workspace.workspaceId });
+      const createdId = await ctx.sessions.create({
+        sessionId: id,
+        workspaceId: workspace.workspaceId,
+        agentPreset: reservation.session.preset || "focused",
+      });
       if (createdId !== id) throw new Error(`The Harness created session ${createdId} instead of reserved binding ${id}.`);
       await api(`/bindings/${encodeURIComponent(id)}/activate`, {});
       ctx.sessions.open(createdId);
@@ -324,6 +333,39 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h(ReviewCard, { review: value.review });
   }
 
+  function WorkflowDock({ sessionId, useProjection }) {
+    const workflow = useProjection("sWorkflow");
+    const [busy, setBusy] = React.useState(false);
+    const [answer, setAnswer] = React.useState("");
+    const [error, setError] = React.useState("");
+    if (!workflow || workflow.preset === "focused" || ["complete", "cancelled"].includes(workflow.status)) return null;
+    const pending = record(workflow.pending);
+    const usage = record(workflow.usage), budget = record(workflow.budget);
+    async function act(action, extra = {}) {
+      setBusy(true); setError("");
+      try {
+        await api(`/bindings/${encodeURIComponent(sessionId)}/workflow/actions`, {
+          action, runId: workflow.runId, revision: workflow.revision, ...extra,
+        });
+        if (action === "answer") setAnswer("");
+      } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+      finally { setBusy(false); }
+    }
+    return h("div", { className: "s2g-workflow", "data-s2g-workflow": workflow.status },
+      h("strong", null, workflow.status.replaceAll("-", " ")),
+      h("div", { className: "s2g-workflow-main" },
+        h("div", { className: "s2g-workflow-objective", title: workflow.objective }, pending.prompt || workflow.objective),
+        h("div", { className: "s2g-workflow-meta" }, `${workflow.preset} · rounds ${usage.rounds || 0}/${budget.maxRounds || 0} · requests ${usage.requests || 0}/${budget.maxRequests || 0} · children ${usage.children || 0}/${budget.maxChildren || 0}`),
+        error ? h("span", { className: "s2g-error" }, error) : null),
+      h("div", { className: "s2g-workflow-controls" },
+        workflow.status === "awaiting-user-input" ? h(React.Fragment, null,
+          h("input", { value: answer, disabled: busy, "aria-label": "Workflow answer", placeholder: "Answer required question", onChange: event => setAnswer(event.target.value), onKeyDown: event => { if (event.key === "Enter" && answer.trim()) void act("answer", { answer }); } }),
+          h("button", { disabled: busy || !answer.trim(), onClick: () => void act("answer", { answer }) }, "Answer")) : null,
+        workflow.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,
+        ["paused", "blocked"].includes(workflow.status) ? h("button", { disabled: busy, onClick: () => void act("resume") }, "Resume") : null,
+        h("button", { disabled: busy, onClick: () => void act("cancel") }, "Cancel")));
+  }
+
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
   function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds assistant"); }
 
@@ -351,6 +393,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     } });
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
+    ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "s-workflow", order: 11 }, WorkflowDock));
     for (const key of ["prepare_spec_proposal", "prepare_circuit_proposal"]) ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, ProposalToolView));
     queueMicrotask(async () => {
       try {

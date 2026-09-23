@@ -1,0 +1,13 @@
+apiVersion: dsh.deepseek.ai/v1
+kind: ServiceAdapter
+metadata:
+  id: spec-editor
+  version: 1.0.0
+service: spec
+promptBundles:
+  - id: spec2gds.spec
+    version: 1.0.0
+toolPackages:
+  - '@spec2gds/harness-assistant'
+skillPackages: []
+reviewKind: spec-proposal

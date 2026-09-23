@@ -75,7 +75,7 @@ test("Circuit client uses the public snapshot, preview, and proposal routes", as
   const ownerUrl = `http://127.0.0.1:${address.port}/api/circuit-designer/v1`;
   const clients = new OwnerClients([], [ownerUrl], 5_000);
   const binding: SessionBinding = {
-    sessionId: "session-1", status: "active", domain: "circuit", ownerUrl,
+    sessionId: "session-1", status: "active", preset: "focused", domain: "circuit", ownerUrl,
     documentId: "doc-1", scope: "document", entityKind: null, entityId: null,
     title: "Circuit: doc-1", archived: false, createdAt: "", updatedAt: "",
     workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",

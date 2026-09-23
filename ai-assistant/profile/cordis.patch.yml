@@ -72,9 +72,9 @@
 # historical goal state cannot resume in the background. Keep them unavailable
 # until spec2gds owns bounded, review-aware goal semantics.
 - id: goal
-  disabled: true
+  disabled: false
 - id: goal-round-driver
-  disabled: true
+  disabled: false
 - id: command-goal
   disabled: true
 - id: tool-goal
@@ -83,6 +83,25 @@
   disabled: true
 
 - insert:
+    - id: prompt-catalog
+      name: '@deepseek-ai/dsh-prompt-catalog'
+
+    - id: prompt-catalog-yaml
+      name: '@deepseek-ai/dsh-prompt-catalog-yaml'
+      config:
+        roots:
+          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/prompts'
+
+    - id: s-workflow
+      name: '@deepseek-ai/dsh-s-workflow'
+
+    - id: s-workflow-yaml
+      name: '@deepseek-ai/dsh-s-workflow-yaml'
+      config:
+        roots:
+          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/workflows'
+          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/adapters'
+
     - id: spec2gds-assistant
       name: '@spec2gds/harness-assistant'
       config:

@@ -1,0 +1,13 @@
+apiVersion: dsh.deepseek.ai/v1
+kind: ServiceAdapter
+metadata:
+  id: circuit-editor
+  version: 1.0.0
+service: circuit
+promptBundles:
+  - id: spec2gds.circuit
+    version: 1.0.0
+toolPackages:
+  - '@spec2gds/harness-assistant'
+skillPackages: []
+reviewKind: circuit-proposal

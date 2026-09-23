@@ -12,7 +12,7 @@ import {
 import type { ProposalReview, SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit"): SessionBinding => ({
-  sessionId: "session-1", status: "active", domain, ownerUrl: "http://owner", documentId: "doc-1", scope: "document",
+  sessionId: "session-1", status: "active", preset: "focused", domain, ownerUrl: "http://owner", documentId: "doc-1", scope: "document",
   entityKind: null, entityId: null, title: "Test", archived: false, createdAt: "", updatedAt: "",
   workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
   workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",

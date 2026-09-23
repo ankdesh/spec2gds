@@ -25,20 +25,53 @@ test("focused web profile removes the generic DSH provider onboarding plugin", (
   assert.doesNotMatch(patch, /showTestingNotice|showDeepSeekOnboarding/);
 });
 
-test("focused product profile disables generic autonomous goals", () => {
+test("goal state is host-owned while model goal tools remain preset-scoped", () => {
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
-  assert.match(patch, /- id: goal\n  disabled: true/);
-  assert.match(patch, /- id: goal-round-driver\n  disabled: true/);
+  const webPatch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
+  assert.match(patch, /- id: goal\n  disabled: false/);
+  assert.match(patch, /- id: goal-round-driver\n  disabled: false/);
   assert.match(patch, /- id: command-goal\n  disabled: true/);
   assert.match(patch, /- id: tool-goal\n  disabled: true/);
   assert.match(patch, /- id: ui-goal\n  disabled: true/);
+  assert.match(webPatch, /- id: agent-presets\n  disabled: false/);
+  assert.match(webPatch, /default: focused/);
+  assert.match(webPatch, /- id: ui-goal\n  disabled: false/);
+});
+
+test("catalog-backed presets separate focused, goal, and read-only orchestrated capabilities", () => {
+  const focused = readFileSync(resolve(root, "profile/presets/focused/agent.cordis.yml"), "utf8");
+  const goal = readFileSync(resolve(root, "profile/presets/goal/agent.cordis.yml"), "utf8");
+  const orchestrated = readFileSync(resolve(root, "profile/presets/orchestrated/agent.cordis.yml"), "utf8");
+  assert.doesNotMatch(focused, /tool-goal|tool-s-workflow|tool-subagent/);
+  assert.match(goal, /@deepseek-ai\/dsh-tool-goal/);
+  assert.match(goal, /@deepseek-ai\/dsh-tool-s-workflow/);
+  assert.doesNotMatch(goal, /tool-subagent/);
+  assert.match(orchestrated, /toolName: delegate_workflow_step/);
+  assert.match(orchestrated, /maxDepth: 1/);
+  assert.match(orchestrated, /enableRunInBackground: false/);
+  assert.match(orchestrated, /allow:\n        - get_bound_context/);
+});
+
+test("workflow controls stay human-owned and are surfaced in the conversation dock", () => {
+  const server = readFileSync(resolve(root, "src/index.ts"), "utf8");
+  const client = readFileSync(resolve(root, "client/index.js"), "utf8");
+  assert.ok(server.includes("workflow\\/actions"));
+  for (const action of ["pause", "resume", "cancel", "answer", "approve", "raise-budgets"]) {
+    assert.ok(server.includes(`action === "${action}"`));
+  }
+  assert.match(server, /settleReviewedWorkflow\(binding, updated\)/);
+  assert.match(server, /sWorkflow\.updateDraft/);
+  assert.match(server, /does not permit owner mutation/);
+  assert.match(client, /conversation\.input\.dock/);
+  assert.match(client, /data-s2g-workflow/);
+  assert.match(client, /workflow\/actions/);
 });
 
 test("product policy bounds model steps and output tokens", () => {
   const source = readFileSync(resolve(root, "src/index.ts"), "utf8");
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
   assert.match(source, /ctx\.on\("agent\/pre-step"/);
-  assert.match(source, /step > config\.maxStepsPerTurn \? \{ kind: "reject" \}/);
+  assert.match(source, /agentPreset\(agent\) === "focused" \? config\.maxStepsPerTurn : 8/);
   assert.match(source, /ctx\.on\("agent\/request"/);
   assert.match(source, /maxTokens: config\.maxOutputTokens/);
   assert.match(patch, /ASSISTANT_MAX_STEPS_PER_TURN \|\| 3/);
@@ -76,7 +109,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
     fetch: async (url: string) => ({ ok: true, json: async () => {
       if (url === "/spec2gds-api/workspaces") return { workspaces: [] };
       if (url === "/spec2gds-api/bindings/bound-session") return { session: {
-        sessionId: "bound-session", workspaceKey: "workspace-1", workspaceTitle: "Bound design",
+        sessionId: "bound-session", preset: "focused", workspaceKey: "workspace-1", workspaceTitle: "Bound design",
         workspacePath: "/tmp/bound-design", workspaceDomain: "spec",
         workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
       } };
@@ -120,7 +153,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   for (const task of microtasks) await task();
   await new Promise(resolvePromise => setImmediate(resolvePromise));
   assert.deepEqual(renamed, ["Bound design", "Bound design · 127.0.0.1:6010 · workspac"]);
-  assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1" }]));
+  assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1", agentPreset: "focused" }]));
   assert.deepEqual(opened, ["bound-session"]);
 });
 
