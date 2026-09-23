@@ -67,7 +67,9 @@ stack already occupying the default ports.
 The browser profile omits DSH's generic Models settings/onboarding
 plugin. Configure the OpenAI provider through `OPENAI_API_KEY`,
 `OPENAI_BASE_URL`, and `OPENAI_MODEL`; the conversation model selector remains
-available for configured models.
+available for configured models. The OpenAI route always adds `gpt-5.6-luna`
+to that selector while retaining `OPENAI_MODEL` as the default; the configured
+endpoint and API key must have access to the selected model.
 
 The new-conversation dialog offers three immutable execution presets:
 
@@ -85,12 +87,20 @@ durable DSH Session events. The browser dock exposes human pause, resume,
 cancel, and answer controls. Proposal apply/send is the completion approval;
 discard cancels the workflow.
 
-Focused turns default to three model steps. Goal and orchestrated turns allow
-eight steps while the workflow adds round, request, token, time, child,
-concurrency, and depth budgets. Each model response remains capped at 1,200
-output tokens. Orchestrated children inherit the immutable binding but can use
-only `get_bound_context`; they cannot propose, ask the user, mutate workflow
-state, or delegate again.
+Every browser root preset also exposes DSH's structured `ask_user_question`
+tool. When proposal fields are missing, Harness replaces the composer with an
+interactive question surface and returns the answers to the same model turn.
+This is distinct from a durable workflow input request, which pauses a goal or
+orchestrated run for a later answer. The headless profile and delegated children
+do not expose either interactive mechanism.
+
+Focused turns default to three model steps and receive one extra step only
+after a visible structured-question call in that turn. Goal and orchestrated
+turns allow eight steps while the workflow adds round, request, token, time,
+child, concurrency, and depth budgets. Each model response remains capped at
+1,200 output tokens. Orchestrated children inherit the immutable binding but
+can use only `get_bound_context`; they cannot propose, ask the user, mutate
+workflow state, or delegate again.
 
 ## Design-source workspaces
 

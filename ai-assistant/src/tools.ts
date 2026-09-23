@@ -31,6 +31,16 @@ const CIRCUIT_PROPOSAL_DESCRIPTION = `Prepare and owner-preview a typed Circuit 
 Intent mapping: add a definition -> add_component; place a definition -> add_instance; add a pin -> update_component with the complete component; add a top-level port -> add_boundary_terminal; connect a new net -> create_net; extend an existing net -> connect_endpoint.
 Supported operations are add/update/remove_component, add/update/remove_instance, add/update/remove_boundary_terminal, create/update/delete_net, and connect/disconnect_endpoint. Complete replacements must copy every unchanged field. New normal components use {id,label,origin:"local",editable:true,terminals,parameters,appearance:{renderer_key:"default",properties:[{name,value}]}}. Instances use {id,label,component_id,parameter_values:[{name,value}]}. Endpoints are exactly {kind:"instance",instance_id,terminal_id,slice:null} or {kind:"boundary",terminal_id,slice:null}; use {lsb,width} only for an explicit numeric slice. Reuse exact existing IDs, order dependent operations, prefer cascade:false, and never author geometry, routes, labels, or layout.`;
 
+export function structuredQuestionPrompt(enabled: boolean): PromptSection | null {
+  if (!enabled) return null;
+  return {
+    name: "spec2gds:interactive-clarification",
+    order: 250,
+    text: `INTERACTIVE CLARIFICATION
+After reading bound context, if a concrete change cannot be represented safely without user-supplied values, you MUST call ask_user_question. Do not list the missing questions in an ordinary assistant response and end the turn. Batch all currently known missing values into one concise tool call, ask only for information that cannot be derived from bound context, and do not ask about optional data that can safely retain its current or default value. Use this tool for immediate missing fields or choices. When a goal or orchestrated workflow instead needs to stop durably for a consequential decision, use its workflow input request capability.`,
+  };
+}
+
 function callId(exec: ToolRunContext): string { return String(exec.callId); }
 function id(prefix: string): string { return `${prefix}_${randomUUID().replaceAll("-", "")}`; }
 
@@ -63,7 +73,10 @@ function diagnostics(value: Record<string, unknown>): unknown {
 }
 
 export function registerDomainTools(
-  agentContext: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: PromptSection): () => void } },
+  agentContext: {
+    tools: { register(tool: unknown): () => void; get?(name: string): unknown };
+    systemPrompt?: { section(value: PromptSection): () => void };
+  },
   binding: SessionBinding,
   state: ProductState,
   owners: OwnerClients,
@@ -72,6 +85,8 @@ export function registerDomainTools(
 ): void {
   const sections = promptCatalog ? catalogPromptSectionsFor(promptCatalog, binding) : promptSectionsFor(binding);
   for (const section of sections) agentContext.systemPrompt?.section(section);
+  const interaction = structuredQuestionPrompt(agentContext.tools.get?.("ask_user_question") !== undefined);
+  if (interaction) agentContext.systemPrompt?.section(interaction);
   agentContext.tools.register(defineTool({
     name: "get_bound_context",
     description: "Read the current authoritative semantic context and revision for this conversation's immutable Spec or Circuit binding. Call this before discussing concrete design facts or preparing a proposal. It never mutates owner data.",

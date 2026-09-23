@@ -106,7 +106,7 @@ The base and web bundles contain more infrastructure, but the following packages
 | `@deepseek-ai/dsh-agent` | Live Agent registry | Provides `ctx.agents`, Agent lifecycle lookup, parent relationships, and scoped identity |
 | `@deepseek-ai/dsh-agent-loop` | Turn and step driver | Assembles requests, runs the model, dispatches tools, logs results, and emits `agent/*` hooks |
 | `@deepseek-ai/dsh-agent-default-model` | Route selection | Selects the configured provider and model |
-| `@deepseek-ai/dsh-llm-pi-ai` | LLM adapter provider | Connects DSH to the configured OpenAI-compatible endpoint |
+| `@deepseek-ai/dsh-llm-pi-ai` | LLM adapter provider | Connects DSH to the configured OpenAI-compatible endpoint and exposes the configured default plus `gpt-5.6-luna` to model selectors |
 | `@deepseek-ai/dsh-system-prompt` | Ordered prompt registry | Composes persona, domain sections, workflow policy, and visible tool schemas |
 | `@deepseek-ai/dsh-tools` | Scoped tool registry and executor | Runs typed tools through validation, logging, cancellation, and result handling |
 
@@ -119,6 +119,8 @@ The base and web bundles contain more infrastructure, but the following packages
 | `@deepseek-ai/dsh-session-projection` | Typed event fold | Projects the latest workflow snapshot for host and browser consumers |
 | `@deepseek-ai/dsh-sandbox-policy` | Workspace safety policy | Keeps the general execution environment read-only even though coding tools are disabled |
 | `@deepseek-ai/dsh-user-approval` | Approval policy | Retains DSH's `ask` policy; artifact mutation still uses the product review card |
+| `@deepseek-ai/dsh-user-questions` | Human-question service seam | Suspends a root Agent tool call until a scoped answerer accepts a response |
+| `@deepseek-ai/dsh-tool-ask-user` | Structured model-facing question tool | Lets every browser root preset request missing information or a choice during the current turn |
 
 The DSH Session log is the conversation source of truth. Product SQLite stores only immutable editor bindings and proposal-review state. Backups must keep both stores together.
 
@@ -140,6 +142,7 @@ The YAML packages are providers for their corresponding catalog services. The to
 | --- | --- | --- |
 | `@deepseek-ai/dsh-agent-presets` | All browser Sessions | Loads trusted per-Agent Cordis trees from `profile/presets` |
 | `@deepseek-ai/dsh-client-ui-agent-preset` | Browser | Adds the preset choice to new Session creation |
+| `@deepseek-ai/dsh-client-ui-user-questions` | Browser | Replaces the composer with the structured question surface while `ask_user_question` waits |
 | `@deepseek-ai/dsh-persona` | All three | Adds the preset-specific identity before domain prompt sections |
 | `@deepseek-ai/dsh-goal` | Goal and orchestrated infrastructure | Persists same-Session objective state |
 | `@deepseek-ai/dsh-goal-round-driver` | Goal and orchestrated infrastructure | Continues an unfinished goal in bounded rounds |
@@ -163,6 +166,7 @@ The browser bundle uses DSH's client plugin system rather than owning a separate
 | Client slot registry | Inserts branding, proposal tool views, and the workflow dock |
 | Tool renderer | Renders persisted Spec or Circuit proposal results as review cards |
 | Session projection transport | Supplies the live `sWorkflow` value to the workflow dock |
+| User-question answerer | Takes over the composer, collects structured answers, and resumes the waiting tool call |
 
 ## 5. Follow prompt construction
 
@@ -171,10 +175,17 @@ Prompt construction has three independent inputs:
 1. The preset persona identifies focused, goal-oriented, or orchestrating behavior.
 2. The exact service prompt bundle contributes `domain-persona`, `binding-context`, `operation-constraints`, and `output-contract`.
 3. Preset-scoped DSH packages contribute stable policies such as the workflow-tool policy.
+4. When a browser root preset exposes `ask_user_question`, the product contributes `spec2gds:interactive-clarification` at order 250; it mandates the tool for required values absent from bound context and is omitted in headless mode.
 
 The prompt catalog replaces `{{binding.*}}` variables from the immutable binding and returns detached text plus the bundle digest. The product checks expected section IDs and order before registering them on `agent.ctx.systemPrompt`.
 
 An unbound Session receives one `complete: true` guard. In DSH, that flag makes the section the entire effective prompt and suppresses other prompt text. The guard therefore fails closed without exposing a partially configured design assistant.
+
+### Choose the right input mechanism
+
+`ask_user_question` and an `sWorkflow` input request both involve a human, but they have different lifetimes. Use the structured question tool for information needed immediately in the current turn, such as a new component's name, port list, or a choice between two compatible endpoints. The conditional product prompt makes this mandatory when a concrete proposal cannot be represented without those values; the assistant must not end the turn by printing the questions as ordinary text. The Web answerer replaces the composer, returns compact structured answers to the tool, and the same model turn continues.
+
+Use the workflow input request only when goal or orchestrated work must durably stop at a consequential decision. It changes the persisted workflow state to `awaiting-user-input`; a later direct user answer returns the workflow to `active`. Focused mode has no workflow state. Headless mode has no interactive answerer. Delegated children cannot use either mechanism and return unresolved questions to the root Agent.
 
 ## 6. Follow the three execution paths
 
@@ -184,13 +195,14 @@ An unbound Session receives one `complete: true` guard. In DSH, that flag makes 
 human message
   -> Agent turn
   -> get_bound_context
+  -> optional ask_user_question and structured answer
   -> optional prepare_spec_proposal / prepare_circuit_proposal
   -> owner preview only
   -> persisted review card
   -> human Apply/Send or Discard
 ```
 
-Focused mode mounts no goal, workflow, or delegation tools. The product still enforces the immutable binding, fresh context read, three-step limit, and 1,200-token response cap. Questions can finish after the context read; edits produce a previewed proposal but never mutate through a model tool.
+Focused mode mounts the structured question tool but no goal, workflow, or delegation tools. The product still enforces the immutable binding, fresh context read, normal three-step limit, and 1,200-token response cap. One visible `ask_user_question` call earns one additional step in that same turn so context read, clarification, proposal, and final response can complete; ordinary repeated-tool trajectories still stop at three. Questions can finish after the context read; missing fields can be collected interactively; edits produce a previewed proposal but never mutate through a model tool.
 
 ### Goal-oriented work
 

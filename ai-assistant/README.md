@@ -36,7 +36,9 @@ connect another service for this process or create a new Spec or empty Circuit;
 a Workspace-row action stays within that logical design source. The same dialog
 chooses an immutable `focused`, `goal`, or `orchestrated` preset. Focused is
 one-shot; goal adds a bounded durable loop; orchestrated additionally permits
-depth-one read-only analysis children.
+depth-one read-only analysis children. All browser presets can pause the
+current turn with Harness's structured question surface when required details
+cannot be derived from bound context. Headless requests remain noninteractive.
 The existing editor links also work:
 
 - `/launch/spec-document?service_base_url=...&document_id=...`
@@ -83,6 +85,11 @@ node deployment/request.mjs --domain spec --service-url ... --document-id ... --
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
 | `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |
 | `SPEC2GDS_CATALOG_ROOT` | Product package's `profile/catalog` (normally set by the launcher) |
+
+The OpenAI route always offers `gpt-5.6-luna` in the conversation model
+selector in addition to the `OPENAI_MODEL` value. `OPENAI_MODEL` remains the
+default, so adding Luna does not change existing sessions or deployments.
+The configured API key and compatible endpoint must grant access to the model.
 
 Owner allowlists are comma-separated exact URLs. Stored owner URLs are checked
 against the current allowlist before every owner-backed operation. This is a

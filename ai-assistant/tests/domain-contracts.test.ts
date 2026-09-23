@@ -3,6 +3,7 @@ import test from "node:test";
 import { validateArgs } from "@deepseek-ai/dsh-tools";
 import { promptSectionsFor, shapeBoundContext } from "../src/domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "../src/operation-schemas.js";
+import { structuredQuestionPrompt } from "../src/tools.js";
 import type { SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): SessionBinding => ({
@@ -44,6 +45,19 @@ test("composed domain prompts retain proposal and safety rules", () => {
     "complete replacements", "VALID ENDPOINT CATALOG", "cascade=false", "supported=false",
     "List every material assumption", "Never claim a proposal was applied or sent",
   ]) assert.match(circuit, new RegExp(phrase));
+});
+
+test("structured-question policy is conditional and requires the interactive tool", () => {
+  assert.equal(structuredQuestionPrompt(false), null);
+  const section = structuredQuestionPrompt(true);
+  assert.ok(section);
+  assert.equal(section.name, "spec2gds:interactive-clarification");
+  assert.equal(section.order, 250);
+  assert.equal(Object.hasOwn(section, "complete"), false);
+  assert.match(section.text, /MUST call ask_user_question/);
+  assert.match(section.text, /Do not list the missing questions in an ordinary assistant response/);
+  assert.match(section.text, /cannot be derived from bound context/);
+  assert.match(section.text, /workflow input request capability/);
 });
 
 test("binding section names immutable entity and document targets and requires fresh context", () => {

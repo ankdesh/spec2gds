@@ -183,11 +183,14 @@ propose new top-level components or designs (including a design's initial
 instances); use an entity's **Options → More actions… → Explore with AI
 Assistant** when a reviewed change should target an existing entity.
 
-Assistant editing conversations fail closed unless they are bound to an exact
-editor document or entity. Generic DSH goals and their background driver are
-disabled; each user turn is also capped at three model steps and 1,200 output
-tokens per model response so a repeated tool trajectory cannot run unattended.
-See the Assistant guide for the optional limit overrides.
+Assistant conversations fail closed unless they are bound to an exact editor
+document or entity. The browser offers focused, goal, and orchestrated presets;
+all preserve owner preview and explicit review as the only mutation boundary.
+Focused turns are capped at three model steps, with one additional step only
+after a visible structured-question call, and every model response is capped
+at 1,200 output tokens. Goal and orchestrated work use separate bounded
+workflow budgets. See the Assistant guide for the full capability and limit
+matrix.
 
 ## Run only the specification editor
 

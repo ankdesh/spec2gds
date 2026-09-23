@@ -157,6 +157,14 @@ export function authenticatedLaunchLocation(
   return `${authenticated.pathname}${authenticated.search}#${launch}`;
 }
 
+export function maxModelStepsForTurn(
+  preset: "focused" | "goal" | "orchestrated",
+  focusedBase: number,
+  clarified: boolean,
+): number {
+  return preset === "focused" ? focusedBase + (clarified ? 1 : 0) : 8;
+}
+
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
   const config: ServiceConfig = {
     provider: String(rawConfig.provider), model: String(rawConfig.model), stateRoot: resolve(String(rawConfig.stateRoot)),
@@ -171,6 +179,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const unboundGuards = new Map<string, () => void>();
   const delegatedParents = new Map<string, string>();
   const activeDelegations = new Map<string, Set<string>>();
+  const clarifiedTurns = new Map<string, number>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
@@ -236,14 +245,22 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
 
   // DSH deliberately leaves turn budgeting to product policy. Spec work is
   // narrow: one context read and one proposal call normally settle in two or
-  // three model steps. Refuse a fourth model call and cap each response so a
-  // malformed tool trajectory cannot silently consume an unbounded budget.
+  // three model steps. A visible user-question call earns exactly
+  // one additional focused step so context -> question -> proposal -> final
+  // can finish without weakening the ordinary runaway-tool boundary.
   ctx.on("agent/pre-step", async (
-    { agent, step }: { agent: ProductAgent; step: number },
+    { agent, turn, step }: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<unknown>,
-  ) => step > (agentPreset(agent) === "focused" ? config.maxStepsPerTurn : 8)
-    ? { kind: "reject" }
-    : next());
+  ) => {
+    const limit = maxModelStepsForTurn(
+      agentPreset(agent),
+      config.maxStepsPerTurn,
+      clarifiedTurns.get(String(agent.id)) === turn,
+    );
+    return step > limit
+      ? { kind: "reject" }
+      : next();
+  });
   ctx.on("agent/request", async (
     _payload: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<Record<string, unknown>>,
@@ -307,6 +324,12 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     else guardUnbound(agent);
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
+    if (event.type === "tool/call" && event.data?.name === "ask_user_question"
+      && Number.isSafeInteger(event.data?.turn)) {
+      clarifiedTurns.set(String(session.id), Number(event.data.turn));
+    }
+  });
+  ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
     if (event.type !== "user/message" || event.data?.source?.kind !== "user") return;
     const binding = state.getBinding(String(session.id));
     if (!binding || binding.preset === "focused") return;
@@ -356,6 +379,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
       delegatedParents.delete(String(agent.id));
     }
     attached.delete(String(agent.id));
+    clarifiedTurns.delete(String(agent.id));
     unboundGuards.get(String(agent.id))?.();
     unboundGuards.delete(String(agent.id));
   });

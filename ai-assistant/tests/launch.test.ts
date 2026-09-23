@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
-import { authenticatedLaunchLocation } from "../src/index.js";
+import { authenticatedLaunchLocation, maxModelStepsForTurn } from "../src/index.js";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -42,6 +42,9 @@ test("catalog-backed presets separate focused, goal, and read-only orchestrated 
   const focused = readFileSync(resolve(root, "profile/presets/focused/agent.cordis.yml"), "utf8");
   const goal = readFileSync(resolve(root, "profile/presets/goal/agent.cordis.yml"), "utf8");
   const orchestrated = readFileSync(resolve(root, "profile/presets/orchestrated/agent.cordis.yml"), "utf8");
+  for (const preset of [focused, goal, orchestrated]) {
+    assert.match(preset, /@deepseek-ai\/dsh-tool-ask-user/);
+  }
   assert.doesNotMatch(focused, /tool-goal|tool-s-workflow|tool-subagent/);
   assert.match(goal, /@deepseek-ai\/dsh-tool-goal/);
   assert.match(goal, /@deepseek-ai\/dsh-tool-s-workflow/);
@@ -50,6 +53,16 @@ test("catalog-backed presets separate focused, goal, and read-only orchestrated 
   assert.match(orchestrated, /maxDepth: 1/);
   assert.match(orchestrated, /enableRunInBackground: false/);
   assert.match(orchestrated, /allow:\n        - get_bound_context/);
+  assert.doesNotMatch(orchestrated.match(/toolFilter:[\s\S]*/)?.[0] ?? "", /ask_user_question/);
+});
+
+test("browser presets use Harness structured questions while headless stays noninteractive", () => {
+  const packageJson = readFileSync(resolve(root, "package.json"), "utf8");
+  const webPatch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
+  const sharedPatch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  assert.match(packageJson, /"@deepseek-ai\/dsh-tool-ask-user": "0\.1\.6-alpha\.1"/);
+  assert.doesNotMatch(webPatch, /- id: ui-user-questions\n  disabled: true/);
+  assert.doesNotMatch(sharedPatch, /@deepseek-ai\/dsh-tool-ask-user/);
 });
 
 test("workflow controls stay human-owned and are surfaced in the conversation dock", () => {
@@ -71,11 +84,28 @@ test("product policy bounds model steps and output tokens", () => {
   const source = readFileSync(resolve(root, "src/index.ts"), "utf8");
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
   assert.match(source, /ctx\.on\("agent\/pre-step"/);
-  assert.match(source, /agentPreset\(agent\) === "focused" \? config\.maxStepsPerTurn : 8/);
+  assert.match(source, /clarifiedTurns\.get\(String\(agent\.id\)\) === turn/);
+  assert.match(source, /maxModelStepsForTurn/);
+  assert.match(source, /event\.data\?\.name === "ask_user_question"/);
   assert.match(source, /ctx\.on\("agent\/request"/);
   assert.match(source, /maxTokens: config\.maxOutputTokens/);
   assert.match(patch, /ASSISTANT_MAX_STEPS_PER_TURN \|\| 3/);
   assert.match(patch, /ASSISTANT_MAX_OUTPUT_TOKENS \|\| 1200/);
+});
+
+test("OpenAI route offers GPT-5.6 Luna without changing the configured default", () => {
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  assert.match(patch, /provider: openai\n    model: !!js process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini'/);
+  assert.match(patch, /new Set\(\[process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini', 'gpt-5\.6-luna'\]\)/);
+  assert.match(patch, /id => \(\{ id \}\)/);
+});
+
+test("a structured clarification grants only one additional focused model step", () => {
+  assert.equal(maxModelStepsForTurn("focused", 3, false), 3);
+  assert.equal(maxModelStepsForTurn("focused", 3, true), 4);
+  assert.equal(maxModelStepsForTurn("goal", 3, false), 8);
+  assert.equal(maxModelStepsForTurn("goal", 3, true), 8);
+  assert.equal(maxModelStepsForTurn("orchestrated", 3, true), 8);
 });
 
 test("product dialog preserves the HTML hidden contract over layout styles", () => {

@@ -11,8 +11,7 @@
         apiKeyEnv: OPENAI_API_KEY
         api: openai-completions
         baseURL: !!js process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-        models:
-          - id: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
+        models: !!js Array.from(new Set([process.env.OPENAI_MODEL || 'gpt-4o-mini', 'gpt-5.6-luna']), id => ({ id }))
 
 - id: system-prompt
   config:

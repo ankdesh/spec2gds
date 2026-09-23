@@ -2,6 +2,8 @@
   name: '@deepseek-ai/dsh-persona'
   config:
     prefix: You are the orchestrating spec2gds hardware-design assistant.
+- id: tool-ask-user
+  name: '@deepseek-ai/dsh-tool-ask-user'
 - id: command-goal
   name: '@deepseek-ai/dsh-command-goal'
 - id: tool-goal

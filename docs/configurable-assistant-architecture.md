@@ -31,6 +31,7 @@ observe a hot reload or an implicit latest version.
 | Versioned prompt catalog | Spec/Circuit YAML bundles; exact variable binding and section checks | New Cordis `promptCatalog` service and strict YAML provider | Domain instructions become reusable, testable configuration without losing deterministic section order |
 | Generic workflow catalog | One generic workflow plus Spec/Circuit adapter YAML | New Cordis `sWorkflow` service and strict YAML provider | New services reuse lifecycle/budget behavior while contributing exact domain capabilities |
 | Execution presets | Browser selector and immutable binding field | Existing `agent-presets`, `persona`, goal command/tool, and preset-scoped composition | One assistant supports one-shot Q&A, long-running goals, and orchestration without conflating service logic |
+| Interactive clarification | All browser root presets mount the structured question tool; the host adds a conditional mandatory-use prompt section | Existing `user-questions`, `tool-ask-user`, `system-prompt`, and `ui-user-questions` composition | Missing proposal fields use a composer takeover and resume the same turn instead of an unstructured final response |
 | Durable workflow state | Product starts the exact workflow on the first direct user request | Full-snapshot `s-workflow/change` Session event and strict projection | Pause/resume/replay retains exact definitions, budgets, progress, draft, and human decisions |
 | Restricted model progress | Goal/orchestrated presets mount five workflow tools | Existing typed DSH tool registry plus new `tool-s-workflow` | The model can report work but cannot grant itself lifecycle, budget, approval, or mutation authority |
 | Human workflow controls | Conversation dock and same-origin CAS endpoints | Client slot `conversation.input.dock` and DSH Session projection | Humans can pause, resume, cancel, answer, and approve without model-owned control flow |
@@ -43,8 +44,9 @@ observe a hot reload or an implicit latest version.
 | --- | ---: | ---: | ---: |
 | Read bound owner context | Yes | — | Validates owner and binding |
 | Prepare an owner proposal | Root agent only | Reviews | Persists artifact and preview |
+| Request immediate clarification | Root agent only | Answers in structured composer | Routes the answer back into the same turn |
 | Update draft/checkpoint | Yes, exact workflow revision | Observes | Enforces schema and budget |
-| Request input/completion review | Yes | Answers/reviews | Persists pending state |
+| Request durable workflow input/completion review | Goal/orchestrated root only | Answers/reviews | Persists pending state |
 | Start/pause/resume/cancel | No | Yes | Yes |
 | Raise workflow budgets | No | Authorized API | Enforces preset hard caps |
 | Apply/send owner artifact | No | Explicit review action | Loads persisted artifact and checks revision/digest |
@@ -65,10 +67,11 @@ workflow from drifting behind an already-mutated owner document.
 | `orchestrated` | 8 / 48 | 500,000 / 45 min | 6 / 3 / 1 | 24 rounds, 144 requests, 2M tokens, 120 min, 20 / 4 / 1 |
 
 The service validates defaults and raised values. Product turn policy also caps
-focused turns at three model steps, goal/orchestrated turns at eight, and every
-individual model response at 1,200 output tokens. Workflow checkpoint usage is
-monotonic; delegated child creation consumes the child budget before work
-starts.
+focused turns at three model steps, with one extra step only after a visible
+structured-question call in that turn. Goal/orchestrated turns remain capped at
+eight, and every individual model response at 1,200 output tokens. Workflow
+checkpoint usage is monotonic; delegated child creation consumes the child
+budget before work starts.
 
 ## Adding a service
 

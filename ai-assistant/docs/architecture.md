@@ -53,10 +53,17 @@ adds four typed, agent-scoped sections in deterministic order:
 3. Spec or Circuit operation constraints (`200`); and
 4. output and unsupported-request contract (`300`).
 
+When the active preset supplies `ask_user_question`, the product also inserts
+one generic interaction-policy section at order `250`. It requires structured
+questions for proposal values that cannot be derived from bound context and
+forbids ending the turn with the same questions as ordinary assistant text.
+The section is absent when the tool is absent, including headless execution.
+
 Bound sections are composable and do not use Harness's `complete` flag. This
 allows the deployment persona and any deliberately enabled Harness sections to
 coexist with the product contract. Tool descriptions remain the authoritative
-schema-level call guidance and are not duplicated into new prompt sections.
+schema-level argument guidance; the conditional interaction section separately
+defines when the structured-question tool must be used.
 
 An unbound agent is the deliberate exception. It receives one `complete: true`
 fail-closed section, no domain tools, and instructions to open a new bound
@@ -77,13 +84,26 @@ User-selected execution shape and service specialization are independent:
 
 | Preset | Intended use | Model-visible DSH capabilities |
 | --- | --- | --- |
-| `focused` | One-shot questions and ordinary proposals | Bound context plus the domain proposal tool |
+| `focused` | One-shot questions and ordinary proposals | Bound context, structured user questions, and the domain proposal tool |
 | `goal` | Bounded multi-round work | Focused tools, DSH goal tools, and restricted workflow progress tools |
 | `orchestrated` | Bounded work needing independent analysis | Goal capabilities plus one-shot read-only delegation |
 
 The selected preset is stored with the immutable binding and DSH session
 header. Headless requests remain `focused`; the browser chooser is the only
 surface that currently selects another preset.
+
+Every browser root preset mounts `dsh-tool-ask-user`. When required proposal
+details are absent from authoritative bound context, the model can pause the
+current turn and Harness replaces the composer with a structured question
+surface. This immediate interaction is separate from a workflow input request,
+which durably moves a goal or orchestrated run to `awaiting-user-input` so it
+can resume in a later turn. The headless profile has neither the browser
+answerer nor the preset-scoped question tool. A focused turn retains its normal
+three-step ceiling and receives one additional step only after a visible
+`ask_user_question` call in that same turn, allowing context → question →
+proposal → final without raising the ordinary repeated-tool limit. Delegated
+children remain filtered to `get_bound_context` and must return unresolved
+questions to their parent.
 
 `prepare-reviewed-change@1.0.0` is a generic declarative workflow. Exact Spec
 and Circuit adapter manifests contribute prompt refs, tool-package identities,
