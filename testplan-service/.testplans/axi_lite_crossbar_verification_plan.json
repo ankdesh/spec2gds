@@ -1,0 +1,351 @@
+{
+  "id": "axi_lite_crossbar_verification_plan",
+  "name": "AXI4-Lite 1x4 Crossbar Interconnect Verification Plan",
+  "description": "Verification plan for a 1-Master to 4-Slave AXI4-Lite bus matrix crossbar. Verifies memory map address decoding across 4 peripheral apertures, read/write handshake synchronization, slave backpressure stalls, unmapped DECERR responses, and interconnect structural connectivity.",
+  "version": "1.1.0",
+  "target_design": "axi_crossbar_1x4",
+  "revision": 1,
+  "created_at": "2026-09-25T14:23:59.325976+00:00",
+  "updated_at": "2026-09-25T14:23:59.325979+00:00",
+  "tags": [
+    "axi",
+    "interconnect",
+    "bus",
+    "crossbar",
+    "soc"
+  ],
+  "metadata": {},
+  "nodes": {
+    "grp_addr_decode": {
+      "id": "grp_addr_decode",
+      "parent_id": null,
+      "title": "Address Decoding & Slave Steering",
+      "kind": "group",
+      "category": "structural_connectivity",
+      "description": "Verification of address window routing across 4 slave base addresses.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "feat_slave_apertures": {
+      "id": "feat_slave_apertures",
+      "parent_id": "grp_addr_decode",
+      "title": "Peripheral Base Address Window Routing",
+      "kind": "feature",
+      "category": "structural_connectivity",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_route_slave0_uart": {
+      "id": "tc_route_slave0_uart",
+      "parent_id": "feat_slave_apertures",
+      "title": "Route Address 0x1000_0000 to Slave 0 (UART)",
+      "kind": "testcase",
+      "category": "structural_connectivity",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Master initiates read at ARADDR = 0x1000_0004",
+      "expected_outcome": "Slave 0 ARVALID asserts; Slave 1-3 ARVALID remain low; data routed to master",
+      "coverage_bins": [
+        "structural_connectivity:route:slave0_uart"
+      ],
+      "tags": [
+        "routing",
+        "uart"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_route_slave1_spi": {
+      "id": "tc_route_slave1_spi",
+      "parent_id": "feat_slave_apertures",
+      "title": "Route Address 0x1000_1000 to Slave 1 (SPI)",
+      "kind": "testcase",
+      "category": "structural_connectivity",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Master initiates write at AWADDR = 0x1000_1010",
+      "expected_outcome": "Slave 1 AWVALID asserts; transactions strictly steered to SPI target",
+      "coverage_bins": [
+        "structural_connectivity:route:slave1_spi"
+      ],
+      "tags": [
+        "routing",
+        "spi"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_decode_unmapped_decerr": {
+      "id": "tc_decode_unmapped_decerr",
+      "parent_id": "feat_slave_apertures",
+      "title": "Unmapped Address Range Returns DECERR (0b11)",
+      "kind": "testcase",
+      "category": "error_injection",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "Master accesses 0xDEAD_BEEF (outside any peripheral base/mask)",
+      "expected_outcome": "Internal default slave terminates transfer; RRESP/BRESP asserts DECERR (2'b11)",
+      "coverage_bins": [
+        "error_injection:axi:decerr_unmapped"
+      ],
+      "tags": [
+        "axi",
+        "error",
+        "decerr"
+      ],
+      "order": 2,
+      "metadata": {},
+      "children": []
+    },
+    "grp_handshakes": {
+      "id": "grp_handshakes",
+      "parent_id": null,
+      "title": "AXI4-Lite Channel Handshake Compliance",
+      "kind": "group",
+      "category": "protocol_compliance",
+      "description": "Valid/Ready handshake protocols across Read Address, Read Data, Write Address, Write Data, and Write Response channels.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "feat_read_handshake": {
+      "id": "feat_read_handshake",
+      "parent_id": "grp_handshakes",
+      "title": "AR & R Channel Interlocking",
+      "kind": "feature",
+      "category": "protocol_compliance",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_read_zero_waitstate": {
+      "id": "tc_read_zero_waitstate",
+      "parent_id": "feat_read_handshake",
+      "title": "Zero-Wait-State Single-Cycle Read Burst",
+      "kind": "testcase",
+      "category": "protocol_compliance",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Slave asserts ARREADY=1 and RVALID=1 concurrently with Master ARVALID=1 and RREADY=1",
+      "expected_outcome": "Immediate single-cycle data transfer without dead clock cycles",
+      "coverage_bins": [
+        "protocol_compliance:read:zero_waitstate"
+      ],
+      "tags": [
+        "read",
+        "throughput"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_read_slave_backpressure": {
+      "id": "tc_read_slave_backpressure",
+      "parent_id": "feat_read_handshake",
+      "title": "Read Backpressure (Slave Holds ARREADY Low for 32 Cycles)",
+      "kind": "testcase",
+      "category": "timing_sequencing",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "high",
+      "status": "in_progress",
+      "stimulus": "Master asserts ARVALID; Target slave delays ARREADY for 32 cycles",
+      "expected_outcome": "Master ARVALID and ARADDR remain stable without glitch until handshake completes",
+      "coverage_bins": [
+        "timing_sequencing:read:backpressure_stall"
+      ],
+      "tags": [
+        "read",
+        "backpressure"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "feat_write_channel_order": {
+      "id": "feat_write_channel_order",
+      "parent_id": "grp_handshakes",
+      "title": "Write Address / Data Independent Arrival Order",
+      "kind": "feature",
+      "category": "protocol_compliance",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_write_aw_before_w": {
+      "id": "tc_write_aw_before_w",
+      "parent_id": "feat_write_channel_order",
+      "title": "AWVALID Asserts 4 Cycles Prior to WVALID",
+      "kind": "testcase",
+      "category": "timing_sequencing",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V2",
+      "priority": "medium",
+      "status": "passed",
+      "stimulus": "Drive write address phase, wait 4 cycles, drive write data phase",
+      "expected_outcome": "Crossbar buffers address, pairs with incoming data, drives slave target cleanly",
+      "coverage_bins": [
+        "timing_sequencing:write:aw_before_w"
+      ],
+      "tags": [
+        "write",
+        "ordering"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_write_w_before_aw": {
+      "id": "tc_write_w_before_aw",
+      "parent_id": "feat_write_channel_order",
+      "title": "WVALID Asserts 4 Cycles Prior to AWVALID",
+      "kind": "testcase",
+      "category": "timing_sequencing",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V2",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "Drive write data phase first, wait 4 cycles, drive write address phase",
+      "expected_outcome": "Crossbar queues data in write skid buffer, matches when address arrives",
+      "coverage_bins": [
+        "timing_sequencing:write:w_before_aw"
+      ],
+      "tags": [
+        "write",
+        "ordering"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "grp_system_reset": {
+      "id": "grp_system_reset",
+      "parent_id": null,
+      "title": "Bus Reset & Quiescence Checks",
+      "kind": "group",
+      "category": "reset_behavior",
+      "description": "Verification that ARESETn resets all valid outputs and clears in-flight transactions.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 2,
+      "metadata": {},
+      "children": []
+    },
+    "tc_reset_deasserts_all_valides": {
+      "id": "tc_reset_deasserts_all_valides",
+      "parent_id": "grp_system_reset",
+      "title": "Synchronous Reset Clears All Channel VALID Signals to 0",
+      "kind": "testcase",
+      "category": "reset_behavior",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V0",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "Assert ARESETn=0 during simultaneous multi-channel active transactions",
+      "expected_outcome": "ARVALID, AWVALID, WVALID, RVALID, BVALID drive 0 within 1 cycle",
+      "coverage_bins": [
+        "reset_behavior:axi:valides_cleared"
+      ],
+      "tags": [
+        "reset",
+        "safety"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "sva_never_highz_when_active": {
+      "id": "sva_never_highz_when_active",
+      "parent_id": "grp_system_reset",
+      "title": "Formal Check: Bus Signals Never Float to High-Z While Clock Running",
+      "kind": "assertion",
+      "category": "structural_connectivity",
+      "description": "",
+      "methodology": "formal",
+      "stage": "V2",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "",
+      "expected_outcome": "Formal proof ensures 100% deterministic binary 0/1 output across all bus lines.",
+      "coverage_bins": [
+        "structural_connectivity:formal:no_floating_signals"
+      ],
+      "tags": [
+        "formal",
+        "electrical"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    }
+  }
+}

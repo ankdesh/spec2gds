@@ -56,17 +56,41 @@ testplan-service/
   - `POST /assistant/proposals/apply`: Atomic commit of proposed operations with revision bump.
 - **Interactive Web Editor**: Responsive web UI served at `/` and `/ui` featuring live tree manipulation, node inspector, filter/search, Markdown/JSON export, and AI proposal reviewer.
 
+## Pre-Seeded Sample Testplans
+
+The service includes realistic, multi-level hierarchical testplans across diverse hardware domains:
+1. **RISC-V 32-bit Integer ALU** (`riscv_alu_verification_plan`): Arithmetic overflow, barrel shifter walking-ones, signed branch comparisons, and formal stability proofs (21 nodes).
+2. **UART 16550 Serial Controller** (`uart_16550_verification_plan`): Programmable baud prescaler, framing parity, false start-bit glitch suppression, and FIFO overruns (19 nodes).
+3. **Dual-Clock Asynchronous FIFO** (`dual_clock_fifo_verification_plan`): Gray-code pointer CDC, frequency ratios (200MHz/50MHz), full/empty capacity edge cases, and formal FIFO order proofs (15 nodes).
+4. **AXI4-Lite 1x4 Crossbar Interconnect** (`axi_lite_crossbar_verification_plan`): Memory map decoding, DECERR unmapped access, zero-wait-state reads, write channel arrival skew, and bus reset quiescence (15 nodes).
+
+### Generating Testplans via Test Suite
+
+To run the generator tests and verify all testplans, their tree integrity, coverage taxonomy breadth, and markdown/JSON exports:
+
+```bash
+uv run python -m pytest testplan-service/tests/test_plan_generators.py -v
+```
+
+### Seeding Testplans into Storage
+
+To seed or refresh all sample testplans into your local storage directory:
+
+```bash
+uv run python -m testplan_service.samples.seed --storage-dir .testplans
+```
+
 ## Running the Service
 
 ```bash
-# Run standalone using default port 6016
+# Run standalone using default port 6016 (auto-seeds samples if storage is empty)
 uv run python -m testplan_service.cli --host 0.0.0.0 --port 6016 --storage-dir .testplans
 
 # Or using the console script
 uv run testplan-service --port 6016
 ```
 
-Open `http://127.0.0.1:6016` in your browser.
+Open `http://127.0.0.1:6016` in your browser. Use the header dropdown to switch between testplans and explore the interactive tree, badges, inspector panel, and AI proposal reviewer.
 
 ## Running Tests
 

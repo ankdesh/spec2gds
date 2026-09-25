@@ -32,6 +32,9 @@ Read in this order:
     and retained, extended, and removed UI features.
     The [AI Assistant improvement plan](ai-assistant-improvement-plan.md) is the
     living, topic- and readiness-organized backlog for future assistant work.
+    The [AI Assistant integration issues](ai-assistant-integration-issues.md) tracks
+    identified decoupling defects and divergences between the Spec Editor, Circuit
+    Designer, and AI Assistant.
     The [configurable assistant architecture](configurable-assistant-architecture.md)
     documents the implemented prompt/workflow catalogs, presets, budgets,
     delegation boundary, and service-extension path.

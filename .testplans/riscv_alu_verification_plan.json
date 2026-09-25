@@ -1,0 +1,482 @@
+{
+  "id": "riscv_alu_verification_plan",
+  "name": "RISC-V 32-bit Integer ALU Verification Plan",
+  "description": "Comprehensive hierarchical verification plan for the RV32I integer arithmetic and logic unit. Covers arithmetic datapath, bitwise logic, barrel shifter, branch comparisons, signed overflow/underflow boundary values, and formal equivalence.",
+  "version": "1.2.0",
+  "target_design": "riscv_alu",
+  "revision": 1,
+  "created_at": "2026-09-25T14:26:48.537200+00:00",
+  "updated_at": "2026-09-25T14:26:48.537209+00:00",
+  "tags": [
+    "cpu",
+    "rv32i",
+    "datapath",
+    "alu"
+  ],
+  "metadata": {},
+  "nodes": {
+    "grp_arithmetic": {
+      "id": "grp_arithmetic",
+      "parent_id": null,
+      "title": "Arithmetic Operations (ADD, SUB)",
+      "kind": "group",
+      "category": "functional_mode",
+      "description": "Verification group for all signed and unsigned arithmetic additions and subtractions.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "feat_add": {
+      "id": "feat_add",
+      "parent_id": "grp_arithmetic",
+      "title": "32-bit Adder Datapath",
+      "kind": "feature",
+      "category": "functional_mode",
+      "description": "Full adder functionality with carry propagation across 32 bits.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_add_basic": {
+      "id": "tc_add_basic",
+      "parent_id": "feat_add",
+      "title": "Basic Positive and Negative Addition",
+      "kind": "testcase",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0x0000002A (42), op_b = 0x00000010 (16), opcode = ADD",
+      "expected_outcome": "Result = 0x0000003A (58), zero_flag = 0, overflow = 0",
+      "coverage_bins": [
+        "functional_mode:add:basic_positive"
+      ],
+      "tags": [
+        "adder",
+        "smoke"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_add_overflow": {
+      "id": "tc_add_overflow",
+      "parent_id": "feat_add",
+      "title": "Signed Overflow Boundary Flag Check",
+      "kind": "testcase",
+      "category": "port_boundary",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0x7FFFFFFF (max positive 32-bit int), op_b = 0x00000001, opcode = ADD",
+      "expected_outcome": "Result = 0x80000000 (negative), overflow_flag = 1, carry_out = 0",
+      "coverage_bins": [
+        "boundary:op_a:max_positive",
+        "boundary:op_b:min_positive"
+      ],
+      "tags": [
+        "adder",
+        "overflow",
+        "boundary"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_add_all_ones": {
+      "id": "tc_add_all_ones",
+      "parent_id": "feat_add",
+      "title": "Double All-Ones Carry Out Verification",
+      "kind": "testcase",
+      "category": "special_patterns",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V2",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0xFFFFFFFF, op_b = 0xFFFFFFFF, opcode = ADD",
+      "expected_outcome": "Result = 0xFFFFFFFE, carry_out = 1, overflow = 0",
+      "coverage_bins": [
+        "special_patterns:all_ones:addition"
+      ],
+      "tags": [
+        "adder",
+        "patterns"
+      ],
+      "order": 2,
+      "metadata": {},
+      "children": []
+    },
+    "feat_sub": {
+      "id": "feat_sub",
+      "parent_id": "grp_arithmetic",
+      "title": "32-bit Subtractor Datapath",
+      "kind": "feature",
+      "category": "functional_mode",
+      "description": "Subtractor logic including two's complement inversion and borrow tracking.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_sub_zero_diff": {
+      "id": "tc_sub_zero_diff",
+      "parent_id": "feat_sub",
+      "title": "Subtract Equal Operands (Zero Flag Assertion)",
+      "kind": "testcase",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0x12345678, op_b = 0x12345678, opcode = SUB",
+      "expected_outcome": "Result = 0x00000000, zero_flag = 1, negative_flag = 0",
+      "coverage_bins": [
+        "functional_mode:sub:zero_flag"
+      ],
+      "tags": [
+        "subtractor",
+        "zero"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_sub_underflow": {
+      "id": "tc_sub_underflow",
+      "parent_id": "feat_sub",
+      "title": "Signed Underflow Corner Check",
+      "kind": "testcase",
+      "category": "port_boundary",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "critical",
+      "status": "in_progress",
+      "stimulus": "Drive op_a = 0x80000000 (min negative 32-bit int), op_b = 0x00000001, opcode = SUB",
+      "expected_outcome": "Result = 0x7FFFFFFF (positive), overflow_flag = 1",
+      "coverage_bins": [
+        "boundary:op_a:min_negative",
+        "boundary:underflow"
+      ],
+      "tags": [
+        "subtractor",
+        "underflow"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "grp_shifter": {
+      "id": "grp_shifter",
+      "parent_id": null,
+      "title": "Barrel Shifter Unit (SLL, SRL, SRA)",
+      "kind": "group",
+      "category": "functional_mode",
+      "description": "Comprehensive checks for left, logical right, and sign-extended arithmetic right shifts.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "feat_logical_shift": {
+      "id": "feat_logical_shift",
+      "parent_id": "grp_shifter",
+      "title": "Logical Shift Operations (SLL, SRL)",
+      "kind": "feature",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_shift_zero": {
+      "id": "tc_shift_zero",
+      "parent_id": "feat_logical_shift",
+      "title": "Zero Shift Amount Pass-Through",
+      "kind": "testcase",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0xCAFEBABE, shamt[4:0] = 0x00, opcode = SLL",
+      "expected_outcome": "Result matches op_a unmodified without pipeline cycle latency",
+      "coverage_bins": [
+        "functional_mode:shifter:zero_shamt"
+      ],
+      "tags": [
+        "shifter",
+        "zero"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_shift_max_31": {
+      "id": "tc_shift_max_31",
+      "parent_id": "feat_logical_shift",
+      "title": "Maximum 31-bit Shift Boundary",
+      "kind": "testcase",
+      "category": "port_boundary",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "high",
+      "status": "in_progress",
+      "stimulus": "Drive op_a = 0x80000000, shamt[4:0] = 31, opcode = SRL",
+      "expected_outcome": "Result = 0x00000001, MSB shifted to LSB with zero-fill",
+      "coverage_bins": [
+        "boundary:shamt:max_31"
+      ],
+      "tags": [
+        "shifter",
+        "boundary"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_shift_walking_ones": {
+      "id": "tc_shift_walking_ones",
+      "parent_id": "feat_logical_shift",
+      "title": "Walking Ones Shift Sweep",
+      "kind": "testcase",
+      "category": "special_patterns",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "high",
+      "status": "planned",
+      "stimulus": "Iterate single set bit across all 32 positions with shifting amounts 0..31",
+      "expected_outcome": "Accurate position output without bit dropping or adjacent crosstalk",
+      "coverage_bins": [
+        "special_patterns:walking_ones:shifter"
+      ],
+      "tags": [
+        "shifter",
+        "walking_ones"
+      ],
+      "order": 2,
+      "metadata": {},
+      "children": []
+    },
+    "feat_arith_shift": {
+      "id": "feat_arith_shift",
+      "parent_id": "grp_shifter",
+      "title": "Arithmetic Right Shift (SRA Sign Extension)",
+      "kind": "feature",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_sra_negative": {
+      "id": "tc_sra_negative",
+      "parent_id": "feat_arith_shift",
+      "title": "Sign Bit Propagation with MSB=1",
+      "kind": "testcase",
+      "category": "functional_mode",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "failed",
+      "stimulus": "Drive op_a = 0xF0000000 (negative), shamt = 4, opcode = SRA",
+      "expected_outcome": "Result = 0xFF000000 (preserves negative sign bits in upper nibble)",
+      "coverage_bins": [
+        "functional_mode:sra:sign_extension"
+      ],
+      "tags": [
+        "shifter",
+        "sra",
+        "sign_extension"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "grp_comparison": {
+      "id": "grp_comparison",
+      "parent_id": null,
+      "title": "Comparisons & Flag Generation (SLT, SLTU)",
+      "kind": "group",
+      "category": "cross_port",
+      "description": "Cross-port relational checks for signed and unsigned inequalities.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 2,
+      "metadata": {},
+      "children": []
+    },
+    "feat_slt": {
+      "id": "feat_slt",
+      "parent_id": "grp_comparison",
+      "title": "Signed Less-Than Comparison",
+      "kind": "feature",
+      "category": "cross_port",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_slt_opposite_signs": {
+      "id": "tc_slt_opposite_signs",
+      "parent_id": "feat_slt",
+      "title": "Opposite Sign Comparison (Negative < Positive)",
+      "kind": "testcase",
+      "category": "cross_port",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "high",
+      "status": "passed",
+      "stimulus": "Drive op_a = 0xFFFFFFFF (-1), op_b = 0x00000001 (+1), opcode = SLT",
+      "expected_outcome": "Result = 0x00000001 (True, since -1 < 1)",
+      "coverage_bins": [
+        "cross_port:slt:opposite_signs"
+      ],
+      "tags": [
+        "comparison",
+        "slt"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "grp_formal": {
+      "id": "grp_formal",
+      "parent_id": null,
+      "title": "Formal SVA Properties & Safety Guarantees",
+      "kind": "group",
+      "category": "timing_sequencing",
+      "description": "Mathematical induction and bounded model checking assertions for ALU integrity.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 3,
+      "metadata": {},
+      "children": []
+    },
+    "sva_combinational_stability": {
+      "id": "sva_combinational_stability",
+      "parent_id": "grp_formal",
+      "title": "Proof: Combinational Output Stability with Stable Operands",
+      "kind": "assertion",
+      "category": "timing_sequencing",
+      "description": "",
+      "methodology": "formal",
+      "stage": "V2",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "",
+      "expected_outcome": "Formal solver proves zero glitch or spurious state change while inputs hold.",
+      "coverage_bins": [
+        "timing_sequencing:formal:output_stability"
+      ],
+      "tags": [
+        "formal",
+        "sva"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "sva_illegal_opcode_safe": {
+      "id": "sva_illegal_opcode_safe",
+      "parent_id": "grp_formal",
+      "title": "Proof: Undefined Opcodes Default to Zero Output",
+      "kind": "assertion",
+      "category": "error_injection",
+      "description": "",
+      "methodology": "formal",
+      "stage": "V2",
+      "priority": "high",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "Formal solver proves undefined opcode inputs drive 0 and assert illegal_op flag.",
+      "coverage_bins": [
+        "error_injection:formal:illegal_opcode_trap"
+      ],
+      "tags": [
+        "formal",
+        "security"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    }
+  }
+}
