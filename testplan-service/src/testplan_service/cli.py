@@ -40,6 +40,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help=f"Directory for JSON testplan storage (default: {DEFAULT_STORAGE_DIR})",
     )
     parser.add_argument(
+        "--seed",
+        action="store_true",
+        help="Pre-seed storage with realistic sample testplans (ALU, UART, FIFO, Crossbar)",
+    )
+    parser.add_argument(
         "--reload",
         action="store_true",
         help="Enable auto-reload for local development",
@@ -58,6 +63,18 @@ def main(argv: Sequence[str] | None = None) -> None:
     )
 
     repo = FileTestPlanRepository(storage_path)
+
+    # Pre-seed if explicitly requested or if storage directory contains no testplans
+    existing_plans = repo.list_all()
+    if args.seed or len(existing_plans) == 0:
+        from testplan_service.samples.seed import seed_repository
+
+        seeded = seed_repository(repo)
+        logger.info(
+            f"Seeded {len(seeded)} sample testplan(s) into {storage_path}",
+            details={"plan_ids": [p.id for p in seeded]},
+        )
+
     app = create_app(repository=repo, logger=logger)
 
     uvicorn.run(
