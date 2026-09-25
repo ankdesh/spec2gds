@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>spec2gds Testplan Manager</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-logo">
+        <span>⚡</span> spec2gds
+      </div>
+      <span class="brand-badge">TESTPLAN MANAGER</span>
+    </div>
+
+    <div class="header-center">
+      <select id="planSelector" class="plan-select" title="Select Active Testplan">
+        <option value="">Loading testplans...</option>
+      </select>
+      <button id="btnNewPlan" class="btn btn-secondary btn-sm">+ New Plan</button>
+      <button id="btnImportPlan" class="btn btn-outline btn-sm">Import</button>
+    </div>
+
+    <div class="header-actions">
+      <button id="btnExportMarkdown" class="btn btn-outline btn-sm" title="Export as Markdown document">Markdown 📄</button>
+      <button id="btnExportJson" class="btn btn-outline btn-sm" title="Export canonical JSON">JSON 💾</button>
+      <button id="btnAiProposals" class="btn btn-assistant btn-sm" title="Review or simulate AI Assistant proposal">AI Assistant ↗</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <div class="layout">
+    <!-- Left Sidebar: Plan Metadata & Summary -->
+    <aside class="sidebar-left">
+      <div class="section-box">
+        <div class="section-title">
+          <span>Active Testplan</span>
+          <button id="btnEditPlanMeta" class="icon-btn" title="Edit Plan Details">✎</button>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">ID:</span>
+          <span id="metaPlanId" class="meta-val">-</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Target:</span>
+          <span id="metaTargetDesign" class="meta-val">-</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Version:</span>
+          <span id="metaVersion" class="meta-val">-</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Revision:</span>
+          <span id="metaRevision" class="meta-val">-</span>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <div class="section-title">Metrics & Verification Status</div>
+        <div class="meta-row">
+          <span class="meta-label">Pass Rate:</span>
+          <span id="summaryPassRate" class="meta-val">0%</span>
+        </div>
+        <div class="progress-bar-container">
+          <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Total Nodes:</span>
+          <span id="summaryTotalNodes" class="meta-val">0</span>
+        </div>
+        <div class="meta-row">
+          <span class="meta-label">Coverage Bins:</span>
+          <span id="summaryCoverageBins" class="meta-val">0</span>
+        </div>
+      </div>
+
+      <div class="section-box">
+        <div class="section-title">Coverage Categories</div>
+        <div id="categoryPills" class="pills-container">
+          <!-- Populated via JS -->
+        </div>
+      </div>
+
+      <div class="section-box" style="flex: 1; border-bottom: none;">
+        <div class="section-title">Milestone Stages</div>
+        <div id="stagePills" class="pills-container">
+          <!-- Populated via JS -->
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center Canvas: Hierarchical Tree -->
+    <main class="main-canvas">
+      <div class="toolbar">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="btnAddRootNode" class="btn btn-primary btn-sm">+ Add Item</button>
+          <button id="btnExpandAll" class="btn btn-outline btn-sm">Expand All</button>
+          <button id="btnCollapseAll" class="btn btn-outline btn-sm">Collapse All</button>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input id="searchInput" type="text" class="search-input" placeholder="Search title, category, tags...">
+          <select id="kindFilter" class="plan-select" style="min-width: 120px;">
+            <option value="">All Kinds</option>
+            <option value="group">Groups</option>
+            <option value="feature">Features</option>
+            <option value="testpoint">Testpoints</option>
+            <option value="testcase">Test Cases</option>
+            <option value="covergroup">Covergroups</option>
+            <option value="assertion">Assertions</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="treeContainer" class="tree-container">
+        <!-- Rendered Hierarchical Nodes via JS -->
+        <div style="text-align: center; color: var(--text-muted); margin-top: 40px;">
+          Select or create a testplan to display its hierarchy.
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Sidebar: Inspector -->
+    <aside class="sidebar-right">
+      <div class="inspector-header">
+        <span class="inspector-title">Item Inspector</span>
+        <button id="btnDeselectNode" class="icon-btn" title="Close Inspector">✕</button>
+      </div>
+
+      <div id="inspectorEmpty" class="inspector-body" style="text-align: center; color: var(--text-muted); padding: 40px 16px;">
+        Click any node in the hierarchy tree to inspect and edit its properties.
+      </div>
+
+      <form id="inspectorForm" class="inspector-body" style="display: none;">
+        <input type="hidden" id="formNodeId">
+        <input type="hidden" id="formParentId">
+
+        <div class="form-group">
+          <label class="form-label" for="formTitle">Title</label>
+          <input type="text" id="formTitle" class="form-control" required>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label" for="formKind">Kind</label>
+            <select id="formKind" class="form-control">
+              <option value="group">Group</option>
+              <option value="feature">Feature</option>
+              <option value="testpoint">Testpoint</option>
+              <option value="testcase">TestCase</option>
+              <option value="covergroup">Covergroup</option>
+              <option value="assertion">Assertion</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="formCategory">Coverage Category</label>
+            <select id="formCategory" class="form-control">
+              <option value="port_boundary">Port Boundary</option>
+              <option value="reset_behavior">Reset Behavior</option>
+              <option value="functional_mode">Functional Mode</option>
+              <option value="protocol_compliance">Protocol Compliance</option>
+              <option value="error_injection">Error Injection</option>
+              <option value="timing_sequencing">Timing / Sequencing</option>
+              <option value="cross_port">Cross-Port</option>
+              <option value="structural_connectivity">Structural Connectivity</option>
+              <option value="special_patterns">Special Patterns</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label" for="formStatus">Status</label>
+            <select id="formStatus" class="form-control">
+              <option value="planned">Planned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="passed">Passed</option>
+              <option value="failed">Failed</option>
+              <option value="blocked">Blocked</option>
+              <option value="skipped">Skipped</option>
+              <option value="draft">Draft</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="formPriority">Priority</label>
+            <select id="formPriority" class="form-control">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label class="form-label" for="formStage">Stage</label>
+            <select id="formStage" class="form-control">
+              <option value="V0">V0 (Smoke)</option>
+              <option value="V1">V1 (Core)</option>
+              <option value="V2">V2 (Corner)</option>
+              <option value="V3">V3 (Stress)</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="formMethodology">Methodology</label>
+            <select id="formMethodology" class="form-control">
+              <option value="directed">Directed</option>
+              <option value="constrained_random">Constrained Random</option>
+              <option value="formal">Formal</option>
+              <option value="assertion">Assertion</option>
+              <option value="lint">Lint</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formDescription">Description</label>
+          <textarea id="formDescription" class="form-control" rows="3" placeholder="Verification intent or markdown description..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formStimulus">Stimulus</label>
+          <textarea id="formStimulus" class="form-control" rows="2" placeholder="Inputs, clock cycles, sequence..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formExpected">Expected Outcome</label>
+          <textarea id="formExpected" class="form-control" rows="2" placeholder="Expected outputs, latency, flags..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formCoverageBins">Target Coverage Bins (comma-separated)</label>
+          <input type="text" id="formCoverageBins" class="form-control" placeholder="e.g. boundary:data_in:max, reset:rst_n">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="formTags">Tags (comma-separated)</label>
+          <input type="text" id="formTags" class="form-control" placeholder="e.g. alu, math, pipelined">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
+          <button type="button" id="btnDeleteSelectedNode" class="btn btn-outline btn-sm" style="color: var(--status-failed);">Delete</button>
+          <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
+        </div>
+      </form>
+    </aside>
+  </div>
+
+  <!-- New Plan Modal -->
+  <div id="modalNewPlan" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create New Testplan</h3>
+        <button class="icon-btn modal-close">✕</button>
+      </div>
+      <form id="formNewPlan">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label" for="newPlanId">Plan ID</label>
+            <input type="text" id="newPlanId" class="form-control" placeholder="e.g. alu_verification_plan" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newPlanName">Plan Title</label>
+            <input type="text" id="newPlanName" class="form-control" placeholder="e.g. ALU Core Verification Plan" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newPlanTarget">Target Component / Design</label>
+            <input type="text" id="newPlanTarget" class="form-control" placeholder="e.g. alu_top">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="newPlanDesc">Description</label>
+            <textarea id="newPlanDesc" class="form-control" rows="3" placeholder="Brief verification strategy overview..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline modal-close">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Plan</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- AI Proposals Modal -->
+  <div id="modalProposals" class="modal-overlay">
+    <div class="modal-content" style="width: 700px;">
+      <div class="modal-header">
+        <h3>AI Assistant Proposal Review</h3>
+        <button class="icon-btn modal-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: var(--text-secondary);">
+          Review, simulate, or apply structured verification proposals from the AI Assistant.
+        </p>
+        <div class="form-group">
+          <label class="form-label">Proposal JSON Payload</label>
+          <textarea id="proposalJsonInput" class="form-control" rows="6" placeholder="Paste ProposalArtifact JSON here..."></textarea>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button id="btnLoadSampleProposal" class="btn btn-secondary btn-sm">Load Sample Proposal</button>
+          <button id="btnPreviewProposal" class="btn btn-primary btn-sm">Preview Diff</button>
+        </div>
+        <div id="proposalPreviewBox" style="display: none; margin-top: 10px;">
+          <label class="form-label">Preview & Diff</label>
+          <div id="proposalDiffText" class="diff-box"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline modal-close">Close</button>
+        <button type="button" id="btnApplyProposal" class="btn btn-assistant" disabled>Apply Proposal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Modal -->
+  <div id="modalImport" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Import Testplan</h3>
+        <button class="icon-btn modal-close">✕</button>
+      </div>
+      <form id="formImport">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Paste Testplan JSON</label>
+            <textarea id="importJsonInput" class="form-control" rows="10" placeholder="Paste testplan JSON here..." required></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline modal-close">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
