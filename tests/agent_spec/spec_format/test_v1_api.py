@@ -13,10 +13,12 @@ import pytest
 
 from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
 from spec2gds.agent_spec.spec_format.cli import main as package_cli
+from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef
 from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
 from spec2gds.agent_spec.spec_format.v1_api import (
     ActivityExecutionRequest,
+    AssistantDocumentLaunchRequest,
     AssistantLaunchRequest,
     CircuitLaunchRequest,
     CircuitSourceSyncRequest,
@@ -42,9 +44,12 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
     assert services["services"]["circuit_designer"]["service_url"].endswith(
         "/api/circuit-designer/v1"
     )
-    editor_html = endpoints["editor"]()
+    editor_response = endpoints["editor"]()
+    editor_html = editor_response.body.decode("utf-8")
+    assert editor_response.headers["cache-control"] == "no-store"
     assert "A2UI Document Editor" in editor_html
     assert "/editor-assets/assets/index.js" in editor_html
+    assert "/editor-assets/assets/index.js?v=" in editor_html
     assert "/circuit-designer-ui/" not in editor_html
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary) / "acceptance.spec"
@@ -53,7 +58,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         with pytest.raises(fastapi.HTTPException) as existing:
             endpoints["create_document"](CreateDocumentRequest(path=str(path), document_id="replacement"))
         assert existing.value.status_code == 422
-        assert endpoints["editor"]().count('id="root"') == 1
+        assert endpoints["editor"]().body.decode("utf-8").count('id="root"') == 1
 
         sample = build_test_package()
         document_id = created["document_id"]
@@ -553,10 +558,26 @@ def test_editor_launches_ai_assistant_with_configured_url_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setenv("AI_ASSISTANT_URL", "http://127.0.0.1:4400/")
+    endpoints = _endpoints()
+    unbound_launch = endpoints["launch_document_assistant"](
+        AssistantDocumentLaunchRequest(attach_active_document=False)
+    )
+    assert unbound_launch == {
+        "assistant_url": "http://127.0.0.1:4400/launch",
+        "document_id": None,
+        "source_revision_hash": None,
+        "scope": "unbound",
+    }
+
     package_path = tmp_path / "assistant-launch.spec"
     write_test_package(package_path)
-    endpoints = _endpoints()
     opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    explicitly_unbound = endpoints["launch_document_assistant"](
+        AssistantDocumentLaunchRequest(attach_active_document=False)
+    )
+    assert explicitly_unbound["scope"] == "unbound"
+    assert explicitly_unbound["document_id"] is None
     component = next(
         item["ref"]
         for item in opened["components"]
@@ -567,12 +588,13 @@ def test_editor_launches_ai_assistant_with_configured_url_override(
         entity_id=component["entity_id"],
     )
 
-    monkeypatch.setenv("AI_ASSISTANT_URL", "http://127.0.0.1:4400/")
     preferred = endpoints["launch_assistant"](request)
     assert preferred["assistant_url"].startswith("http://127.0.0.1:4400/launch/spec?")
     assert preferred["target"] == component
 
-    document_launch = endpoints["launch_document_assistant"]()
+    document_launch = endpoints["launch_document_assistant"](
+        AssistantDocumentLaunchRequest(attach_active_document=True)
+    )
     assert document_launch["assistant_url"].startswith(
         "http://127.0.0.1:4400/launch/spec-document?"
     )
@@ -811,6 +833,56 @@ def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path
     rejected = endpoints["assistant_proposal_preview"](forbidden)
     assert rejected["status"] == "invalid"
     assert "may only create top-level" in rejected["diagnostics"][0]
+
+
+def test_document_assistant_creates_populated_component_atomically(tmp_path: Path) -> None:
+    package_path = tmp_path / "assistant-component.spec"
+    write_test_package(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    proposal = SpecChangeProposal(
+        proposal_id="proposal_and_gate",
+        document_id=opened["document_id"],
+        scope="document",
+        target=None,
+        base_source_revision_hash=opened["source_revision_hash"],
+        title="Create AND gate",
+        summary="Create an AND gate with its interface and behavior.",
+        rationale="Use the values confirmed in the details card.",
+        assumptions=[],
+        operations=[{
+            "operation_id": "create_and_gate",
+            "type": "create_entity",
+            "kind": "component",
+            "name": "AndGate",
+            "entity_id": "component_and_gate_fixed",
+            "instances": [],
+            "ports": [
+                {"name": "A", "family": "wire", "display_name": None, "description": None, "direction": "in", "range": None},
+                {"name": "B", "family": "wire", "display_name": None, "description": None, "direction": "in", "range": None},
+                {"name": "Y", "family": "wire", "display_name": None, "description": None, "direction": "out", "range": None},
+            ],
+            "systemverilog": "assign Y = A & B;\n",
+        }],
+    )
+
+    preview = endpoints["assistant_proposal_preview"](proposal)
+    assert preview["status"] == "valid", preview["diagnostics"]
+    applied = endpoints["assistant_proposal_apply"](proposal)
+    assert applied["status"] == "applied"
+
+    reopened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    component = next(item for item in reopened["components"] if item["ref"]["entity_id"] == "component_and_gate_fixed")
+    assert [(port["name"], port["direction"], port["width"]) for port in component["ports"]] == [
+        ("A", "in", 1),
+        ("B", "in", 1),
+        ("Y", "out", 1),
+    ]
+    revision = SpecRevision.load(str(package_path))
+    section = revision.entity_sections_for(EntityRef.model_validate(component["ref"]), "sv")[0]
+    assert section.content == "assign Y = A & B;\n"
+
+
 def test_spec_assistant_rejects_stale_and_cross_boundary_operations(tmp_path: Path) -> None:
     package_path = tmp_path / "assistant-boundary.spec"
     write_test_package(package_path)

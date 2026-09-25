@@ -19,6 +19,70 @@ test("editor launch uses a relative DSH authentication target and fragment paylo
   assert.ok(!location.includes("127.0.0.1"), "redirect must stay on the browser's current authority");
 });
 
+test("unbound editor launch still enters DSH through its one-time browser token", () => {
+  const location = authenticatedLaunchLocation(
+    { authenticatedUrl: base => `${base}/?token=one-time-secret` },
+    undefined,
+    true,
+  );
+  assert.equal(location, "/?token=one-time-secret#spec2gds_unbound=1");
+  assert.ok(!location.includes("spec2gds_session"));
+  assert.match(readFileSync(resolve(root, "src/index.ts"), "utf8"), /path: "\/launch"/);
+});
+
+test("browser plugin creates and opens the requested unbound session", async () => {
+  let definition: { factory(require: (name: string) => unknown): { apply(ctx: unknown): void } } | undefined;
+  let replaced = "";
+  const created: unknown[] = [];
+  const opened: unknown[] = [];
+  const microtasks: Array<() => unknown> = [];
+  const source = readFileSync(resolve(root, "client/index.js"), "utf8");
+  const context = {
+    URL,
+    URLSearchParams,
+    location: { pathname: "/", search: "", hash: "#spec2gds_unbound=1" },
+    history: { replaceState: (_state: unknown, _title: string, url: string) => { replaced = url; } },
+    document: {
+      title: "",
+      createElement: () => ({ dataset: {}, textContent: "" }),
+      head: { appendChild: () => undefined },
+    },
+    fetch: async () => ({ ok: true, json: async () => ({ workspaces: [] }) }),
+    queueMicrotask: (callback: () => unknown) => { microtasks.push(callback); },
+    window: {
+      alert: (message: unknown) => { throw new Error(`unexpected alert: ${String(message)}`); },
+      __ModuleLoader__: { load: (value: typeof definition) => { definition = value; } },
+    },
+  };
+  vm.runInNewContext(source, context, { filename: "client/index.js" });
+  assert.ok(definition);
+  const plugin = definition.factory(() => ({ createElement: () => null }));
+  plugin.apply({
+    uiSession: { registerNewSessionHandler: () => undefined },
+    uiConversation: { events: { register: () => undefined } },
+    slots: { inject: () => undefined },
+    sessions: {
+      create: async (value: unknown) => { created.push(value); return "unbound-session"; },
+      open: (value: unknown) => { opened.push(value); },
+    },
+    workspaces: {
+      list: { getSnapshot: () => ({ items: [] }) },
+      create: async () => { throw new Error("unexpected workspace creation"); },
+      rename: async () => { throw new Error("unexpected workspace rename"); },
+    },
+  });
+  assert.equal(replaced, "/");
+  assert.equal(microtasks.length, 2);
+  for (const task of microtasks) await task();
+  assert.equal(JSON.stringify(created), JSON.stringify([{ agentPreset: "focused" }]));
+  assert.deepEqual(opened, ["unbound-session"]);
+});
+
+test("combined launcher starts the Assistant without opening a browser", () => {
+  const launcher = readFileSync(resolve(root, "../scripts/serve-all.sh"), "utf8");
+  assert.match(launcher, /start_service "ai-assistant"[^\n]+npm run dev -- --no-open/);
+});
+
 test("focused web profile removes the generic DSH provider onboarding plugin", () => {
   const patch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
   assert.match(patch, /- id: ui-settings-models\n  disabled: true/);
@@ -63,6 +127,15 @@ test("browser presets use Harness structured questions while headless stays noni
   assert.match(packageJson, /"@deepseek-ai\/dsh-tool-ask-user": "0\.1\.6-alpha\.1"/);
   assert.doesNotMatch(webPatch, /- id: ui-user-questions\n  disabled: true/);
   assert.doesNotMatch(sharedPatch, /@deepseek-ai\/dsh-tool-ask-user/);
+});
+
+test("web proposal forms are profile-owned and do not depend on ask_user_question registration", () => {
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  const server = readFileSync(resolve(root, "src/index.ts"), "utf8");
+  const dev = readFileSync(resolve(root, "scripts/dev.mjs"), "utf8");
+  assert.match(patch, /interactiveForms: !!js \(process\.env\.ASSISTANT_PROFILE \|\| 'spec2gds-web'\) === 'spec2gds-web'/);
+  assert.match(server, /config\.interactiveForms/);
+  assert.match(dev, /env\.ASSISTANT_PROFILE = profile/);
 });
 
 test("workflow controls stay human-owned and are surfaced in the conversation dock", () => {
@@ -111,11 +184,14 @@ test("a structured clarification grants only one additional focused model step",
 test("product dialog preserves the HTML hidden contract over layout styles", () => {
   const source = readFileSync(resolve(root, "client/index.js"), "utf8");
   assert.match(source, /\.s2g-dialog \[hidden\]\{display:none!important\}/);
+  assert.match(source, /\.s2g-required input\{[^}]*background:#fff;color:#17211f;caret-color:#17211f/);
 });
 
 test("browser plugin owns New Session and consumes launch data from the fragment", async () => {
   let definition: { factory(require: (name: string) => unknown): { apply(ctx: unknown): void } } | undefined;
   let newSessionHandler: Record<string, unknown> | undefined;
+  let proposalDefinition: any;
+  let proposalTail: Record<string, any> | undefined;
   let replaced = "";
   const created: unknown[] = [];
   const opened: unknown[] = [];
@@ -159,7 +235,16 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   });
   plugin.apply({
     uiSession: { registerNewSessionHandler: (handler: Record<string, unknown>) => { newSessionHandler = handler; } },
-    slots: { inject: () => undefined },
+    uiConversation: { events: { register: (value: unknown) => { proposalDefinition = value; } } },
+    slots: {
+      inject: (name: string, register: () => unknown) => {
+        if (name === "conversation.chat.turnTail") register();
+      },
+      register: (options: Record<string, any>, component: unknown) => {
+        proposalTail = { options, component };
+        return () => undefined;
+      },
+    },
     sessions: {
       create: async (value: unknown) => { created.push(value); return "bound-session"; },
       open: (value: unknown) => { opened.push(value); },
@@ -178,6 +263,8 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   assert.equal(newSessionHandler?.id, "spec2gds");
   assert.equal(newSessionHandler?.priority, -100);
   assert.equal(context.document.title, "spec2gds Assistant");
+  assert.equal(proposalDefinition.kind, "spec2gds-proposal-reviews");
+  assert.equal(proposalTail?.options.name, "conversation.chat.turnTail");
   assert.equal(replaced, "/");
   assert.equal(microtasks.length, 2);
   for (const task of microtasks) await task();
@@ -185,6 +272,46 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   assert.deepEqual(renamed, ["Bound design", "Bound design · 127.0.0.1:6010 · workspac"]);
   assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1", agentPreset: "focused" }]));
   assert.deepEqual(opened, ["bound-session"]);
+
+  const turnStart = { type: "turn/start", seq: 1, data: { turn: 4 } };
+  let proposalState = proposalDefinition.start({}, { event: turnStart });
+  proposalState = proposalDefinition.update({ state: proposalState }, { event: {
+    type: "tool/call", seq: 2, data: { turn: 4, callId: "proposal-call", name: "prepare_spec_proposal" },
+  } });
+  const review = { proposalId: "proposal-1", state: "ready", domain: "spec", artifact: {} };
+  proposalState = proposalDefinition.update({ state: proposalState }, { event: {
+    type: "tool/result", seq: 3, data: { turn: 4, message: {
+      source: { callId: "proposal-call" },
+      content: [{ content: [{ type: "text", text: JSON.stringify({ review }) }] }],
+    } },
+  } });
+  const published = proposalDefinition.buildLocationData({ state: proposalState }, "turn", null);
+  const matched = proposalTail?.options.select({
+    seq: 4,
+    turn: { data: { get: (key: string) => key === "spec2gds-proposal-reviews" ? published.value : undefined } },
+  });
+  assert.equal(matched?.review?.proposalId, "proposal-1");
+
+  let inputState = proposalDefinition.start({}, { event: { type: "turn/start", seq: 5, data: { turn: 5 } } });
+  inputState = proposalDefinition.update({ state: inputState }, { event: {
+    type: "tool/call", seq: 6, data: { turn: 5, callId: "input-call", name: "prepare_spec_proposal" },
+  } });
+  const requiredInput = { title: "Complete the proposal details", fields: [{ name: "component_name", label: "Component name", default_value: "AndGate" }] };
+  inputState = proposalDefinition.update({ state: inputState }, { event: {
+    type: "tool/result", seq: 7, data: { turn: 5, message: {
+      source: { callId: "input-call" },
+      content: [{ content: [{ type: "text", text: JSON.stringify({ required_input: requiredInput }) }] }],
+    } },
+  } });
+  const inputPublished = proposalDefinition.buildLocationData({ state: inputState }, "turn", null);
+  const inputMatched = proposalTail?.options.select({
+    seq: 8,
+    turn: { data: { get: (key: string) => key === "spec2gds-proposal-reviews" ? inputPublished.value : undefined } },
+  });
+  assert.equal(inputMatched?.requiredInput?.fields[0]?.default_value, "AndGate");
+  assert.match(source, /data-s2g-required-input/);
+  assert.match(source, /inputActions\.setDraft\(requiredInputMessage/);
+  assert.match(source, /inputActions\.submit\(\)/);
 });
 
 test("browser plugin fails closed if Harness does not preserve the reserved session identity", () => {

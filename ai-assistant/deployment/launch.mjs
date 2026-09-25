@@ -35,6 +35,7 @@ for (const [profileName, profile] of profiles) {
 }
 const profile = env.ASSISTANT_PROFILE || recipe.defaultProfile || profiles[0][0];
 if (!Object.hasOwn(recipe.profiles, profile)) throw new Error(`Unknown assistant profile ${JSON.stringify(profile)}.`);
+env.ASSISTANT_PROFILE = profile;
 if (profile === "spec2gds-web") console.log(`spec2gds Harness assistant: http://127.0.0.1:${env.ASSISTANT_PORT || 6013}`);
 const child = spawn(process.execPath, [resolve(root, "node_modules/@deepseek-ai/dsh/lib/bin.js"), "--profile", profile, ...process.argv.slice(2)], {
   cwd: env.DSH_PRODUCT_RUN_CWD || state,

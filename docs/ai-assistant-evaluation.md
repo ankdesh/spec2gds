@@ -17,8 +17,13 @@ Use Node.js 24 or newer for the combined assistant and Circuit checks.
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 ```
+
+The setup step prepares the pinned DSH checkout used by evaluation and replay.
+It can be omitted on later runs while that checkout remains clean, pinned, and
+built.
 
 Pass `--session /path/to/session.jsonl` to calculate metrics from an
 uncompressed DSH Session snapshot. The command writes versioned `events.jsonl`,

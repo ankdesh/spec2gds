@@ -24,6 +24,7 @@ export const Config = z.object({
   requestTimeoutMs: z.number().min(100).max(300_000).required(),
   maxStepsPerTurn: z.number().step(1).min(1).max(20).required(),
   maxOutputTokens: z.number().step(1).min(128).max(32_768).required(),
+  interactiveForms: z.boolean().required(),
 });
 
 type ProductAgent = {
@@ -150,9 +151,13 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
  */
 export function authenticatedLaunchLocation(
   connection: { authenticatedUrl(baseUrl: string): string },
-  sessionId: string,
+  sessionId?: string,
+  unbound = false,
 ): string {
   const authenticated = new URL(connection.authenticatedUrl("http://127.0.0.1"));
+  if (sessionId === undefined) {
+    return `${authenticated.pathname}${authenticated.search}${unbound ? "#spec2gds_unbound=1" : ""}`;
+  }
   const launch = new URLSearchParams({ spec2gds_session: sessionId });
   return `${authenticated.pathname}${authenticated.search}#${launch}`;
 }
@@ -172,6 +177,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     specDocumentRoot: resolve(String(rawConfig.specDocumentRoot)),
     circuitAllowlist: splitAllowlist(String(rawConfig.circuitAllowlist)), requestTimeoutMs: Number(rawConfig.requestTimeoutMs),
     maxStepsPerTurn: Number(rawConfig.maxStepsPerTurn), maxOutputTokens: Number(rawConfig.maxOutputTokens),
+    interactiveForms: Boolean(rawConfig.interactiveForms),
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
@@ -180,6 +186,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const delegatedParents = new Map<string, string>();
   const activeDelegations = new Map<string, Set<string>>();
   const clarifiedTurns = new Map<string, number>();
+  const latestUserRequests = new Map<string, string>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
@@ -222,7 +229,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       } catch (error) {
         console.error("Failed to synchronize the owner-previewed proposal into workflow draft state:", error);
       }
-    });
+    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms);
     attached.add(agent.id);
   };
 
@@ -331,12 +338,13 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
     if (event.type !== "user/message" || event.data?.source?.kind !== "user") return;
-    const binding = state.getBinding(String(session.id));
-    if (!binding || binding.preset === "focused") return;
     const objective = Array.isArray(event.data.content)
       ? event.data.content.filter((item: unknown) => isRecord(item) && item.type === "text" && typeof item.text === "string")
         .map((item: Record<string, unknown>) => String(item.text)).join("\n").trim()
       : "";
+    if (objective) latestUserRequests.set(String(session.id), objective);
+    const binding = state.getBinding(String(session.id));
+    if (!binding || binding.preset === "focused") return;
     if (!objective) return;
     queueMicrotask(() => { void (async () => {
       await ready;
@@ -648,6 +656,14 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
       }
     } }));
 
+    webCtx.effect(() => webCtx.webServer.register({ kind: "exact", path: "/launch", handler: (_request: any, response: any) => {
+      response.writeHead(303, {
+        Location: authenticatedLaunchLocation(webCtx.connection, undefined, true),
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+      });
+      response.end();
+    } }));
     for (const route of ["/launch/spec", "/launch/spec-document", "/launch/circuit"]) {
       webCtx.effect(() => webCtx.webServer.register({ kind: "exact", path: route, handler: async (request: any, response: any) => {
         try {

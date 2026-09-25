@@ -771,7 +771,7 @@ export default function EditorMenuBar({
         <div className="app-header__utilities">
           <button
             className="assistant-launch"
-            disabled={!snapshot || launchingAssistant}
+            disabled={launchingAssistant}
             onClick={() => { void onOpenAssistant(); }}
             type="button"
           >

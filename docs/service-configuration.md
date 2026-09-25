@@ -106,18 +106,21 @@ an arbitrary URL supplied by a browser request.
   reports `Available` or `Not detected` in its workspace chooser.
 
 The **AI Assistant ↗** button in Spec Editor opens the Assistant with the Spec
-workspace selected. Entity-level **Explore with AI Assistant** remains the
-recommended route because it can bind the exact IP-XACT entity.
+workspace selected when a specification is active. Before a specification is
+opened, it starts an unbound chat with no source attached. Entity-level
+**Explore with AI Assistant** remains the recommended route because it can bind
+the exact IP-XACT entity.
 
 Circuit Designer's **Tools → AI Assistant** command sends the active document
 ID and configured Circuit API URL to `/launch/circuit`; the Assistant validates
 the document and opens a new circuit-bound chat directly.
 
 The combined `scripts/serve-all.sh` launcher starts services with these
-resolved settings, but its printed links and its untracked-listener cleanup are
-limited to the tracked default ports. When using a custom registry, use that
-registry's URLs and stop any custom-port listener through its owning process if
-it is not represented by a launcher PID file.
+resolved settings and prints their links without opening a browser. Its printed
+links and untracked-listener cleanup are limited to the tracked default ports.
+When using a custom registry, use that registry's URLs and stop any custom-port
+listener through its owning process if it is not represented by a launcher PID
+file.
 
 For LAN use, allow the selected ports through the server's host firewall and
 open the advertised URLs from the other systems.

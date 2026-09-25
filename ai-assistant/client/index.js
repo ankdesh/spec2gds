@@ -15,6 +15,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     .s2g-review header{display:flex;justify-content:space-between;gap:12px}.s2g-review h4{margin:0;font-size:14px}.s2g-state{text-transform:uppercase;font-size:10px;letter-spacing:.08em;color:#176b5b}
     .s2g-review details{margin-top:8px}.s2g-review pre{overflow:auto;max-height:260px;padding:8px;border-radius:7px;background:color-mix(in srgb,currentColor 5%,transparent);font-size:11px}
     .s2g-summary{margin:9px 0}.s2g-summary ul{margin:5px 0;padding-left:20px}.s2g-summary code{font-size:11px}
+    .s2g-required{display:grid;gap:10px;margin-top:10px}.s2g-required label{display:grid;gap:4px;font-weight:600}.s2g-required label small{font-weight:400;color:var(--text-secondary,#52615e)}
+    .s2g-required input{box-sizing:border-box;width:100%;padding:8px 9px;border:1px solid #9aa5a2;border-radius:7px;background:#fff;color:#17211f;caret-color:#17211f;-webkit-text-fill-color:#17211f;font:inherit}
+    .s2g-required input:focus{outline:2px solid color-mix(in srgb,#176b5b 45%,transparent);outline-offset:1px}.s2g-required-status{margin:8px 0 0;color:#176b5b}
     .s2g-diff{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.s2g-diff small{display:block;margin-bottom:3px;font-weight:600}
     .s2g-actions{display:flex;gap:8px;margin-top:10px}.s2g-actions button{padding:5px 9px;border:1px solid #176b5b;border-radius:6px;background:transparent;color:inherit;cursor:pointer}.s2g-actions button.primary{background:#176b5b;color:#fff}
     .s2g-circuit{width:100%;height:180px;border-radius:8px;background:color-mix(in srgb,currentColor 3%,transparent)}
@@ -236,9 +239,14 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     }
   }
 
-  function resultValue(block) {
-    if (!block || block.kind !== "tool-result" || !Array.isArray(block.content) || block.content.length !== 1 || block.content[0]?.type !== "text") return null;
-    try { return JSON.parse(block.content[0].text); } catch { return null; }
+  async function createUnboundSession(ctx) {
+    const sessionId = await ctx.sessions.create({ agentPreset: "focused" });
+    ctx.sessions.open(sessionId);
+  }
+
+  function resultContentValue(content) {
+    if (!Array.isArray(content) || content.length !== 1 || content[0]?.type !== "text") return null;
+    try { return JSON.parse(content[0].text); } catch { return null; }
   }
 
   const pretty = value => JSON.stringify(value, null, 2);
@@ -326,11 +334,90 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h("small", null, value.retryable ? "Retryable after the underlying condition changes." : "No automatic retry will be attempted."));
   }
 
-  function ProposalToolView({ block, toolName }) {
-    const value = resultValue(block);
-    if (value?.error && !value?.review) return h(ProposalErrorCard, { error: value.error });
-    if (!value?.review) return h("div", { className: "s2g-review" }, block?.kind === "tool-result" ? "Proposal result unavailable." : `${toolName.replaceAll("_", " ")}…`);
-    return h(ReviewCard, { review: value.review });
+  function requiredInputMessage(request, values) {
+    const fields = Array.isArray(request.fields) ? request.fields : [];
+    return [
+      "Continue the pending design proposal using these user-confirmed values:",
+      ...fields.map(field => `- ${String(field.label || field.name)}: ${String(values[field.name] || "").trim()}`),
+      "Prepare the proposal now. Use these values as authoritative and ask only if another required value truly cannot be inferred.",
+    ].join("\n");
+  }
+
+  function ProposalInputCard({ request, inputActions }) {
+    const value = record(request);
+    const fields = (Array.isArray(value.fields) ? value.fields : []).map(record);
+    const [values, setValues] = React.useState(() => Object.fromEntries(fields.map(field => [String(field.name), String(field.default_value || "")])));
+    const [submitted, setSubmitted] = React.useState(false);
+    const [error, setError] = React.useState("");
+    function submit(event) {
+      event.preventDefault();
+      const missing = fields.find(field => !String(values[field.name] || "").trim());
+      if (missing) { setError(`${String(missing.label || missing.name)} is required.`); return; }
+      setError("");
+      setSubmitted(true);
+      inputActions.setDraft(requiredInputMessage(value, values));
+      queueMicrotask(() => inputActions.submit());
+    }
+    return h("article", { className: "s2g-review", "data-s2g-required-input": submitted ? "submitted" : "pending" },
+      h("header", null, h("h4", null, value.title || "Complete the proposal details"), h("span", { className: "s2g-state" }, submitted ? "SUBMITTED" : "INPUT REQUIRED")),
+      h("p", null, value.description || "Review the defaults and fill in the required values."),
+      submitted ? h("p", { className: "s2g-required-status" }, "Details submitted. The Assistant is continuing the proposal.")
+        : h("form", { className: "s2g-required", onSubmit: submit },
+          fields.map(field => h("label", { key: field.name }, String(field.label || field.name),
+            field.description ? h("small", null, String(field.description)) : null,
+            h("input", {
+              name: String(field.name), value: String(values[field.name] || ""), required: true,
+              onChange: event => setValues(current => ({ ...current, [field.name]: event.target.value })),
+            }))),
+          error ? h("p", { className: "s2g-error" }, error) : null,
+          h("div", { className: "s2g-actions" }, h("button", { className: "primary", type: "submit" }, value.submit_label || "Continue proposal"))));
+  }
+
+  const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal"]);
+
+  const proposalReviewsDefinition = {
+    kind: "spec2gds-proposal-reviews",
+    match(event) {
+      if (event.type === "turn/start") return { id: String(event.data.turn), role: "start" };
+      if (event.type === "tool/call" || event.type === "tool/result") return { id: String(event.data.turn), role: "update" };
+      return null;
+    },
+    start(_context, match) {
+      if (match.event.type !== "turn/start") throw new Error("proposal review tracking requires turn/start");
+      return { turn: match.event.data.turn, calls: new Map(), results: [] };
+    },
+    update(context, match) {
+      if (match.event.type === "tool/call") {
+        if (!proposalToolNames.has(match.event.data.name)) return context.state;
+        const calls = new Map(context.state.calls);
+        calls.set(String(match.event.data.callId), match.event.data.name);
+        return { ...context.state, calls };
+      }
+      if (match.event.type !== "tool/result") return context.state;
+      const callId = String(match.event.data.message.source.callId);
+      if (!context.state.calls.has(callId)) return context.state;
+      const value = resultContentValue(match.event.data.message.content[0]?.content);
+      if (!value?.review && !value?.error && !value?.required_input) return context.state;
+      const result = { callId, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null };
+      return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
+    },
+    buildLocationData(context, scope, previous) {
+      if (scope !== "turn" || !context.state) return null;
+      if (previous?.kind === "turn" && previous.turn === context.state.turn
+        && previous.key === "spec2gds-proposal-reviews" && previous.value.results === context.state.results) return previous;
+      return { kind: "turn", turn: context.state.turn, key: "spec2gds-proposal-reviews", value: { results: context.state.results } };
+    },
+  };
+
+  function selectProposalReview(owner) {
+    const results = owner.turn.data.get("spec2gds-proposal-reviews")?.results || [];
+    return results.filter(result => result.seq < owner.seq).at(-1) || null;
+  }
+
+  function ProposalReviewTail({ matched, inputActions }) {
+    if (matched.review) return h(ReviewCard, { review: matched.review });
+    if (matched.requiredInput) return h(ProposalInputCard, { request: matched.requiredInput, inputActions });
+    return h(ProposalErrorCard, { error: matched.error });
   }
 
   function WorkflowDock({ sessionId, useProjection }) {
@@ -369,7 +456,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
   function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds assistant"); }
 
-  module.exports.inject = ["slots", "uiSession", "sessions", "workspaces"];
+  module.exports.inject = ["slots", "uiConversation", "uiSession", "sessions", "workspaces"];
   module.exports.apply = function apply(ctx) {
     const setProductTitle = () => {
       if (document.title !== "spec2gds Assistant") document.title = "spec2gds Assistant";
@@ -394,7 +481,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
     ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "s-workflow", order: 11 }, WorkflowDock));
-    for (const key of ["prepare_spec_proposal", "prepare_circuit_proposal"]) ctx.slots.inject("tool.call.toolview", () => ctx.slots.register({ name: "tool.call.toolview", key }, ProposalToolView));
+    ctx.uiConversation.events.register(proposalReviewsDefinition);
+    ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({ name: "conversation.chat.turnTail", select: selectProposalReview }, ProposalReviewTail));
     queueMicrotask(async () => {
       try {
         const stored = await api("/workspaces");
@@ -404,11 +492,15 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const params = new URLSearchParams(location.search);
     const launch = new URLSearchParams(location.hash.replace(/^#/, ""));
     const sessionId = params.get("spec2gds_session") || launch.get("spec2gds_session");
-    if (sessionId) {
+    const unbound = launch.get("spec2gds_unbound") === "1";
+    if (sessionId || unbound) {
       params.delete("spec2gds_session");
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
       queueMicrotask(async () => {
-        try { await createBoundSession(ctx, await api(`/bindings/${encodeURIComponent(sessionId)}`)); }
+        try {
+          if (sessionId) await createBoundSession(ctx, await api(`/bindings/${encodeURIComponent(sessionId)}`));
+          else await createUnboundSession(ctx);
+        }
         catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
       });
     }

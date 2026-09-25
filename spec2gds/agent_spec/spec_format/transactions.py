@@ -69,16 +69,6 @@ class DeleteDocument:
 
 
 @dataclass(frozen=True)
-class CreateEntity:
-    """Create a minimal top-level component or entry design from a name."""
-
-    kind: typing.Literal["component", "design"]
-    name: str
-    entity_id: str | None = None
-    instances: tuple[InstanceIR, ...] = ()
-
-
-@dataclass(frozen=True)
 class SetDocumentTitle:
     """Replace the human-facing specification title without changing stable IDs."""
 
@@ -130,6 +120,26 @@ class StructuredPortInput:
 
 
 ComponentPortInput = typing.Union[WirePortInput, TransactionalPortInput, StructuredPortInput]
+
+
+@dataclass(frozen=True)
+class InitialComponentPort:
+    """One named port created atomically with a new component."""
+
+    name: str
+    port: ComponentPortInput
+
+
+@dataclass(frozen=True)
+class CreateEntity:
+    """Create a top-level component or entry design with optional initial content."""
+
+    kind: typing.Literal["component", "design"]
+    name: str
+    entity_id: str | None = None
+    instances: tuple[InstanceIR, ...] = ()
+    ports: tuple[InitialComponentPort, ...] = ()
+    systemverilog: str | None = None
 
 
 @dataclass(frozen=True)
@@ -402,6 +412,14 @@ class SpecEditTransaction:
             for operation in self.operations
             if isinstance(operation, UpsertEntitySection) and operation.section_type == "sv"
         }
+        updated_owners.update(
+            next_revision.by_vlnv(
+                operation.kind,
+                f"spec2gds.local:work:{operation.name.strip()}:1.0",
+            ).ref
+            for operation in self.operations
+            if isinstance(operation, CreateEntity) and operation.systemverilog is not None
+        )
         updated_ids = {
             item.section_id for owner in updated_owners
             for item in next_revision.entity_sections_for(owner, "sv")
@@ -616,7 +634,7 @@ def _delete_document(package: SpecPackage, ref: EntityRef) -> None:
 
 
 def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
-    """Create one minimal valid IP-XACT document with editor-owned defaults."""
+    """Create one valid IP-XACT document with optional atomic initial content."""
     name = operation.name.strip()
     if not name or not ID_PATTERN.fullmatch(name):
         raise ValueError("Entity name must be a non-empty XML-compatible identifier.")
@@ -630,6 +648,10 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
         raise ValueError(f"Entity ID already exists: {entity_id}")
     if operation.kind == "component" and operation.instances:
         raise ValueError("Only designs may define component instances.")
+    if operation.kind == "design" and operation.ports:
+        raise ValueError("Only components may define initial ports.")
+    if operation.kind == "design" and operation.systemverilog is not None:
+        raise ValueError("Initial SystemVerilog behavior is supported only for components.")
     instance_names = [item.name for item in operation.instances]
     if len(instance_names) != len(set(instance_names)):
         raise ValueError("Design component instance names must be unique.")
@@ -645,13 +667,20 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
         etree.SubElement(root, _q(field)).text = value
     for instance in operation.instances:
         _upsert_instance(root, instance)
+    initial_port_names = [item.name for item in operation.ports]
+    if len(initial_port_names) != len(set(initial_port_names)):
+        raise ValueError("Initial component port names must be unique.")
+    for initial_port in operation.ports:
+        add_component_port(root, {"name": initial_port.name, **_port_input_mapping(initial_port.port)})
     package.add_document(operation.kind, _serialize(root))
+    reference = EntityRef(
+        document_id=package.manifest.document_id,
+        entity_id=entity_id,
+        entity_kind=operation.kind,
+    )
+    if operation.systemverilog is not None:
+        upsert_systemverilog_section(package, reference, operation.systemverilog)
     if operation.kind == "design":
-        reference = EntityRef(
-            document_id=package.manifest.document_id,
-            entity_id=entity_id,
-            entity_kind="design",
-        )
         package.manifest = package.manifest.model_copy(
             update={"entry_designs": [*package.manifest.entry_designs, reference]}
         )

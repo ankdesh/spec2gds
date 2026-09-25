@@ -1,0 +1,112 @@
+{
+  "component_module_count": 1,
+  "design": {
+    "document_id": "spec_13f32d14fd5a405fa2214cad79bb87a0",
+    "entity_id": "design_combo_block_5f7665a9481149c1b9156be7ae72053c",
+    "entity_kind": "design"
+  },
+  "design_vlnv": "spec2gds.local:work:combo_block:1.0",
+  "document_id": "spec_13f32d14fd5a405fa2214cad79bb87a0",
+  "files": [
+    {
+      "path": "Makefile",
+      "sha256": "sha256:6f4f9ab2cd47cdb9fb36cf6a5df03f2d7fe7928b8f1c14be5304cfe3a330a3b0",
+      "size": 433
+    },
+    {
+      "path": "README.md",
+      "sha256": "sha256:0141590b2d2275829ea7093d6d24bb325e122413302531bbabae2ebdb298952c",
+      "size": 484
+    },
+    {
+      "path": "generation-manifest.json",
+      "sha256": "sha256:a540d6886555b3c827a55ea62744178da258cc6dabb1502e15dc12293b96a370",
+      "size": 2579
+    },
+    {
+      "path": "rtl/components/combinational.sv",
+      "sha256": "sha256:ad25d62803dd1363d66a0aaddcad764e4012f1dad1a60f77bbaa8f0bb6c55e91",
+      "size": 611
+    },
+    {
+      "path": "rtl/designs/combo_block_top.sv",
+      "sha256": "sha256:a9541f2ed9376d94a19eb10a271a62eb56c5f58eec0378e3ede26ec9de6ddf3f",
+      "size": 266
+    },
+    {
+      "path": "rtl/files.f",
+      "sha256": "sha256:d72cd341f7f8e99b58829b52177cba57d2c4f165c37a486a90ea02ea02e1cb80",
+      "size": 55
+    }
+  ],
+  "generator_id": "rtl.generate",
+  "generator_version": "1.1.2",
+  "instance_count": 1,
+  "module_count": 2,
+  "name_mappings": [
+    {
+      "kind": "module",
+      "rtl_name": "combinational",
+      "scope": "spec2gds.local:work:combinational:1.0",
+      "source_name": "combinational"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "x",
+      "scope": "spec2gds.local:work:combinational:1.0",
+      "source_name": "x"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "y",
+      "scope": "spec2gds.local:work:combinational:1.0",
+      "source_name": "y"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "add_sel",
+      "scope": "spec2gds.local:work:combinational:1.0",
+      "source_name": "add_sel"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "z",
+      "scope": "spec2gds.local:work:combinational:1.0",
+      "source_name": "z"
+    },
+    {
+      "kind": "module",
+      "rtl_name": "combo_block_top",
+      "scope": "spec2gds.local:work:combo_block:1.0",
+      "source_name": "combo_block_top"
+    },
+    {
+      "kind": "instance",
+      "rtl_name": "comb_0",
+      "scope": "spec2gds.local:work:combo_block:1.0",
+      "source_name": "comb_0"
+    }
+  ],
+  "net_count": 0,
+  "output_path": "rtl/spec_13f32d14fd5a405fa2214cad79bb87a0/design_combo_block_5f7665a9481149c1b9156be7ae72053c",
+  "schema_version": "spec2gds.rtl-generation-report.v2",
+  "source_revision_hash": "sha256:b68cddf03ce07e47f189a4bd541307f5892849c0e31a794c0b575142c53e8f35",
+  "source_sections": [
+    {
+      "output_path": "rtl/components/combinational.sv",
+      "section_id": "section_sv_component_combinational_f32368080e184590b33cfa3816c41153",
+      "sha256": "sha256:f4c5ef9a2bfa9eb8d8964ffbcc5994ae8bc3322736c5bc01ec0fd885352fa6d0",
+      "source_path": "annotations/entity-sections/sv/section_sv_component_combinational_f32368080e184590b33cfa3816c41153.sv"
+    }
+  ],
+  "top_module": "combo_block_top",
+  "tree_sha256": "sha256:8b8bd4bded1c2156ec52c0a648d70e971b862c023ac6c17150c71f4c63c91245",
+  "unconnected_port_count": 4,
+  "warnings": [
+    "Warning: Design spec2gds.local:work:combo_block:1.0 instance comb_0 port add_sel is unconnected.",
+    "Warning: Design spec2gds.local:work:combo_block:1.0 instance comb_0 port x is unconnected.",
+    "Warning: Design spec2gds.local:work:combo_block:1.0 instance comb_0 port y is unconnected.",
+    "Warning: Design spec2gds.local:work:combo_block:1.0 instance comb_0 port z is unconnected."
+  ],
+  "wrapper_generated": true
+}

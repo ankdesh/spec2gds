@@ -86,6 +86,7 @@ cd ..
 
 # Harness AI Assistant and its production web bundle
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 cd ..
@@ -178,14 +179,22 @@ required.
 The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
 uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
 chat already bound to the active circuit. Spec Editor opens
-a chat bound to the complete active specification. That document chat can
-propose new top-level components or designs (including a design's initial
-instances); use an entity's **Options → More actions… → Explore with AI
-Assistant** when a reviewed change should target an existing entity.
+a chat bound to the complete active specification, or an unbound chat when no
+specification is open. A document chat can propose new top-level components or
+designs (including a design's initial instances); use an entity's **Options →
+More actions… → Explore with AI Assistant** when a reviewed change should
+target an existing entity.
 
-Assistant conversations fail closed unless they are bound to an exact editor
-document or entity. The browser offers focused, goal, and orchestrated presets;
+Unbound Assistant conversations fail closed with no design context or proposal
+tools; mutations require a binding to an exact editor document or entity. The
+browser offers focused, goal, and orchestrated presets;
 all preserve owner preview and explicit review as the only mutation boundary.
+Every interactive top-level component creation first shows an editable details
+card with defaults derived from the request. Submitting it continues the
+proposal in the same conversation. The confirmed name, wire ports, width, and
+module-body behavior are included atomically in the create operation, so an
+approved component is not an empty shell. The subsequent owner-preview card
+remains the explicit approve/apply safety gate.
 Focused turns are capped at three model steps, with one additional step only
 after a visible structured-question call, and every model response is capped
 at 1,200 output tokens. Goal and orchestrated work use separate bounded
@@ -285,7 +294,8 @@ scripts/serve-all.sh stop
 Each service reads its address from `config/services.json`; the launcher's
 displayed URLs and untracked-listener cleanup cover the tracked default ports
 `6010` through `6014`. It writes PID files and per-service logs
-under `logs/serve-all/`. Set `OPENAI_API_KEY` before starting if the AI
+under `logs/serve-all/`. The launcher prints the three application URLs but
+does not open them in a browser. Set `OPENAI_API_KEY` before starting if the AI
 Assistant should make OpenAI requests.
 
 ## Build specification Activities
@@ -404,11 +414,20 @@ save, conflict, layout, and recovery behavior.
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 export OPENAI_API_KEY="..."
-HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
+npm run dev
 ```
+
+`setup:harness` reads `harness.lock.json`, prepares the sibling
+`../deepseek-harness` checkout, installs the pinned pnpm dependencies, and
+builds DSH. It requires network access for the clone/fetch and package install.
+An existing checkout must be clean, use the configured origin, and already be
+at the pinned commit. To move a clean checkout explicitly, run
+`npm run setup:harness -- --update`. Set `HARNESS_SOURCE` to manage and use a
+different checkout path; the same safety checks apply.
 
 Open `http://SERVER_IP:6013`. Repeat `npm run build` after changing Assistant
 server or web code.

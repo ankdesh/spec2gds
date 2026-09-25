@@ -31,7 +31,7 @@ observe a hot reload or an implicit latest version.
 | Versioned prompt catalog | Spec/Circuit YAML bundles; exact variable binding and section checks | New Cordis `promptCatalog` service and strict YAML provider | Domain instructions become reusable, testable configuration without losing deterministic section order |
 | Generic workflow catalog | One generic workflow plus Spec/Circuit adapter YAML | New Cordis `sWorkflow` service and strict YAML provider | New services reuse lifecycle/budget behavior while contributing exact domain capabilities |
 | Execution presets | Browser selector and immutable binding field | Existing `agent-presets`, `persona`, goal command/tool, and preset-scoped composition | One assistant supports one-shot Q&A, long-running goals, and orchestration without conflating service logic |
-| Interactive clarification | All browser root presets mount the structured question tool; the host adds a conditional mandatory-use prompt section | Existing `user-questions`, `tool-ask-user`, `system-prompt`, and `ui-user-questions` composition | Missing proposal fields use a composer takeover and resume the same turn instead of an unstructured final response |
+| Interactive clarification | Interactive top-level component creation always returns one request-derived required-fields form before preview; browser root presets also mount the structured question tool | Product turn-tail card plus existing `user-questions`, `tool-ask-user`, `system-prompt`, and `ui-user-questions` composition | Component defaults remain editable and consistent before the separate approve/apply review boundary |
 | Durable workflow state | Product starts the exact workflow on the first direct user request | Full-snapshot `s-workflow/change` Session event and strict projection | Pause/resume/replay retains exact definitions, budgets, progress, draft, and human decisions |
 | Restricted model progress | Goal/orchestrated presets mount five workflow tools | Existing typed DSH tool registry plus new `tool-s-workflow` | The model can report work but cannot grant itself lifecycle, budget, approval, or mutation authority |
 | Human workflow controls | Conversation dock and same-origin CAS endpoints | Client slot `conversation.input.dock` and DSH Session projection | Humans can pause, resume, cancel, answer, and approve without model-owned control flow |
@@ -44,7 +44,7 @@ observe a hot reload or an implicit latest version.
 | --- | ---: | ---: | ---: |
 | Read bound owner context | Yes | — | Validates owner and binding |
 | Prepare an owner proposal | Root agent only | Reviews | Persists artifact and preview |
-| Request immediate clarification | Root agent only | Answers in structured composer | Routes the answer back into the same turn |
+| Request immediate clarification | Root agent only | Confirms proposal form or answers structured composer | Routes proposal values into the same Session; resumes other waiting questions |
 | Update draft/checkpoint | Yes, exact workflow revision | Observes | Enforces schema and budget |
 | Request durable workflow input/completion review | Goal/orchestrated root only | Answers/reviews | Persists pending state |
 | Start/pause/resume/cancel | No | Yes | Yes |

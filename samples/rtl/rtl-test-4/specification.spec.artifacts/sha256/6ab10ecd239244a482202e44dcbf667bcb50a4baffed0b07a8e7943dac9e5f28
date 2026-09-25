@@ -1,0 +1,105 @@
+{
+  "component_module_count": 1,
+  "design": {
+    "document_id": "spec_ce5a717edc124d03ac93022ecd4033c1",
+    "entity_id": "design_sequential_b91f5c399363430b8a9c4d5b072cbd6b",
+    "entity_kind": "design"
+  },
+  "design_vlnv": "spec2gds.local:work:sequential:1.0",
+  "document_id": "spec_ce5a717edc124d03ac93022ecd4033c1",
+  "files": [
+    {
+      "path": "Makefile",
+      "sha256": "sha256:2364279904cf4da22bb863cd2688f7889ef2929c4a6b9d93ba3cc4d2b649aa2d",
+      "size": 432
+    },
+    {
+      "path": "README.md",
+      "sha256": "sha256:a9c872a3042b3529784c4a3a7c487927fc3fd753f9a3897b7e1756ef23e5ba59",
+      "size": 482
+    },
+    {
+      "path": "generation-manifest.json",
+      "sha256": "sha256:b36f836aa1e5f3a52ab3a77b5d79cc467c0dee513a93a2055558331f76391c36",
+      "size": 2296
+    },
+    {
+      "path": "rtl/components/ff_block.sv",
+      "sha256": "sha256:2ace76a9ceab478226c4cd2570a3196dcb829d8a82ccf518693def26fe5621c0",
+      "size": 527
+    },
+    {
+      "path": "rtl/designs/sequential_top.sv",
+      "sha256": "sha256:f235f14cdc0ab1b9823d8967fceb2453d3176ddfda19544a3ced7f8a4fe96811",
+      "size": 236
+    },
+    {
+      "path": "rtl/files.f",
+      "sha256": "sha256:9804ed34a5e7b337afb87be741ab910c3934c31eb3f5663d287737d64a0f851f",
+      "size": 49
+    }
+  ],
+  "generator_id": "rtl.generate",
+  "generator_version": "1.1.2",
+  "instance_count": 1,
+  "module_count": 2,
+  "name_mappings": [
+    {
+      "kind": "module",
+      "rtl_name": "ff_block",
+      "scope": "spec2gds.local:work:ff_block:1.0",
+      "source_name": "ff_block"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "clk",
+      "scope": "spec2gds.local:work:ff_block:1.0",
+      "source_name": "clk"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "d",
+      "scope": "spec2gds.local:work:ff_block:1.0",
+      "source_name": "d"
+    },
+    {
+      "kind": "port",
+      "rtl_name": "q",
+      "scope": "spec2gds.local:work:ff_block:1.0",
+      "source_name": "q"
+    },
+    {
+      "kind": "module",
+      "rtl_name": "sequential_top",
+      "scope": "spec2gds.local:work:sequential:1.0",
+      "source_name": "sequential_top"
+    },
+    {
+      "kind": "instance",
+      "rtl_name": "ff",
+      "scope": "spec2gds.local:work:sequential:1.0",
+      "source_name": "ff"
+    }
+  ],
+  "net_count": 0,
+  "output_path": "rtl/spec_ce5a717edc124d03ac93022ecd4033c1/design_sequential_b91f5c399363430b8a9c4d5b072cbd6b",
+  "schema_version": "spec2gds.rtl-generation-report.v2",
+  "source_revision_hash": "sha256:eaf09636a80390d4275c7fa4b6ae7bfc25934b8a7935cb41d56402fa09a80d71",
+  "source_sections": [
+    {
+      "output_path": "rtl/components/ff_block.sv",
+      "section_id": "section_sv_component_ff_block_313d0340fd664491a4a480285e7c024c",
+      "sha256": "sha256:11707e280f690c8ffb4eea25b7f6802f0b57f8a8a588353982d462b5224d16b8",
+      "source_path": "annotations/entity-sections/sv/section_sv_component_ff_block_313d0340fd664491a4a480285e7c024c.sv"
+    }
+  ],
+  "top_module": "sequential_top",
+  "tree_sha256": "sha256:2203ff38172df26f06b5965982fe8f058712fd42b4ae7d0a41e7b31988eec4b0",
+  "unconnected_port_count": 3,
+  "warnings": [
+    "Warning: Design spec2gds.local:work:sequential:1.0 instance ff port clk is unconnected.",
+    "Warning: Design spec2gds.local:work:sequential:1.0 instance ff port d is unconnected.",
+    "Warning: Design spec2gds.local:work:sequential:1.0 instance ff port q is unconnected."
+  ],
+  "wrapper_generated": true
+}

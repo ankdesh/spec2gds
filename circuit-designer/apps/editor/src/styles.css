@@ -75,16 +75,24 @@ a:focus-visible {
 .assistant-launch {
   flex: 0 0 auto;
   padding: 0.48rem 0.68rem;
-  border: 1px solid #9fc2b7;
+  border: 1px solid #246b5a;
   border-radius: 0.38rem;
-  background: #e8f3ef;
-  color: #174f43;
+  background: #246b5a;
+  color: #fff;
   cursor: pointer;
   font-size: 0.75rem;
   font-weight: 750;
 }
 
-.assistant-launch:hover { background: #dbece6; }
+.assistant-launch:hover { background: #195345; }
+
+.assistant-launch:disabled {
+  border-color: #b9c8c3;
+  background: #edf2f0;
+  color: #82918c;
+  cursor: wait;
+  opacity: 0.72;
+}
 
 .brand {
   display: inline-flex;

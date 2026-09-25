@@ -175,7 +175,7 @@ Prompt construction has three independent inputs:
 1. The preset persona identifies focused, goal-oriented, or orchestrating behavior.
 2. The exact service prompt bundle contributes `domain-persona`, `binding-context`, `operation-constraints`, and `output-contract`.
 3. Preset-scoped DSH packages contribute stable policies such as the workflow-tool policy.
-4. When a browser root preset exposes `ask_user_question`, the product contributes `spec2gds:interactive-clarification` at order 250; it mandates the tool for required values absent from bound context and is omitted in headless mode.
+4. When a browser root preset exposes `ask_user_question`, the product contributes `spec2gds:interactive-clarification` at order 250. Every interactive top-level component creation is returned once as a request-derived product form before owner preview; other immediate questions use `ask_user_question`. The section is omitted in headless mode.
 
 The prompt catalog replaces `{{binding.*}}` variables from the immutable binding and returns detached text plus the bundle digest. The product checks expected section IDs and order before registering them on `agent.ctx.systemPrompt`.
 
@@ -183,7 +183,9 @@ An unbound Session receives one `complete: true` guard. In DSH, that flag makes 
 
 ### Choose the right input mechanism
 
-`ask_user_question` and an `sWorkflow` input request both involve a human, but they have different lifetimes. Use the structured question tool for information needed immediately in the current turn, such as a new component's name, port list, or a choice between two compatible endpoints. The conditional product prompt makes this mandatory when a concrete proposal cannot be represented without those values; the assistant must not end the turn by printing the questions as ordinary text. The Web answerer replaces the composer, returns compact structured answers to the tool, and the same model turn continues.
+Proposal details, `ask_user_question`, and an `sWorkflow` input request all involve a human, but they have different lifetimes. For an interactive top-level component creation, `prepare_spec_proposal` returns `required_input` once before it performs owner preview; the turn footer renders every field as a text box with defaults derived from the user's request. **Continue proposal** sends the confirmed values into the same Session as a new message. The proposal tool can then produce the separate owner-preview card whose **Approve and apply** action is the mutation boundary. Requests that are genuinely outside the writable vocabulary remain error cards.
+
+Use `ask_user_question` for non-proposal information needed immediately in the current turn, such as choosing between compatible endpoints before a proposal attempt. The Web answerer replaces the composer and returns compact structured answers to the waiting tool.
 
 Use the workflow input request only when goal or orchestrated work must durably stop at a consequential decision. It changes the persisted workflow state to `awaiting-user-input`; a later direct user answer returns the workflow to `active`. Focused mode has no workflow state. Headless mode has no interactive answerer. Delegated children cannot use either mechanism and return unresolved questions to the root Agent.
 
@@ -195,14 +197,14 @@ Use the workflow input request only when goal or orchestrated work must durably 
 human message
   -> Agent turn
   -> get_bound_context
-  -> optional ask_user_question and structured answer
+  -> optional defaulted proposal-details card or ask_user_question
   -> optional prepare_spec_proposal / prepare_circuit_proposal
   -> owner preview only
   -> persisted review card
   -> human Apply/Send or Discard
 ```
 
-Focused mode mounts the structured question tool but no goal, workflow, or delegation tools. The product still enforces the immutable binding, fresh context read, normal three-step limit, and 1,200-token response cap. One visible `ask_user_question` call earns one additional step in that same turn so context read, clarification, proposal, and final response can complete; ordinary repeated-tool trajectories still stop at three. Questions can finish after the context read; missing fields can be collected interactively; edits produce a previewed proposal but never mutate through a model tool.
+Focused mode mounts the structured question tool but no goal, workflow, or delegation tools. The product still enforces the immutable binding, fresh context read, normal three-step limit, and 1,200-token response cap. One visible `ask_user_question` call earns one additional step in that same turn; ordinary repeated-tool trajectories still stop at three. A proposal-details card starts a normal follow-up turn after submission. Missing fields can therefore be collected interactively without converting absent data into an unsupported-request error; edits produce a previewed proposal but never mutate through a model tool.
 
 ### Goal-oriented work
 
@@ -295,11 +297,17 @@ Run the product checks under Node.js 22.19+ or 24+:
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm run typecheck
 npm test
 npm run build
-HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run test:harness
+npm run test:harness
 ```
+
+The setup command prepares and builds the exact DSH commit recorded in
+`harness.lock.json`. It uses the sibling `../deepseek-harness` checkout by
+default; set `HARNESS_SOURCE` for a different path. An existing clean checkout
+at another commit is left unchanged unless setup is rerun with `--update`.
 
 When behavior is surprising, inspect these layers in order:
 

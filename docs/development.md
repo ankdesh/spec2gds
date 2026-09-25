@@ -98,12 +98,19 @@ The AI Assistant is a separate DeepSeek Harness Node workspace.
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 npm run typecheck
 npm test
 npm run test:harness
 ```
+
+`setup:harness` clones and builds the commit pinned by `harness.lock.json` in
+the sibling `../deepseek-harness` checkout. It refuses dirty, wrong-origin, or
+wrong-commit existing checkouts. Use `npm run setup:harness -- --update` to
+explicitly move a clean checkout to the pinned commit, or set
+`HARNESS_SOURCE=/absolute/path` to select another checkout.
 
 ## Combined local launcher
 
@@ -118,6 +125,7 @@ npm install
 cd ..
 
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 cd ..

@@ -111,7 +111,10 @@ const abstractionPort = object({
 
 export const SPEC_OPERATION_SCHEMA: Schema = {
   oneOf: [
-    operationBase("create_entity", { kind: required(strings("component", "design")), name: required(string()), instances: required(array(specInstance)) }),
+    operationBase("create_entity", {
+      kind: required(strings("component", "design")), name: required(string()), instances: required(array(specInstance)),
+      ports: array(specPort), systemverilog: nullable(string()),
+    }),
     operationBase("set_entity_metadata", { entity: required(entityRef), display_name: required(nullable(string())), short_description: required(nullable(string())), description: required(nullable(string())), clear_fields: required(array(strings("display_name", "short_description", "description"))) }),
     operationBase("upsert_parameter", { entity: required(entityRef), parameter: required(specParameter) }),
     operationBase("delete_parameter", { entity: required(entityRef), name: required(string()) }),
@@ -185,6 +188,11 @@ function validateSpecSemantic(operation: Record<string, unknown>): void {
   if (operation.type === "create_entity") {
     if (typeof operation.name !== "string" || !/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(operation.name)) throw new Error("New Spec entity names must be XML-compatible identifiers.");
     if (operation.kind === "component" && Array.isArray(operation.instances) && operation.instances.length) throw new Error("A new component cannot contain design instances.");
+    if (operation.kind === "design" && Array.isArray(operation.ports) && operation.ports.length) throw new Error("A new design cannot contain component ports.");
+    if (operation.kind === "design" && operation.systemverilog != null) throw new Error("Initial SystemVerilog behavior is supported only for components.");
+    const names = Array.isArray(operation.ports) ? operation.ports.map(port => isObject(port) ? String(port.name ?? "") : "") : [];
+    if (new Set(names).size !== names.length) throw new Error("Initial component port names must be unique.");
+    if (typeof operation.systemverilog === "string") validateSystemverilog(operation.systemverilog);
   }
   if (operation.type === "upsert_connection" && isObject(operation.connection)) {
     const connection = operation.connection;
@@ -197,10 +205,14 @@ function validateSpecSemantic(operation: Record<string, unknown>): void {
     if ((operation.port.kind === "custom") !== custom) throw new Error("custom_kind is required exactly when transactional kind is custom.");
   }
   if (operation.type === "upsert_entity_section" && isObject(operation.payload) && typeof operation.payload.content === "string") {
-    if (operation.payload.content.length > 262_144) throw new Error("SystemVerilog section content exceeds 262,144 characters.");
-    if (/\b(module|endmodule)\b|`(?:include|line)\b/.test(operation.payload.content)) throw new Error("SystemVerilog sections accept module-body content only.");
+    validateSystemverilog(operation.payload.content);
   }
   if (operation.type === "upsert_narrative_block") validateNarrativeBlock(operation.block, "block");
+}
+
+function validateSystemverilog(content: string): void {
+  if (content.length > 262_144) throw new Error("SystemVerilog section content exceeds 262,144 characters.");
+  if (/\b(module|endmodule)\b|`(?:include|line)\b/.test(content)) throw new Error("SystemVerilog sections accept module-body content only.");
 }
 
 function validateNarrativeBlock(value: unknown, path: string): void {

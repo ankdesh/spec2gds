@@ -44,6 +44,7 @@ from spec2gds.agent_spec.spec_format.transactions import (
     DeleteInstance,
     DeleteNarrativeBlock,
     EditOperation,
+    InitialComponentPort,
     ReorderConnections,
     ReorderInstances,
     ReorderNarrativeBlocks,
@@ -55,6 +56,9 @@ from spec2gds.agent_spec.spec_format.transactions import (
     UpsertEntitySection,
     UpsertInstance,
     UpsertNarrativeBlock,
+    WirePortInput,
+    TransactionalPortInput,
+    StructuredPortInput,
 )
 
 SUPPORTED_TARGET_KINDS = {
@@ -335,6 +339,9 @@ def compile_assistant_operations(
             instances = tuple(
                 InstanceIR(**item) for item in _list(raw, "instances")
             )
+            ports_value = raw.get("ports", [])
+            if not isinstance(ports_value, list):
+                raise ValueError("create_entity ports must be an array.")
             if any(
                 item.component_vlnv not in available_component_vlnvs
                 for item in instances
@@ -348,6 +355,8 @@ def compile_assistant_operations(
                     str(raw.get("name", "")),
                     str(raw.get("entity_id", "")),
                     instances,
+                    tuple(_initial_component_port(item) for item in ports_value),
+                    _optional_string(raw.get("systemverilog")),
                 )
             )
         elif operation_type == "set_entity_metadata":
@@ -450,7 +459,7 @@ def compile_assistant_operations(
 def _allowed_keys(kind: str) -> set[str]:
     common = {"type", "operation_id"}
     shapes = {
-        "create_entity": {"kind", "name", "entity_id", "instances"},
+        "create_entity": {"kind", "name", "entity_id", "instances", "ports", "systemverilog"},
         "set_entity_metadata": {"entity", "display_name", "short_description", "description"},
         "upsert_parameter": {"entity", "parameter"},
         "delete_parameter": {"entity", "name"},
@@ -742,6 +751,64 @@ def _assert_document_ref(revision: SpecRevision, reference: EntityRef) -> None:
 
 def _ref(value: typing.Any) -> EntityRef:
     return EntityRef.model_validate(value)
+
+
+def _optional_string(value: typing.Any) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ValueError("systemverilog must be a string or null.")
+    return value
+
+
+def _initial_component_port(value: typing.Any) -> InitialComponentPort:
+    """Decode the public component-port union for atomic component creation."""
+    if not isinstance(value, dict):
+        raise ValueError("Every initial component port must be an object.")
+    name = str(value.get("name", ""))
+    family = str(value.get("family", ""))
+    common = {"name", "family", "display_name", "description"}
+    display_name = value.get("display_name")
+    description = value.get("description")
+    if display_name is not None and not isinstance(display_name, str):
+        raise ValueError("Initial component port display_name must be a string or null.")
+    if description is not None and not isinstance(description, str):
+        raise ValueError("Initial component port description must be a string or null.")
+    if family == "wire":
+        _reject_unknown_keys(value, common | {"direction", "range"}, "initial wire port")
+        direction = str(value.get("direction", ""))
+        if direction not in {"in", "out", "inout"}:
+            raise ValueError("Initial wire port direction must be in, out, or inout.")
+        port_range = value.get("range")
+        if port_range is not None and not isinstance(port_range, str):
+            raise ValueError("Initial wire port range must be a string or null.")
+        port = WirePortInput(typing.cast(typing.Any, direction), port_range, display_name, description)
+    elif family == "transactional":
+        _reject_unknown_keys(
+            value,
+            common | {"initiative", "kind", "custom_kind", "bus_width"},
+            "initial transactional port",
+        )
+        initiative = str(value.get("initiative", ""))
+        if initiative not in {"requires", "provides", "both"}:
+            raise ValueError("Initial transactional port initiative must be requires, provides, or both.")
+        port = TransactionalPortInput(
+            typing.cast(typing.Any, initiative),
+            typing.cast(typing.Any, value.get("kind")),
+            typing.cast(str | None, value.get("custom_kind")),
+            typing.cast(str | None, value.get("bus_width")),
+            display_name,
+            description,
+        )
+    elif family == "structured":
+        _reject_unknown_keys(value, common | {"direction"}, "initial structured port")
+        direction = str(value.get("direction", ""))
+        if direction not in {"in", "out", "inout"}:
+            raise ValueError("Initial structured port direction must be in, out, or inout.")
+        port = StructuredPortInput(typing.cast(typing.Any, direction), display_name, description)
+    else:
+        raise ValueError("Initial component port family must be wire, transactional, or structured.")
+    return InitialComponentPort(name=name, port=port)
 
 
 def _mapping(value: dict[str, typing.Any], key: str) -> dict[str, typing.Any]:

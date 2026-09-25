@@ -390,20 +390,24 @@ export default function App() {
   };
 
   const launchDocumentAssistant = async () => {
-    if (launchingAssistant || !snapshot) return;
+    if (launchingAssistant) return;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
       pendingWindow.opener = null;
       pendingWindow.document.title = "Opening AI Assistant…";
-      pendingWindow.document.body.textContent = "Connecting to the active specification…";
+      pendingWindow.document.body.textContent = snapshot
+        ? "Connecting to the active specification…"
+        : "Opening the AI Assistant without a specification…";
     }
     setLaunchingAssistant(true);
     setError("");
     try {
-      const launch = await client.launchDocumentAssistant();
+      const launch = await client.launchDocumentAssistant(snapshot !== null);
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
-      setNotice(`Opened a read-only AI Assistant chat for ${launch.document_id}.`);
+      setNotice(launch.scope === "document"
+        ? `Opened a read-only AI Assistant chat for ${launch.document_id}.`
+        : "Opened the AI Assistant without an attached specification.");
     } catch (caught) {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));

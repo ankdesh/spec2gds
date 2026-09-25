@@ -3,7 +3,7 @@ import test from "node:test";
 import { validateArgs } from "@deepseek-ai/dsh-tools";
 import { promptSectionsFor, shapeBoundContext } from "../src/domain-context.js";
 import { CIRCUIT_OPERATION_SCHEMA, SPEC_OPERATION_SCHEMA, validateProposalSemantics } from "../src/operation-schemas.js";
-import { structuredQuestionPrompt } from "../src/tools.js";
+import { applyConfirmedComponentDetails, proposalInputRequest, registerDomainTools, structuredQuestionPrompt, type ProposalInputRequest } from "../src/tools.js";
 import type { SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): SessionBinding => ({
@@ -55,9 +55,150 @@ test("structured-question policy is conditional and requires the interactive too
   assert.equal(section.order, 250);
   assert.equal(Object.hasOwn(section, "complete"), false);
   assert.match(section.text, /MUST call ask_user_question/);
-  assert.match(section.text, /Do not list the missing questions in an ordinary assistant response/);
+  assert.match(section.text, /every missing value in required_fields/);
+  assert.match(section.text, /sensible default_value for every field/);
+  assert.match(section.text, /Do not list missing proposal fields in an ordinary assistant response/);
   assert.match(section.text, /cannot be derived from bound context/);
   assert.match(section.text, /workflow input request capability/);
+});
+
+test("missing component details produce a defaulted form while genuinely unsupported requests remain errors", () => {
+  const request = proposalInputRequest(
+    binding("spec"),
+    "The request does not provide a component name.",
+    undefined,
+    "Add a component with AND-gate semantics.",
+  );
+  assert.ok(request);
+  assert.equal(request.title, "Complete the proposal details");
+  assert.deepEqual(request.fields.map(field => [field.name, field.default_value]), [
+    ["component_name", "AndGate"],
+    ["input_ports", "A, B"],
+    ["output_ports", "Y"],
+    ["port_width", "1"],
+    ["behavior", "Y = A & B"],
+  ]);
+  const requestDerived = proposalInputRequest(
+    binding("spec"),
+    "Review the component details before the proposal is prepared.",
+    [{ name: "component_name", label: "Component name", description: "", default_value: "OrGate" }],
+    "Create an 8-bit AND gate with sensible defaults, or let me edit them.",
+    "OrGate",
+  );
+  assert.deepEqual(requestDerived?.fields.map(field => [field.name, field.default_value]), [
+    ["component_name", "AndGate"],
+    ["input_ports", "A, B"],
+    ["output_ports", "Y"],
+    ["port_width", "8"],
+    ["behavior", "Y = A & B"],
+  ]);
+  const explicitlyNamed = proposalInputRequest(binding("spec"), "Review component details.", [],
+    "Create an OR gate called StatusCombiner.", "AndGate");
+  assert.equal(explicitlyNamed?.fields[0]?.default_value, "StatusCombiner");
+  assert.equal(explicitlyNamed?.fields.at(-1)?.default_value, "Y = A | B");
+  assert.equal(proposalInputRequest(binding("spec"), "Renaming entity identity is outside the writable boundary.", undefined), null);
+
+  const explicit = proposalInputRequest(binding("circuit"), "A terminal width is required.", [{
+    name: "width", label: "Terminal width", description: "Width in bits.", default_value: "1",
+  }]);
+  assert.equal(explicit?.fields[0]?.default_value, "1");
+});
+
+test("confirmed component form values become atomic initial ports and behavior", () => {
+  const [operation] = applyConfirmedComponentDetails(
+    [{ operation_id: "create", type: "create_entity", kind: "component", name: "placeholder", instances: [] }],
+    [
+      "Continue the pending design proposal using these user-confirmed values:",
+      "- Component name: AndGate",
+      "- Input ports: A, B",
+      "- Output ports: Y",
+      "- Port width: 1",
+      "- Behavior: Y = A & B",
+      "Prepare the proposal now.",
+    ].join("\n"),
+  ) as Array<Record<string, unknown>>;
+  assert.equal(operation?.name, "AndGate");
+  assert.deepEqual(operation?.ports, [
+    { name: "A", family: "wire", display_name: null, description: null, direction: "in", range: null },
+    { name: "B", family: "wire", display_name: null, description: null, direction: "in", range: null },
+    { name: "Y", family: "wire", display_name: null, description: null, direction: "out", range: null },
+  ]);
+  assert.equal(operation?.systemverilog, "assign Y = A & B;");
+});
+
+test("the Spec proposal tool returns required input instead of an unsupported error for missing details", async () => {
+  const registered: Array<{ name: string; execute(args: unknown, context: unknown): Promise<unknown> }> = [];
+  registerDomainTools({
+    tools: {
+      register(tool) { registered.push(tool as typeof registered[number]); return () => undefined; },
+      get() { return undefined; },
+    },
+  }, binding("spec"), {} as never, {} as never, undefined, undefined, undefined, true);
+  const tool = registered.find(item => item.name === "prepare_spec_proposal");
+  assert.ok(tool);
+  const result = await tool.execute({
+    supported: false,
+    unsupported_reason: "The request does not provide a component name.",
+    title: "Add an AND gate",
+    summary: "Create a two-input AND gate.",
+    rationale: "Requested by the user.",
+    assumptions: ["Inputs A and B drive output Y."],
+    operations: [],
+  }, { callId: "call-1", signal: new AbortController().signal });
+  assert.equal((result as { error?: unknown }).error, undefined);
+  assert.equal((result as { required_input: ProposalInputRequest }).required_input.fields[0]?.default_value, "AndGate");
+
+  const guessedProposal = await tool.execute({
+    supported: true,
+    unsupported_reason: null,
+    title: "Create an AND-gate component",
+    summary: "Create a two-input AND gate.",
+    rationale: "Requested by the user.",
+    assumptions: ["Inputs A and B drive output Y."],
+    operations: [{ operation_id: "create", type: "create_entity", kind: "component", name: "Or", instances: [] }],
+  }, { callId: "call-form", signal: new AbortController().signal });
+  assert.equal((guessedProposal as { review?: unknown }).review, undefined);
+  assert.equal((guessedProposal as { required_input: ProposalInputRequest }).required_input.fields[0]?.default_value, "AndGate");
+
+  const confirmedTools: typeof registered = [];
+  registerDomainTools({
+    tools: {
+      register(registeredTool) { confirmedTools.push(registeredTool as typeof registered[number]); return () => undefined; },
+      get() { return undefined; },
+    },
+  }, binding("spec"), {} as never, {} as never, undefined, undefined,
+  () => [
+    "Continue the pending design proposal using these user-confirmed values:",
+    "- Component name: AndGate",
+    "- Input ports: A, B",
+    "- Output ports: Y",
+    "- Port width: 1",
+    "- Behavior: Y = A & B",
+  ].join("\n"), true);
+  const confirmedTool = confirmedTools.find(item => item.name === "prepare_spec_proposal");
+  assert.ok(confirmedTool);
+  const afterConfirmation = await confirmedTool.execute({
+    supported: true,
+    unsupported_reason: null,
+    title: "Create an AND-gate component",
+    summary: "Create a two-input AND gate.",
+    rationale: "Confirmed by the user.",
+    assumptions: [],
+    operations: [{ operation_id: "create", type: "create_entity", kind: "component", name: "AndGate", instances: [] }],
+  }, { callId: "call-confirmed", signal: new AbortController().signal });
+  assert.equal((afterConfirmation as { required_input?: unknown }).required_input, undefined, "confirmed details must not reopen the form");
+
+  const unsupported = await tool.execute({
+    supported: false,
+    unsupported_reason: "Renaming entity identity is outside the writable boundary.",
+    title: "Rename identity",
+    summary: "Rename an immutable identity.",
+    rationale: "Requested by the user.",
+    assumptions: [],
+    operations: [],
+  }, { callId: "call-2", signal: new AbortController().signal });
+  assert.equal((unsupported as { required_input?: unknown }).required_input, undefined);
+  assert.equal((unsupported as { error: { error_code: string } }).error.error_code, "UNSUPPORTED_REQUEST");
 });
 
 test("binding section names immutable entity and document targets and requires fresh context", () => {

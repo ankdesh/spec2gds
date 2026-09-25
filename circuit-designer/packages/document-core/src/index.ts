@@ -284,12 +284,17 @@ export interface AssistantLaunch {
   target: EntityRef;
 }
 
-export interface AssistantDocumentLaunch {
+export type AssistantDocumentLaunch = {
   assistant_url: string;
   document_id: string;
   source_revision_hash: string;
   scope: "document";
-}
+} | {
+  assistant_url: string;
+  document_id: null;
+  source_revision_hash: null;
+  scope: "unbound";
+};
 
 export interface HostedServiceLocation {
   service_url: string;
@@ -458,9 +463,11 @@ export class SpecEditorHttpClient {
     });
   }
 
-  launchDocumentAssistant(): Promise<AssistantDocumentLaunch> {
+  launchDocumentAssistant(attachActiveDocument: boolean): Promise<AssistantDocumentLaunch> {
     return this.request("/assistant/launch/document", {
       method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ attach_active_document: attachActiveDocument }),
     });
   }
 

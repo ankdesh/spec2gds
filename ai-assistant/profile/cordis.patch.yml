@@ -114,3 +114,4 @@
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
         maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
         maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)
+        interactiveForms: !!js (process.env.ASSISTANT_PROFILE || 'spec2gds-web') === 'spec2gds-web'

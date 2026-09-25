@@ -69,7 +69,7 @@ Read in this order:
     Blueprint Slate tokens, responsive behavior, and theme extension.
 23. [Circuit Designer / Chipmind gap analysis](circuit-designer-chipmind-gap-analysis.md)
     — current overlap, missing capabilities, and suggested priorities.
-25. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
+24. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
     — plain-language ownership, projection, launch, save, refresh, conflict,
     and security diagrams.
 

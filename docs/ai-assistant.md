@@ -6,13 +6,17 @@ permanent document bindings, owner-aware tools, and proposal review cards. The
 former Python/FastAPI/A2A service and custom assistant-ui application have been
 removed.
 
-Each conversation is immutably bound to one Spec document, Spec entity, or
-Circuit document. The model can read fresh owner context and prepare typed
+Design conversations are immutably bound to one Spec document, Spec entity, or
+Circuit document. An unbound conversation is also available for general
+discussion when no specification is open, but it receives no design context or
+proposal tools. A bound model can read fresh owner context and prepare typed
 previews. It has no owner mutation, source creation, filesystem, shell, browser,
 or skill tools. The selected `focused`, `goal`, or `orchestrated` preset controls
 whether bounded workflow, goal, and read-only delegation capabilities are
 present. Spec apply and Circuit send happen only from an explicit review-card
-action using the artifact persisted by the server.
+action using the artifact persisted by the server. The latest proposal card is
+kept in the completed turn footer, independent of the collapsible tool-call
+trace, so its actions remain available after the response finishes.
 
 See [DSH UI migration and extension map](dsh-ui-migration.md) for the plugin
 architecture and the retained/extended/dropped feature table.
@@ -21,6 +25,7 @@ architecture and the retained/extended/dropped feature table.
 
 The editor launch paths remain stable:
 
+- `/launch` opens an authenticated, unbound conversation;
 - `/launch/spec-document` binds a complete Spec document;
 - `/launch/spec` binds one Spec entity;
 - `/launch/circuit` binds a Circuit document.
@@ -39,24 +44,39 @@ no domain tools, so it cannot make design claims or prepare proposals.
 
 Document-scoped Spec conversations can propose only `create_entity`. Entity
 scope supports the complete Spec assistant operation vocabulary and enforces
-the owner's writable boundary. Circuit scope supports the complete logical
+the owner's writable boundary. A component `create_entity` may carry its
+initial profiled ports and one module-body SystemVerilog section so the reviewed
+change is applied atomically. Circuit scope supports the complete logical
 operation vocabulary for components, instances, boundary terminals, nets, and
 endpoints; geometry, routes, labels, and layout remain outside AI operations.
 
 ## Run the browser profile
 
-Use Node.js 22.19+ or Node.js 24+ and the pinned built Harness fork.
+Use Node.js 22.19+ or Node.js 24+. Prepare the pinned built Harness fork and
+the product with:
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 export OPENAI_API_KEY="..."
-HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
+npm run dev
 ```
 
+`setup:harness` reads `harness.lock.json`, clones the default sibling
+`../deepseek-harness` checkout when absent, installs the exact pnpm version
+from the lock, and builds DSH. Clone, fetch, and dependency installation need
+network access. For an existing checkout, the command rejects local changes,
+a different origin, or a different HEAD. Run
+`npm run setup:harness -- --update` to explicitly fetch and detach a clean
+checkout at the pinned commit. `HARNESS_SOURCE=/path/to/deepseek-harness`
+selects another checkout for setup and all Assistant commands without weakening
+these checks.
+
 Open `http://127.0.0.1:6013`. The combined `scripts/serve-all.sh start`
-launcher uses the same profile and port. The browser new-session button opens a
+launcher uses the same profile and port, prints the URL, and does not open a
+browser automatically. The browser new-session button opens a
 design-source chooser for configured Spec and Circuit services. It can connect
 another service for the current process or create a new Spec or empty Circuit.
 Editor launch links bypass the chooser with an already validated exact target.
@@ -88,11 +108,18 @@ cancel, and answer controls. Proposal apply/send is the completion approval;
 discard cancels the workflow.
 
 Every browser root preset also exposes DSH's structured `ask_user_question`
-tool. When proposal fields are missing, Harness replaces the composer with an
-interactive question surface and returns the answers to the same model turn.
-This is distinct from a durable workflow input request, which pauses a goal or
-orchestrated run for a later answer. The headless profile and delegated children
-do not expose either interactive mechanism.
+tool. Every interactive top-level component creation first produces a
+persistent product details card with one labeled text box and a request-derived
+default per required value. **Continue proposal** submits the confirmed values
+as the next message in the same Session. For a new component, the submitted
+name, input and output ports, width, and behavior are deterministically folded
+into one atomic create operation before owner preview. The next card is the
+owner-previewed review and remains the explicit approve/apply boundary; a
+genuinely unsupported operation still produces an error card. Non-proposal
+questions use the Harness composer takeover. Both are distinct from a durable
+workflow input request, which pauses a goal or orchestrated run for a later
+answer. The headless profile and delegated children do not expose either
+interactive mechanism.
 
 Focused turns default to three model steps and receive one extra step only
 after a visible structured-question call in that turn. Goal and orchestrated
@@ -180,12 +207,13 @@ npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
-The unit suite protects the catalog prompt/domain rules, preset capability
-boundaries, workflow controls, and complete
-operation vocabularies. The integration test boots the real headless profile
-against local owner/model fixtures and verifies context dispatch, proposal
-preview, and durable SQLite state. Packaging refuses a dirty Harness checkout
-or a commit different from `harness.lock.json`.
+The unit suite protects Harness bootstrap safety, catalog prompt/domain rules,
+preset capability boundaries, workflow controls, and complete operation
+vocabularies. Run only the bootstrap cases with
+`npm run test:setup-harness`. The integration test boots the real headless
+profile against local owner/model fixtures and verifies context dispatch,
+proposal preview, and durable SQLite state. Packaging refuses a dirty Harness
+checkout or a commit different from `harness.lock.json`.
 
 Proposal failures use one structured Spec/Circuit envelope, and review cards
 lead with a deterministic summary derived from owner preview rather than model

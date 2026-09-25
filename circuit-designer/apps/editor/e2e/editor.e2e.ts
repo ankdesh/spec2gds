@@ -503,6 +503,15 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     if (path === "/proposals") return json({ proposals: [] });
     if (path === "/assistant/changes") return json({ assistant_changes: [] });
     if (path === "/assistant/launch/document") {
+      const body = request.postDataJSON() as { attach_active_document: boolean };
+      if (!body.attach_active_document) {
+        return json({
+          assistant_url: "http://127.0.0.1:6013/launch",
+          document_id: null,
+          source_revision_hash: null,
+          scope: "unbound",
+        });
+      }
       return json({
         assistant_url: "http://127.0.0.1:6013/launch/spec-document?document_id=editor_test",
         document_id: documentId,
@@ -656,6 +665,24 @@ test("opens the configured AI Assistant from the top bar", async ({ page }) => {
   await expect.poll(() => page.evaluate(
     () => (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl,
   )).toBe("http://127.0.0.1:6013/launch/spec-document?document_id=editor_test");
+});
+
+test("opens an unbound AI Assistant when no specification is open", async ({ page }) => {
+  await mockEditorApi(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as Window & { openedAssistantUrl?: string }).open = ((url?: string | URL) => {
+      (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl = String(url);
+      return null;
+    }) as typeof window.open;
+  });
+
+  const assistant = page.getByRole("button", { name: /AI Assistant/ });
+  await expect(assistant).toBeEnabled();
+  await assistant.click();
+  await expect.poll(() => page.evaluate(
+    () => (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl,
+  )).toBe("http://127.0.0.1:6013/launch");
 });
 
 test("supports keyboard menu navigation and restores trigger focus", async ({ page }) => {

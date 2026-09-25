@@ -16,6 +16,7 @@ import threading
 import time
 import typing
 from datetime import UTC, datetime
+from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -191,6 +192,12 @@ class AssistantLaunchRequest(pydantic.BaseModel):
         "narrative_block",
     ]
     entity_id: str
+
+
+class AssistantDocumentLaunchRequest(pydantic.BaseModel):
+    """State of the requesting editor tab for a document-level launch."""
+
+    attach_active_document: bool = True
 
 
 class V1Session:
@@ -423,6 +430,12 @@ def create_app() -> typing.Any:
 
     app.router.add_event_handler("shutdown", activity_jobs.close)
     editor_root = Path(__file__).with_name("editor_dist")
+    editor_asset_version = sha256(
+        b"".join(
+            (editor_root / "assets" / name).read_bytes()
+            for name in ("index.js", "index.css")
+        )
+    ).hexdigest()[:12]
     # StaticFiles is mounted from a package-relative path so launching the API
     # from another working directory cannot silently break the editor.
     app.mount(
@@ -637,10 +650,21 @@ def create_app() -> typing.Any:
         }
 
     @app.post("/assistant/launch/document")
-    def launch_document_assistant() -> dict[str, typing.Any]:
-        """Launch a fresh document-bound chat for the active specification."""
-        session = active()
+    def launch_document_assistant(
+        request: AssistantDocumentLaunchRequest | None = None,
+    ) -> dict[str, typing.Any]:
+        """Launch the Assistant, binding it when a specification is active."""
         urls = service_urls()
+        session = typing.cast(V1Session | None, state["active"])
+        if session is None or (
+            request is not None and not request.attach_active_document
+        ):
+            return {
+                "assistant_url": f"{urls['ai_assistant']['service_url']}/launch",
+                "document_id": None,
+                "source_revision_hash": None,
+                "scope": "unbound",
+            }
         query = urlencode(
             {
                 "service_base_url": urls["spec_editor"]["service_url"],
@@ -1348,10 +1372,17 @@ def create_app() -> typing.Any:
         """Make the visual editor the convenient default local-server page."""
         return fastapi.responses.RedirectResponse(url="/editor")
 
-    @app.get("/editor", include_in_schema=False, response_class=fastapi.responses.HTMLResponse)
-    def editor() -> str:
+    @app.get("/editor", include_in_schema=False)
+    def editor() -> typing.Any:
         """Serve the prebuilt React/A2UI editor bundled with the Python package."""
-        return (editor_root / "index.html").read_text(encoding="utf-8")
+        html = (editor_root / "index.html").read_text(encoding="utf-8")
+        for name in ("index.js", "index.css"):
+            path = f"/editor-assets/assets/{name}"
+            html = html.replace(path, f"{path}?v={editor_asset_version}")
+        return fastapi.responses.HTMLResponse(
+            content=html,
+            headers={"Cache-Control": "no-store"},
+        )
 
     return app
 

@@ -167,7 +167,7 @@ start_all() {
 
   start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
   start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev
-  start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" npm run dev
+  start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" npm run dev -- --no-open
 
   # Catch immediate failures such as missing dependencies or occupied ports.
   sleep 3

@@ -115,6 +115,7 @@ export interface ServiceConfig {
   requestTimeoutMs: number;
   maxStepsPerTurn: number;
   maxOutputTokens: number;
+  interactiveForms: boolean;
 }
 
 export interface WorkspaceDescriptor {

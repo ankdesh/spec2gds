@@ -17,6 +17,7 @@ const env = {
   SPEC_DOCUMENT_ROOT: resolve(process.env.SPEC_DOCUMENT_ROOT || resolve(state, "spec-documents")),
 };
 const profile = env.ASSISTANT_PROFILE || "spec2gds-web";
+env.ASSISTANT_PROFILE = profile;
 const registryPath = resolve(env.SPEC2GDS_SERVICE_CONFIG || resolve(root, "../config/services.json"));
 if (existsSync(registryPath)) {
   const registry = JSON.parse(readFileSync(registryPath, "utf8"));

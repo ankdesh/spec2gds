@@ -15,19 +15,32 @@ editor launch URLs.
 ## Requirements
 
 - Node.js `^22.19.0` or Node.js 24+
-- the pinned, built Harness fork at `/home/ankdesh/explore/deepseek-harness`, or
-  a different checkout named by `HARNESS_SOURCE`
+- network access when preparing DSH or installing dependencies
 - `OPENAI_API_KEY` for model turns
 - a running Spec Editor or Circuit Designer owner for a new bound conversation
+
+Prepare the pinned, built Harness checkout with:
+
+```bash
+npm run setup:harness
+```
+
+The command manages the sibling `../deepseek-harness` checkout by default.
+It refuses to touch a dirty checkout, a checkout with a different origin, or a
+checkout at a different commit. Use `npm run setup:harness -- --update` to
+explicitly fetch and detach a clean checkout at the pinned commit. Set
+`HARNESS_SOURCE` to select another destination; setup, development, tests, and
+packaging all honor that override.
 
 ## Browser development
 
 ```bash
 cd ai-assistant
+npm run setup:harness
 npm install
 npm run build
 export OPENAI_API_KEY="..."
-HARNESS_SOURCE=/home/ankdesh/explore/deepseek-harness npm run dev
+npm run dev
 ```
 
 Open `http://127.0.0.1:6013`. New conversation opens a browse-only target
@@ -36,14 +49,25 @@ connect another service for this process or create a new Spec or empty Circuit;
 a Workspace-row action stays within that logical design source. The same dialog
 chooses an immutable `focused`, `goal`, or `orchestrated` preset. Focused is
 one-shot; goal adds a bounded durable loop; orchestrated additionally permits
-depth-one read-only analysis children. All browser presets can pause the
-current turn with Harness's structured question surface when required details
-cannot be derived from bound context. Headless requests remain noninteractive.
+depth-one read-only analysis children. Every interactive top-level component
+creation first appears in a product details card with labeled text boxes and
+request-derived defaults; its **Continue proposal** action submits the confirmed
+values to the same Session. For component creation, those values become the
+initial wire ports and module-body SystemVerilog in the same atomic create
+operation. The following review card is the owner-previewed safety gate and is
+the only place where the user can approve and apply the operation.
+Other immediate questions use Harness's structured question surface. Headless
+requests remain noninteractive.
 The existing editor links also work:
 
+- `/launch` for an authenticated conversation without attached design context
 - `/launch/spec-document?service_base_url=...&document_id=...`
 - `/launch/spec?service_base_url=...&document_id=...&entity_kind=...&entity_id=...`
 - `/launch/circuit?service_base_url=...&document_id=...`
+
+Proposal review cards remain in the completed turn footer after Harness
+collapses the tool-call trace, so approve, discard, reconcile, and send actions
+stay available.
 
 ## One-off command-line requests
 
@@ -121,6 +145,8 @@ npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
+`npm test` includes the isolated Harness bootstrap Git-state cases. Run only
+those cases with `npm run test:setup-harness` when changing setup behavior.
 The integration test uses local owner and OpenAI-compatible fixtures. Packaging
 requires the Harness checkout to be clean and at the commit in
 `harness.lock.json`.
