@@ -78,3 +78,26 @@ test("migrates pre-error-envelope review databases in place", async () => {
     migrated.close();
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test("stores confirmed proposal details as structured session state", async () => {
+  const root = await mkdtemp(join(tmpdir(), "spec2gds-assistant-input-"));
+  try {
+    const path = join(root, "product.sqlite3");
+    const state = new ProductState(path);
+    state.createBinding("session-1", {
+      domain: "spec", serviceBaseUrl: "http://ignored", ownerUrl: "http://127.0.0.1:6010",
+      documentId: "doc-1", scope: "document", title: "Spec: doc-1",
+      workspaceKey: "workspace-1", workspaceTitle: "Spec: doc-1", workspacePath: join(root, "workspace-1"),
+      workspaceDomain: "spec", workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
+    });
+    const inputId = state.createProposalInput("session-1", [{ name: "component_name" }, { name: "width" }]);
+    assert.equal(state.confirmedProposalInput("session-1", inputId), null);
+    assert.throws(() => state.confirmProposalInput(inputId, { width: "8" }), /do not match/);
+    state.confirmProposalInput(inputId, { component_name: "adder", width: "8" });
+    state.close();
+    const reopened = new ProductState(path);
+    assert.deepEqual(reopened.confirmedProposalInput("session-1", inputId), { component_name: "adder", width: "8" });
+    assert.equal(reopened.confirmedProposalInput("another-session", inputId), null);
+    reopened.close();
+  } finally { await rm(root, { recursive: true, force: true }); }
+});

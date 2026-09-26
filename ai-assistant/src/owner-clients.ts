@@ -165,6 +165,16 @@ export class OwnerClients {
     }
   }
 
+  async operationContract(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    const query = new URLSearchParams({ document_id: binding.documentId, scope: binding.scope });
+    if (binding.scope === "entity") {
+      query.set("entity_kind", binding.entityKind ?? "");
+      query.set("entity_id", binding.entityId ?? "");
+    }
+    return this.request("GET", `${binding.ownerUrl}/assistant/operation-schema?${query}`, undefined, signal);
+  }
+
   async previewSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
     return this.request("POST", `${binding.ownerUrl}/assistant/proposals/preview`, artifact, signal);

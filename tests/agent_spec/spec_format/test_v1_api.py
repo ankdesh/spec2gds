@@ -1097,3 +1097,36 @@ def test_document_projection_uses_semantic_row_ids() -> None:
     row_ids = [row["row_id"] for table in tables for row in table["rows"]]
     assert row_ids
     assert not any(row_id.endswith(("-0", "-1", "-2")) for row_id in row_ids)
+
+
+def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_path: Path) -> None:
+    from spec2gds.agent_spec.spec_format.assistant import SUPPORTED_OPERATION_TYPES
+    from spec2gds.agent_spec.spec_format.assistant_operation_contract import _schema
+
+    assert {branch["properties"]["type"]["const"] for branch in _schema()["oneOf"]} == SUPPORTED_OPERATION_TYPES
+    package_path = tmp_path / "contract.spec"
+    write_test_package(package_path)
+    endpoints = _endpoints()
+    opened = endpoints["open_document"](OpenDocumentRequest(path=str(package_path)))
+    document_id = opened["document_id"]
+    schema = endpoints["assistant_operation_schema"]
+    document = schema(document_id, "document")
+    assert document["schema_version"] == 1
+    assert document["digest"].startswith("sha256:")
+    assert {branch["properties"]["type"]["const"] for branch in document["operation_schema"]["oneOf"]} == {"create_entity"}
+    from spec2gds.agent_spec.spec_format.assistant_operation_contract import validate_assistant_operations
+    validate_assistant_operations("document", [{"operation_id": "create", "type": "create_entity", "kind": "component", "name": "gate"}])
+    with pytest.raises(ValueError, match="owner schema"):
+        validate_assistant_operations("document", [{"operation_id": "create", "type": "create_entity", "kind": "component"}])
+    component = schema(document_id, "entity", "component", "component_leaf")
+    component_types = {branch["properties"]["type"]["const"] for branch in component["operation_schema"]["oneOf"]}
+    assert "upsert_component_port" in component_types
+    assert "upsert_instance" not in component_types
+    design = schema(document_id, "entity", "design", opened["designs"][0]["ref"]["entity_id"])
+    design_types = {branch["properties"]["type"]["const"] for branch in design["operation_schema"]["oneOf"]}
+    assert "upsert_instance" in design_types
+    assert "upsert_component_port" not in design_types
+    assert component["digest"] != design["digest"]
+    with pytest.raises(fastapi.HTTPException) as missing:
+        schema("different-document", "document")
+    assert missing.value.status_code == 409

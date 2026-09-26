@@ -8,6 +8,7 @@ import { errorFromException, logProposalFailure, proposalError, publicReview } f
 import { artifactDigest, ProductState } from "./state.js";
 import { findProposal, findSpecChange, registerDomainTools } from "./tools.js";
 import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, WorkspaceDescriptor } from "./types.js";
+import { parseOwnerOperationContract } from "./owner-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
 
@@ -170,6 +171,10 @@ export function maxModelStepsForTurn(
   return preset === "focused" ? focusedBase + (clarified ? 1 : 0) : 8;
 }
 
+export const UNBOUND_SOURCE_PROMPT = `This conversation is not bound to a design source.
+Do not answer questions about a document, component, design, or requested edit. Do not claim that work was completed and do not create a goal.
+Tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
+
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
   const config: ServiceConfig = {
     provider: String(rawConfig.provider), model: String(rawConfig.model), stateRoot: resolve(String(rawConfig.stateRoot)),
@@ -207,11 +212,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     ctx.sWorkflow.seal();
   })();
 
-  const attach = (agent: ProductAgent, binding: SessionBinding): void => {
+  const attach = async (agent: ProductAgent, binding: SessionBinding): Promise<void> => {
     if (attached.has(agent.id)) return;
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
+    let operationContract;
+    let schemaError;
+    try {
+      operationContract = parseOwnerOperationContract(await owners.operationContract(binding));
+    } catch (error) {
+      schemaError = error instanceof Error ? error.message : String(error);
+    }
     registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog, (review) => {
       if (binding.preset === "focused") return;
       try {
@@ -229,7 +241,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       } catch (error) {
         console.error("Failed to synchronize the owner-previewed proposal into workflow draft state:", error);
       }
-    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms);
+    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms, operationContract, schemaError);
     attached.add(agent.id);
   };
 
@@ -239,9 +251,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       name: "spec2gds:unbound-session",
       order: 150,
       complete: true,
-      text: `This conversation is not bound to a Spec Editor design source.
-Do not answer questions about a document, component, design, or requested edit. Do not claim that work was completed and do not create a goal.
-Tell the user to start a new conversation and choose a Spec Editor document or entity.`,
+      text: UNBOUND_SOURCE_PROMPT,
     }));
   };
 
@@ -303,7 +313,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
       active.add(String(agent.id));
       activeDelegations.set(String(parentSession), active);
       delegatedParents.set(String(agent.id), String(parentSession));
-      attach(agent, parentBinding);
+      await attach(agent, parentBinding);
       return;
     }
     const serialized = process.env.SPEC2GDS_BINDING_JSON;
@@ -327,7 +337,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
         workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
       binding = state.activateBinding(String(agent.id));
     }
-    if (binding) attach(agent, binding);
+    if (binding) await attach(agent, binding);
     else guardUnbound(agent);
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
@@ -423,7 +433,7 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
     if (!binding) throw new HttpError(404, "Unknown reserved binding.");
     const active = binding.status === "active" ? binding : state.activateBinding(sessionId);
     const agent = ctx.agents.get(SessionId(sessionId));
-    if (agent) attach(agent, active);
+    if (agent) await attach(agent, active);
     return active;
   }
 
@@ -542,6 +552,14 @@ Tell the user to start a new conversation and choose a Spec Editor document or e
         const requestUrl = new URL(request.url ?? "/", "http://localhost");
         const path = requestUrl.pathname;
         if (path === "/spec2gds-api/capabilities" && request.method === "GET") return writeJson(response, 200, { model: config.model, provider: config.provider, owners: await owners.capabilities() });
+        const proposalInputMatch = path.match(/^\/spec2gds-api\/proposal-inputs\/([^/]+)\/confirm$/);
+        if (proposalInputMatch && request.method === "POST") {
+          const body = await readBody(request);
+          if (!body.values || typeof body.values !== "object" || Array.isArray(body.values)) throw new HttpError(400, "values must be an object.");
+          try { state.confirmProposalInput(decodeURIComponent(proposalInputMatch[1]!), body.values as Record<string, string>); }
+          catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
+          return writeJson(response, 200, { confirmed: true });
+        }
         if (path === "/spec2gds-api/services/connect" && request.method === "POST") {
           const body = await readBody(request);
           if (body.domain !== "spec" && body.domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");

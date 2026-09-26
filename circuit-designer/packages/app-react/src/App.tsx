@@ -164,6 +164,7 @@ export function App({
   const [sliceLsb, setSliceLsb] = useState(0);
   const [sliceWidth, setSliceWidth] = useState(0);
   const [proposals, setProposals] = useState<CircuitProposal[]>([]);
+  const [stagedProposalId, setStagedProposalId] = useState<string>();
   const [sourceDescription, setSourceDescription] = useState("Empty local circuit. Add definitions and instances after unlocking.");
   const [openingFile, setOpeningFile] = useState(false);
   const [contextRequest, setContextRequest] = useState<(CircuitCanvasContextMenuRequest & { selection: CircuitCanvasSelection })>();
@@ -249,6 +250,7 @@ export function App({
           setLayout(undefined);
           setSelection([]);
           setLease(undefined);
+          setStagedProposalId(undefined);
           setSourceBinding(binding);
           setSourceConflict(false);
           setSourceDescription(binding?.writable
@@ -278,6 +280,7 @@ export function App({
         setLayout(undefined);
         setSelection([]);
         setLease(undefined);
+        setStagedProposalId(undefined);
         setSourceDescription("Empty local circuit. Add definitions and instances after unlocking.");
         setMessage(joined
           ? `Joined the existing REST session at revision ${next.revision}.`
@@ -306,6 +309,7 @@ export function App({
     setLayout(undefined);
     setSelection([]);
     setLease(undefined);
+    setStagedProposalId(undefined);
     setSourceBinding(undefined);
     setSourceConflict(false);
     setLinkedDocumentId(undefined);
@@ -460,6 +464,7 @@ export function App({
           snapshot.document.document_id,
           draft.toBatch(operationId("source_save")),
           lease.lease_id,
+          stagedProposalId,
         );
       } catch (reason) {
         setMessage(`The source save response was lost or failed. The complete draft is preserved; retry the save. ${reason instanceof Error ? reason.message : String(reason)}`);
@@ -473,12 +478,14 @@ export function App({
       }
       draftRef.current = undefined;
       setLease(undefined);
+      setStagedProposalId(undefined);
       setSnapshot(result.snapshot);
       setDocument(result.snapshot.document);
       setSelection([]);
       setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
       setSourceConflict(false);
       setMessage(`Saved to the source at ${result.revision.slice(0, 20)}… Edit mode closed.`);
+      void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
       return;
     }
     const result = await backend.commit(
@@ -505,6 +512,7 @@ export function App({
     draftRef.current?.cancel();
     draftRef.current = undefined;
     setLease(undefined);
+    setStagedProposalId(undefined);
     const result = await source.reload(snapshot.document.document_id);
     if (!result.accepted || !result.snapshot) {
       setMessage(result.diagnostics.map((item) => item.message).join(" · "));
@@ -515,6 +523,7 @@ export function App({
     setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
     setSelection([]);
     setSourceConflict(false);
+    void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
     setMessage("Reopened the latest source revision. The previous unsaved draft was discarded.");
   }
 
@@ -524,6 +533,7 @@ export function App({
     draftRef.current?.cancel();
     draftRef.current = undefined;
     setLease(undefined);
+    setStagedProposalId(undefined);
     setDocument(snapshot.document);
     setMessage("Draft cancelled. No changes were persisted.");
   }
@@ -861,7 +871,43 @@ export function App({
   }
 
   async function decideProposal(proposalId: string, decision: "accept" | "reject"): Promise<void> {
-    if (!document || !backend) return;
+    if (!document || !backend || !snapshot) return;
+    if (decision === "accept" && sourceBinding) {
+      if (!sourceBinding.writable || lease || draftRef.current) {
+        setMessage("Save or Cancel the current draft before accepting a proposal.");
+        return;
+      }
+      const proposal = proposals.find(item => item.proposal_id === proposalId);
+      if (!proposal?.batch || proposal.base_revision !== snapshot.revision) {
+        setMessage("This proposal cannot be staged as a source draft. Refresh the proposal.");
+        return;
+      }
+      let nextLease;
+      try {
+        nextLease = await backend.acquireLease(document.document_id, "standalone-canvas");
+        const draft = new CircuitDraft(snapshot.document, snapshot.revision);
+        const diagnostics = draft.applyBatch(proposal.batch.operations);
+        const errors = diagnostics.filter(item => item.severity === "error");
+        if (errors.length) throw new Error(errors.map(item => item.message).join(" · "));
+        draftRef.current = draft;
+        setLease(nextLease);
+        setStagedProposalId(proposalId);
+        setDocument(draft.document);
+        setMessage("Proposal staged in a private draft. Save to Specification to persist it, or Cancel to discard the draft.");
+      } catch (reason) {
+        if (nextLease) await backend.releaseLease(document.document_id, nextLease.lease_id).catch(() => undefined);
+        setMessage(reason instanceof Error ? reason.message : String(reason));
+      }
+      return;
+    }
+    if (decision === "reject" && stagedProposalId === proposalId && lease) {
+      await backend.releaseLease(document.document_id, lease.lease_id);
+      draftRef.current?.cancel();
+      draftRef.current = undefined;
+      setLease(undefined);
+      setStagedProposalId(undefined);
+      setDocument(snapshot.document);
+    }
     const result = await backend.decideProposal(document.document_id, proposalId, decision);
     setProposals(await backend.listProposals(document.document_id));
     if (result?.snapshot) {
@@ -871,9 +917,9 @@ export function App({
     setMessage(`Proposal ${decision === "accept" ? "accepted" : "rejected"}.`);
   }
 
-  function runPrimaryTool(): void {
-    const tool = tools[0];
-    if (!snapshot || !tool) return;
+  function runTool(toolId: string): void {
+    const tool = tools.find(item => item.id === toolId);
+    if (!snapshot || !tool || lease) return;
     void Promise.resolve(tool.run({ backend, document: snapshot.document, snapshot })).catch((reason) => {
       setMessage(`${tool.label} failed: ${reason instanceof Error ? reason.message : String(reason)}`);
     });
@@ -1284,7 +1330,7 @@ export function App({
       case "zoom-in": canvasRef.current?.zoomIn(); return true;
       case "zoom-out": canvasRef.current?.zoomOut(); return true;
       case "fit-circuit": canvasRef.current?.fitView(); return true;
-      case "run-primary-tool": runPrimaryTool(); return true;
+      case "run-primary-tool": if (tools[0]) runTool(tools[0].id); return true;
       case "getting-started": setDialog("getting-started"); return true;
       case "about": setDialog("about"); return true;
       case "pan-canvas": return false;
@@ -1361,7 +1407,9 @@ export function App({
         proposalCount={proposals.length}
         sourceBound={Boolean(sourceBinding)}
         sourceSaveLabel={sourceBinding?.saveLabel}
-        toolLabel={tools[0]?.label}
+        tools={tools}
+        toolsEnabled={Boolean(snapshot) && !lease}
+        onRunTool={runTool}
       />
       <div className="document-status" title={sourceDescription}>
         <strong>{document?.label ?? "Loading…"}</strong>

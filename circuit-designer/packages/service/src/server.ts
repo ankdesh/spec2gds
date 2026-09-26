@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
+  assistantCircuitOperationSchema,
   createEmptyCircuitDocument,
   isCircuitSourceBindingV1,
   validateContractDefinition,
@@ -17,7 +18,7 @@ import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
 import { EphemeralCircuitSessionBackend } from "./session-backend";
 import type { PublicServiceDirectory } from "./service-registry";
 import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observability/node";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { CircuitPreferencesStore } from "./preferences-store";
 import { resolve } from "node:path";
 import {
@@ -27,7 +28,7 @@ import {
   type StoredSourceBinding,
 } from "./source-provider";
 
-type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider">;
+type MutableProviderBackend = CircuitDesignerBackend & Pick<EphemeralCircuitSessionBackend, "registerProvider" | "resolveProposal">;
 
 export interface CircuitServiceOptions {
   backend?: MutableProviderBackend;
@@ -132,6 +133,18 @@ export class CircuitDesignerService {
           },
         });
       }
+      if (method === "GET" && parts[0] === "assistant" && parts[1] === "operation-schema" && parts.length === 2) {
+        if (url.searchParams.get("scope") !== "document" || !url.searchParams.get("document_id")) {
+          throw new CircuitBackendError("validation_failed", "Circuit schema requires document_id and scope=document.");
+        }
+        await this.backend.get(url.searchParams.get("document_id")!);
+        const operation_schema = assistantCircuitOperationSchema();
+        const canonical = JSON.stringify(operation_schema, (_key, value: unknown) => value && typeof value === "object" && !Array.isArray(value)
+          ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+          : value);
+        const digest = `sha256:${createHash("sha256").update(canonical).digest("hex")}`;
+        return this.jsonResponse(response, 200, { schema_version: 1, digest, operation_schema });
+      }
       if (method === "GET" && parts[0] === "services" && parts.length === 1) {
         if (!this.serviceDirectory) {
           return this.error(response, 404, "not_found", "No legacy service directory was configured. Use /capabilities for portable discovery.");
@@ -195,6 +208,7 @@ export class CircuitDesignerService {
 
       if (method === "GET" && tail.length === 0) return this.jsonResponse(response, 200, await this.backend.get(documentId));
       if (method === "PUT" && tail.length === 0) {
+        this.requireIndependent(documentId);
         const body = await this.json(request) as { request_id: string; expected_revision: string; document: CircuitDocument };
         return this.change(response, await this.backend.replace(
           documentId, body.document, body.expected_revision, body.request_id,
@@ -206,6 +220,7 @@ export class CircuitDesignerService {
         return this.change(response, await this.backend.preview(documentId, batch as CircuitOperationBatch));
       }
       if (method === "POST" && tail[0] === "operations" && tail[1] === "commit") {
+        this.requireIndependent(documentId);
         const body = await this.json(request) as { batch: CircuitOperationBatch; lease_id?: string };
         this.requireDefinition("CircuitOperationBatch", body.batch);
         return this.change(response, await this.backend.commit(documentId, body.batch, body.lease_id), documentId);
@@ -317,6 +332,12 @@ export class CircuitDesignerService {
     return stored;
   }
 
+  private requireIndependent(documentId: string): void {
+    if (this.sourceBindings.has(documentId)) {
+      throw new CircuitBackendError("validation_failed", "Source-bound documents must use Save to Specification.");
+    }
+  }
+
   private async sourceCandidate(documentId: string, body: SourceCommitBody) {
     const stored = this.sourceBinding(documentId);
     if (!stored.binding.writable) throw new CircuitBackendError("validation_failed", stored.binding.message ?? "Source projection is read-only.");
@@ -349,6 +370,12 @@ export class CircuitDesignerService {
     const replayKey = `${registered.binding.binding_id}:${body.batch.request_id}`;
     const replay = this.sourceResults.get(replayKey);
     if (replay) return this.jsonResponse(response, 200, replay);
+    if (body.proposal_id) {
+      const proposal = (await this.backend.listProposals(documentId)).find(item => item.proposal_id === body.proposal_id);
+      if (!proposal || !proposal.batch || proposal.base_revision !== body.batch.expected_revision) {
+        throw new CircuitBackendError("proposal_stale", "The staged proposal is missing or stale.");
+      }
+    }
     const { stored, preview, candidate } = await this.sourceCandidate(documentId, body);
     if (!candidate) {
       return this.jsonResponse(response, 200, {
@@ -371,7 +398,9 @@ export class CircuitDesignerService {
       throw new CircuitBackendError("provider_failed", "Specification saved, but the Circuit session could not refresh.", replaced.diagnostics);
     }
     stored.binding = { ...stored.binding, base_source_revision_hash: result.source_revision_hash };
+    if (body.proposal_id) await this.backend.resolveProposal(documentId, body.proposal_id);
     this.emit(documentId, "document.changed", replaced.snapshot.revision);
+    if (body.proposal_id) this.emit(documentId, "proposal.changed");
     const responseBody = { ...result, binding: stored.binding, snapshot: replaced.snapshot };
     this.sourceResults.set(replayKey, responseBody);
     return this.jsonResponse(response, 200, responseBody);
@@ -383,6 +412,10 @@ export class CircuitDesignerService {
     const result = await stored.provider.resolve(stored.binding);
     if (!result.accepted || !result.document) return this.jsonResponse(response, 200, result);
     const before = await this.backend.get(documentId);
+    if (result.source_revision_hash === stored.binding.base_source_revision_hash
+      && JSON.stringify(result.document) === JSON.stringify(before.document)) {
+      return this.jsonResponse(response, 200, { ...result, binding: stored.binding, snapshot: before });
+    }
     const replaced = await this.backend.replace(documentId, result.document, before.revision, `source-reload:${result.source_revision_hash}`);
     if (replaced.status !== "accepted" || !replaced.snapshot) {
       throw new CircuitBackendError("provider_failed", "Could not refresh the Circuit session.", replaced.diagnostics);
@@ -445,12 +478,16 @@ export class CircuitDesignerService {
         ...(input.batch !== undefined ? { batch: input.batch } : {}),
       };
       this.requireDefinition("CircuitProposalCreateRequest", proposal);
+      if (this.sourceBindings.has(documentId) && proposal.construction !== undefined) {
+        throw new CircuitBackendError("validation_failed", "Source-bound proposals must contain an operation batch.");
+      }
       const saved = await this.backend.submitProposal(proposal as CircuitProposalCreateRequest);
       this.emit(documentId, "proposal.changed");
       return this.jsonResponse(response, 201, saved);
     }
     if (request.method === "POST" && tail[1] && tail[2] === "decision") {
       const body = await this.json(request) as { decision: "accept" | "reject" };
+      if (body.decision === "accept") this.requireIndependent(documentId);
       const result = await this.backend.decideProposal(documentId, tail[1], body.decision);
       this.emit(documentId, "proposal.changed");
       if (!result) {

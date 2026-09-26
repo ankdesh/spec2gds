@@ -61,7 +61,13 @@ SVG immediately. If an inline form has unsaved input, the editor preserves it
 and offers an explicit refresh instead.
 
 **File → Cancel Changes** discards only the private Circuit draft. It never
-touches the `.spec` package.
+touches the `.spec` package. When an Assistant proposal is pending, **Accept**
+stages its operations in that draft and leaves the proposal pending. Save
+resolves the proposal only after the Spec commit succeeds; Cancel or an
+unchanged-source reload allows the proposal to be staged again. A rejected or
+stale source save keeps the draft and proposal. **Reject** removes the
+proposal. Direct API acceptance and ordinary Circuit write routes refuse
+source-bound documents.
 
 ## Conflicts and recovery
 

@@ -52,6 +52,7 @@ from spec2gds.agent_spec.spec_format.assistant import (
     build_document_assistant_context,
     preview_assistant_proposal,
 )
+from spec2gds.agent_spec.spec_format.assistant_operation_contract import operation_contract
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
     CircuitDesignerConnectionError,
@@ -911,6 +912,33 @@ def create_app() -> typing.Any:
                 detail="A different .spec document is active.",
             )
         return build_document_assistant_context(active().revision)
+
+    @app.get("/assistant/operation-schema")
+    def assistant_operation_schema(
+        document_id: str,
+        scope: str,
+        entity_kind: str | None = None,
+        entity_id: str | None = None,
+    ) -> dict[str, typing.Any]:
+        """Return the assistant operation schema owned by this specification."""
+        if document_id != active().revision.document_id:
+            raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
+        target = None
+        if scope == "entity":
+            if not entity_kind or not entity_id:
+                raise fastapi.HTTPException(status_code=422, detail="Entity scope requires entity_kind and entity_id.")
+            try:
+                target = ref(entity_kind, entity_id)
+                active().revision.resolve(target)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+        try:
+            return operation_contract(
+                scope, entity_kind,
+                bool(target and target.entity_kind == "component" and active().revision.internal_design(target)),
+            )
+        except ValueError as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/assistant/proposals/preview")
     def assistant_proposal_preview(proposal: SpecChangeProposal) -> dict[str, typing.Any]:

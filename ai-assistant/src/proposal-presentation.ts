@@ -1,4 +1,5 @@
 import { OwnerError } from "./owner-clients.js";
+import { OwnerContractError } from "./owner-operation-schema.js";
 import type {
   ProposalChangeSummary,
   ProposalError,
@@ -106,6 +107,9 @@ export function errorFromException(
   correlationId: string,
   error: unknown,
 ): ProposalError {
+  if (error instanceof OwnerContractError) {
+    return proposalError(binding, correlationId, "OWNER_CONTRACT_ERROR", error.message, false);
+  }
   if (error instanceof OwnerError) {
     if (error.status === 409) return proposalError(binding, correlationId, "STALE_REVISION", error.detail, true);
     if (error.status === 502 && typeof error.detail === "string" && (

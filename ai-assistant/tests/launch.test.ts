@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import vm from "node:vm";
-import { authenticatedLaunchLocation, maxModelStepsForTurn } from "../src/index.js";
+import { UNBOUND_SOURCE_PROMPT, authenticatedLaunchLocation, maxModelStepsForTurn } from "../src/index.js";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -325,7 +325,8 @@ test("unbound sessions receive a product guard instead of design-editing claims"
   const guard = source.match(/name: "spec2gds:unbound-session",[\s\S]*?\}\)\);/)?.[0];
   assert.ok(guard, "Expected the unbound prompt guard registration.");
   assert.match(guard, /complete: true/);
-  assert.match(guard, /Do not claim that work was completed and do not create a goal/);
+  assert.match(guard, /text: UNBOUND_SOURCE_PROMPT/);
+  assert.match(UNBOUND_SOURCE_PROMPT, /Do not claim that work was completed and do not create a goal/);
   for (const name of ["domain-persona", "binding-context", "operation-constraints", "output-contract"]) {
     assert.doesNotMatch(guard, new RegExp(name));
   }

@@ -364,6 +364,13 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
     return result;
   }
 
+  async resolveProposal(documentId: string, proposalId: string): Promise<void> {
+    const record = this.record(documentId);
+    if (!record.proposals.delete(proposalId)) {
+      throw new CircuitBackendError("not_found", `Unknown proposal: ${proposalId}`);
+    }
+  }
+
   async resolveComponentDesign(documentId: string, componentId: string): Promise<ResolvedComponentDesign> {
     const document = this.record(documentId).snapshot.document;
     const component = document.components.find((item) => item.id === componentId);

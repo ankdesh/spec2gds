@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { simpleDocumentFixture } from "@spec2gds/circuit-core";
+import { CircuitDraft, simpleDocumentFixture } from "@spec2gds/circuit-core";
 import { CircuitDesignerService } from "../src/server";
 import { EphemeralCircuitSessionBackend } from "../src/session-backend";
 import { StructuredLogger } from "@spec2gds/observability/node";
@@ -52,6 +52,23 @@ describe("Circuit Designer REST service", () => {
       integrations: { service_directory: false },
     });
     expect((await fetch(`${base}/services`)).status).toBe(404);
+  });
+
+  it("publishes a document-bound logical operation schema", async () => {
+    service = new CircuitDesignerService({ backend: new EphemeralCircuitSessionBackend({ documents: [simpleDocumentFixture()] }) });
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1/assistant/operation-schema`;
+    const response = await fetch(`${base}?document_id=fixture_simple&scope=document`);
+    expect(response.status).toBe(200);
+    const contract = await response.json() as { schema_version: number; digest: string; operation_schema: { $schema: string; oneOf: unknown[]; $defs: Record<string, unknown> } };
+    expect(contract.schema_version).toBe(1);
+    expect(contract.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(contract.operation_schema.$schema).toBe("https://json-schema.org/draft/2020-12/schema");
+    expect(contract.operation_schema.oneOf).toHaveLength(14);
+    expect(contract.operation_schema.$defs).not.toHaveProperty("SetInstanceGeometryOperation");
+    expect(contract.operation_schema.$defs).toHaveProperty("AddInstanceOperation");
+    expect((await fetch(`${base}?document_id=missing&scope=document`)).status).toBe(404);
+    expect((await fetch(`${base}?document_id=fixture_simple&scope=entity`)).status).toBe(400);
   });
 
   it("retains the legacy service-directory endpoint when a host supplies one", async () => {
@@ -316,6 +333,7 @@ describe("Circuit Designer REST service", () => {
   it("commits source-bound drafts through the provider before replacing the session", async () => {
     let authorization = "";
     const providerCalls: string[] = [];
+    let rejectNextCommit = true;
     const provider = createServer((request, response) => {
       authorization = String(request.headers.authorization ?? "");
       providerCalls.push(request.url ?? "");
@@ -324,6 +342,15 @@ describe("Circuit Designer REST service", () => {
       request.on("end", () => {
         const body = JSON.parse(Buffer.concat(chunks).toString()) as { candidate_document: ReturnType<typeof simpleDocumentFixture> };
         response.setHeader("Content-Type", "application/json");
+        if (request.url === "/source/resolve") {
+          response.end(JSON.stringify({ accepted: true, source_revision_hash: "sha256:base", document: simpleDocumentFixture(), diagnostics: [] }));
+          return;
+        }
+        if (request.url === "/source/commit" && rejectNextCommit) {
+          rejectNextCommit = false;
+          response.end(JSON.stringify({ accepted: false, source_revision_hash: "sha256:base", diagnostics: [] }));
+          return;
+        }
         response.end(JSON.stringify({
           accepted: true,
           source_revision_hash: "sha256:next",
@@ -360,7 +387,7 @@ describe("Circuit Designer REST service", () => {
           },
         }),
       })).status).toBe(200);
-      const lease = await (await fetch(`${documentBase}/lock`, {
+      let lease = await (await fetch(`${documentBase}/lock`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner_id: "test" }),
       })).json() as { lease_id: string };
@@ -371,31 +398,77 @@ describe("Circuit Designer REST service", () => {
           expected_revision: "1",
           operations: [{
             operation_id: "move",
-            type: "set_instance_geometry",
+            type: "set_instance_geometry" as const,
             instance_id: "producer_0",
             geometry: { x: 40, y: 60, width: 180, height: 100, pinned: true },
           }],
         },
       };
+      const submitted = await fetch(`${documentBase}/proposals`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          proposal_id: "source_proposal", document_id: "fixture_simple", base_revision: "1",
+          title: "Move the producer", summary: "Stage the producer movement.", batch: commitBody.batch,
+        }),
+      });
+      expect(submitted.status).toBe(201);
+      expect((await fetch(`${documentBase}/proposals/source_proposal/decision`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: "accept" }),
+      })).status).toBe(400);
+      expect((await fetch(`${documentBase}/operations/commit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ batch: commitBody.batch, lease_id: lease.lease_id }),
+      })).status).toBe(400);
+      expect((await fetch(documentBase, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: "bypass", expected_revision: "1", document: simpleDocumentFixture() }),
+      })).status).toBe(400);
+      expect((await (await fetch(`${documentBase}/proposals`)).json() as { proposals: unknown[] }).proposals).toHaveLength(1);
+      const firstDraft = new CircuitDraft(simpleDocumentFixture(), "1");
+      expect(firstDraft.applyBatch(commitBody.batch.operations).filter(item => item.severity === "error")).toEqual([]);
+      expect((await (await fetch(documentBase)).json() as { revision: string }).revision).toBe("1");
+      firstDraft.cancel();
+      await fetch(`${documentBase}/lock/${lease.lease_id}`, { method: "DELETE" });
+      const reloaded = await fetch(`${documentBase}/source/reload`, { method: "POST" });
+      expect((await reloaded.json() as { snapshot: { revision: string } }).snapshot.revision).toBe("1");
+      expect((await (await fetch(`${documentBase}/proposals`)).json() as { proposals: unknown[] }).proposals).toHaveLength(1);
+      lease = await (await fetch(`${documentBase}/lock`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ owner_id: "test" }),
+      })).json() as { lease_id: string };
+      commitBody.lease_id = lease.lease_id;
+      const retryDraft = new CircuitDraft(simpleDocumentFixture(), "1");
+      expect(retryDraft.applyBatch(commitBody.batch.operations).filter(item => item.severity === "error")).toEqual([]);
+      expect(retryDraft.document.layout.instance_geometry.producer_0.x).toBe(40);
+      const failed = await fetch(`${documentBase}/source/commit`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...commitBody, proposal_id: "source_proposal", batch: { ...commitBody.batch, request_id: "source_move_failed" } }),
+      });
+      expect((await failed.json() as { accepted: boolean }).accepted).toBe(false);
+      expect((await (await fetch(documentBase)).json() as { revision: string }).revision).toBe("1");
+      expect((await (await fetch(`${documentBase}/proposals`)).json() as { proposals: unknown[] }).proposals).toHaveLength(1);
+      expect((await (await fetch(`${documentBase}/lock`)).json() as { lease: unknown }).lease).not.toBeNull();
       const response = await fetch(`${documentBase}/source/commit`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(commitBody),
+        body: JSON.stringify({ ...commitBody, proposal_id: "source_proposal" }),
       });
       expect(response.status).toBe(200);
       const saved = await response.json() as { accepted: boolean; snapshot: { document: ReturnType<typeof simpleDocumentFixture> } };
       expect(saved.accepted).toBe(true);
       expect(saved.snapshot.document.layout.instance_geometry.producer_0.x).toBe(40);
       expect(authorization).toBe("Bearer secret-token");
-      expect(providerCalls).toEqual(["/source/preview", "/source/commit"]);
+      expect(providerCalls).toEqual(["/source/resolve", "/source/preview", "/source/commit", "/source/preview", "/source/commit"]);
+      expect((await (await fetch(`${documentBase}/proposals`)).json() as { proposals: unknown[] }).proposals).toHaveLength(0);
       expect((await (await fetch(`${documentBase}/lock`)).json() as { lease: unknown }).lease).toBeNull();
       expect((await (await fetch(`${documentBase}/source-binding`)).json() as { base_source_revision_hash: string }).base_source_revision_hash).toBe("sha256:next");
       const replay = await fetch(`${documentBase}/source/commit`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(commitBody),
+        body: JSON.stringify({ ...commitBody, proposal_id: "source_proposal" }),
       });
       expect(replay.status).toBe(200);
       expect((await replay.json() as { accepted: boolean }).accepted).toBe(true);
-      expect(providerCalls).toEqual(["/source/preview", "/source/commit"]);
+      expect(providerCalls).toEqual(["/source/resolve", "/source/preview", "/source/commit", "/source/preview", "/source/commit"]);
     } finally {
       await new Promise<void>((resolve) => provider.close(() => resolve()));
     }

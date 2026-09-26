@@ -73,8 +73,8 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     async load(documentId) {
       return state(await backend.getSourceBinding(documentId));
     },
-    async commit(documentId, batch, leaseId) {
-      const result = await backend.commitSource(documentId, batch, leaseId);
+    async commit(documentId, batch, leaseId, proposalId) {
+      const result = await backend.commitSource(documentId, batch, leaseId, proposalId);
       return {
         accepted: result.accepted,
         revision: result.source_revision_hash,

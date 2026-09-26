@@ -22,6 +22,7 @@ from spec2gds.agent_spec.activities.registry import (
 )
 from spec2gds.agent_spec.activities.snapshot import ActivitySnapshot
 from spec2gds.agent_spec.spec_format import ipxact
+from spec2gds.agent_spec.spec_format.assistant_operation_contract import validate_assistant_operations
 from spec2gds.agent_spec.spec_format.document import DocumentSection, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import (
     ConnectionIR,
@@ -261,6 +262,12 @@ def preview_assistant_proposal(
         }
     try:
         operations = compile_assistant_operations(revision, proposal.target, proposal.operations)
+        validate_assistant_operations(
+            proposal.scope, proposal.operations,
+            proposal.target.entity_kind if proposal.target else None,
+            bool(proposal.target and proposal.target.entity_kind == "component"
+                 and revision.internal_design(proposal.target)),
+        )
     except (KeyError, TypeError, ValueError, pydantic.ValidationError) as exc:
         return _invalid_preview(revision, proposal.target, str(exc))
     result = SpecEditTransaction(revision.source_revision_hash, operations).apply(revision)

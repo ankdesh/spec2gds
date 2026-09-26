@@ -31,7 +31,9 @@ The two editors have different source-of-truth rules:
 - A source-bound circuit is an editable projection; **Save to Specification**
   commits validated topology and layout changes back to the `.spec` package.
 - Leaf-component previews and unsupported projections remain read-only.
-- Assistant changes are proposals until a user accepts them.
+- Assistant changes are proposals until a user accepts them. On a source-bound
+  Circuit, Accept stages a private draft; only **Save to Specification** writes
+  the `.spec` package.
 
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
@@ -171,6 +173,13 @@ cd circuit-designer
 CIRCUIT_DESIGNER_PORT=6011 npm run service
 ```
 
+For a standalone Circuit UI with custom service URLs, set
+`VITE_AI_ASSISTANT_UI_URL` and `VITE_CIRCUIT_DESIGNER_SERVICE_URL` before
+starting or building the UI. The Tools link uses these exact URLs, including
+HTTPS, custom ports, and base paths. Without explicit values it reads the
+Circuit service directory; without a directory it falls back to the local
+Assistant port 6013 and Circuit port 6011.
+
 In independent mode, discover optional functionality through
 `GET /api/circuit-designer/v1/capabilities`. Set
 `SPEC2GDS_SERVICE_CONFIG` only when the legacy shared `/services` directory is
@@ -189,12 +198,13 @@ Unbound Assistant conversations fail closed with no design context or proposal
 tools; mutations require a binding to an exact editor document or entity. The
 browser offers focused, goal, and orchestrated presets;
 all preserve owner preview and explicit review as the only mutation boundary.
-Every interactive top-level component creation first shows an editable details
-card with defaults derived from the request. Submitting it continues the
-proposal in the same conversation. The confirmed name, wire ports, width, and
-module-body behavior are included atomically in the create operation, so an
-approved component is not an empty shell. The subsequent owner-preview card
-remains the explicit approve/apply safety gate.
+Every interactive top-level Spec component creation first shows an editable
+details card with model-suggested defaults from the proposed values. Either
+domain can show a card for genuinely missing required fields. Submitting it
+stores structured confirmed values and continues the proposal; the model then
+submits typed operations for owner preview. The owner-preview card remains the
+explicit approve/apply safety gate. Operation shapes come from the bound owner
+through the [owner schema contract](docs/assistant-owner-operation-contract.md).
 Focused turns are capped at three model steps, with one additional step only
 after a visible structured-question call, and every model response is capped
 at 1,200 output tokens. Goal and orchestrated work use separate bounded

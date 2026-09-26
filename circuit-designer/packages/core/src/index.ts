@@ -29,6 +29,39 @@ const definitions = (protocolSchema as { $defs?: Record<string, unknown> }).$def
 const protocolValidator = ajv.compile(protocolSchema);
 const definitionValidators = new Map<string, ValidateFunction>();
 
+/** The logical operation subset offered to assistant clients by Circuit Designer. */
+export function assistantCircuitOperationSchema(): Record<string, unknown> {
+  const allowed = new Set([
+    "AddComponentOperation", "UpdateComponentOperation", "RemoveComponentOperation",
+    "AddInstanceOperation", "UpdateInstanceOperation", "RemoveInstanceOperation",
+    "AddBoundaryTerminalOperation", "UpdateBoundaryTerminalOperation", "RemoveBoundaryTerminalOperation",
+    "CreateNetOperation", "UpdateNetOperation", "DeleteNetOperation",
+    "ConnectEndpointOperation", "DisconnectEndpointOperation",
+  ]);
+  const operation = definitions.CircuitOperation as { oneOf: Array<{ $ref: string }> };
+  const branches = operation.oneOf.filter(branch => allowed.has(branch.$ref.split("/").at(-1) ?? ""));
+  const selected: Record<string, unknown> = {};
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (!value || typeof value !== "object") return;
+    const node = value as Record<string, unknown>;
+    if (typeof node.$ref === "string" && node.$ref.startsWith("#/$defs/")) {
+      const name = node.$ref.slice("#/$defs/".length);
+      if (!(name in selected) && name in definitions) {
+        selected[name] = definitions[name];
+        visit(definitions[name]);
+      }
+    }
+    Object.values(node).forEach(visit);
+  };
+  visit(branches);
+  return {
+    $schema: "https://json-schema.org/draft/2020-12/schema",
+    oneOf: branches,
+    $defs: selected,
+  };
+}
+
 export interface SchemaValidationResult {
   valid: boolean;
   errors: ErrorObject[];

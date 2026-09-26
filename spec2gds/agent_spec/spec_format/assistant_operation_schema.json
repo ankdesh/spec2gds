@@ -1,0 +1,2333 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "create_entity"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "component",
+            "design"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "component_vlnv": {
+                "type": "string"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        },
+        "ports": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string",
+                    "const": "wire"
+                  },
+                  "display_name": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "in",
+                      "out",
+                      "inout"
+                    ]
+                  },
+                  "range": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string",
+                    "const": "transactional"
+                  },
+                  "display_name": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "initiative": {
+                    "type": "string",
+                    "enum": [
+                      "requires",
+                      "provides",
+                      "both"
+                    ]
+                  },
+                  "kind": {
+                    "oneOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "tlm_port",
+                          "tlm_socket",
+                          "simple_socket",
+                          "multi_socket",
+                          "custom"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "custom_kind": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bus_width": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "family": {
+                    "type": "string",
+                    "const": "structured"
+                  },
+                  "display_name": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "description": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": [
+                      "in",
+                      "out",
+                      "inout"
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "systemverilog": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "entity_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "kind",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_entity_metadata"
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "display_name": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "short_description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "description": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clear_fields": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "display_name",
+              "short_description",
+              "description"
+            ]
+          }
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "entity"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_parameter"
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "parameter": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "type": "string"
+            },
+            "resolve": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "data_type": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "choice_ref": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "minimum": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "maximum": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "entity",
+        "parameter"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_parameter"
+        },
+        "entity": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "entity",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_component_port"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "port": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string",
+                  "const": "wire"
+                },
+                "display_name": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out",
+                    "inout"
+                  ]
+                },
+                "range": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string",
+                  "const": "transactional"
+                },
+                "display_name": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "initiative": {
+                  "type": "string",
+                  "enum": [
+                    "requires",
+                    "provides",
+                    "both"
+                  ]
+                },
+                "kind": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "enum": [
+                        "tlm_port",
+                        "tlm_socket",
+                        "simple_socket",
+                        "multi_socket",
+                        "custom"
+                      ]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "custom_kind": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "bus_width": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "family": {
+                  "type": "string",
+                  "const": "structured"
+                },
+                "display_name": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out",
+                    "inout"
+                  ]
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "port"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_component_port"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_bus_interface"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "interface": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string",
+              "enum": [
+                "initiator",
+                "target",
+                "system",
+                "monitor"
+              ]
+            },
+            "bus_vlnv": {
+              "type": "string"
+            },
+            "abstraction_vlnv": {
+              "type": "string"
+            },
+            "connection_required": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "bits_in_lau": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "endianness": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "port_maps": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "logical": {
+                    "type": "string"
+                  },
+                  "physical": {
+                    "type": "string"
+                  },
+                  "tie_off": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "invert": {
+                    "oneOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "informative": {
+                    "oneOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "interface"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_bus_interface"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_channel"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "channel": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "interfaces": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "channel"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_channel"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_instance"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "instance": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "component_vlnv": {
+              "type": "string"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "instance"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_instance"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "instance_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "instance_name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reorder_instances"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "instance_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "instance_names"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_connection"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "connection": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "interface"
+                },
+                "interface_endpoints": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "instance_name": {
+                        "type": "string"
+                      },
+                      "interface_name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "hierarchy_interfaces": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "const": "ad_hoc"
+                },
+                "port_endpoints": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "instance_name": {
+                        "type": "string"
+                      },
+                      "port_name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                  }
+                },
+                "external_ports": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "connection"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_connection"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "connection_name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "connection_name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reorder_connections"
+        },
+        "design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "interface",
+            "ad_hoc"
+          ]
+        },
+        "connection_names": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "design",
+        "kind",
+        "connection_names"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_internal_design"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "internal_design": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component",
+        "internal_design"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "clear_internal_design"
+        },
+        "component": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "component"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "update_bus_definition"
+        },
+        "bus_definition": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "properties": {
+          "type": "object",
+          "properties": {
+            "direct_connection": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "broadcast": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "addressable": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "extends_vlnv": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "max_initiators": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "max_targets": {
+              "oneOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "system_groups": {
+              "oneOf": [
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "clear_fields": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "direct_connection",
+                  "broadcast",
+                  "addressable",
+                  "extends_vlnv",
+                  "max_initiators",
+                  "max_targets",
+                  "system_groups"
+                ]
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "bus_definition",
+        "properties"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_abstraction_bus_type"
+        },
+        "abstraction_definition": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "bus_vlnv": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "abstraction_definition",
+        "bus_vlnv"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_abstraction_port"
+        },
+        "abstraction_definition": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "port": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "style": {
+              "type": "string",
+              "enum": [
+                "wire",
+                "transactional"
+              ]
+            },
+            "match": {
+              "oneOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "description": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "qualifiers": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "on_initiator": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "direction": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "initiative": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "presence": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bus_width": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "on_target": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "direction": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "initiative": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "presence": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "width": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bus_width": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "on_system": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "group": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "direction": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "initiative": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "presence": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "width": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "bus_width": {
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "abstraction_definition",
+        "port"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_abstraction_port"
+        },
+        "abstraction_definition": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "abstraction_definition",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_narrative_block"
+        },
+        "block": {},
+        "parent_block_id": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "index": {
+          "oneOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "block"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_narrative_block"
+        },
+        "block_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "block_id"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "reorder_narrative_blocks"
+        },
+        "block_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "parent_block_id": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "block_ids"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "set_narrative_entity_links"
+        },
+        "block_id": {
+          "type": "string"
+        },
+        "entity_refs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "string"
+              },
+              "entity_id": {
+                "type": "string"
+              },
+              "entity_kind": {
+                "type": "string",
+                "enum": [
+                  "component",
+                  "design",
+                  "bus_definition",
+                  "abstraction_definition",
+                  "narrative_block"
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "block_id",
+        "entity_refs"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "upsert_entity_section"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "section_type": {
+          "type": "string",
+          "const": "sv"
+        },
+        "type_version": {
+          "type": "integer",
+          "const": 1
+        },
+        "section_id": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "owner",
+        "section_type",
+        "payload"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "const": "delete_entity_section"
+        },
+        "owner": {
+          "type": "object",
+          "properties": {
+            "document_id": {
+              "type": "string"
+            },
+            "entity_id": {
+              "type": "string"
+            },
+            "entity_kind": {
+              "type": "string",
+              "enum": [
+                "component",
+                "design",
+                "bus_definition",
+                "abstraction_definition",
+                "narrative_block"
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "section_type": {
+          "type": "string",
+          "const": "sv"
+        },
+        "section_id": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "operation_id",
+        "type",
+        "owner",
+        "section_type",
+        "section_id"
+      ],
+      "additionalProperties": false
+    }
+  ]
+}

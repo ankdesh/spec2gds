@@ -2,8 +2,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { circuitActionDefinitions, formatKeyboardShortcut, type ActionBindings, type CircuitActionId } from "./action-bindings";
 import { CircuitActionMenuPanel, type CircuitMenuEntry } from "./CircuitActionMenu";
+import type { CircuitToolContribution } from "./adapters";
 
-type MenuDefinition = { id: string; label: string; entries: CircuitMenuEntry<CircuitActionId>[] };
+type MenuCommandId = CircuitActionId | `tool:${string}`;
+type MenuDefinition = { id: string; label: string; entries: CircuitMenuEntry<MenuCommandId>[] };
 const definitions = new Map(circuitActionDefinitions.map((item) => [item.id, item]));
 const action = (commandId: CircuitActionId): CircuitMenuEntry<CircuitActionId> => ({
   kind: "action", commandId, label: definitions.get(commandId)?.label ?? commandId,
@@ -17,9 +19,12 @@ const menus: MenuDefinition[] = [
   { id: "route", label: "Route", entries: [action("reroute-selected"), action("lock-selected-route"), action("unlock-selected-route"), { kind: "separator" }, action("arrange-all")] },
   { id: "timing", label: "Timing", entries: [action("add-cycle-edge"), action("open-clock-settings"), action("open-timing-analysis"), { kind: "separator" }, action("edit-cycle-edge"), action("lock-cycle-edge"), action("unlock-cycle-edge"), action("delete-cycle-edge")] },
   { id: "view", label: "View", entries: [action("toggle-inspector"), action("toggle-timing-overlay"), { kind: "separator" }, { kind: "submenu", id: "pan", label: "Pan", entries: [action("pan-up"), action("pan-left"), action("pan-down"), action("pan-right")] }, action("zoom-in"), action("zoom-out"), { kind: "separator" }, action("center-selection"), action("fit-circuit")] },
-  { id: "tools", label: "Tools", entries: [action("run-primary-tool")] },
+  { id: "tools", label: "Tools", entries: [] },
   { id: "help", label: "Help", entries: [action("getting-started"), { kind: "separator" }, action("about")] },
 ];
+
+export const toolMenuEntries = (tools: CircuitToolContribution[]): CircuitMenuEntry<MenuCommandId>[] =>
+  tools.map(tool => ({ kind: "action", commandId: `tool:${tool.id}`, label: tool.label }));
 
 export interface CircuitMenuBarProps {
   bindings: ActionBindings;
@@ -32,18 +37,18 @@ export interface CircuitMenuBarProps {
   onOpenChange?: (open: boolean) => void;
   sourceBound?: boolean;
   sourceSaveLabel?: string;
-  toolLabel?: string;
+  tools: CircuitToolContribution[];
+  toolsEnabled: boolean;
+  onRunTool: (toolId: string) => void;
 }
 
-export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, toolLabel }: CircuitMenuBarProps) {
+export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, tools, toolsEnabled, onRunTool }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
   const rootRef = useRef<HTMLElement>(null);
-  const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || toolLabel).map((menu) => ({
+  const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || tools.length).map((menu) => ({
     ...menu,
-    entries: menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
+    entries: menu.id === "tools" ? toolMenuEntries(tools) : menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
       ? { ...entry, label: sourceSaveLabel ?? "Save to Source" }
-      : entry.kind === "action" && entry.commandId === "run-primary-tool" && toolLabel
-      ? { ...entry, label: toolLabel }
       : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
       : entry.kind === "action" && entry.commandId === "toggle-timing-overlay"
@@ -51,7 +56,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
       : entry.kind === "action" && entry.commandId === "review-proposals"
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
-  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, toolLabel]);
+  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, tools]);
   const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 
@@ -98,15 +103,15 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
         >{menu.label}</button>
         {open && <CircuitActionMenuPanel
           entries={menu.entries}
-          isCommandEnabled={isActionEnabled}
+          isCommandEnabled={(commandId) => commandId.startsWith("tool:") ? toolsEnabled : isActionEnabled(commandId as CircuitActionId)}
           label={menu.label}
-          onCommand={onAction}
+          onCommand={(commandId) => commandId.startsWith("tool:") ? onRunTool(commandId.slice(5)) : onAction(commandId as CircuitActionId)}
           onDismiss={() => {
             close();
             requestAnimationFrame(() => document.getElementById(`circuit-${menu.id}-menu-trigger`)?.focus());
           }}
           onMoveTop={(delta) => moveTop(menu.id, delta, true)}
-          shortcutFor={(commandId) => bindings[commandId].keyboard ? formatKeyboardShortcut(bindings[commandId].keyboard) : undefined}
+          shortcutFor={(commandId) => commandId.startsWith("tool:") ? undefined : bindings[commandId as CircuitActionId].keyboard ? formatKeyboardShortcut(bindings[commandId as CircuitActionId].keyboard) : undefined}
         />}
       </div>;
     })}

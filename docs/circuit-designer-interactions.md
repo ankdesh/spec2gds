@@ -20,7 +20,7 @@ the previous action so two commands never compete for the same shortcut.
 - **Selection**, **Connect**, **Route**, **Timing**, and **View** contain the former canvas
   action-strip commands. The View menu also toggles the properties-only
   Inspector, which defaults closed.
-- **Tools** opens AI Assistant. **Help** contains Getting Started and About.
+- **Tools** lists every tool contributed by the host, including AI Assistant in the standalone app. The menu is hidden when no tools are supplied. **Help** contains Getting Started and About.
 
 Menus use ARIA menu semantics. Arrow keys navigate menus and submenus, Home/End
 move to boundaries, Enter or Space activates, Escape dismisses and restores
@@ -31,7 +31,11 @@ commands.
 Selection and View remain available for source-owned and locked documents.
 Connect and route-changing commands require an unlocked private draft. A
 writable source-bound design labels the ordinary save action **Save to
-Specification** and shows it in the header while the draft is dirty.
+Specification** and shows it in the header while the draft is dirty. Accepting
+an Assistant proposal for that design stages its operation batch in the
+private draft. Save commits it to Spec and resolves the proposal; Cancel or
+reload discards the draft so it can be staged again. A failed save leaves the
+draft and proposal available.
 
 SVG and PNG downloads are rendered from the same effective layout currently
 shown by the canvas, including automatically computed instance and boundary

@@ -1,15 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CircuitDesignerApp, linkedCircuitDocumentId, type CircuitToolContribution } from "@spec2gds/circuit-app-react";
 import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import { BrowserLogger } from "@spec2gds/observability/browser";
 import { createBrowserFileAdapter, createBrowserPreferencesAdapter, createHttpSourceAdapter } from "./browser-adapters";
-
-function assistantUrl(uiUrl: string, serviceUrl: string, documentId: string): string {
-  const url = new URL("/launch/circuit", uiUrl);
-  url.searchParams.set("service_base_url", serviceUrl);
-  url.searchParams.set("document_id", documentId);
-  return url.toString();
-}
+import { assistantUrl, resolveAssistantLinks } from "./assistant-links";
 
 /** Browser composition for the reusable Circuit Designer application shell. */
 export function App() {
@@ -19,6 +13,21 @@ export function App() {
   const preferences = useMemo(() => createBrowserPreferencesAdapter(backend), [backend]);
   const source = useMemo(() => createHttpSourceAdapter(backend), [backend]);
   const telemetry = useMemo(() => new BrowserLogger(`${apiBase}/logs/events`, { enabled: false, level: "info" }), [apiBase]);
+  const linkConfig = useMemo(() => ({
+    apiBase,
+    origin: window.location.origin,
+    hostname: window.location.hostname,
+    assistantUiUrl: import.meta.env.VITE_AI_ASSISTANT_UI_URL,
+    circuitServiceUrl: import.meta.env.VITE_CIRCUIT_DESIGNER_SERVICE_URL,
+  }), [apiBase]);
+  const [assistantLinks, setAssistantLinks] = useState(() => resolveAssistantLinks(linkConfig));
+  useEffect(() => {
+    let active = true;
+    void fetch(`${apiBase}/services`).then(async response => {
+      if (response.ok && active) setAssistantLinks(resolveAssistantLinks({ ...linkConfig, directory: await response.json() }));
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [apiBase, linkConfig]);
   const launch = useMemo(() => {
     const documentId = linkedCircuitDocumentId(window.location.search);
     return documentId ? { kind: "document" as const, documentId } : { kind: "new" as const };
@@ -28,12 +37,11 @@ export function App() {
     label: "AI Assistant",
     description: "Open a chat bound to the current circuit.",
     run: ({ snapshot }) => {
-      const host = window.location.hostname;
-      const target = assistantUrl(`http://${host}:6013`, `http://${host}:6011/api/circuit-designer/v1`, snapshot.document.document_id);
+      const target = assistantUrl(assistantLinks.uiUrl, assistantLinks.serviceUrl, snapshot.document.document_id);
       const opened = window.open(target, "_blank", "noopener,noreferrer");
       if (opened) opened.opener = null;
     },
-  }], []);
+  }], [assistantLinks]);
   return <CircuitDesignerApp
     backend={backend}
     events={backend}

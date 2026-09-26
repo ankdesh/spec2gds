@@ -108,18 +108,23 @@ cancel, and answer controls. Proposal apply/send is the completion approval;
 discard cancels the workflow.
 
 Every browser root preset also exposes DSH's structured `ask_user_question`
-tool. Every interactive top-level component creation first produces a
-persistent product details card with one labeled text box and a request-derived
-default per required value. **Continue proposal** submits the confirmed values
-as the next message in the same Session. For a new component, the submitted
-name, input and output ports, width, and behavior are deterministically folded
-into one atomic create operation before owner preview. The next card is the
-owner-previewed review and remains the explicit approve/apply boundary; a
-genuinely unsupported operation still produces an error card. Non-proposal
-questions use the Harness composer takeover. Both are distinct from a durable
-workflow input request, which pauses a goal or orchestrated run for a later
-answer. The headless profile and delegated children do not expose either
-interactive mechanism.
+tool. An interactive top-level Spec component proposal first produces a
+persistent details card with model-suggested defaults from the proposed
+operation. Either domain may request a card for genuinely missing required
+fields. **Continue proposal** stores the confirmed values as structured state
+and sends them into the same Session. The model authors the typed operations
+using those values; the Assistant does not synthesize ports or SystemVerilog.
+The next card is the owner-previewed review and remains the explicit
+approve/apply boundary. Non-proposal questions use the Harness composer
+takeover. A durable workflow input request instead pauses a goal or
+orchestrated run for a later answer. Headless mode and delegated children do
+not expose either interactive mechanism.
+
+The proposal tool's operation shape is fetched from the selected owner at
+agent attachment. The owner publishes a binding-specific JSON Schema and
+validates against it before preview. The Assistant checks it before calling
+the owner and refuses preview if the schema digest changes. See the
+[owner operation schema contract](assistant-owner-operation-contract.md).
 
 Focused turns default to three model steps and receive one extra step only
 after a visible structured-question call in that turn. Goal and orchestrated

@@ -102,3 +102,37 @@ test("Circuit client uses the public snapshot, preview, and proposal routes", as
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
 });
+
+test("fetches binding-specific owner operation contracts and reports retrieval failures", async () => {
+  const paths: string[] = [];
+  let available = true;
+  const server = createServer((request, response) => {
+    paths.push(request.url ?? "");
+    response.writeHead(available ? 200 : 503, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(available
+      ? { schema_version: 1, digest: `sha256:${"a".repeat(64)}`, operation_schema: {
+        $schema: "https://json-schema.org/draft/2020-12/schema", oneOf: [],
+      } }
+      : { detail: "schema unavailable" }));
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const ownerUrl = `http://127.0.0.1:${address.port}`;
+  const clients = new OwnerClients([ownerUrl], [], 5_000);
+  const binding: SessionBinding = {
+    sessionId: "session-1", status: "active", preset: "focused", domain: "spec", ownerUrl,
+    documentId: "doc-1", scope: "entity", entityKind: "component", entityId: "component-1",
+    title: "Spec", archived: false, createdAt: "", updatedAt: "",
+    workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
+    workspaceDomain: "spec", workspaceOwnerUrl: ownerUrl, workspaceDocumentId: "doc-1",
+  };
+  try {
+    assert.equal((await clients.operationContract(binding)).schema_version, 1);
+    assert.match(paths[0] ?? "", /document_id=doc-1&scope=entity&entity_kind=component&entity_id=component-1/);
+    available = false;
+    await assert.rejects(() => clients.operationContract(binding), /schema unavailable/);
+  } finally {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+  }
+});

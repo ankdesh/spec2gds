@@ -84,4 +84,5 @@ export interface StoredSourceBinding {
 export interface SourceCommitBody {
   batch: CircuitOperationBatch;
   lease_id: string;
+  proposal_id?: string;
 }

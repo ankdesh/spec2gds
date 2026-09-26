@@ -66,7 +66,7 @@ export interface CircuitSourceSaveResult {
 
 export interface CircuitSourceAdapter {
   load(documentId: string): Promise<CircuitSourceState | undefined>;
-  commit(documentId: string, batch: CircuitOperationBatch, leaseId: string): Promise<CircuitSourceSaveResult>;
+  commit(documentId: string, batch: CircuitOperationBatch, leaseId: string, proposalId?: string): Promise<CircuitSourceSaveResult>;
   reload(documentId: string): Promise<CircuitSourceSaveResult>;
 }
 

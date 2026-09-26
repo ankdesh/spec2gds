@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -59,6 +59,13 @@ export class ProductState {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS reviews_session_created ON reviews(session_id, created_at);
+      CREATE TABLE IF NOT EXISTS proposal_inputs (
+        input_id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES bindings(session_id) ON DELETE CASCADE,
+        fields_json TEXT NOT NULL,
+        values_json TEXT,
+        created_at TEXT NOT NULL
+      );
     `);
     const reviewColumns = new Set((this.database.prepare("PRAGMA table_info(reviews)").all() as Array<Record<string, unknown>>)
       .map(row => String(row.name)));
@@ -69,6 +76,30 @@ export class ProductState {
   }
 
   close(): void { this.database.close(); }
+
+  createProposalInput(sessionId: string, fields: readonly { name: string }[]): string {
+    const inputId = randomUUID();
+    this.database.prepare("INSERT INTO proposal_inputs(input_id,session_id,fields_json,created_at) VALUES(?,?,?,?)")
+      .run(inputId, sessionId, JSON.stringify(fields.map(field => field.name)), now());
+    return inputId;
+  }
+
+  confirmProposalInput(inputId: string, values: Record<string, string>): void {
+    const row = this.database.prepare("SELECT fields_json FROM proposal_inputs WHERE input_id=?").get(inputId) as { fields_json: string } | undefined;
+    if (!row) throw new Error("Unknown proposal input request.");
+    const fields = JSON.parse(row.fields_json) as string[];
+    if (Object.keys(values).length !== fields.length || fields.some(name => typeof values[name] !== "string" || !values[name]?.trim())
+      || Object.keys(values).some(name => !fields.includes(name))) {
+      throw new Error("Confirmed proposal values do not match the requested fields.");
+    }
+    this.database.prepare("UPDATE proposal_inputs SET values_json=? WHERE input_id=?").run(JSON.stringify(values), inputId);
+  }
+
+  confirmedProposalInput(sessionId: string, inputId: string): Record<string, string> | null {
+    const row = this.database.prepare("SELECT values_json FROM proposal_inputs WHERE session_id=? AND input_id=?")
+      .get(sessionId, inputId) as { values_json: string | null } | undefined;
+    return row?.values_json ? JSON.parse(row.values_json) as Record<string, string> : null;
+  }
 
   createBinding(sessionId: string, input: BindingInput & {
     ownerUrl: string;

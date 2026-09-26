@@ -112,8 +112,12 @@ opened, it starts an unbound chat with no source attached. Entity-level
 the exact IP-XACT entity.
 
 Circuit Designer's **Tools → AI Assistant** command sends the active document
-ID and configured Circuit API URL to `/launch/circuit`; the Assistant validates
-the document and opens a new circuit-bound chat directly.
+ID and resolved Circuit API URL to `/launch/circuit`; the Assistant validates
+the document and opens a new circuit-bound chat directly. For standalone UI
+runs, `VITE_AI_ASSISTANT_UI_URL` and `VITE_CIRCUIT_DESIGNER_SERVICE_URL` override
+the corresponding URLs. Otherwise the UI reads `/services` from the Circuit
+service. If no directory is available, it uses local ports 6013 and 6011.
+Configured schemes, ports, and base paths are preserved in the launch URL.
 
 The combined `scripts/serve-all.sh` launcher starts services with these
 resolved settings and prints their links without opening a browser. Its printed

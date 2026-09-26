@@ -154,10 +154,12 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
     documentId: string,
     batch: CircuitOperationBatch,
     leaseId: string,
+    proposalId?: string,
   ): Promise<CircuitSourceSyncResponse> {
     return await this.sendJson(`${this.documentUrl(documentId)}/source/commit`, "POST", {
       batch,
       lease_id: leaseId,
+      ...(proposalId ? { proposal_id: proposalId } : {}),
     }) as CircuitSourceSyncResponse;
   }
 

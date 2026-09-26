@@ -335,12 +335,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   }
 
   function requiredInputMessage(request, values) {
-    const fields = Array.isArray(request.fields) ? request.fields : [];
-    return [
-      "Continue the pending design proposal using these user-confirmed values:",
-      ...fields.map(field => `- ${String(field.label || field.name)}: ${String(values[field.name] || "").trim()}`),
-      "Prepare the proposal now. Use these values as authoritative and ask only if another required value truly cannot be inferred.",
-    ].join("\n");
+    return JSON.stringify({ kind: "confirmed_proposal_input", input_id: request.input_id, values,
+      instruction: "Use these confirmed values as authoritative. Pass confirmed_input_id and confirmed_values to the proposal tool." });
   }
 
   function ProposalInputCard({ request, inputActions }) {
@@ -349,11 +345,13 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const [values, setValues] = React.useState(() => Object.fromEntries(fields.map(field => [String(field.name), String(field.default_value || "")])));
     const [submitted, setSubmitted] = React.useState(false);
     const [error, setError] = React.useState("");
-    function submit(event) {
+    async function submit(event) {
       event.preventDefault();
       const missing = fields.find(field => !String(values[field.name] || "").trim());
       if (missing) { setError(`${String(missing.label || missing.name)} is required.`); return; }
       setError("");
+      try { await api(`/proposal-inputs/${encodeURIComponent(String(value.input_id))}/confirm`, { values }); }
+      catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); return; }
       setSubmitted(true);
       inputActions.setDraft(requiredInputMessage(value, values));
       queueMicrotask(() => inputActions.submit());

@@ -175,7 +175,7 @@ Prompt construction has three independent inputs:
 1. The preset persona identifies focused, goal-oriented, or orchestrating behavior.
 2. The exact service prompt bundle contributes `domain-persona`, `binding-context`, `operation-constraints`, and `output-contract`.
 3. Preset-scoped DSH packages contribute stable policies such as the workflow-tool policy.
-4. When a browser root preset exposes `ask_user_question`, the product contributes `spec2gds:interactive-clarification` at order 250. Every interactive top-level component creation is returned once as a request-derived product form before owner preview; other immediate questions use `ask_user_question`. The section is omitted in headless mode.
+4. When a browser root preset exposes `ask_user_question`, the product contributes `spec2gds:interactive-clarification` at order 250. Every interactive top-level Spec component creation is returned as a product form with model-suggested defaults before owner preview; other immediate questions use `ask_user_question`. The section is omitted in headless mode.
 
 The prompt catalog replaces `{{binding.*}}` variables from the immutable binding and returns detached text plus the bundle digest. The product checks expected section IDs and order before registering them on `agent.ctx.systemPrompt`.
 
@@ -183,7 +183,7 @@ An unbound Session receives one `complete: true` guard. In DSH, that flag makes 
 
 ### Choose the right input mechanism
 
-Proposal details, `ask_user_question`, and an `sWorkflow` input request all involve a human, but they have different lifetimes. For an interactive top-level component creation, `prepare_spec_proposal` returns `required_input` once before it performs owner preview; the turn footer renders every field as a text box with defaults derived from the user's request. **Continue proposal** sends the confirmed values into the same Session as a new message. The proposal tool can then produce the separate owner-preview card whose **Approve and apply** action is the mutation boundary. Requests that are genuinely outside the writable vocabulary remain error cards.
+Proposal details, `ask_user_question`, and an `sWorkflow` input request all involve a human, but they have different lifetimes. For an interactive top-level component creation, `prepare_spec_proposal` returns `required_input` once before it performs owner preview; the turn footer renders every field as a text box with defaults from the model's proposed operation. **Continue proposal** stores the confirmed values as structured state and sends them into the same Session. The proposal tool can then produce the separate owner-preview card whose **Approve and apply** action is the mutation boundary. Requests that are genuinely outside the writable vocabulary remain error cards.
 
 Use `ask_user_question` for non-proposal information needed immediately in the current turn, such as choosing between compatible endpoints before a proposal attempt. The Web answerer replaces the composer and returns compact structured answers to the waiting tool.
 
