@@ -1,0 +1,14 @@
+{
+  "name": "spec2gds-ui-scenarios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --import tsx runner/run_scenario.ts",
+    "test:headed": "HEADED=true node --import tsx runner/run_scenario.ts"
+  },
+  "dependencies": {
+    "@playwright/test": "1.61.1",
+    "tsx": "^4.20.5"
+  }
+}

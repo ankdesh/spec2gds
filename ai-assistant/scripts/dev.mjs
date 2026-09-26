@@ -6,7 +6,10 @@ import { spawn } from "node:child_process";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 if (existsSync(resolve(root, ".env"))) process.loadEnvFile(resolve(root, ".env"));
-const harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
+let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
+if (!existsSync(resolve(harness, "scripts/product-runtime.mjs")) && existsSync(resolve(harness, "deepseek-harness/scripts/product-runtime.mjs"))) {
+  harness = resolve(harness, "deepseek-harness");
+}
 const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 mkdirSync(state, { recursive: true, mode: 0o700 });
 const env = {
