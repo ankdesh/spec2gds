@@ -76,20 +76,8 @@ workspaces. The Assistant build compiles its host plugin and product-owned DSH
 client bundle, so it is part of setup even when using the combined launcher.
 
 ```bash
-# Root Spec Editor, Activities, and shared Python runtime
-uv sync
-
-# Circuit service plus the Spec Editor and Circuit Designer frontends
-cd circuit-designer
-npm install
-cd ..
-
-# Harness AI Assistant and its production web bundle
-cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
-cd ..
+# Run the complete environment setup (Python, Circuit Designer, DSH, and AI Assistant)
+scripts/setup-all.sh
 ```
 
 See [AI Assistant](docs/ai-assistant.md) for Harness checkout setup, owner
@@ -413,21 +401,13 @@ save, conflict, layout, and recovery behavior.
 ## Run only the optional AI Assistant
 
 ```bash
+# Setup all workspaces including DeepSeek Harness and AI Assistant
+scripts/setup-all.sh
+
 cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
 export OPENAI_API_KEY="..."
 npm run dev
 ```
-
-`setup:harness` reads `harness.lock.json`, prepares the sibling
-`../deepseek-harness` checkout, installs the pinned pnpm dependencies, and
-builds DSH. It requires network access for the clone/fetch and package install.
-An existing checkout must be clean, use the configured origin, and already be
-at the pinned commit. To move a clean checkout explicitly, run
-`npm run setup:harness -- --update`. Set `HARNESS_SOURCE` to manage and use a
-different checkout path; the same safety checks apply.
 
 Open `http://SERVER_IP:6013`. Repeat `npm run build` after changing Assistant
 server or web code.
@@ -462,6 +442,9 @@ npm test
 npm run build
 npm run test:harness
 npm run eval -- --output /tmp/spec2gds-assistant-eval
+
+# End-to-end UI automation testing (Natural Language scenarios via AI Assistant & Spec Editor)
+./tests/ui-scenarios/run-test.sh
 ```
 
 Detailed source locations and focused commands are in

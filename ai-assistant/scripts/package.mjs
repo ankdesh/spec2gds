@@ -4,8 +4,10 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
+let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
+if (!existsSync(resolve(harness, "scripts/product-runtime.mjs")) && existsSync(resolve(harness, "deepseek-harness/scripts/product-runtime.mjs"))) {
+  harness = resolve(harness, "deepseek-harness");
+}
 const output = process.argv[2];
 if (!output) throw new Error("Usage: npm run package -- NEW_OUTPUT_DIRECTORY");
 if (!existsSync(resolve(root, "lib/index.js")) || !existsSync(resolve(root, "bundles/web/lib/client.js"))) throw new Error("Run npm run build before packaging.");

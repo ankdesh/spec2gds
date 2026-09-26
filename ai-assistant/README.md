@@ -19,26 +19,23 @@ editor launch URLs.
 - `OPENAI_API_KEY` for model turns
 - a running Spec Editor or Circuit Designer owner for a new bound conversation
 
-Prepare the pinned, built Harness checkout with:
+Prepare the entire workspace, including Harness and product bundles, with:
 
 ```bash
-npm run setup:harness
+# From workspace root
+scripts/setup-all.sh
 ```
 
-The command manages the sibling `../deepseek-harness` checkout by default.
-It refuses to touch a dirty checkout, a checkout with a different origin, or a
-checkout at a different commit. Use `npm run setup:harness -- --update` to
-explicitly fetch and detach a clean checkout at the pinned commit. Set
-`HARNESS_SOURCE` to select another destination; setup, development, tests, and
-packaging all honor that override.
+The script manages the sibling `../deepseek-harness` checkout by default.
+Set `HARNESS_SOURCE` to select another destination.
 
 ## Browser development
 
 ```bash
+# Run the complete environment setup (first time or after dependency changes)
+scripts/setup-all.sh
+
 cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
 export OPENAI_API_KEY="..."
 npm run dev
 ```
