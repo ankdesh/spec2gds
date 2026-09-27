@@ -14,6 +14,8 @@ dependencies = [
     "uvicorn[standard]>=0.35.0",
     "spec2gds-runtime",
     "jinja2>=3.1.6",
+    "httpx>=0.28.0",
+    "testplan-service",
 ]
 
 [project.optional-dependencies]
@@ -43,6 +45,7 @@ spec2gds-server = "spec2gds.agent_spec.api.__main__:server_main"
 spec2gds-editor = "spec2gds.agent_spec.api.__main__:editor_main"
 spec2gds-import-document = "spec2gds.agent_spec.importers.cli:main"
 spec2gds-log-viewer = "spec2gds.log_viewer:main"
+testplan-service = "testplan_service.cli:main"
 
 [tool.uv]
 package = true
@@ -57,6 +60,7 @@ explicit = true
 
 [tool.uv.sources]
 spec2gds-runtime = { path = "runtime", editable = true }
+testplan-service = { path = "testplan-service", editable = true }
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
 

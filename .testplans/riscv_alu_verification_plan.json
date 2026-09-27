@@ -4,9 +4,9 @@
   "description": "Comprehensive hierarchical verification plan for the RV32I integer arithmetic and logic unit. Covers arithmetic datapath, bitwise logic, barrel shifter, branch comparisons, signed overflow/underflow boundary values, and formal equivalence.",
   "version": "1.2.0",
   "target_design": "riscv_alu",
-  "revision": 1,
-  "created_at": "2026-09-25T14:26:48.537200+00:00",
-  "updated_at": "2026-09-25T14:26:48.537209+00:00",
+  "revision": 2,
+  "created_at": "2026-09-26T08:49:10.211406+00:00",
+  "updated_at": "2026-09-26T09:40:11.214615+00:00",
   "tags": [
     "cpu",
     "rv32i",
@@ -31,99 +31,6 @@
       "coverage_bins": [],
       "tags": [],
       "order": 0,
-      "metadata": {},
-      "children": []
-    },
-    "feat_add": {
-      "id": "feat_add",
-      "parent_id": "grp_arithmetic",
-      "title": "32-bit Adder Datapath",
-      "kind": "feature",
-      "category": "functional_mode",
-      "description": "Full adder functionality with carry propagation across 32 bits.",
-      "methodology": "directed",
-      "stage": "V1",
-      "priority": "medium",
-      "status": "planned",
-      "stimulus": "",
-      "expected_outcome": "",
-      "coverage_bins": [],
-      "tags": [],
-      "order": 0,
-      "metadata": {},
-      "children": []
-    },
-    "tc_add_basic": {
-      "id": "tc_add_basic",
-      "parent_id": "feat_add",
-      "title": "Basic Positive and Negative Addition",
-      "kind": "testcase",
-      "category": "functional_mode",
-      "description": "",
-      "methodology": "directed",
-      "stage": "V1",
-      "priority": "high",
-      "status": "passed",
-      "stimulus": "Drive op_a = 0x0000002A (42), op_b = 0x00000010 (16), opcode = ADD",
-      "expected_outcome": "Result = 0x0000003A (58), zero_flag = 0, overflow = 0",
-      "coverage_bins": [
-        "functional_mode:add:basic_positive"
-      ],
-      "tags": [
-        "adder",
-        "smoke"
-      ],
-      "order": 0,
-      "metadata": {},
-      "children": []
-    },
-    "tc_add_overflow": {
-      "id": "tc_add_overflow",
-      "parent_id": "feat_add",
-      "title": "Signed Overflow Boundary Flag Check",
-      "kind": "testcase",
-      "category": "port_boundary",
-      "description": "",
-      "methodology": "constrained_random",
-      "stage": "V2",
-      "priority": "critical",
-      "status": "passed",
-      "stimulus": "Drive op_a = 0x7FFFFFFF (max positive 32-bit int), op_b = 0x00000001, opcode = ADD",
-      "expected_outcome": "Result = 0x80000000 (negative), overflow_flag = 1, carry_out = 0",
-      "coverage_bins": [
-        "boundary:op_a:max_positive",
-        "boundary:op_b:min_positive"
-      ],
-      "tags": [
-        "adder",
-        "overflow",
-        "boundary"
-      ],
-      "order": 1,
-      "metadata": {},
-      "children": []
-    },
-    "tc_add_all_ones": {
-      "id": "tc_add_all_ones",
-      "parent_id": "feat_add",
-      "title": "Double All-Ones Carry Out Verification",
-      "kind": "testcase",
-      "category": "special_patterns",
-      "description": "",
-      "methodology": "directed",
-      "stage": "V2",
-      "priority": "high",
-      "status": "passed",
-      "stimulus": "Drive op_a = 0xFFFFFFFF, op_b = 0xFFFFFFFF, opcode = ADD",
-      "expected_outcome": "Result = 0xFFFFFFFE, carry_out = 1, overflow = 0",
-      "coverage_bins": [
-        "special_patterns:all_ones:addition"
-      ],
-      "tags": [
-        "adder",
-        "patterns"
-      ],
-      "order": 2,
       "metadata": {},
       "children": []
     },

@@ -383,7 +383,7 @@
     wrapper.className = "tree-node-wrapper";
 
     const row = document.createElement("div");
-    row.className = `tree-node ${node.id === selectedNodeId ? "selected" : ""}`;
+    row.className = `tree-node tree-node-kind-${node.kind} tree-node-status-${node.status} ${node.id === selectedNodeId ? "selected" : ""}`;
     row.style.paddingLeft = `${12 + depth * 20}px`;
 
     // Collapse / Expand arrow
@@ -709,7 +709,7 @@
       });
 
       const diagLines = (res.diagnostics || []).map(
-        (d) => `<span style="color: #fbbf24;">[Warning] ${escapeHtml(d)}</span>`
+        (d) => `<span style="color: var(--status-in-progress, #7e5a0d);">[Warning] ${escapeHtml(d)}</span>`
       );
 
       proposalDiffText.innerHTML = [

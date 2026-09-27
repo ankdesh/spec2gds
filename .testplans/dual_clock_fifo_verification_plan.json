@@ -4,9 +4,9 @@
   "description": "Verification plan targeting a 512-word by 32-bit asynchronous dual-clock FIFO queue. Focuses on multi-clock domain crossing (CDC), Gray-coded pointer synchronization, almost-full/almost-empty programmable thresholds, underflow/overflow safeguards, and formal data-ordering retention proofs.",
   "version": "1.0.0",
   "target_design": "fifo_dual_clock_512x32",
-  "revision": 2,
-  "created_at": "2026-09-25T14:26:48.537493+00:00",
-  "updated_at": "2026-09-25T14:29:40.823331+00:00",
+  "revision": 1,
+  "created_at": "2026-09-26T08:49:10.211701+00:00",
+  "updated_at": "2026-09-26T08:49:10.211704+00:00",
   "tags": [
     "fifo",
     "memory",
@@ -165,6 +165,117 @@
         "metastability"
       ],
       "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "grp_boundary_flags": {
+      "id": "grp_boundary_flags",
+      "parent_id": null,
+      "title": "Full / Empty Boundary Flag Generation",
+      "kind": "group",
+      "category": "port_boundary",
+      "description": "Checks for edge conditions when FIFO reaches 0 words, 511 words, and 512 words capacity.",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "feat_full_empty": {
+      "id": "feat_full_empty",
+      "parent_id": "grp_boundary_flags",
+      "title": "Pessimistic Flag Boundary Checks",
+      "kind": "feature",
+      "category": "port_boundary",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "medium",
+      "status": "planned",
+      "stimulus": "",
+      "expected_outcome": "",
+      "coverage_bins": [],
+      "tags": [],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_capacity_512_full": {
+      "id": "tc_capacity_512_full",
+      "parent_id": "feat_full_empty",
+      "title": "Fill to Max Capacity (512 Words)",
+      "kind": "testcase",
+      "category": "port_boundary",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "Write exactly 512 sequential words without reading",
+      "expected_outcome": "wfull asserts on 512th write; further writes ignored; memory array undamaged",
+      "coverage_bins": [
+        "boundary:fifo_depth:max_512"
+      ],
+      "tags": [
+        "fifo",
+        "full"
+      ],
+      "order": 0,
+      "metadata": {},
+      "children": []
+    },
+    "tc_empty_underflow_safeguard": {
+      "id": "tc_empty_underflow_safeguard",
+      "parent_id": "feat_full_empty",
+      "title": "Read from Empty Queue (Underflow Safeguard)",
+      "kind": "testcase",
+      "category": "error_injection",
+      "description": "",
+      "methodology": "directed",
+      "stage": "V1",
+      "priority": "critical",
+      "status": "passed",
+      "stimulus": "Assert r_en=1 when rempty=1",
+      "expected_outcome": "Read pointer does not advance; r_err error flag pulses high",
+      "coverage_bins": [
+        "error_injection:fifo:underflow_prevented"
+      ],
+      "tags": [
+        "fifo",
+        "error",
+        "underflow"
+      ],
+      "order": 1,
+      "metadata": {},
+      "children": []
+    },
+    "tc_simul_push_pop_at_full": {
+      "id": "tc_simul_push_pop_at_full",
+      "parent_id": "feat_full_empty",
+      "title": "Simultaneous Write and Read at Full Boundary",
+      "kind": "testcase",
+      "category": "timing_sequencing",
+      "description": "",
+      "methodology": "constrained_random",
+      "stage": "V2",
+      "priority": "high",
+      "status": "failed",
+      "stimulus": "At 512/512 occupancy, assert both w_en=1 and r_en=1 simultaneously across clocks",
+      "expected_outcome": "FIFO occupancy remains at 512; outgoing word popped; new incoming word stored",
+      "coverage_bins": [
+        "timing_sequencing:simultaneous_rw_full"
+      ],
+      "tags": [
+        "fifo",
+        "corner_case"
+      ],
+      "order": 2,
       "metadata": {},
       "children": []
     },

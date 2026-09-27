@@ -76,6 +76,9 @@ Read in this order:
 24. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
     — plain-language ownership, projection, launch, save, refresh, conflict,
     and security diagrams.
+25. [Verification & Testplan System](verification-testplan-system.md) —
+    hierarchical coverage taxonomy, testplan-service architecture, Circuit
+    Designer visual alignment, AI Assistant contract, and execution roadmap.
 
 ## Proposed Verification Planner
 
