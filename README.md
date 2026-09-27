@@ -55,6 +55,12 @@ file, preference, source, telemetry, event, and tool adapters; see
 [Chipmind feature-gap inventory](docs/circuit-designer-chipmind-gap-analysis.md)
 document the current professionalization direction.
 
+The proposed independent **Verification Planner** is specified in four
+[implementation-planning documents](docs/verification-service-overall.md),
+covering the shared UI, manual test-plan authoring, coverage/evidence, and
+test IR/backend plugins. These are design documents for future work; the
+existing testplan prototype does not implement this three-layer contract.
+
 ## Prerequisites
 
 Install these tools before setting up the repository:

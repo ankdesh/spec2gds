@@ -1,8 +1,9 @@
 # Documentation
 
-These are living documents for the current system. Historical plans, completed
-migration notes, generated demos, and benchmark-specific guides are not kept in
-this tree.
+These are living documents for the current system, plus explicitly labeled
+implementation specifications for requested future work. Historical plans,
+completed migration notes, generated demos, and benchmark-specific guides are
+not kept in this tree.
 
 Read in this order:
 
@@ -76,10 +77,25 @@ Read in this order:
     — plain-language ownership, projection, launch, save, refresh, conflict,
     and security diagrams.
 
+## Proposed Verification Planner
+
+These four documents specify future behavior, not the existing testplan prototype:
+
+1. [Overall service and user experience](verification-service-overall.md) —
+   decisions, palette, layout, navigation, independent architecture, shared API,
+   persistence, review boundaries, and delivery gates.
+2. [Layer 1: Test Plan](verification-layer-1-test-plan.md) — snapshot references,
+   sections, manual intent authoring, UI/API workflows, and FIFO fixtures.
+3. [Layer 2: Coverage & Evidence](verification-layer-2-coverage.md) — objectives,
+   mapping completeness, results, gaps, exact status and aggregation rules.
+4. [Layer 3: Implementation](verification-layer-3-implementation.md) — test IR,
+   recipe editor, plugin contracts, artifact generation, and result mapping.
+
 ## Documentation rule
 
-Documentation describes behavior that exists now or a clearly labeled next
-sample application. Put implementation history in version control rather than
+Documentation describes behavior that exists now, a clearly labeled next
+sample application, or a requested implementation specification explicitly
+marked as proposed. Put implementation history in version control rather than
 an archive folder. Delete a superseded page instead of adding another versioned
 page beside it.
 
