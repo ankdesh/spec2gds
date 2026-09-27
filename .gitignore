@@ -8,6 +8,8 @@ generated/
 .playwright-browsers/
 test-results/
 *.tsbuildinfo
+verification-data/
+**/verification-data/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

@@ -1,13 +1,9 @@
-"""Storage layer for Testplan Service."""
+"""Storage package for Verification Planner."""
 
-from __future__ import annotations
-
-from testplan_service.storage.file_repository import FileTestPlanRepository
-from testplan_service.storage.interface import TestPlanRepository
-from testplan_service.storage.memory_repository import MemoryTestPlanRepository
+from testplan_service.storage.blob_store import BlobStore
+from testplan_service.storage.sqlite_repo import SqlitePlanRepository
 
 __all__ = [
-    "FileTestPlanRepository",
-    "MemoryTestPlanRepository",
-    "TestPlanRepository",
+    "BlobStore",
+    "SqlitePlanRepository",
 ]

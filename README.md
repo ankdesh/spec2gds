@@ -55,11 +55,14 @@ file, preference, source, telemetry, event, and tool adapters; see
 [Chipmind feature-gap inventory](docs/circuit-designer-chipmind-gap-analysis.md)
 document the current professionalization direction.
 
-The proposed independent **Verification Planner** is specified in four
-[implementation-planning documents](docs/verification-service-overall.md),
-covering the shared UI, manual test-plan authoring, coverage/evidence, and
-test IR/backend plugins. These are design documents for future work; the
-existing testplan prototype does not implement this three-layer contract.
+The independent **Verification Planner** (`testplan-service`) implements the complete
+three-layer verification architecture specified in [Verification Planner Architecture](docs/testplan-service-architecture.md),
+[Layer 1 Test Plan](docs/verification-layer-1-test-plan.md),
+[Layer 2 Coverage & Evidence](docs/verification-layer-2-coverage.md), and
+[Layer 3 Implementation & Plugins](docs/verification-layer-3-implementation.md). It features
+content-addressed Activity Snapshot binding, manual requirement and intent authoring, multi-family coverage
+objectives and policies, campaigns, language-neutral Test IR ASTs, target bindings, pluggable backend generators,
+immutable P1, C1, and I1 review checkpoints, deterministic status evaluation, and a high-density Blueprint Slate UI on port `6016`.
 
 ## Prerequisites
 

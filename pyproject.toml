@@ -15,6 +15,7 @@ dependencies = [
     "spec2gds-runtime",
     "jinja2>=3.1.6",
     "httpx>=0.28.0",
+    "python-multipart>=0.0.18",
     "testplan-service",
 ]
 

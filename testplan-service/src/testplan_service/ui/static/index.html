@@ -3,192 +3,441 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>spec2gds Testplan Manager</title>
+  <title>Verification Planner — spec2gds</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
-<body>
-  <!-- Header -->
-  <header>
+<body class="verification-app">
+  <!-- Top Application Header (48px) -->
+  <header class="app-header">
     <div class="brand">
-      <span class="brand__mark">⚡</span>
-      <div class="brand__details">
-        <strong>Testplan Manager</strong>
-        <small>spec2gds verification planning</small>
-      </div>
+      <span class="brand__mark">◈</span>
+      <strong>Verification Planner</strong>
     </div>
 
     <div class="header-center">
-      <select id="planSelector" class="plan-select" title="Select Active Testplan">
-        <option value="">Loading testplans...</option>
+      <select id="planSelector" class="plan-select" title="Active Plan">
+        <option value="">Select a plan...</option>
       </select>
       <button id="btnNewPlan" class="btn btn-secondary btn-sm">+ New Plan</button>
-      <button id="btnImportPlan" class="btn btn-outline btn-sm">Import</button>
+      <button id="btnImportBundle" class="btn btn-outline btn-sm" style="color: #ffffff; border-color: #284b6f;">Import .vplan</button>
     </div>
 
     <div class="header-actions">
-      <button id="btnExportMarkdown" class="btn btn-outline btn-sm" title="Export as Markdown document">Markdown 📄</button>
-      <button id="btnExportJson" class="btn btn-outline btn-sm" title="Export canonical JSON">JSON 💾</button>
-      <button id="btnAiProposals" class="btn btn-assistant btn-sm" title="Review or simulate AI Assistant proposal">AI Assistant ↗</button>
+      <span id="saveStatusIndicator" style="font-size: 12px; color: #a0aec0; margin-right: 8px;">Saved</span>
+      <button id="btnReviewPlanHeader" class="btn btn-primary btn-sm">Review Plan</button>
+      <button id="btnExportHeader" class="btn btn-outline btn-sm" style="color: #ffffff; border-color: #284b6f;">Export ▾</button>
     </div>
   </header>
 
-  <!-- Main Layout -->
-  <div class="layout">
-    <!-- Left Sidebar: Plan Metadata & Summary -->
-    <aside class="sidebar-left">
-      <div class="section-box">
-        <div class="section-title">
-          <span>Active Testplan</span>
-          <button id="btnEditPlanMeta" class="icon-btn" title="Edit Plan Details">✎</button>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">ID:</span>
-          <span id="metaPlanId" class="meta-val">-</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Target:</span>
-          <span id="metaTargetDesign" class="meta-val">-</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Version:</span>
-          <span id="metaVersion" class="meta-val">-</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Revision:</span>
-          <span id="metaRevision" class="meta-val">-</span>
-        </div>
-      </div>
+  <!-- Layer Tabs Bar (44px) -->
+  <nav class="layer-tabs" aria-label="Verification Layers">
+    <button class="layer-tab active" data-layer="plan">
+      <span>1 · Test Plan</span>
+    </button>
+    <button class="layer-tab" data-layer="coverage" title="Layer 2 — Coverage & Evidence">
+      <span>2 · Coverage & Evidence</span>
+    </button>
+    <button class="layer-tab" data-layer="implementation" title="Layer 3 — Implementation & Test IR">
+      <span>3 · Implementation</span>
+    </button>
+  </nav>
 
-      <div class="section-box">
-        <div class="section-title">Metrics & Verification Status</div>
-        <div class="meta-row">
-          <span class="meta-label">Pass Rate:</span>
-          <span id="summaryPassRate" class="meta-val">0%</span>
-        </div>
-        <div class="progress-bar-container">
-          <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;"></div>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Total Nodes:</span>
-          <span id="summaryTotalNodes" class="meta-val">0</span>
-        </div>
-        <div class="meta-row">
-          <span class="meta-label">Coverage Bins:</span>
-          <span id="summaryCoverageBins" class="meta-val">0</span>
-        </div>
-      </div>
+  <!-- Breadcrumb Bar (32px) -->
+  <div class="breadcrumb-bar">
+    <span>Location:</span>
+    <span id="breadcrumbPath" class="breadcrumb-path">Root</span>
+    <span id="breadcrumbRevision" class="breadcrumb-rev">r1</span>
+  </div>
 
-      <div class="section-box">
-        <div class="section-title">Coverage Categories</div>
-        <div id="categoryPills" class="pills-container">
-          <!-- Populated via JS -->
-        </div>
+  <!-- 3-Panel Main Layout -->
+  <div class="workspace-layout">
+    <!-- Left Panel: Hierarchy (280px) -->
+    <aside class="panel-hierarchy" id="panelHierarchy">
+      <div class="hierarchy-header">
+        <input type="text" id="hierarchySearchInput" class="search-input" placeholder="Find in hierarchy... (Ctrl+K)" />
       </div>
-
-      <div class="section-box" style="flex: 1; border-bottom: none;">
-        <div class="section-title">Milestone Stages</div>
-        <div id="stagePills" class="pills-container">
-          <!-- Populated via JS -->
-        </div>
+      <div class="hierarchy-tree" id="hierarchyTree">
+        <!-- Rendered via JS -->
       </div>
     </aside>
 
-    <!-- Center Canvas: Hierarchical Tree -->
-    <main class="main-canvas">
-      <div class="toolbar">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <button id="btnAddRootNode" class="btn btn-primary btn-sm">+ Add Item</button>
-          <button id="btnExpandAll" class="btn btn-outline btn-sm">Expand All</button>
-          <button id="btnCollapseAll" class="btn btn-outline btn-sm">Collapse All</button>
+    <!-- Center Workspace -->
+    <main class="panel-center" id="panelCenter">
+      <!-- Toolbar for Layer 1: Test Plan -->
+      <div class="workspace-toolbar" id="toolbarPlan">
+        <div class="toolbar-group">
+          <button id="btnAddSection" class="btn btn-secondary btn-sm">+ Section</button>
+          <button id="btnAddIntent" class="btn btn-primary btn-sm">+ Intent</button>
+          <button id="btnToggleSourceView" class="btn btn-outline btn-sm">Source & Requirements</button>
         </div>
-
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <input id="searchInput" type="text" class="search-input" placeholder="Search title, category, tags...">
-          <select id="kindFilter" class="plan-select" style="min-width: 120px;">
-            <option value="">All Kinds</option>
-            <option value="group">Groups</option>
-            <option value="feature">Features</option>
-            <option value="testpoint">Testpoints</option>
-            <option value="testcase">Test Cases</option>
-            <option value="covergroup">Covergroups</option>
-            <option value="assertion">Assertions</option>
-          </select>
+        <div class="toolbar-group">
+          <button id="btnReviewPlan" class="btn btn-outline btn-sm">Review Checklist</button>
         </div>
       </div>
 
-      <div id="treeContainer" class="tree-container">
-        <!-- Rendered Hierarchical Nodes via JS -->
-        <div style="text-align: center; color: var(--text-muted); margin-top: 40px;">
-          Select or create a testplan to display its hierarchy.
+      <!-- Toolbar for Layer 2: Coverage & Evidence -->
+      <div class="workspace-toolbar" id="toolbarCoverage" style="display: none;">
+        <div class="toolbar-group">
+          <div class="subnav-btn-group">
+            <button class="btn btn-secondary btn-sm active" id="btnSubnavMatrix">Coverage Matrix</button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavGaps">Gaps <span id="badgeGapsCount" class="badge badge-failed" style="display:none; margin-left:4px;">0</span></button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavRuns">Evidence Runs</button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavTrace">Trace</button>
+          </div>
+          <button id="btnAddObjective" class="btn btn-primary btn-sm">+ Objective</button>
+          <button id="btnImportResults" class="btn btn-secondary btn-sm">Import Results</button>
+        </div>
+        <div class="toolbar-group">
+          <button id="btnReviewCoverage" class="btn btn-outline btn-sm">Review Coverage (C1)</button>
+          <button id="btnFreezeReport" class="btn btn-outline btn-sm">Freeze Report</button>
+        </div>
+      </div>
+
+      <!-- Toolbar for Layer 3: Implementation -->
+      <div class="workspace-toolbar" id="toolbarImplementation" style="display: none;">
+        <div class="toolbar-group">
+          <div class="subnav-btn-group">
+            <button class="btn btn-secondary btn-sm active" id="btnSubnavRecipes">Recipes</button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavBindings">Target Bindings</button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavBackends">Backend Plugins</button>
+            <button class="btn btn-outline btn-sm" id="btnSubnavGenerations">Generated Artifacts</button>
+          </div>
+          <button id="btnAddRecipe" class="btn btn-primary btn-sm">+ Recipe</button>
+          <button id="btnAddBinding" class="btn btn-secondary btn-sm">+ Target Binding</button>
+        </div>
+        <div class="toolbar-group">
+          <button id="btnReviewImplementation" class="btn btn-outline btn-sm">Review Implementation (I1)</button>
+          <button id="btnGenerateArtifacts" class="btn btn-outline btn-sm">Generate Artifacts</button>
+        </div>
+      </div>
+
+      <!-- Main Workspace Views -->
+      <div class="workspace-content" id="workspaceContent">
+        <!-- Layer 1: Outline View (Default) -->
+        <div id="viewOutline">
+          <table class="data-table" id="intentTable">
+            <thead>
+              <tr>
+                <th style="width: 35%;">Intent</th>
+                <th style="width: 15%;">Priority</th>
+                <th style="width: 20%;">Source</th>
+                <th style="width: 15%;">Authoring</th>
+                <th style="width: 15%;">Coverage</th>
+              </tr>
+            </thead>
+            <tbody id="intentTableBody">
+              <!-- Populated via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Layer 1: Source & Requirements View (Toggleable) -->
+        <div id="viewSourceRequirements" style="display: none; height: 100%;">
+          <div style="display: flex; gap: 16px; height: 100%;">
+            <div style="flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 12px; overflow-y: auto;">
+              <h4 style="margin-bottom: 8px;">Source Sections & Audit</h4>
+              <div id="sourceSectionsList"></div>
+            </div>
+            <div style="flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 12px; overflow-y: auto;">
+              <h4 style="margin-bottom: 8px;">Captured Requirements</h4>
+              <div id="capturedRequirementsList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 2: Coverage View Container -->
+        <div id="viewCoverage" style="display: none; height: 100%; flex-direction: column;">
+          <!-- Subview 1: Matrix -->
+          <div id="subviewCoverageMatrix" style="display: flex; flex-direction: column; height: 100%;">
+            <!-- Summary metrics header -->
+            <div id="coverageSummaryBar" class="coverage-summary-bar">
+              <div class="summary-metric">
+                <span class="metric-label">Whole Baseline:</span>
+                <span id="metricBaselineText" class="metric-val">Loading...</span>
+              </div>
+              <div class="summary-metric">
+                <span class="metric-label">Unique Bins:</span>
+                <span id="metricBinsText" class="metric-val">0 / 0 (0%)</span>
+              </div>
+              <div class="summary-metric" style="margin-left: auto;">
+                <label style="font-size: 12px; margin-right: 6px;">Status Filter:</label>
+                <select id="filterMatrixStatus" class="form-select form-select-sm" style="display: inline-block; width: auto;">
+                  <option value="">All Statuses</option>
+                  <option value="satisfied">Satisfied</option>
+                  <option value="failed">Failed</option>
+                  <option value="blocked">Blocked</option>
+                  <option value="open">Open</option>
+                  <option value="waived">Waived</option>
+                  <option value="not_evaluated">Not evaluated</option>
+                </select>
+                <label style="font-size: 12px; margin-left: 10px; margin-right: 6px;">Profile:</label>
+                <select id="selectMatrixProfile" class="form-select form-select-sm" style="display: inline-block; width: auto;">
+                  <option value="">(All Profiles)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Matrix Table -->
+            <div style="flex: 1; overflow: auto;">
+              <table class="data-table matrix-table" id="matrixTable">
+                <thead>
+                  <tr>
+                    <th style="width: 25%;">Intent</th>
+                    <th style="width: 12%;">Scenario</th>
+                    <th style="width: 12%;">Functional</th>
+                    <th style="width: 12%;">Correctness</th>
+                    <th style="width: 12%;">Property</th>
+                    <th style="width: 12%;">Structural</th>
+                    <th style="width: 15%;">Intent Status</th>
+                  </tr>
+                </thead>
+                <tbody id="matrixTableBody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subview 2: Gaps -->
+          <div id="subviewCoverageGaps" style="display: none; height: 100%; flex-direction: column;">
+            <div class="gaps-toolbar">
+              <span id="gapsSummaryCount" style="font-weight: 600; font-size: 13px;">0 Gaps</span>
+              <div style="margin-left: auto; display: flex; gap: 8px;">
+                <select id="filterGapSeverity" class="form-select form-select-sm" style="width: auto;">
+                  <option value="">All Severities</option>
+                  <option value="blocker">Blockers</option>
+                  <option value="warning">Warnings</option>
+                  <option value="info">Advisory Notes</option>
+                </select>
+              </div>
+            </div>
+            <div style="flex: 1; overflow-y: auto;">
+              <table class="data-table" id="gapsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 10%;">Severity</th>
+                    <th style="width: 15%;">Code</th>
+                    <th style="width: 25%;">Title</th>
+                    <th style="width: 35%;">Explanation / Cause</th>
+                    <th style="width: 15%;">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="gapsTableBody">
+                  <!-- Rendered via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subview 3: Evidence Runs -->
+          <div id="subviewCoverageRuns" style="display: none; height: 100%; flex-direction: column;">
+            <div class="runs-toolbar" style="padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: center;">
+              <label style="font-weight: 600; font-size: 13px;">Active Campaign:</label>
+              <select id="selectActiveCampaign" class="form-select form-select-sm" style="width: 240px;"></select>
+              <span id="campaignStatusInfo" style="font-size: 12px; color: var(--muted-text);"></span>
+              <button id="btnNewCampaign" class="btn btn-secondary btn-sm" style="margin-left: auto;">+ New Campaign</button>
+            </div>
+            <div style="flex: 1; overflow-y: auto; padding: 16px;">
+              <h4 style="font-size: 14px; margin-bottom: 8px;">Committed Evidence Runs</h4>
+              <table class="data-table" id="runsTable">
+                <thead>
+                  <tr>
+                    <th>Producer</th>
+                    <th>External Run ID</th>
+                    <th>Profile</th>
+                    <th>Disposition</th>
+                    <th>Observations</th>
+                    <th>Imported At</th>
+                  </tr>
+                </thead>
+                <tbody id="runsTableBody">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subview 4: Trace -->
+          <div id="subviewCoverageTrace" style="display: none; height: 100%; padding: 16px; overflow-y: auto;">
+            <h4>Bidirectional Verification Trace</h4>
+            <div id="traceVisualContainer" style="margin-top: 12px;">
+              <!-- Populated via JS -->
+            </div>
+          </div>
+        </div>
+
+        <!-- Layer 3: Implementation View Container -->
+        <div id="viewImplementation" style="display: none; height: 100%; flex-direction: column;">
+          <!-- Subview 1: Recipes -->
+          <div id="subviewImplementationRecipes" style="display: flex; flex-direction: column; height: 100%;">
+            <div class="coverage-summary-bar">
+              <div class="summary-metric">
+                <span class="metric-label">Total Recipes:</span>
+                <span id="metricRecipesCount" class="metric-val">0</span>
+              </div>
+              <div class="summary-metric">
+                <span class="metric-label">Ready:</span>
+                <span id="metricRecipesReady" class="metric-val">0</span>
+              </div>
+              <div class="summary-metric">
+                <span class="metric-label">Target Bindings:</span>
+                <span id="metricBindingsCount" class="metric-val">0</span>
+              </div>
+              <div class="summary-metric" style="margin-left: auto;">
+                <label style="font-size: 12px; margin-right: 6px;">Kind Filter:</label>
+                <select id="filterRecipeKind" class="form-select form-select-sm" style="display: inline-block; width: auto;">
+                  <option value="">All Kinds</option>
+                  <option value="scenario">Scenario</option>
+                  <option value="directed">Directed</option>
+                  <option value="random">Random</option>
+                  <option value="property">Property</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="flex: 1; overflow: auto;">
+              <table class="data-table" id="recipesTable">
+                <thead>
+                  <tr>
+                    <th style="width: 12%;">Key / ID</th>
+                    <th style="width: 26%;">Title</th>
+                    <th style="width: 10%;">Kind</th>
+                    <th style="width: 16%;">Backend</th>
+                    <th style="width: 16%;">Target Binding</th>
+                    <th style="width: 8%;">State</th>
+                    <th style="width: 12%;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="recipesTableBody">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subview 2: Target Bindings -->
+          <div id="subviewImplementationBindings" style="display: none; height: 100%; flex-direction: column;">
+            <div style="padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center;">
+              <span style="font-weight: 600; font-size: 13px;">Target Binding Sets</span>
+            </div>
+            <div style="flex: 1; overflow: auto;">
+              <table class="data-table" id="bindingsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 15%;">Key / ID</th>
+                    <th style="width: 25%;">Title</th>
+                    <th style="width: 15%;">Scope ID</th>
+                    <th style="width: 12%;">Ports</th>
+                    <th style="width: 15%;">Clock / Reset</th>
+                    <th style="width: 10%;">Permission</th>
+                    <th style="width: 8%;">State</th>
+                  </tr>
+                </thead>
+                <tbody id="bindingsTableBody">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Subview 3: Backend Plugins -->
+          <div id="subviewImplementationBackends" style="display: none; height: 100%; flex-direction: column;">
+            <div style="padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center;">
+              <span style="font-weight: 600; font-size: 13px;">Available Backend Plugins & Configurations</span>
+            </div>
+            <div style="flex: 1; overflow: auto; padding: 16px;">
+              <div id="backendsListContainer">
+                <!-- Populated via JS -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Subview 4: Generated Artifacts & Jobs -->
+          <div id="subviewImplementationGenerations" style="display: none; height: 100%; flex-direction: column;">
+            <div style="padding: 10px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center;">
+              <span style="font-weight: 600; font-size: 13px;">Generation Jobs & Published Artifacts</span>
+            </div>
+            <div style="flex: 1; overflow: auto;">
+              <table class="data-table" id="jobsTable">
+                <thead>
+                  <tr>
+                    <th style="width: 25%;">Job ID</th>
+                    <th style="width: 15%;">Checkpoint</th>
+                    <th style="width: 18%;">Plugin</th>
+                    <th style="width: 10%;">Status</th>
+                    <th style="width: 12%;">Artifacts</th>
+                    <th style="width: 20%;">Created</th>
+                  </tr>
+                </thead>
+                <tbody id="jobsTableBody">
+                  <!-- Populated via JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="empty-state" style="display: none;">
+          <div class="empty-state-icon">📝</div>
+          <div class="empty-state-title">No test plan authored yet</div>
+          <div class="empty-state-text">
+            Start by selecting a source section to capture requirements, or add an intent and link its source before review.
+          </div>
+          <div>
+            <button id="btnEmptyAddSection" class="btn btn-primary">Add first section</button>
+            <button id="btnEmptyBrowseSource" class="btn btn-secondary" style="margin-left: 8px;">Browse source</button>
+          </div>
         </div>
       </div>
     </main>
 
-    <!-- Right Sidebar: Inspector -->
-    <aside class="sidebar-right">
-      <div class="inspector-header">
-        <span class="inspector-title">Item Inspector</span>
-        <button id="btnDeselectNode" class="icon-btn" title="Close Inspector">✕</button>
+    <!-- Right Panel: Inspector (360px) -->
+    <aside class="panel-inspector" id="panelInspector">
+      <div class="inspector-tabs">
+        <button class="inspector-tab active" data-tab="details">Details</button>
+        <button class="inspector-tab" data-tab="source">Source</button>
+        <button class="inspector-tab" data-tab="related">Related</button>
+        <button class="inspector-tab" data-tab="history">History</button>
       </div>
 
-      <div id="inspectorEmpty" class="inspector-body" style="text-align: center; color: var(--text-muted); padding: 40px 16px;">
-        Click any node in the hierarchy tree to inspect and edit its properties.
+      <div class="inspector-content" id="inspectorContent">
+        <div id="inspectorDetails">
+          <p style="color: var(--muted-text); font-style: italic;">Select an intent or section in the hierarchy or outline to view details.</p>
+        </div>
       </div>
+    </aside>
+  </div>
 
-      <form id="inspectorForm" class="inspector-body" style="display: none;">
-        <input type="hidden" id="formNodeId">
-        <input type="hidden" id="formParentId">
+  <!-- Footer (28px) -->
+  <footer class="app-footer">
+    <span id="footerStats">0 intents · 0 requirements</span>
+    <span id="footerSnapshot">Snapshot: none</span>
+  </footer>
 
+  <!-- Modals -->
+
+  <!-- Add / Edit Intent Modal -->
+  <div class="modal-overlay" id="modalIntent">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3 id="modalIntentTitle">Add Verification Intent</h3>
+        <button class="modal-close" data-close="modalIntent">&times;</button>
+      </div>
+      <div class="modal-body">
         <div class="form-group">
-          <label class="form-label" for="formTitle">Title</label>
-          <input type="text" id="formTitle" class="form-control" required>
+          <label class="form-label" for="intentFormTitle">Title</label>
+          <input type="text" id="intentFormTitle" class="form-input" placeholder="e.g. Reject write while full" required />
         </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label class="form-label" for="formKind">Kind</label>
-            <select id="formKind" class="form-control">
-              <option value="group">Group</option>
-              <option value="feature">Feature</option>
-              <option value="testpoint">Testpoint</option>
-              <option value="testcase">TestCase</option>
-              <option value="covergroup">Covergroup</option>
-              <option value="assertion">Assertion</option>
-            </select>
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="intentFormSection">Section</label>
+            <select id="intentFormSection" class="form-select"></select>
           </div>
-          <div class="form-group">
-            <label class="form-label" for="formCategory">Coverage Category</label>
-            <select id="formCategory" class="form-control">
-              <option value="port_boundary">Port Boundary</option>
-              <option value="reset_behavior">Reset Behavior</option>
-              <option value="functional_mode">Functional Mode</option>
-              <option value="protocol_compliance">Protocol Compliance</option>
-              <option value="error_injection">Error Injection</option>
-              <option value="timing_sequencing">Timing / Sequencing</option>
-              <option value="cross_port">Cross-Port</option>
-              <option value="structural_connectivity">Structural Connectivity</option>
-              <option value="special_patterns">Special Patterns</option>
-              <option value="general">General</option>
-            </select>
-          </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <div class="form-group">
-            <label class="form-label" for="formStatus">Status</label>
-            <select id="formStatus" class="form-control">
-              <option value="planned">Planned</option>
-              <option value="in_progress">In Progress</option>
-              <option value="passed">Passed</option>
-              <option value="failed">Failed</option>
-              <option value="blocked">Blocked</option>
-              <option value="skipped">Skipped</option>
-              <option value="draft">Draft</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="formPriority">Priority</label>
-            <select id="formPriority" class="form-control">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="intentFormPriority">Priority Override</label>
+            <select id="intentFormPriority" class="form-select">
+              <option value="">Inherit from section</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
@@ -197,148 +446,575 @@
           </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+        <div class="spec-block" style="margin-top: 10px;">
           <div class="form-group">
-            <label class="form-label" for="formStage">Stage</label>
-            <select id="formStage" class="form-control">
-              <option value="V0">V0 (Smoke)</option>
-              <option value="V1">V1 (Core)</option>
-              <option value="V2">V2 (Corner)</option>
-              <option value="V3">V3 (Stress)</option>
-            </select>
+            <label class="form-label"><span class="spec-keyword">GIVEN</span> Preconditions</label>
+            <textarea id="intentFormPreconditions" class="form-textarea" placeholder="State/configuration before event (e.g. FIFO is full; reset is inactive)."></textarea>
           </div>
           <div class="form-group">
-            <label class="form-label" for="formMethodology">Methodology</label>
-            <select id="formMethodology" class="form-control">
-              <option value="directed">Directed</option>
-              <option value="constrained_random">Constrained Random</option>
-              <option value="formal">Formal</option>
-              <option value="assertion">Assertion</option>
-              <option value="lint">Lint</option>
-            </select>
+            <label class="form-label"><span class="spec-keyword">WHEN</span> Trigger</label>
+            <textarea id="intentFormTrigger" class="form-textarea" placeholder="Event/action condition (e.g. A write is requested on the next clock edge)."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label"><span class="spec-keyword">THEN</span> Expected Behavior</label>
+            <textarea id="intentFormExpected" class="form-textarea" placeholder="Normative result (e.g. No item accepted; occupancy and queued data unchanged)."></textarea>
           </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="formDescription">Description</label>
-          <textarea id="formDescription" class="form-control" rows="3" placeholder="Verification intent or markdown description..."></textarea>
+          <label class="form-label">Observable Outcomes (What user/testbench observes)</label>
+          <div id="intentObservationsList"></div>
+          <button id="btnAddObservationRow" type="button" class="btn btn-secondary btn-sm" style="margin-top: 6px;">+ Add Observation</button>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="formStimulus">Stimulus</label>
-          <textarea id="formStimulus" class="form-control" rows="2" placeholder="Inputs, clock cycles, sequence..."></textarea>
+          <label class="form-label">Linked Requirements</label>
+          <div id="intentLinkedReqsList" style="margin-bottom: 6px;"></div>
+          <select id="intentAddReqSelect" class="form-select">
+            <option value="">-- Link a captured requirement --</option>
+          </select>
         </div>
 
-        <div class="form-group">
-          <label class="form-label" for="formExpected">Expected Outcome</label>
-          <textarea id="formExpected" class="form-control" rows="2" placeholder="Expected outputs, latency, flags..."></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="formCoverageBins">Target Coverage Bins (comma-separated)</label>
-          <input type="text" id="formCoverageBins" class="form-control" placeholder="e.g. boundary:data_in:max, reset:rst_n">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="formTags">Tags (comma-separated)</label>
-          <input type="text" id="formTags" class="form-control" placeholder="e.g. alu, math, pipelined">
-        </div>
-
-        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;">
-          <button type="button" id="btnDeleteSelectedNode" class="btn btn-outline btn-sm" style="color: var(--status-failed);">Delete</button>
-          <button type="submit" class="btn btn-primary btn-sm">Save Changes</button>
-        </div>
-      </form>
-    </aside>
-  </div>
-
-  <!-- New Plan Modal -->
-  <div id="modalNewPlan" class="modal-overlay">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h3>Create New Testplan</h3>
-        <button class="icon-btn modal-close">✕</button>
+        <details style="margin-top: 10px; font-size: 13px;">
+          <summary style="cursor: pointer; font-weight: 600; color: var(--muted-text);">More details (Origin, Rationale, Tags)</summary>
+          <div style="padding-top: 10px;">
+            <div class="form-group">
+              <label class="form-label">Origin</label>
+              <select id="intentFormOrigin" class="form-select">
+                <option value="direct_requirement">Direct Requirement</option>
+                <option value="derived_interpretation">Derived Interpretation</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Rationale (Required if derived interpretation)</label>
+              <textarea id="intentFormRationale" class="form-textarea" placeholder="Explain why this point follows from the source specification."></textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tags (comma-separated)</label>
+              <input type="text" id="intentFormTags" class="form-input" placeholder="e.g. corner-case, protocol" />
+            </div>
+          </div>
+        </details>
       </div>
-      <form id="formNewPlan">
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label" for="newPlanId">Plan ID</label>
-            <input type="text" id="newPlanId" class="form-control" placeholder="e.g. alu_verification_plan" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="newPlanName">Plan Title</label>
-            <input type="text" id="newPlanName" class="form-control" placeholder="e.g. ALU Core Verification Plan" required>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="newPlanTarget">Target Component / Design</label>
-            <input type="text" id="newPlanTarget" class="form-control" placeholder="e.g. alu_top">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="newPlanDesc">Description</label>
-            <textarea id="newPlanDesc" class="form-control" rows="3" placeholder="Brief verification strategy overview..."></textarea>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline modal-close">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create Plan</button>
-        </div>
-      </form>
+      <div class="modal-footer">
+        <button id="btnCancelIntent" class="btn btn-outline" data-close="modalIntent">Cancel</button>
+        <button id="btnSaveIntentDraft" class="btn btn-secondary">Save Draft</button>
+        <button id="btnSaveIntentReady" class="btn btn-primary">Save & Mark Ready</button>
+      </div>
     </div>
   </div>
 
-  <!-- AI Proposals Modal -->
-  <div id="modalProposals" class="modal-overlay">
-    <div class="modal-content" style="width: 700px;">
+  <!-- Add / Edit Section Modal -->
+  <div class="modal-overlay" id="modalSection">
+    <div class="modal-dialog" style="max-width: 480px;">
       <div class="modal-header">
-        <h3>AI Assistant Proposal Review</h3>
-        <button class="icon-btn modal-close">✕</button>
+        <h3 id="modalSectionTitle">Add Section</h3>
+        <button class="modal-close" data-close="modalSection">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 13px; color: var(--text-secondary);">
-          Review, simulate, or apply structured verification proposals from the AI Assistant.
-        </p>
         <div class="form-group">
-          <label class="form-label">Proposal JSON Payload</label>
-          <textarea id="proposalJsonInput" class="form-control" rows="6" placeholder="Paste ProposalArtifact JSON here..."></textarea>
+          <label class="form-label" for="secFormTitle">Title</label>
+          <input type="text" id="secFormTitle" class="form-input" placeholder="e.g. Boundary behavior" required />
         </div>
-        <div style="display: flex; gap: 8px;">
-          <button id="btnLoadSampleProposal" class="btn btn-secondary btn-sm">Load Sample Proposal</button>
-          <button id="btnPreviewProposal" class="btn btn-primary btn-sm">Preview Diff</button>
+        <div class="form-group">
+          <label class="form-label" for="secFormDesc">Description</label>
+          <textarea id="secFormDesc" class="form-textarea" placeholder="Optional introduction or grouping notes."></textarea>
         </div>
-        <div id="proposalPreviewBox" style="display: none; margin-top: 10px;">
-          <label class="form-label">Preview & Diff</label>
-          <div id="proposalDiffText" class="diff-box"></div>
+        <div class="form-group">
+          <label class="form-label" for="secFormPriority">Default Priority</label>
+          <select id="secFormPriority" class="form-select">
+            <option value="low">Low</option>
+            <option value="medium" selected>Medium</option>
+            <option value="high">High</option>
+            <option value="critical">Critical</option>
+          </select>
         </div>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-outline modal-close">Close</button>
-        <button type="button" id="btnApplyProposal" class="btn btn-assistant" disabled>Apply Proposal</button>
+        <button class="btn btn-outline" data-close="modalSection">Cancel</button>
+        <button id="btnSaveSection" class="btn btn-primary">Save Section</button>
       </div>
     </div>
   </div>
 
-  <!-- Import Modal -->
-  <div id="modalImport" class="modal-overlay">
-    <div class="modal-content">
+  <!-- Review Checklist & Checkpoint Creation Modal -->
+  <div class="modal-overlay" id="modalReview">
+    <div class="modal-dialog" style="max-width: 600px;">
       <div class="modal-header">
-        <h3>Import Testplan</h3>
-        <button class="icon-btn modal-close">✕</button>
+        <h3>Review Plan Checkpoint (P1)</h3>
+        <button class="modal-close" data-close="modalReview">&times;</button>
       </div>
-      <form id="formImport">
-        <div class="modal-body">
-          <div class="form-group">
-            <label class="form-label">Paste Testplan JSON</label>
-            <textarea id="importJsonInput" class="form-control" rows="10" placeholder="Paste testplan JSON here..." required></textarea>
+      <div class="modal-body">
+        <div id="reviewChecklistSummary" style="margin-bottom: 14px;">
+          <!-- Loaded dynamically -->
+        </div>
+
+        <div id="reviewBlockersContainer" style="display: none; margin-bottom: 14px; padding: 10px; background-color: var(--danger-bg); border-left: 4px solid var(--danger); border-radius: 4px;">
+          <strong style="color: var(--danger);">Blockers preventing review:</strong>
+          <ul id="reviewBlockersList" style="margin-left: 20px; margin-top: 6px; font-size: 13px;"></ul>
+        </div>
+
+        <div id="reviewWarningsContainer" style="display: none; margin-bottom: 14px; padding: 10px; background-color: var(--warning-bg); border-left: 4px solid var(--warning); border-radius: 4px;">
+          <strong style="color: var(--warning);">Warnings requiring acknowledgement:</strong>
+          <div id="reviewWarningsList" style="margin-top: 6px; font-size: 13px;"></div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reviewFormReviewer">Reviewer Label</label>
+          <input type="text" id="reviewFormReviewer" class="form-input" value="author" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reviewFormComment">Review Comment</label>
+          <textarea id="reviewFormComment" class="form-textarea" placeholder="Summary notes on review completeness."></textarea>
+        </div>
+
+        <p style="font-size: 12px; color: var(--muted-text); font-style: italic; margin-top: 10px;">
+          "I reviewed the selected source sections and the behavioral points for this scope. The plan captures the intended requirements identified in that review."
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalReview">Cancel</button>
+        <button id="btnConfirmReviewCheckpoint" class="btn btn-primary">Confirm & Create Checkpoint P1</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Plan / Snapshot Import Modal -->
+  <div class="modal-overlay" id="modalNewPlan">
+    <div class="modal-dialog" style="max-width: 520px;">
+      <div class="modal-header">
+        <h3>Create New Verification Plan</h3>
+        <button class="modal-close" data-close="modalNewPlan">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Choose Source Snapshot</label>
+          <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+            <button id="btnSampleFifo" class="btn btn-secondary btn-sm" type="button">Use Synchronous FIFO Sample</button>
+            <button id="btnSampleTwoFifo" class="btn btn-secondary btn-sm" type="button">Use Two-FIFO Pipeline Sample</button>
+          </div>
+          <input type="file" id="fileSnapshotUpload" class="form-input" accept=".snapshot,.zip" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPlanName">Plan Name</label>
+          <input type="text" id="newPlanName" class="form-input" placeholder="e.g. FIFO Subsystem Verification" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPlanScope">Root Verification Scope</label>
+          <select id="newPlanScope" class="form-select"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newPlanDesc">Description</label>
+          <textarea id="newPlanDesc" class="form-textarea" placeholder="Human purpose and boundaries."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalNewPlan">Cancel</button>
+        <button id="btnSubmitNewPlan" class="btn btn-primary">Create Plan</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Coverage Objective Modal -->
+  <div class="modal-overlay" id="modalAddObjective">
+    <div class="modal-dialog" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3 id="modalObjectiveTitle">Add Coverage Objective</h3>
+        <button class="modal-close" data-close="modalAddObjective">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="objFormTitle">Title</label>
+          <input type="text" id="objFormTitle" class="form-input" placeholder="e.g. Observe full write attempt" required />
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="objFormFamily">Family</label>
+            <select id="objFormFamily" class="form-select">
+              <option value="scenario">Scenario</option>
+              <option value="functional">Functional</option>
+              <option value="correctness">Correctness</option>
+              <option value="property">Property</option>
+              <option value="structural">Structural</option>
+              <option value="mutation">Mutation</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="objFormIntent">Parent Intent</label>
+            <select id="objFormIntent" class="form-select"></select>
           </div>
         </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-outline modal-close">Cancel</button>
-          <button type="submit" class="btn btn-primary">Import</button>
+        <div class="form-group">
+          <label class="form-label" for="objFormDescription">Description / Check Condition</label>
+          <textarea id="objFormDescription" class="form-textarea" placeholder="Detail the stimulus, condition, or behavioral invariant."></textarea>
         </div>
-      </form>
+        <div class="form-group">
+          <label class="form-label" for="objFormAcceptance">Acceptance Metric</label>
+          <select id="objFormAcceptance" class="form-select">
+            <option value="all_bins_hit">All Required Bins Hit</option>
+            <option value="pass_verdict">Pass Verdict Required</option>
+            <option value="threshold">Hit Count Threshold</option>
+            <option value="bounded_unbounded">Bounded / Unbounded Proof</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="objFormBins">Required Bins (comma-separated names)</label>
+          <input type="text" id="objFormBins" class="form-input" placeholder="e.g. bin_full_write, bin_empty_read" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalAddObjective">Cancel</button>
+        <button id="btnSaveObjective" class="btn btn-primary">Save Objective</button>
+      </div>
     </div>
   </div>
 
+  <!-- Review Coverage (C1) Checkpoint Modal -->
+  <div class="modal-overlay" id="modalReviewCoverage">
+    <div class="modal-dialog" style="max-width: 620px;">
+      <div class="modal-header">
+        <h3>Review Coverage Checkpoint (C1)</h3>
+        <button class="modal-close" data-close="modalReviewCoverage">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="reviewCovUpstreamP1">Upstream Plan Checkpoint (P1)</label>
+          <select id="reviewCovUpstreamP1" class="form-select"></select>
+        </div>
+
+        <div id="reviewCovChecklistSummary" style="margin-bottom: 14px; font-size: 13px; line-height: 1.8;">
+          <!-- Loaded dynamically -->
+        </div>
+
+        <div id="reviewCovBlockersContainer" style="display: none; margin-bottom: 14px; padding: 10px; background-color: var(--danger-bg); border-left: 4px solid var(--danger); border-radius: 4px;">
+          <strong style="color: var(--danger);">Blockers preventing C1 review:</strong>
+          <ul id="reviewCovBlockersList" style="margin-left: 20px; margin-top: 6px; font-size: 13px;"></ul>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reviewCovReviewer">Reviewer Label</label>
+          <input type="text" id="reviewCovReviewer" class="form-input" value="coverage_lead" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reviewCovComment">Review Comment</label>
+          <textarea id="reviewCovComment" class="form-textarea" placeholder="Notes on coverage model completeness and intent-evidence mapping."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalReviewCoverage">Cancel</button>
+        <button id="btnConfirmReviewCoverage" class="btn btn-primary">Confirm & Create Checkpoint C1</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Import Results Modal -->
+  <div class="modal-overlay" id="modalImportResults">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3>Import Verification Results</h3>
+        <button class="modal-close" data-close="modalImportResults">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="importResultCampaign">Target Campaign</label>
+            <select id="importResultCampaign" class="form-select"></select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="importResultProfile">Evaluation Profile</label>
+            <select id="importResultProfile" class="form-select"></select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Upload or Paste Results (Schema: <code>verification.results.v1</code>)</label>
+          <input type="file" id="fileResultUpload" class="form-input" accept=".json" style="margin-bottom: 8px;" />
+          <textarea id="importResultJson" class="form-textarea" style="font-family: var(--font-mono); font-size: 11px; height: 140px;" placeholder='{"schema_version": "verification.results.v1", "producer": {"producer_id": "test_runner"}, ...}'></textarea>
+        </div>
+
+        <button id="btnStageImportPreview" type="button" class="btn btn-secondary btn-sm" style="margin-bottom: 12px;">Stage & Validate Preview</button>
+
+        <div id="importPreviewBox" style="display: none; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-muted); font-size: 12px; margin-bottom: 12px;">
+          <!-- Loaded dynamically -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalImportResults">Cancel</button>
+        <button id="btnCommitImport" class="btn btn-primary" disabled>Commit Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Freeze Evidence Report Modal -->
+  <div class="modal-overlay" id="modalFreezeReport">
+    <div class="modal-dialog" style="max-width: 500px;">
+      <div class="modal-header">
+        <h3>Freeze Evidence Report</h3>
+        <button class="modal-close" data-close="modalFreezeReport">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="freezeReportCampaign">Campaign</label>
+          <select id="freezeReportCampaign" class="form-select"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="freezeReportTitle">Report Title</label>
+          <input type="text" id="freezeReportTitle" class="form-input" value="Milestone Evidence Report" required />
+        </div>
+        <p style="font-size: 12px; color: var(--muted-text);">
+          Freezing creates an immutable engineering record of coverage achievement, disposition decisions, and gaps at this exact campaign revision.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalFreezeReport">Cancel</button>
+        <button id="btnSubmitFreezeReport" class="btn btn-primary">Freeze & Generate</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Campaign Modal -->
+  <div class="modal-overlay" id="modalNewCampaign">
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <h3>New Evidence Campaign</h3>
+        <button class="modal-close" data-close="modalNewCampaign">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="newCampName">Campaign Name</label>
+          <input type="text" id="newCampName" class="form-input" placeholder="e.g. FIFO Signoff Campaign" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="newCampPurpose">Purpose</label>
+          <select id="newCampPurpose" class="form-select">
+            <option value="verification">Verification</option>
+            <option value="fixture">Fixture</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalNewCampaign">Cancel</button>
+        <button id="btnSubmitNewCampaign" class="btn btn-primary">Create Campaign</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layer 3 Modals -->
+
+  <!-- Add / Edit Recipe Modal -->
+  <div class="modal-overlay" id="modalRecipe">
+    <div class="modal-dialog" style="max-width: 780px;">
+      <div class="modal-header">
+        <h3 id="modalRecipeTitle">Add Verification Recipe</h3>
+        <button class="modal-close" data-close="modalRecipe">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-label" for="rcpFormTitle">Recipe Title</label>
+            <input type="text" id="rcpFormTitle" class="form-input" placeholder="e.g. FIFO Full Write Boundary Scenario" required />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormKind">Kind</label>
+            <select id="rcpFormKind" class="form-select">
+              <option value="scenario">Scenario</option>
+              <option value="directed">Directed</option>
+              <option value="random">Random</option>
+              <option value="property">Property</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormBinding">Target Binding Set</label>
+            <select id="rcpFormBinding" class="form-select"></select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormBackend">Backend Configuration</label>
+            <select id="rcpFormBackend" class="form-select"></select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormCoverageCp">Coverage Checkpoint (C1)</label>
+            <select id="rcpFormCoverageCp" class="form-select"></select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormIntents">Covered Intent IDs (comma-separated)</label>
+            <input type="text" id="rcpFormIntents" class="form-input" placeholder="int-full-1, int-full-2" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormObjectives">Satisfied Objective IDs (comma-separated)</label>
+            <input type="text" id="rcpFormObjectives" class="form-input" placeholder="obj-scen-full, obj-corr-occ" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="rcpFormState">Authoring State</label>
+            <select id="rcpFormState" class="form-select">
+              <option value="draft">Draft</option>
+              <option value="ready">Ready</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label" for="rcpFormTestIR" style="margin-bottom: 0;">Test IR (Neutral Abstract Syntax Tree JSON)</label>
+            <button id="btnValidateIRPreflight" class="btn btn-outline btn-sm">Validate Preflight</button>
+          </div>
+          <textarea id="rcpFormTestIR" class="form-textarea" style="font-family: var(--font-mono); font-size: 12px; height: 180px;"></textarea>
+        </div>
+
+        <div id="rcpValidationFeedback" style="display: none; padding: 10px; border-radius: 4px; font-size: 12px; margin-top: 8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <input type="hidden" id="rcpEditId" value="" />
+        <button class="btn btn-outline" data-close="modalRecipe">Cancel</button>
+        <button id="btnSubmitRecipe" class="btn btn-primary">Save Recipe</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Target Binding Modal -->
+  <div class="modal-overlay" id="modalBinding">
+    <div class="modal-dialog" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3 id="modalBindingTitle">Add Target Binding Set</h3>
+        <button class="modal-close" data-close="modalBinding">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 2;">
+            <label class="form-label" for="bndFormTitle">Binding Title</label>
+            <input type="text" id="bndFormTitle" class="form-input" placeholder="e.g. FIFO Primary RTL Target" required />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="bndFormPermission">Permission</label>
+            <select id="bndFormPermission" class="form-select">
+              <option value="full_access">Full Access</option>
+              <option value="read_only">Read Only</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="bndFormClock">Clock Signal</label>
+            <input type="text" id="bndFormClock" class="form-input" placeholder="clk" value="clk" />
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="bndFormReset">Reset Signal</label>
+            <input type="text" id="bndFormReset" class="form-input" placeholder="rst_n" value="rst_n" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="bndFormPortsJson">Port / Signal Bindings (JSON Array)</label>
+          <textarea id="bndFormPortsJson" class="form-textarea" style="font-family: var(--font-mono); font-size: 12px; height: 160px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalBinding">Cancel</button>
+        <button id="btnSubmitBinding" class="btn btn-primary">Save Target Binding</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Review Implementation (I1) Checkpoint Modal -->
+  <div class="modal-overlay" id="modalReviewImplementation">
+    <div class="modal-dialog" style="max-width: 640px;">
+      <div class="modal-header">
+        <h3>Review Implementation Checkpoint (I1)</h3>
+        <button class="modal-close" data-close="modalReviewImplementation">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="reviewImplUpstreamC1">Upstream Coverage Checkpoint (C1)</label>
+          <select id="reviewImplUpstreamC1" class="form-select"></select>
+        </div>
+
+        <div id="reviewImplChecklistSummary" style="margin-bottom: 14px; font-size: 13px; line-height: 1.8;">
+          <!-- Loaded dynamically -->
+        </div>
+
+        <div id="reviewImplBlockersContainer" style="display: none; margin-bottom: 14px; padding: 10px; background-color: var(--danger-bg); border-left: 4px solid var(--danger); border-radius: 4px;">
+          <strong style="color: var(--danger);">Blockers preventing I1 review:</strong>
+          <ul id="reviewImplBlockersList" style="margin-left: 20px; margin-top: 6px; font-size: 13px;"></ul>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="reviewImplReviewer">Reviewer Label</label>
+          <input type="text" id="reviewImplReviewer" class="form-input" value="impl_lead" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="reviewImplComment">Review Comment</label>
+          <textarea id="reviewImplComment" class="form-textarea" placeholder="Validation checks complete; test IR ready for backend code generation."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalReviewImplementation">Cancel</button>
+        <button id="btnConfirmReviewImplementation" class="btn btn-primary">Confirm & Create Checkpoint I1</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate Artifacts Modal -->
+  <div class="modal-overlay" id="modalGeneration">
+    <div class="modal-dialog" style="max-width: 700px;">
+      <div class="modal-header">
+        <h3>Generate Verification Artifacts</h3>
+        <button class="modal-close" data-close="modalGeneration">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; gap: 12px;">
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="genCheckpointSelect">Implementation Checkpoint (I1)</label>
+            <select id="genCheckpointSelect" class="form-select"></select>
+          </div>
+          <div class="form-group" style="flex: 1;">
+            <label class="form-label" for="genPluginSelect">Backend Plugin</label>
+            <select id="genPluginSelect" class="form-select"></select>
+          </div>
+        </div>
+
+        <div style="margin: 12px 0;">
+          <button id="btnRunGenPreview" class="btn btn-outline btn-sm">Preview Capabilities & Preflight</button>
+        </div>
+
+        <div id="genPreviewFeedback" style="display: none; padding: 10px; border-radius: 4px; font-size: 12px; margin-bottom: 12px;"></div>
+
+        <div id="genArtifactsResultContainer" style="display: none; margin-top: 12px;">
+          <h4 style="font-size: 13px; margin-bottom: 8px;">Generated Output Artifacts:</h4>
+          <ul id="genArtifactsList" style="list-style: none; padding: 0; font-family: var(--font-mono); font-size: 12px;"></ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalGeneration">Close</button>
+        <button id="btnSubmitGeneration" class="btn btn-primary">Generate Artifacts Now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Artifact Inspector Modal -->
+  <div class="modal-overlay" id="modalArtifactViewer">
+    <div class="modal-dialog" style="max-width: 800px;">
+      <div class="modal-header">
+        <h3 id="artifactViewerTitle">Artifact Content</h3>
+        <button class="modal-close" data-close="modalArtifactViewer">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="artifactMetaBar" style="padding: 6px 10px; background: var(--surface-muted); font-size: 12px; margin-bottom: 10px; border-radius: 4px;"></div>
+        <pre id="artifactViewerCode" style="font-family: var(--font-mono); font-size: 12px; max-height: 420px; overflow: auto; background: #0f172a; color: #f8fafc; padding: 12px; border-radius: 4px;"></pre>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" data-close="modalArtifactViewer">Close</button>
+        <a id="btnDownloadArtifact" class="btn btn-primary" href="#" target="_blank" download>Download Raw File</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Script logic -->
   <script src="/static/app.js"></script>
 </body>
 </html>

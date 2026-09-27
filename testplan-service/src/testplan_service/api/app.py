@@ -1,67 +1,88 @@
-"""FastAPI application factory and middleware configuration for Testplan Service."""
+"""FastAPI application factory and middleware configuration for Verification Planner."""
 
 from __future__ import annotations
 
-import time
-import uuid
+import logging
 from pathlib import Path
+import time
 from typing import Any
+import uuid
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from testplan_service.api.routes_assistant import create_assistant_router
-from testplan_service.api.routes_export import create_export_router
-from testplan_service.api.routes_nodes import create_nodes_router
-from testplan_service.api.routes_testplans import create_testplans_router
-from testplan_service.constants import API_V1_PREFIX, DEFAULT_SERVICE_NAME, DEFAULT_SERVICE_VERSION
-from testplan_service.exceptions import (
-    CycleDetectedError,
-    DuplicateNodeError,
-    InvalidOperationError,
-    MaxDepthExceededError,
-    NodeNotFoundError,
-    ProposalValidationError,
-    StorageError,
-    TestPlanAlreadyExistsError,
-    TestPlanNotFoundError,
+from testplan_service.api.routes_checkpoints import create_checkpoints_router
+from testplan_service.api.routes_commands import create_commands_router
+from testplan_service.api.routes_coverage import create_coverage_router
+from testplan_service.api.routes_events import create_events_router
+from testplan_service.api.routes_exports import create_exports_router
+from testplan_service.api.routes_generations import create_generations_router
+from testplan_service.api.routes_imports import create_imports_router
+from testplan_service.api.routes_meta import meta_router
+from testplan_service.api.routes_plans import create_plans_router
+from testplan_service.api.routes_plugins import create_plugins_router
+from testplan_service.api.routes_recipes import create_recipes_router
+from testplan_service.application.service import TestPlanService
+from testplan_service.constants import (
+    API_BASE_PATH,
+    DEFAULT_PRODUCT_TITLE,
+    DEFAULT_SERVICE_VERSION,
+    DEFAULT_STORAGE_DIR,
+    LEGACY_STORAGE_DIR,
 )
-from testplan_service.logging import StructuredLogger
-from testplan_service.service.export_service import ExportService
-from testplan_service.service.manager import TestPlanManager
-from testplan_service.service.proposal_handler import ProposalHandler
-from testplan_service.storage.interface import TestPlanRepository
-from testplan_service.storage.memory_repository import MemoryTestPlanRepository
+from testplan_service.exceptions import (
+    CampaignFrozenError,
+    CampaignNotFoundError,
+    CampaignRevisionConflictError,
+    CheckpointBlockerError,
+    DomainValidationError,
+    IdempotencyMismatchError,
+    ImportValidationError,
+    PlanNotFoundError,
+    PreconditionRequiredError,
+    ProfileNotFoundError,
+    RecordNotFoundError,
+    RevisionConflictError,
+    RunNotFoundError,
+    SnapshotError,
+    StorageError,
+    VerificationPlannerError,
+)
+
+logger = logging.getLogger("testplan_service")
 
 
 def create_app(
-    repository: TestPlanRepository | None = None,
-    logger: StructuredLogger | None = None,
+    storage_dir: Path | str | None = None,
     static_dir: Path | str | None = None,
 ) -> FastAPI:
-    """Create and configure a production-ready Testplan Service FastAPI app."""
-    repo = repository or MemoryTestPlanRepository()
-    log = logger or StructuredLogger(DEFAULT_SERVICE_NAME)
+    """Create and configure the production Verification Planner FastAPI service."""
+    resolved_storage = Path(storage_dir or DEFAULT_STORAGE_DIR).resolve()
+    resolved_storage.mkdir(parents=True, exist_ok=True)
 
-    manager = TestPlanManager(repo, log)
-    proposal_handler = ProposalHandler(manager, log)
-    export_service = ExportService()
+    # Legacy storage notice
+    legacy_path = Path(LEGACY_STORAGE_DIR)
+    if legacy_path.is_dir() and any(legacy_path.iterdir()):
+        logger.warning(
+            "Legacy storage directory '%s' detected. Verification Planner uses independent SQLite "
+            "storage at '%s'. Legacy files will not be converted or deleted.",
+            legacy_path,
+            resolved_storage,
+        )
+
+    service = TestPlanService(resolved_storage)
 
     app = FastAPI(
-        title="Testplan Management Service",
-        description="Hierarchical testplan management and verification planning service.",
+        title=DEFAULT_PRODUCT_TITLE,
+        description="Hierarchical test planning, requirement tracing, and verification intent service.",
         version=DEFAULT_SERVICE_VERSION,
     )
 
-    # Attach shared instances to app state
-    app.state.manager = manager
-    app.state.proposal_handler = proposal_handler
-    app.state.export_service = export_service
-    app.state.logger = log
+    app.state.service = service
 
-    # CORS support for browser UI and external tools
+    # CORS support for browser application
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -70,122 +91,167 @@ def create_app(
         allow_headers=["*"],
     )
 
-    # Logging and correlation ID middleware
+    # Correlation ID middleware
     @app.middleware("http")
-    async def request_logging_middleware(request: Request, call_next: Any) -> Any:
+    async def correlation_id_middleware(request: Request, call_next: Any) -> Any:
         correlation_id = request.headers.get("x-request-id") or uuid.uuid4().hex
         started = time.perf_counter()
         try:
             response = await call_next(request)
         except Exception as exc:
             duration_ms = (time.perf_counter() - started) * 1000
-            log.event(
-                "http",
-                "request_failed",
-                f"{request.method} {request.url.path} failed: {exc}",
-                severity="error",
-                correlation_id=correlation_id,
-                duration_ms=duration_ms,
-                exception=exc,
+            logger.error(
+                "Request %s %s failed in %.1f ms: %s",
+                request.method,
+                request.url.path,
+                duration_ms,
+                exc,
             )
             raise
-
         duration_ms = (time.perf_counter() - started) * 1000
         response.headers["X-Request-ID"] = correlation_id
-        if not request.url.path.startswith("/static"):
-            log.event(
-                "http",
-                "request_completed",
-                f"{request.method} {request.url.path} returned {response.status_code}",
-                severity="error" if response.status_code >= 500 else "info",
-                correlation_id=correlation_id,
-                duration_ms=duration_ms,
-                status=response.status_code,
-            )
         return response
 
     # Exception Handlers
-    @app.exception_handler(TestPlanNotFoundError)
-    def handle_not_found(_: Request, exc: TestPlanNotFoundError) -> JSONResponse:
+    @app.exception_handler(PlanNotFoundError)
+    def handle_plan_not_found(_: Request, exc: PlanNotFoundError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"error": "TestPlanNotFound", "message": exc.message, "details": exc.details},
+            content={"error": "PlanNotFound", "message": exc.message, "details": exc.details},
         )
 
-    @app.exception_handler(NodeNotFoundError)
-    def handle_node_not_found(_: Request, exc: NodeNotFoundError) -> JSONResponse:
+    @app.exception_handler(RecordNotFoundError)
+    def handle_record_not_found(_: Request, exc: RecordNotFoundError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
-            content={"error": "NodeNotFound", "message": exc.message, "details": exc.details},
+            content={"error": "RecordNotFound", "message": exc.message, "details": exc.details},
         )
 
-    @app.exception_handler(TestPlanAlreadyExistsError)
-    def handle_already_exists(_: Request, exc: TestPlanAlreadyExistsError) -> JSONResponse:
+    @app.exception_handler(RevisionConflictError)
+    def handle_revision_conflict(_: Request, exc: RevisionConflictError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"error": "TestPlanAlreadyExists", "message": exc.message, "details": exc.details},
+            content={
+                "error": {
+                    "code": "revision_conflict",
+                    "message": exc.message,
+                    "request_id": exc.request_id,
+                    "current_revision": exc.current_revision,
+                    "diagnostics": exc.diagnostics,
+                },
+                "message": exc.message,
+            },
         )
 
-    @app.exception_handler(DuplicateNodeError)
-    def handle_duplicate_node(_: Request, exc: DuplicateNodeError) -> JSONResponse:
+    @app.exception_handler(PreconditionRequiredError)
+    def handle_precondition(_: Request, exc: PreconditionRequiredError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_428_PRECONDITION_REQUIRED,
+            content={"error": {"code": "precondition_required", "message": exc.message}, "message": exc.message},
+        )
+
+    @app.exception_handler(IdempotencyMismatchError)
+    def handle_idempotency_mismatch(_: Request, exc: IdempotencyMismatchError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_409_CONFLICT,
-            content={"error": "DuplicateNode", "message": exc.message, "details": exc.details},
+            content={"error": {"code": "idempotency_mismatch", "message": exc.message}, "message": exc.message},
         )
 
-    @app.exception_handler(CycleDetectedError)
-    def handle_cycle(_: Request, exc: CycleDetectedError) -> JSONResponse:
+    @app.exception_handler(DomainValidationError)
+    def handle_domain_validation(_: Request, exc: DomainValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"error": "CycleDetected", "message": exc.message, "details": exc.details},
+            content={
+                "error": {
+                    "code": "domain_validation_failed",
+                    "message": exc.message,
+                    "diagnostics": exc.diagnostics,
+                },
+                "message": exc.message,
+                "details": {"diagnostics": exc.diagnostics},
+            },
         )
 
-    @app.exception_handler(MaxDepthExceededError)
-    def handle_max_depth(_: Request, exc: MaxDepthExceededError) -> JSONResponse:
+    @app.exception_handler(CheckpointBlockerError)
+    def handle_checkpoint_blocker(_: Request, exc: CheckpointBlockerError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"error": "MaxDepthExceeded", "message": exc.message, "details": exc.details},
+            content={
+                "error": {
+                    "code": "checkpoint_blocked",
+                    "message": exc.message,
+                    "checklist": exc.checklist,
+                    "blockers": exc.blockers,
+                },
+                "message": exc.message,
+                "checklist": exc.checklist,
+                "blockers": exc.blockers,
+            },
         )
 
-    @app.exception_handler(ProposalValidationError)
-    def handle_proposal_validation(_: Request, exc: ProposalValidationError) -> JSONResponse:
-        return JSONResponse(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={"error": "ProposalValidationFailed", "message": exc.message, "details": exc.details},
-        )
-
-    @app.exception_handler(InvalidOperationError)
-    def handle_invalid_operation(_: Request, exc: InvalidOperationError) -> JSONResponse:
+    @app.exception_handler(SnapshotError)
+    def handle_snapshot_error(_: Request, exc: SnapshotError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
-            content={"error": "InvalidOperation", "message": exc.message, "details": exc.details},
+            content={"error": "SnapshotError", "message": exc.message},
+        )
+
+    @app.exception_handler(CampaignRevisionConflictError)
+    def handle_campaign_conflict(_: Request, exc: CampaignRevisionConflictError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={
+                "error": {
+                    "code": "campaign_revision_conflict",
+                    "message": exc.message,
+                    "campaign_id": exc.campaign_id,
+                    "base_revision": exc.base_revision,
+                    "current_revision": exc.current_revision,
+                },
+                "message": exc.message,
+            },
+        )
+
+    @app.exception_handler(CampaignFrozenError)
+    def handle_campaign_frozen(_: Request, exc: CampaignFrozenError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_409_CONFLICT,
+            content={"error": {"code": "campaign_frozen", "message": exc.message}, "message": exc.message},
+        )
+
+    @app.exception_handler(ImportValidationError)
+    def handle_import_validation(_: Request, exc: ImportValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"error": {"code": "import_validation_failed", "message": exc.message, "diagnostics": exc.diagnostics}, "message": exc.message},
         )
 
     @app.exception_handler(StorageError)
     def handle_storage_error(_: Request, exc: StorageError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"error": "StorageError", "message": exc.message, "details": exc.details},
+            content={"error": "StorageError", "message": exc.message},
         )
 
-    # Dependency providers
-    def get_manager() -> TestPlanManager:
-        return app.state.manager
+    def get_service() -> TestPlanService:
+        return app.state.service
 
-    def get_proposal_handler() -> ProposalHandler:
-        return app.state.proposal_handler
+    # Mount API routers at /api/verification/v1
+    app.include_router(meta_router, prefix=API_BASE_PATH)
+    app.include_router(create_plans_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_commands_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_checkpoints_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_coverage_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_imports_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_exports_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_events_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_plugins_router(), prefix=API_BASE_PATH)
+    app.include_router(create_recipes_router(get_service), prefix=API_BASE_PATH)
+    app.include_router(create_generations_router(get_service), prefix=API_BASE_PATH)
 
-    def get_export_service() -> ExportService:
-        return app.state.export_service
-
-    # Mount API routers
-    app.include_router(create_testplans_router(get_manager), prefix=API_V1_PREFIX)
-    app.include_router(create_nodes_router(get_manager), prefix=API_V1_PREFIX)
-    app.include_router(create_export_router(get_manager, get_export_service), prefix=API_V1_PREFIX)
-    app.include_router(
-        create_assistant_router(get_manager, get_proposal_handler, get_export_service),
-        prefix="",
-    )
+    # Also mount /health, /capabilities, /plugins, and /schemas at root for convenience
+    app.include_router(meta_router, prefix="")
+    app.include_router(create_plugins_router(), prefix="")
 
     # Static UI directory resolution
     resolved_static = (
