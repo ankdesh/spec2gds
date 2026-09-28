@@ -1,0 +1,247 @@
+{
+  "schema_version": 1,
+  "digest": "sha256:905fbd237934533e1db312b83b83479a9277b6f60afb28e008890a616e8c1582",
+  "operation_schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "oneOf": [
+      {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "create_entity"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "component",
+              "design"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "component_vlnv": {
+                  "type": "string"
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            }
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "family": {
+                      "type": "string",
+                      "const": "wire"
+                    },
+                    "display_name": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "description": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "in",
+                        "out",
+                        "inout"
+                      ]
+                    },
+                    "range": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "family": {
+                      "type": "string",
+                      "const": "transactional"
+                    },
+                    "display_name": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "description": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "initiative": {
+                      "type": "string",
+                      "enum": [
+                        "requires",
+                        "provides",
+                        "both"
+                      ]
+                    },
+                    "kind": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "tlm_port",
+                            "tlm_socket",
+                            "simple_socket",
+                            "multi_socket",
+                            "custom"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "custom_kind": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "bus_width": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "family": {
+                      "type": "string",
+                      "const": "structured"
+                    },
+                    "display_name": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "description": {
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "direction": {
+                      "type": "string",
+                      "enum": [
+                        "in",
+                        "out",
+                        "inout"
+                      ]
+                    }
+                  },
+                  "required": [],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "systemverilog": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entity_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id",
+          "type",
+          "kind",
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    ]
+  }
+}

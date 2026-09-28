@@ -10,12 +10,13 @@ from __future__ import annotations
 import asyncio
 import base64
 import dataclasses
+import fcntl
 import json
 import os
 import threading
 import time
 import typing
-from datetime import UTC, datetime
+from contextlib import contextmanager
 from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlencode
@@ -73,6 +74,10 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock, new_entity_id
+from spec2gds.agent_spec.spec_format.proposal_service import (
+    ProposalApplyError,
+    apply_assistant_proposal,
+)
 from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
 from spec2gds.agent_spec.spec_format.transactions import (
     AddAsset,
@@ -201,6 +206,10 @@ class AssistantDocumentLaunchRequest(pydantic.BaseModel):
     attach_active_document: bool = True
 
 
+class SpecDiskConflict(ValueError):
+    """The open editor snapshot no longer matches the package on disk."""
+
+
 class V1Session:
     """One local document session that keeps source and activity concerns separate."""
 
@@ -213,6 +222,7 @@ class V1Session:
         self.activity = ActivityStore(self.package, self.sidecar)
         self.actions = ActionService(ActionRegistry(), self.sidecar)
         self.lock = _path_lock(self.path)
+        self._disk_digest = sha256(Path(self.path).read_bytes()).hexdigest()
 
     @classmethod
     def create(
@@ -232,21 +242,37 @@ class V1Session:
         package.save(str(destination))
         return cls(str(destination), sidecar_root)
 
+    @contextmanager
+    def _guarded_save(self) -> typing.Iterator[None]:
+        """Serialize cross-process writers and reject an externally changed package."""
+        with self.lock:
+            fd = os.open(f"{self.path}.lock", os.O_CREAT | os.O_RDWR, 0o600)
+            with os.fdopen(fd, "rb") as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    current = sha256(Path(self.path).read_bytes()).hexdigest()
+                    if current != self._disk_digest:
+                        raise SpecDiskConflict("Specification changed on disk; refresh from disk before saving.")
+                    yield
+                    self._disk_digest = sha256(Path(self.path).read_bytes()).hexdigest()
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
     def save(self) -> None:
         """Persist source and activity using the package's deterministic writer."""
-        with self.lock:
+        with self._guarded_save():
             self.package.save(self.path)
 
     def commit_revision(self, revision: SpecRevision) -> None:
         """Adopt validated source while retaining activity, which is not source state."""
-        with self.lock:
+        with self._guarded_save():
             next_package = revision.to_package()
             if "activity/v1/actions.json" in self.package.files:
                 next_package.files["activity/v1/actions.json"] = self.package.files["activity/v1/actions.json"]
+            next_package.save(self.path)
             self.package = next_package
             self.revision = SpecRevision.from_package(self.package)
             self.activity = ActivityStore(self.package, self.sidecar)
-            self.package.save(self.path)
 
     def commit_assistant_revision(
         self,
@@ -254,7 +280,7 @@ class V1Session:
         decision: AssistantChangeDecision,
     ) -> None:
         """Atomically save source and its accepted assistant decision together."""
-        with self.lock:
+        with self._guarded_save():
             next_package = revision.to_package()
             if "activity/v1/actions.json" in self.package.files:
                 next_package.files["activity/v1/actions.json"] = self.package.files[
@@ -295,6 +321,10 @@ def create_app() -> typing.Any:
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
+
+    @app.exception_handler(SpecDiskConflict)
+    async def disk_conflict_handler(_request: typing.Any, exc: SpecDiskConflict) -> typing.Any:
+        return fastapi.responses.JSONResponse(status_code=409, content={"detail": str(exc)})
     registry = load_service_registry()
     activity_registry = _product_activity_registry(registry.activities.extension_modules)
     logger = StructuredLogger("spec-editor", registry.logging)
@@ -954,68 +984,25 @@ def create_app() -> typing.Any:
     def assistant_proposal_apply(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
         """Revalidate, atomically apply/save, and record one approved decision."""
         session = active()
-        digest = proposal.operations_digest()
-        existing = next(
-            (
-                item
-                for item in session.activity.state.assistant_changes
-                if item.proposal_id == proposal.proposal_id
-            ),
-            None,
-        )
-        if existing is not None:
-            if existing.operations_digest != digest:
-                raise fastapi.HTTPException(
-                    status_code=409,
-                    detail="Proposal ID was already applied with different operations.",
-                )
-            return {
-                "status": "applied",
-                "idempotent_replay": True,
-                "proposal_id": proposal.proposal_id,
-                "source_revision_hash": existing.result_source_revision_hash,
-                "saved_at": existing.applied_at,
-            }
-        result = preview_assistant_proposal(session.revision, proposal)
-        if result["status"] == "stale":
-            raise fastapi.HTTPException(status_code=409, detail=result)
-        if result["status"] != "valid" or result.get("_revision") is None:
-            raise fastapi.HTTPException(status_code=422, detail=result)
-        revision = typing.cast(SpecRevision, result.pop("_revision"))
-        applied_at = datetime.now(UTC).isoformat()
-        decision = AssistantChangeDecision(
-            proposal_id=proposal.proposal_id,
-            scope=proposal.scope,
-            target=proposal.target,
-            base_source_revision_hash=proposal.base_source_revision_hash,
-            result_source_revision_hash=revision.source_revision_hash,
-            operations_digest=digest,
-            operations=tuple(proposal.operations),
-            applied_at=applied_at,
-        )
         try:
-            session.commit_assistant_revision(revision, decision)
+            result = apply_assistant_proposal(session, proposal)
+        except ProposalApplyError as exc:
+            raise fastapi.HTTPException(status_code=exc.status, detail=exc.detail) from exc
+        except SpecDiskConflict:
+            raise
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
-        _publish_source_event(
-            state,
-            session,
-            origin="assistant",
-            affected_entities=(
-                [proposal.target.model_dump(mode="json")]
-                if proposal.target is not None
-                else []
-            ),
-        )
-        return {
-            "status": "applied",
-            "idempotent_replay": False,
-            "proposal_id": proposal.proposal_id,
-            "source_revision_hash": session.revision.source_revision_hash,
-            "saved_at": applied_at,
-            "sections": result["candidate_sections"],
-            "diff": result["diff"],
-        }
+        if not result["idempotent_replay"]:
+            _publish_source_event(
+                state,
+                session,
+                origin="assistant",
+                affected_entities=(
+                    [proposal.target.model_dump(mode="json")]
+                    if proposal.target is not None else []
+                ),
+            )
+        return result
 
     @app.get("/events")
     async def source_events() -> typing.Any:
@@ -1280,6 +1267,8 @@ def create_app() -> typing.Any:
             )
             active().save()
             return _jsonable(execution)
+        except SpecDiskConflict:
+            raise
         except (KeyError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1392,6 +1381,8 @@ def create_app() -> typing.Any:
             proposal = active().actions.reject_proposal(active().activity, proposal_id)
             active().save()
             return _jsonable(proposal)
+        except SpecDiskConflict:
+            raise
         except (KeyError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 

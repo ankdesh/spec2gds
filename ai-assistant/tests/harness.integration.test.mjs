@@ -28,9 +28,11 @@ async function sessionLogs(root) {
 test("one-off profile reads bound context and persists a previewed proposal", { timeout: 90_000 }, async () => {
   let ownerReads = 0;
   let previews = 0;
+  const operationContract = JSON.parse(await readFile(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
   const owner = createServer((request, response) => {
     const url = new URL(request.url, "http://localhost");
     if (url.pathname === "/health") return send(response, { status: "ok" });
+    if (url.pathname === "/assistant/operation-schema") return send(response, operationContract);
     if (url.pathname === "/assistant/context/document") {
       ownerReads += 1;
       return send(response, {

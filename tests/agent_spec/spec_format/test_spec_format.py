@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
+from scripts.spec2gds_spec import main
 from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
-from spec2gds.agent_spec.spec_format.cli import main
 from spec2gds.agent_spec.spec_format.ipxact import validate_ipxact_document
 from spec2gds.agent_spec.spec_format.testing import _xml, build_test_package
 

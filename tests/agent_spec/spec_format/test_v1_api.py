@@ -11,8 +11,8 @@ from pathlib import Path
 import fastapi
 import pytest
 
+from scripts.spec2gds_spec import main as package_cli
 from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
-from spec2gds.agent_spec.spec_format.cli import main as package_cli
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef
 from spec2gds.agent_spec.spec_format.testing import build_test_package, write_test_package
@@ -1114,7 +1114,9 @@ def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_
     assert document["schema_version"] == 1
     assert document["digest"].startswith("sha256:")
     assert {branch["properties"]["type"]["const"] for branch in document["operation_schema"]["oneOf"]} == {"create_entity"}
-    from spec2gds.agent_spec.spec_format.assistant_operation_contract import validate_assistant_operations
+    from spec2gds.agent_spec.spec_format.assistant_operation_contract import (
+        validate_assistant_operations,
+    )
     validate_assistant_operations("document", [{"operation_id": "create", "type": "create_entity", "kind": "component", "name": "gate"}])
     with pytest.raises(ValueError, match="owner schema"):
         validate_assistant_operations("document", [{"operation_id": "create", "type": "create_entity", "kind": "component"}])

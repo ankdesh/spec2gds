@@ -29,7 +29,9 @@ export function workspaceDescriptor(
     const label = context.document.label;
     if (typeof label === "string" && label.trim()) title = label.trim();
   }
-  const key = digest({ domain, ownerUrl: workspaceOwnerUrl, documentId });
+  // Private CLI owners change ports each turn; the package path supplies a stable key.
+  const identityOwnerUrl = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || workspaceOwnerUrl;
+  const key = digest({ domain, ownerUrl: identityOwnerUrl, documentId });
   return {
     key,
     title,

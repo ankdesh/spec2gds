@@ -66,30 +66,27 @@ Proposal review cards remain in the completed turn footer after Harness
 collapses the tool-call trace, so approve, discard, reconcile, and send actions
 stay available.
 
-## One-off command-line requests
+## Focused Spec command-line workflow
 
-The headless profile sends one request and exits; it does not start an
-interactive chat UI. Start a fresh bound session with:
-
-```bash
-npm run request -- \
-  --domain spec \
-  --service-url http://127.0.0.1:6010 \
-  --document-id my-spec \
-  -- "Summarize this specification and identify missing reset behavior."
-```
-
-Use `--scope entity --entity-kind component --entity-id <id>` for an
-entity-scoped Spec request, or `--domain circuit` with the Circuit service URL.
-Add `--json` for machine-readable DSH events. Continue a durable conversation
-with `--session-id <id> -- "Follow-up question"`; binding arguments are omitted
-when resuming.
-
-An assembled release exposes the same syntax through:
+The two user-facing workspace commands live in the root `scripts/` folder as
+`spec2gds_assistant.py` and `spec2gds_spec.py` and are installed as Python
+entry points in the root `uv`/`.venv` environment. Node and Harness run internally for the assistant
+turn:
 
 ```bash
-node deployment/request.mjs --domain spec --service-url ... --document-id ... -- "request"
+# From the repository root, after scripts/setup-all.sh
+export OPENAI_API_KEY="..."
+uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
+uv run spec2gds-spec reviews ./work/timer
+uv run spec2gds-spec approve ./work/timer proposal_...
 ```
+
+The assistant command prompts once and only prepares proposals. The Spec command
+lists, approves, or rejects them; it does not run a model turn. See the
+[focused Spec workspace guide](../docs/spec-workspace-cli.md) for path selection,
+retry behavior, and run/proposal records intended for later `agent_eval` scripts.
+The lower-level `scripts/request.mjs` remains an internal Harness test and
+integration entry point.
 
 ## Configuration
 
@@ -130,6 +127,11 @@ and required answers; review-card apply/send completes the workflow.
 
 For a guided explanation of the DSH components and how these layers compose,
 read the [DSH configurable assistant tutorial](../docs/dsh-configurable-assistant-tutorial.md).
+
+The [agentic systems architecture report](../docs/agentic-systems-architecture-report.md)
+assesses fixed tool/LLM workflows and durable event-driven teams against the
+pinned DSH implementation. It includes a proposed architecture and adoption
+roadmap; its example configuration is not accepted by current loaders.
 
 ## Verify and package
 

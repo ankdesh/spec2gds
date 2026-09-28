@@ -27,3 +27,22 @@ test("independent Circuits retain an independent workspace identity", () => {
   assert.equal(circuit.documentId, "standalone");
   assert.equal(circuit.title, "Standalone design");
 });
+
+test("private Spec owner URLs retain one package workspace across turns", () => {
+  const previous = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY;
+  process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY = "spec2gds-cli:/tmp/project/design.spec";
+  try {
+    const first = workspaceDescriptor("/tmp/product", {
+      domain: "spec", serviceBaseUrl: "http://127.0.0.1:31001", documentId: "design", scope: "document",
+    }, "http://127.0.0.1:31001", { document_id: "design" });
+    const next = workspaceDescriptor("/tmp/product", {
+      domain: "spec", serviceBaseUrl: "http://127.0.0.1:31002", documentId: "design", scope: "document",
+    }, "http://127.0.0.1:31002", { document_id: "design" });
+    assert.equal(first.key, next.key);
+    assert.equal(first.path, next.path);
+    assert.notEqual(first.ownerUrl, next.ownerUrl);
+  } finally {
+    if (previous === undefined) delete process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY;
+    else process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY = previous;
+  }
+});

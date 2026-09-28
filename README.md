@@ -43,6 +43,11 @@ deterministic domain context, strict proposal schemas, review diffs, and
 conversation archive/rename support. It owns the canonical `ai-assistant/`
 workspace and port `6013`; see the [AI Assistant guide](docs/ai-assistant.md).
 
+For proposed fixed workflows and durable event-driven agents, read the
+[agentic systems architecture report](docs/agentic-systems-architecture-report.md).
+It assesses current DSH support, missing capabilities, and a shared-runtime
+recommendation; the proposed modes are not implemented.
+
 For a focused explanation of how the two editors cooperate, including launch,
 projection, save, refresh, conflict, and security diagrams, read
 [Spec Editor and Circuit Designer integration architecture](docs/spec-circuit-integration-architecture.md).
@@ -69,7 +74,7 @@ immutable P1, C1, and I1 review checkpoints, deterministic status evaluation, an
 Install these tools before setting up the repository:
 
 - Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/);
-- Node.js 24 or newer (including npm);
+- Node.js 22.19+ or 24+ (including npm);
 - `setsid`, which the combined launcher uses to manage process groups;
 - `lsof`, which the launcher uses when stopping untracked default-port
   listeners; and
@@ -93,6 +98,27 @@ scripts/setup-all.sh
 
 See [AI Assistant](docs/ai-assistant.md) for Harness checkout setup, owner
 allowlists, tests, state, and packaging constraints.
+
+For a single focused Spec turn, the two Python CLIs live in
+[`scripts/spec2gds_assistant.py`](scripts/spec2gds_assistant.py) and
+[`scripts/spec2gds_spec.py`](scripts/spec2gds_spec.py). They use the root
+`uv`/`.venv` environment and the built internal Harness product:
+
+```bash
+uv sync
+scripts/setup-all.sh
+export OPENAI_API_KEY="..."
+uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
+uv run spec2gds-spec reviews ./work/timer
+uv run spec2gds-spec approve ./work/timer proposal_...
+# Or discard one pending proposal:
+uv run spec2gds-spec reject ./work/timer proposal_...
+```
+
+The assistant command creates or opens the workspace's `.spec` and leaves proposals
+pending. The Spec command owns review decisions and package updates. See the
+[focused Spec workspace guide](docs/spec-workspace-cli.md) for exact-file targets,
+conflicts, saved run records, and future `agent_eval` integration.
 
 To enable model-backed Assistant replies, export an API key before launch.
 Without it, the Spec Editor and Circuit Designer still run and the Assistant

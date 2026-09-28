@@ -42,6 +42,11 @@ Read in this order:
     The [DSH configurable assistant tutorial](dsh-configurable-assistant-tutorial.md)
     explains the DSH plugins, composition layers, execution paths, authority
     boundaries, persistence, and extension process used by that architecture.
+    The [agentic systems architecture report](agentic-systems-architecture-report.md)
+    assesses fixed workflows and durable event-driven agents, distinguishes
+    current support from proposed capabilities, and recommends shared execution
+    foundations. Its [report plan](agentic-systems-report-plan.md) records the
+    agreed scope and validation approach.
     The [evaluation guide](ai-assistant-evaluation.md) defines the golden
     corpus, DSH replay checks, raw metrics, and commands.
     Its preserved [Spec-to-RTL research guide](research/ai-spec-to-rtl-design-research-guide.md)
@@ -79,6 +84,8 @@ Read in this order:
 25. [Verification & Testplan System](verification-testplan-system.md) —
     hierarchical coverage taxonomy, testplan-service architecture, Circuit
     Designer visual alignment, AI Assistant contract, and execution roadmap.
+26. [Focused Spec workspace commands](spec-workspace-cli.md) — Python assistant
+    and Spec review CLIs, persistence, and evaluation records.
 
 ## Proposed Verification Planner
 
