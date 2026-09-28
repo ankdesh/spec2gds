@@ -34,6 +34,9 @@ from spec2gds.agent_spec.activities import (
 from spec2gds.agent_spec.activities.contracts import ActivityResult
 from spec2gds.agent_spec.activities.rtl import register_extensions as register_rtl
 from spec2gds.agent_spec.activities.systemc_at import register_extensions as register_systemc_at
+from spec2gds.agent_spec.activities.systemc_rtl import (
+    register_extensions as register_systemc_rtl,
+)
 from spec2gds.agent_spec.spec_format.actions import (
     ActionRegistry,
     ActionService,
@@ -308,6 +311,7 @@ def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtens
     registry = SpecExtensionRegistry()
     register_rtl(registry)
     register_systemc_at(registry)
+    register_systemc_rtl(registry)
     return load_extension_modules(extension_modules, registry)
 
 

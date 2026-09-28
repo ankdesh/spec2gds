@@ -372,6 +372,16 @@ Python code. See the [SystemC AT Activity guide](docs/systemc-at-activity.md)
 for invocation, supported topology, template constraints, and build
 instructions.
 
+The `systemc.generate_cycle_accurate` Activity generates a native SystemC
+`SC_MODULE` project from a selected design's wire hierarchy and stored
+SystemVerilog bodies. It uses a configured Slang-enabled CIRCT installation and
+a CIRCT-linked emitter, and publishes separately under
+`<spec-folder>/systemc-rtl/<document-id>/<design-id>/`. Set `CIRCT_PREFIX` to
+the installation containing `circt-verilog` and `spec2gds-systemc-emit`; build
+the generated project against SystemC 2.3.3 or later. The
+[cycle-accurate SystemC guide](docs/systemc-cycle-accurate-activity.md) gives
+the source profile, setup, invocation, and build instructions.
+
 The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
 project for any selected design. It emits one reusable module per
 reachable component, preserves component-owned hierarchy, connects supported

@@ -23,11 +23,13 @@ Read in this order:
    registry, results, and Context Renderers.
 8. [SystemC AT Activity](systemc-at-activity.md) — deterministic structural
    SystemC generation, workspace publishing, and supported topology.
-9. [RTL Generation Activity](rtl-generation-activity.md) — deterministic
+9. [Cycle-accurate SystemC Activity](systemc-cycle-accurate-activity.md) —
+   native RTL-style modules compiled from stored SystemVerilog behavior.
+10. [RTL Generation Activity](rtl-generation-activity.md) — deterministic
    SystemVerilog scaffolding, direct-wire validation, and Verilator checks.
-10. [RTL semantics examples](rtl-semantics-examples.md) — body-only component
+11. [RTL semantics examples](rtl-semantics-examples.md) — body-only component
     behavior, one-/two-cycle samples, and configured output generation.
-11. [AI Assistant](ai-assistant.md) — DeepSeek Harness runtime, editor
+12. [AI Assistant](ai-assistant.md) — DeepSeek Harness runtime, editor
     integration, review boundary, proposal contracts, setup, and recovery.
     Its [DSH UI migration map](dsh-ui-migration.md) documents the plugin layers
     and retained, extended, and removed UI features.
@@ -52,39 +54,39 @@ Read in this order:
     Its preserved [Spec-to-RTL research guide](research/ai-spec-to-rtl-design-research-guide.md)
     provides research provenance for refining open questions; it is reference
     material rather than current product behavior.
-12. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
+13. [Unified logging](logging.md) — Info/Debug modes, redaction, retention, and
     browser viewer.
-13. [Python code-reading guide](python-code-guide.md) — package ownership,
+14. [Python code-reading guide](python-code-guide.md) — package ownership,
     request flows, proposal boundaries, and a safe newcomer reading order.
-14. [Code quality](code-quality.md) — commenting and unused-code review gates.
-15. [Sample application method](sample-apps.md) — how to build one representative
+15. [Code quality](code-quality.md) — commenting and unused-code review gates.
+16. [Sample application method](sample-apps.md) — how to build one representative
     application through the entire system.
-16. [Development guide](development.md) — setup, commands, checks, and where code
+17. [Development guide](development.md) — setup, commands, checks, and where code
     belongs.
-17. [Circuit Designer interactions](circuit-designer-interactions.md) — unified
+18. [Circuit Designer interactions](circuit-designer-interactions.md) — unified
     canvas gestures, configurable action bindings, visible commands, and
     editing constraints.
-18. [Circuit Designer preferences](circuit-designer-preferences.md) — shared
+19. [Circuit Designer preferences](circuit-designer-preferences.md) — shared
     JSON profile, REST endpoints, validation, migration, and persistence.
-19. [Circuit Designer specification synchronization](circuit-designer-spec-sync.md)
+20. [Circuit Designer specification synchronization](circuit-designer-spec-sync.md)
     — source bindings, Save to Specification, layout annotations, conflicts,
     and recovery.
-20. [Circuit Designer timing stages](circuit-designer-timing-stages.md) —
+21. [Circuit Designer timing stages](circuit-designer-timing-stages.md) —
     vertical cycle edges, single-clock defaults, latency analysis, source
     persistence, and export behavior.
-21. [Embedding Circuit Designer](circuit-designer-embedding.md) — reusable React
+22. [Embedding Circuit Designer](circuit-designer-embedding.md) — reusable React
     shell, host adapters, portable service discovery, and ownership rules.
-22. [Circuit Designer visual profile](circuit-designer-visual-profile.md) —
+23. [Circuit Designer visual profile](circuit-designer-visual-profile.md) —
     Blueprint Slate tokens, responsive behavior, and theme extension.
-23. [Circuit Designer / Chipmind gap analysis](circuit-designer-chipmind-gap-analysis.md)
+24. [Circuit Designer / Chipmind gap analysis](circuit-designer-chipmind-gap-analysis.md)
     — current overlap, missing capabilities, and suggested priorities.
-24. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
+25. [Spec Editor and Circuit Designer integration architecture](spec-circuit-integration-architecture.md)
     — plain-language ownership, projection, launch, save, refresh, conflict,
     and security diagrams.
-25. [Verification & Testplan System](verification-testplan-system.md) —
+26. [Verification & Testplan System](verification-testplan-system.md) —
     hierarchical coverage taxonomy, testplan-service architecture, Circuit
     Designer visual alignment, AI Assistant contract, and execution roadmap.
-26. [Focused Spec workspace commands](spec-workspace-cli.md) — Python assistant
+27. [Focused Spec workspace commands](spec-workspace-cli.md) — Python assistant
     and Spec review CLIs, persistence, and evaluation records.
 
 ## Proposed Verification Planner

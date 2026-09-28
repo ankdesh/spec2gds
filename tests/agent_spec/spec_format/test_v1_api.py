@@ -96,7 +96,11 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         design_id = snapshot["entry_designs"][0]["ref"]["entity_id"]
         assert endpoints["entity_actions"]("design", design_id)["actions"] == []
         catalog_ids = {item["activity_id"] for item in endpoints["activities"]()["activities"]}
-        assert catalog_ids == {"rtl.generate", "systemc.generate_at_skeleton"}
+        assert catalog_ids == {
+            "rtl.generate",
+            "systemc.generate_at_skeleton",
+            "systemc.generate_cycle_accurate",
+        }
         available = endpoints["entity_activities"]("design", design_id)["activities"]
         assert {item["definition"]["activity_id"] for item in available} == catalog_ids
 
@@ -270,6 +274,7 @@ def test_v1_api_reports_extension_load_diagnostics(tmp_path: Path, monkeypatch) 
     assert {item["activity_id"] for item in catalog["activities"]} == {
         "rtl.generate",
         "systemc.generate_at_skeleton",
+        "systemc.generate_cycle_accurate",
     }
     assert len(catalog["diagnostics"]) == 1
     assert "missing_activity_plugin" in str(catalog["diagnostics"][0])
