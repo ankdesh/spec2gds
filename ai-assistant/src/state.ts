@@ -3,7 +3,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { proposalError } from "./proposal-presentation.js";
-import type { BindingInput, ProposalReview, ReviewState, SessionBinding } from "./types.js";
+import type { BindingInput, ProposalReview, ReviewState, SessionBinding, SourceCreationRequest } from "./types.js";
 
 const now = (): string => new Date().toISOString();
 const json = (value: unknown): string | null => value === undefined || value === null ? null : JSON.stringify(value);
@@ -66,6 +66,15 @@ export class ProductState {
         values_json TEXT,
         created_at TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS source_creation_requests (
+        request_id TEXT PRIMARY KEY,
+        source_session_id TEXT NOT NULL,
+        call_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        request_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        UNIQUE(source_session_id, call_id)
+      );
     `);
     const reviewColumns = new Set((this.database.prepare("PRAGMA table_info(reviews)").all() as Array<Record<string, unknown>>)
       .map(row => String(row.name)));
@@ -73,9 +82,57 @@ export class ProductState {
     const bindingColumns = new Set((this.database.prepare("PRAGMA table_info(bindings)").all() as Array<Record<string, unknown>>)
       .map(row => String(row.name)));
     if (!bindingColumns.has("preset")) this.database.exec("ALTER TABLE bindings ADD COLUMN preset TEXT NOT NULL DEFAULT 'focused'");
+    if (!bindingColumns.has("owner_document_key")) this.database.exec("ALTER TABLE bindings ADD COLUMN owner_document_key TEXT");
   }
 
   close(): void { this.database.close(); }
+
+  getSourceCreation(requestId: string): SourceCreationRequest | null {
+    const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE request_id=?")
+      .get(requestId) as { request_json: string } | undefined;
+    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+  }
+
+  sourceCreationForCall(sessionId: string, callId: string): SourceCreationRequest | null {
+    const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE source_session_id=? AND call_id=?")
+      .get(sessionId, callId) as { request_json: string } | undefined;
+    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+  }
+
+  storeSourceCreation(request: SourceCreationRequest): void {
+    this.database.prepare(`INSERT INTO source_creation_requests(request_id,source_session_id,call_id,status,request_json,updated_at)
+      VALUES(?,?,?,?,?,?) ON CONFLICT(request_id) DO UPDATE SET status=excluded.status,request_json=excluded.request_json,updated_at=excluded.updated_at`)
+      .run(request.requestId, request.sourceSessionId, request.callId, request.status, JSON.stringify(request), now());
+  }
+
+  claimSourceCreation(request: SourceCreationRequest): boolean {
+    const result = this.database.prepare(`UPDATE source_creation_requests SET status='creating',request_json=?,updated_at=?
+      WHERE request_id=? AND status='pending'`).run(JSON.stringify({ ...request, status: "creating" }), now(), request.requestId);
+    return Number(result.changes) === 1;
+  }
+
+  retrySourceCreation(request: SourceCreationRequest): boolean {
+    const result = this.database.prepare(`UPDATE source_creation_requests SET status='pending',request_json=?,updated_at=?
+      WHERE request_id=? AND status='uncertain'`).run(JSON.stringify({ ...request, status: "pending", error: null }), now(), request.requestId);
+    return Number(result.changes) === 1;
+  }
+
+  cancelSourceCreation(request: SourceCreationRequest): boolean {
+    const cancelled = { ...request, status: "cancelled" as const, error: null };
+    const result = this.database.prepare(`UPDATE source_creation_requests SET status='cancelled',request_json=?,updated_at=?
+      WHERE request_id=? AND status='pending'`).run(JSON.stringify(cancelled), now(), request.requestId);
+    return Number(result.changes) === 1;
+  }
+
+  recoverInterruptedSourceCreations(): void {
+    const rows = this.database.prepare("SELECT request_id FROM source_creation_requests WHERE status='creating'")
+      .all() as Array<{ request_id: string }>;
+    for (const row of rows) {
+      const request = this.getSourceCreation(row.request_id)!;
+      this.storeSourceCreation({ ...request, status: "uncertain",
+        error: "Creation was interrupted. Check the destination in the Spec Editor before creating another package; this request will not be repeated automatically." });
+    }
+  }
 
   createProposalInput(sessionId: string, fields: readonly { name: string }[]): string {
     const inputId = randomUUID();
@@ -116,14 +173,14 @@ export class ProductState {
       throw new Error("Entity bindings require entityKind and entityId.");
     }
     this.database.prepare(`
-      INSERT INTO bindings(session_id,status,preset,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at)
-      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO bindings(session_id,status,preset,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at,owner_document_key)
+      VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(sessionId, input.preset ?? "focused", input.domain, input.ownerUrl, input.documentId, scope,
       input.entityKind ?? null, input.entityId ?? null,
       input.title?.trim() || `${input.domain === "spec" ? "Spec" : "Circuit"}: ${input.documentId}`,
       input.workspaceKey, input.workspaceTitle, input.workspacePath,
       input.workspaceDomain, input.workspaceOwnerUrl, input.workspaceDocumentId,
-      timestamp, timestamp);
+      timestamp, timestamp, input.ownerDocumentKey ?? null);
     return this.getBinding(sessionId)!;
   }
 
@@ -158,6 +215,13 @@ export class ProductState {
 
   touchBinding(sessionId: string): void {
     this.database.prepare("UPDATE bindings SET updated_at=? WHERE session_id=?").run(now(), sessionId);
+  }
+
+  pinOwnerDocument(sessionId: string, key: string): void {
+    const binding = this.getBinding(sessionId);
+    if (!binding || binding.domain !== "spec") throw new Error("Unknown Spec binding.");
+    if (binding.ownerDocumentKey && binding.ownerDocumentKey !== key) throw new Error("A chat cannot switch package bindings.");
+    this.database.prepare("UPDATE bindings SET owner_document_key=? WHERE session_id=?").run(key, sessionId);
   }
 
   updateBinding(sessionId: string, values: { title?: string; archived?: boolean }): SessionBinding {
@@ -196,6 +260,12 @@ export class ProductState {
     return row ? this.review(row as Record<string, unknown>) : null;
   }
 
+  reviewForCall(sessionId: string, callId: string): ProposalReview | null {
+    const row = this.database.prepare("SELECT * FROM reviews WHERE session_id=? AND call_id=? AND domain='spec' ORDER BY created_at DESC LIMIT 1")
+      .get(sessionId, callId);
+    return row ? this.review(row as Record<string, unknown>) : null;
+  }
+
   listReviews(sessionId: string): ProposalReview[] {
     return (this.database.prepare("SELECT * FROM reviews WHERE session_id=? ORDER BY created_at").all(sessionId) as Record<string, unknown>[])
       .map(row => this.review(row));
@@ -213,7 +283,9 @@ export class ProductState {
   markRevisionStale(sessionId: string, revision: string): number {
     const binding = this.getBinding(sessionId);
     if (!binding) return 0;
-    const stale = this.listReviews(sessionId).filter(review => review.baseRevision !== revision && ["ready", "rejected"].includes(review.state));
+    // Pending Spec artifacts stay pending until an explicit decision. The
+    // owner revalidates their original revision at approval time.
+    const stale = this.listReviews(sessionId).filter(review => review.domain !== "spec" && review.baseRevision !== revision && ["ready", "rejected"].includes(review.state));
     const detail = "The owner revision changed after this preview.";
     for (const review of stale) {
       this.transitionReview(sessionId, review.proposalId, [review.state], "stale", {
@@ -253,6 +325,7 @@ export class ProductState {
       sessionId: String(row.session_id), status: row.status as SessionBinding["status"],
       preset: (row.preset ?? "focused") as SessionBinding["preset"],
       domain: row.domain as SessionBinding["domain"], ownerUrl: String(row.owner_url),
+      ownerDocumentKey: typeof row.owner_document_key === "string" ? row.owner_document_key : null,
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),
       entityId: row.entity_id === null ? null : String(row.entity_id), title: String(row.title),

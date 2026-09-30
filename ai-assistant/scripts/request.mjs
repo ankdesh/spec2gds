@@ -15,7 +15,7 @@ for (let index = 0; index < args.length; index += 1) {
   if (passthrough) { task.push(value); continue; }
   if (value === "--") { passthrough = true; continue; }
   if (value === "--json") { options.json = true; continue; }
-  if (["--domain", "--service-url", "--document-id", "--scope", "--entity-kind", "--entity-id", "--session-id"].includes(value)) {
+  if (["--domain", "--service-url", "--document-id", "--owner-document-key", "--scope", "--entity-kind", "--entity-id", "--session-id"].includes(value)) {
     const next = args[++index];
     if (!next) throw new Error(`${value} requires a value`);
     options[value.slice(2)] = next;
@@ -45,6 +45,7 @@ if (options["session-id"]) {
     domain,
     serviceBaseUrl: options["service-url"],
     documentId: options["document-id"],
+    ...(options["owner-document-key"] ? { ownerDocumentKey: options["owner-document-key"] } : {}),
     scope: domain === "circuit" ? "document" : options.scope || "document",
     ...(options["entity-kind"] ? { entityKind: options["entity-kind"] } : {}),
     ...(options["entity-id"] ? { entityId: options["entity-id"] } : {}),
@@ -52,7 +53,8 @@ if (options["session-id"]) {
   env.SPEC2GDS_BINDING_JSON = JSON.stringify(binding);
   const service = new URL(binding.serviceBaseUrl);
   service.pathname = domain === "spec" ? "/" : service.pathname.replace(/\/$/, "");
-  let workspaceIdentity = { domain, ownerUrl: service.toString().replace(/\/$/, ""), documentId: binding.documentId };
+  let workspaceIdentity = { domain, ownerUrl: process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || service.toString().replace(/\/$/, ""), documentId: binding.documentId,
+    ...(domain === "spec" && binding.ownerDocumentKey && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY ? { ownerDocumentKey: binding.ownerDocumentKey } : {}) };
   if (domain === "circuit") {
     try {
       const response = await fetch(`${workspaceIdentity.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`);

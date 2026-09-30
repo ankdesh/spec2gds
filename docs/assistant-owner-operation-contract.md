@@ -4,7 +4,7 @@ Spec Editor and Circuit Designer publish the assistant operation vocabulary for 
 
 ## Read-only endpoint
 
-`GET /assistant/operation-schema?document_id=ID&scope=document` returns a contract for a selected document. Spec Editor also accepts `scope=entity&entity_kind=KIND&entity_id=ID`. Circuit Designer supports document scope only, under its `/api/circuit-designer/v1` base path. The service checks that the selected document and, for Spec, entity exist.
+`GET /assistant/operation-schema?document_id=ID&scope=document` returns a contract for a selected document. Spec requests carry `owner_document_key` to select the exact package independently of the visible document. Spec Editor also accepts `scope=entity&entity_kind=KIND&entity_id=ID`. Circuit Designer supports document scope only, under its `/api/circuit-designer/v1` base path. The service checks that the selected document and, for Spec, entity exist.
 
 The JSON response is:
 
@@ -30,13 +30,13 @@ The JSON response is:
 
 The digest is SHA-256 of the canonical JSON operation schema (sorted keys, no extra whitespace). It changes when the exposed operation shape changes. The schema describes **one operation**; the proposal tool accepts a nonempty array of these operations and checks unique `operation_id` values. The owner remains responsible for semantic validation, references, revision checks, and preview or commit.
 
-Spec Editor publishes document creation at document scope. Entity scope selects operations by entity kind and whether a component owns an internal design. The published schema lives beside the Spec operation compiler and validates the proposal before transaction preview. Circuit Designer selects the logical assistant operations from its canonical protocol schema. Geometry, routes, labels, layout, and timing operations are excluded from its assistant contract.
+Spec Editor publishes the complete supported editing vocabulary at document scope. Entity scope selects operations by entity kind and retains semantic ownership boundaries. Component schemas remain stable when internal composition changes; compiler validation enforces composite port restrictions. The published schema lives beside the Spec operation compiler and validates the proposal before transaction preview. Circuit Designer selects the logical assistant operations from its canonical protocol schema. Geometry, routes, labels, layout, and timing operations are excluded from its assistant contract.
 
 ## Constructs and refresh
 
 The Assistant converts JSON Schema 2020-12 local `$defs`/`$ref`, `oneOf`, object `allOf`, object properties and `required`, `additionalProperties`, arrays and `items`, primitive types, `const`, `enum`, string length and pattern, numeric bounds, `minItems`, and `uniqueItems`. Arbitrary object maps become a general JSON tool argument and are still checked against the owner schema before preview. Unsupported constructs fail closed; no bundled schema is used. Owners adding a construct must first extend the converter and its tests.
 
-Before every proposal preview, the Assistant fetches the contract again. A retrieval or conversion error prevents preview. A changed digest rejects the proposal and requires a new conversation so the registered tool schema can refresh. The owner then performs its own preview and validation; the Assistant's check does not grant write authority.
+Before every proposal preview, the Assistant fetches the contract again. A retrieval or conversion error prevents preview. A changed Spec digest requires a fresh `get_bound_context` call, which refreshes the registered schema in the same conversation before another submission. Ordinary content changes do not change the schema digest. Spec preparation requires the `base_source_revision_hash` actually read by the model. The owner validates again at save. Its published approval policy determines automatic application or a stored-ID review decision.
 
 ## Review and save boundary
 

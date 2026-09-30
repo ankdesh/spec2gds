@@ -31,6 +31,13 @@ Read in this order:
     behavior, one-/two-cycle samples, and configured output generation.
 12. [AI Assistant](ai-assistant.md) — DeepSeek Harness runtime, editor
     integration, review boundary, proposal contracts, setup, and recovery.
+    [Create a specification from Assistant chat](assistant-spec-creation.md)
+    covers the creation card, save location, continuation, and recovery.
+    [Iterative Spec refinement](spec-editor-iterative-refinement.md) covers
+    automatic submissions, restricted policy, stable bindings, live drafts,
+    event replay, and durable history. Its
+    [test plan](spec-editor-iterative-refinement-test-plan.md) lists non-UI
+    acceptance and the separately invoked UI scenarios.
     Its [DSH UI migration map](dsh-ui-migration.md) documents the plugin layers
     and retained, extended, and removed UI features.
     The [AI Assistant improvement plan](ai-assistant-improvement-plan.md) is the

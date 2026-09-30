@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { OwnerClients, OwnerError } from "./owner-clients.js";
@@ -11,6 +11,7 @@ import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, Works
 import { parseOwnerOperationContract } from "./owner-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
+import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
 export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "sWorkflow", "sWorkflowYaml"];
@@ -137,6 +138,7 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
     preset: value.preset ?? "focused",
     serviceBaseUrl: value.serviceBaseUrl.trim(),
     documentId: value.documentId.trim(),
+    ownerDocumentKey: typeof value.ownerDocumentKey === "string" ? value.ownerDocumentKey : undefined,
     scope,
     entityKind: typeof value.entityKind === "string" ? value.entityKind.trim() : undefined,
     entityId: typeof value.entityId === "string" ? value.entityId.trim() : undefined,
@@ -172,8 +174,8 @@ export function maxModelStepsForTurn(
 }
 
 export const UNBOUND_SOURCE_PROMPT = `This conversation is not bound to a design source.
-Do not answer questions about a document, component, design, or requested edit. Do not claim that work was completed and do not create a goal.
-Tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
+Do not answer questions about an existing document, component, design, or requested edit without a binding. Do not claim that work was completed and do not create a goal.
+If prepare_spec_document_creation is available and the user requests a new specification document, use it to show the creation card. No existing package or context read is needed. Otherwise tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
 
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
   const config: ServiceConfig = {
@@ -186,6 +188,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
+  const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve);
   const attached = new Set<string>();
   const unboundGuards = new Map<string, () => void>();
   const delegatedParents = new Map<string, string>();
@@ -198,6 +201,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
     state.recoverInterruptedReviews();
+    state.recoverInterruptedSourceCreations();
     for (const domain of ["spec", "circuit"] as const) {
       ctx.promptCatalog.get({ id: `spec2gds.${domain}`, version: "1.0.0" });
       const catalog = ctx.sWorkflow.catalog(domain);
@@ -220,6 +224,20 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     let operationContract;
     let schemaError;
     try {
+      if (binding.domain === "spec") {
+        const policy = await owners.specPolicy(binding.ownerUrl);
+        agent.ctx.systemPrompt?.section({ name: "spec2gds:approval-policy", order: 205,
+          text: policy.approval_policy === "automatic"
+            ? "The Spec owner currently allows automatic validated submissions. Await its saved receipt and report the resulting revision. Record defaults as assumptions; clarify genuinely missing inputs."
+            : "The Spec owner currently requires human approval. Keep submissions pending until an explicit stored-proposal decision." });
+      }
+      if (binding.domain === "spec" && !binding.ownerDocumentKey) {
+        const context = await owners.context(binding);
+        if (typeof context.owner_document_key === "string") {
+          state.pinOwnerDocument(binding.sessionId, context.owner_document_key);
+          binding.ownerDocumentKey = context.owner_document_key;
+        }
+      }
       operationContract = parseOwnerOperationContract(await owners.operationContract(binding));
     } catch (error) {
       schemaError = error instanceof Error ? error.message : String(error);
@@ -238,10 +256,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           review.artifact,
           summary,
         );
+        if (review.state === "applied") settleReviewedWorkflow(binding, review);
       } catch (error) {
         console.error("Failed to synchronize the owner-previewed proposal into workflow draft state:", error);
       }
-    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms, operationContract, schemaError);
+    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms, operationContract, schemaError,
+    () => startBoundWorkflow(agent, binding));
     attached.add(agent.id);
   };
 
@@ -251,7 +271,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       name: "spec2gds:unbound-session",
       order: 150,
       complete: true,
-      text: UNBOUND_SOURCE_PROMPT,
+      text: UNBOUND_SOURCE_PROMPT + (config.interactiveForms ? `\n\n${SOURCE_CREATION_PROMPT}` : ""),
     }));
   };
 
@@ -339,6 +359,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
     if (binding) await attach(agent, binding);
     else guardUnbound(agent);
+    if (config.interactiveForms && !parentSession) {
+      registerSourceCreationTool(agent, creations, () => ({
+        sourceSessionId: String(agent.id), originalRequest: latestUserRequests.get(String(agent.id)) ?? "",
+        preset: binding?.preset ?? agentPreset(agent), preferredOwner: binding?.domain === "spec" ? binding.ownerUrl : undefined,
+      }));
+    }
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
     if (event.type === "tool/call" && event.data?.name === "ask_user_question"
@@ -353,41 +379,40 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         .map((item: Record<string, unknown>) => String(item.text)).join("\n").trim()
       : "";
     if (objective) latestUserRequests.set(String(session.id), objective);
-    const binding = state.getBinding(String(session.id));
-    if (!binding || binding.preset === "focused") return;
-    if (!objective) return;
-    queueMicrotask(() => { void (async () => {
-      await ready;
-      const agent = ctx.agents.get(session.id);
-      if (!agent) return;
-      const current = ctx.sWorkflow.get(agent);
-      if (current?.status === "awaiting-user-input") {
-        ctx.sWorkflow.answerInput(agent, { runId: current.runId, revision: current.revision }, objective);
-        return;
-      }
-      if (current !== null) return;
-      ctx.sWorkflow.start(agent, {
-        definition: { id: "prepare-reviewed-change", version: "1.0.0" },
-        adapter: { id: `${binding.domain}-editor`, version: "1.0.0" },
-        preset: binding.preset,
-        objective,
-        contract: {
-          binding: {
-            domain: binding.domain,
-            ownerUrl: binding.ownerUrl,
-            documentId: binding.documentId,
-            scope: binding.scope,
-            ...(binding.entityKind ? { entityKind: binding.entityKind } : {}),
-            ...(binding.entityId ? { entityId: binding.entityId } : {}),
-          },
-          review: {
-            kind: binding.domain === "spec" ? "spec-proposal" : "circuit-proposal",
-            mutationBoundary: "explicit-review-card-action",
-          },
-        },
-      });
-    })().catch(error => console.error("Failed to start bound workflow:", error)); });
   });
+
+  async function startBoundWorkflow(agent: ProductAgent, binding: SessionBinding): Promise<void> {
+    if (binding.preset === "focused" || agent.session?.header.parentSession) return;
+    const objective = latestUserRequests.get(String(agent.id)) ?? "";
+    if (!objective) return;
+    await ready;
+    const current = ctx.sWorkflow.get(agent);
+    if (current?.status === "awaiting-user-input") {
+      ctx.sWorkflow.answerInput(agent, { runId: current.runId, revision: current.revision }, objective);
+      return;
+    }
+    if (current !== null) return;
+    ctx.sWorkflow.start(agent, {
+      definition: { id: "prepare-reviewed-change", version: "1.0.0" },
+      adapter: { id: `${binding.domain}-editor`, version: "1.0.0" },
+      preset: binding.preset,
+      objective,
+      contract: {
+        binding: {
+          domain: binding.domain,
+          ownerUrl: binding.ownerUrl,
+          documentId: binding.documentId,
+          scope: binding.scope,
+          ...(binding.entityKind ? { entityKind: binding.entityKind } : {}),
+          ...(binding.entityId ? { entityId: binding.entityId } : {}),
+        },
+        review: {
+          kind: binding.domain === "spec" ? "spec-proposal" : "circuit-proposal",
+          mutationBoundary: "explicit-review-card-action",
+        },
+      },
+    });
+  }
   ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => {
     const parentSession = delegatedParents.get(String(agent.id));
     if (parentSession) {
@@ -398,6 +423,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
     attached.delete(String(agent.id));
     clarifiedTurns.delete(String(agent.id));
+    latestUserRequests.delete(String(agent.id));
     unboundGuards.get(String(agent.id))?.();
     unboundGuards.delete(String(agent.id));
   });
@@ -423,6 +449,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       await owners.circuitSourceBinding(temporary));
     await mkdir(workspace.path, { recursive: true, mode: 0o700 });
     const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl,
+      ownerDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.ownerDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
       workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
     return { binding, workspace };
@@ -437,26 +464,77 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     return active;
   }
 
+  async function createSource(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (typeof body.serviceBaseUrl !== "string" || typeof body.documentId !== "string" || typeof body.title !== "string") {
+      throw new HttpError(400, "serviceBaseUrl, documentId, and title are required.");
+    }
+    if (body.creationRequestId !== undefined) {
+      if (body.domain !== "spec" || typeof body.creationRequestId !== "string") throw new HttpError(400, "A creation request must target a Spec document.");
+      return creations.create(body.creationRequestId, { serviceBaseUrl: body.serviceBaseUrl, documentId: body.documentId, title: body.title });
+    }
+    const input = bindingInput({ ...body, scope: "document" });
+    const documentId = input.documentId;
+    const title = body.title.trim();
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
+    owners.normalize(input);
+    if (input.domain === "spec") {
+      const snapshot = await owners.createSpec(input.serviceBaseUrl, specDestination(config.specDocumentRoot, documentId), documentId, title);
+      if (typeof snapshot.owner_document_key === "string") input.ownerDocumentKey = snapshot.owner_document_key;
+    }
+    else await owners.createCircuit(input.serviceBaseUrl, documentId, title);
+    const result = await reserve({ ...input, title });
+    return { session: result.binding, workspace: result.workspace };
+  }
+
   async function reviewAction(binding: SessionBinding, review: ProposalReview, action: string): Promise<ProposalReview> {
     if (artifactDigest(review.artifact) !== review.artifactDigest) throw new HttpError(409, "Stored proposal content failed its integrity check.");
-    if (action === "discard") return state.transitionReview(binding.sessionId, review.proposalId, ["ready", "rejected", "stale", "reconcile"], "discarded");
+    if (action === "discard") {
+      if (binding.domain === "spec" && (await owners.specPolicy(binding.ownerUrl)).submissions) {
+        try { await owners.rejectSpec(binding, review.proposalId); }
+        catch (error) { if (!(error instanceof OwnerError && error.status === 404)) throw error; }
+      }
+      return state.transitionReview(binding.sessionId, review.proposalId, ["ready", "rejected", "stale", "reconcile"], "discarded");
+    }
     if (binding.domain === "spec" && action === "apply") {
       if (review.state === "reconcile") {
-        try { const found = findSpecChange(await owners.specChanges(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, ownerResult: found }); }
+        try {
+          const policy = await owners.specPolicy(binding.ownerUrl);
+          if (policy.submissions) {
+            const receipt = await owners.specSubmission(binding, review.proposalId);
+            if (isRecord(receipt.artifact) && artifactDigest(receipt.artifact) === review.artifactDigest
+                && receipt.state === "applied" && isRecord(receipt.owner_result)) {
+              return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, ownerResult: receipt.owner_result });
+            }
+          } else {
+            const found = findSpecChange(await owners.specChanges(binding), review.proposalId);
+            if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", {
+              error: null, ownerResult: { ...found, source_revision_hash: found.result_source_revision_hash, application_mode: "review" },
+            });
+          }
+        }
         catch { /* Retry the idempotent apply below. */ }
       }
       state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
       try {
-        const current = await owners.context(binding);
-        if (current.source_revision_hash !== review.baseRevision) {
-          const detail = "The Spec source revision changed.";
-          const normalized = proposalError(binding, review.proposalId, "STALE_REVISION", detail, true);
-          logProposalFailure(binding, normalized, review.proposalId);
-          return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", {
-            diagnostics: detail, error: normalized,
-          });
+        const policy = await owners.specPolicy(binding.ownerUrl);
+        if (!policy.submissions) {
+          const current = await owners.context(binding);
+          if (current.source_revision_hash !== review.baseRevision) {
+            const detail = "The Spec source revision changed.";
+            const normalized = proposalError(binding, review.proposalId, "STALE_REVISION", detail, true);
+            logProposalFailure(binding, normalized, review.proposalId);
+            return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", {
+              diagnostics: detail, error: normalized,
+            });
+          }
         }
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, ownerResult: await owners.applySpec(binding, review.artifact) });
+        let result;
+        if (policy.submissions) {
+          await owners.stageSpec(binding, review.artifact);
+          result = await owners.approveSpec(binding, review.proposalId);
+        } else result = await owners.applySpec(binding, review.artifact);
+        if (result.status !== "applied") throw new OwnerError(502, "The owner did not confirm a saved change.", true);
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, ownerResult: result });
       } catch (error) {
         const normalized = errorFromException(binding, review.proposalId, error);
         logProposalFailure(binding, normalized, review.proposalId);
@@ -552,6 +630,16 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const requestUrl = new URL(request.url ?? "/", "http://localhost");
         const path = requestUrl.pathname;
         if (path === "/spec2gds-api/capabilities" && request.method === "GET") return writeJson(response, 200, { model: config.model, provider: config.provider, owners: await owners.capabilities() });
+        const sourceRequestMatch = path.match(/^\/spec2gds-api\/source-requests\/([^/]+)(?:\/(cancel|continued))?$/);
+        if (sourceRequestMatch) {
+          const requestId = decodeURIComponent(sourceRequestMatch[1]!);
+          if (!sourceRequestMatch[2] && request.method === "GET") return writeJson(response, 200, { creation_request: await creations.present(creations.get(requestId)) });
+          if (request.method === "POST" && sourceRequestMatch[2]) {
+            await readBody(request);
+            const updated = sourceRequestMatch[2] === "cancel" ? creations.cancel(requestId) : creations.continued(requestId);
+            return writeJson(response, 200, { creation_request: await creations.present(updated) });
+          }
+        }
         const proposalInputMatch = path.match(/^\/spec2gds-api\/proposal-inputs\/([^/]+)\/confirm$/);
         if (proposalInputMatch && request.method === "POST") {
           const body = await readBody(request);
@@ -574,21 +662,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         }
         if (path === "/spec2gds-api/sources/create" && request.method === "POST") {
           const body = await readBody(request);
-          if (body.domain !== "spec" && body.domain !== "circuit") throw new HttpError(400, "domain must be spec or circuit.");
-          if (typeof body.serviceBaseUrl !== "string" || typeof body.documentId !== "string" || typeof body.title !== "string") {
-            throw new HttpError(400, "serviceBaseUrl, documentId, and title are required.");
-          }
-          const documentId = body.documentId.trim();
-          const title = body.title.trim();
-          if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
-          if (body.domain === "spec") {
-            const destination = resolve(config.specDocumentRoot, `${documentId}.spec`);
-            if (dirname(destination) !== config.specDocumentRoot) throw new HttpError(400, "Document path escaped the configured root.");
-            await owners.createSpec(body.serviceBaseUrl, destination, documentId, title);
-          } else await owners.createCircuit(body.serviceBaseUrl, documentId, title);
-          const result = await reserve(bindingInput({ domain: body.domain, serviceBaseUrl: body.serviceBaseUrl,
-            documentId, scope: "document", title, preset: body.preset }));
-          return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
+          return writeJson(response, 201, await createSource(body));
         }
         if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
           const workspaces = [...new Map(state.listBindings().map(binding => [binding.workspaceKey, {
@@ -613,7 +687,24 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           }
           if (resource === "activate" && request.method === "POST") return writeJson(response, 200, { session: await activate(sessionId) });
           if (resource === "abandon" && request.method === "POST") { if (state.getBinding(sessionId)?.status === "creating") state.deleteBinding(sessionId); return writeJson(response, 200, { abandoned: true }); }
-          if (resource === "reviews" && request.method === "GET") return writeJson(response, 200, { reviews: state.listReviews(sessionId).map(publicReview) });
+          if (resource === "reviews" && request.method === "GET") {
+            const binding = state.getBinding(sessionId);
+            if (binding?.domain === "spec") {
+              for (const review of state.listReviews(sessionId).filter(item => ["ready", "reconcile"].includes(item.state))) {
+                try {
+                  const receipt = await owners.specSubmission(binding, review.proposalId);
+                  if (!isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) continue;
+                  if (receipt.state === "applied" && isRecord(receipt.owner_result)) {
+                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "applied", { error: null, ownerResult: receipt.owner_result });
+                    settleReviewedWorkflow(binding, updated);
+                  } else if (receipt.state === "discarded") {
+                    state.transitionReview(sessionId, review.proposalId, [review.state], "discarded");
+                  }
+                } catch { /* Keep uncertain results visible while the bound owner is offline. */ }
+              }
+            }
+            return writeJson(response, 200, { reviews: state.listReviews(sessionId).map(publicReview) });
+          }
           if (resource === "workflow" && request.method === "GET") {
             const binding = state.getBinding(sessionId);
             if (!binding) throw new HttpError(404, "Unknown binding.");
@@ -669,6 +760,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         throw new HttpError(404, "Unknown spec2gds endpoint.");
       } catch (error) {
         if (response.headersSent) return response.destroy();
+        if (error instanceof SourceCreationError) return writeJson(response, error.status, { error: error.message });
         if (error instanceof HttpError || error instanceof OwnerError) return writeJson(response, error.status, { error: error.message, detail: error.detail });
         return writeJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
       }
@@ -686,7 +778,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       webCtx.effect(() => webCtx.webServer.register({ kind: "exact", path: route, handler: async (request: any, response: any) => {
         try {
           const url = new URL(request.url ?? route, "http://localhost");
-          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
+          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", ownerDocumentKey: url.searchParams.get("owner_document_key") ?? undefined, scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
           response.writeHead(303, {
             Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId),
             "Cache-Control": "no-store",

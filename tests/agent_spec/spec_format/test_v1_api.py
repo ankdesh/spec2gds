@@ -761,6 +761,52 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
     assert endpoints["assistant_changes"]()["assistant_changes"] == changes
 
 
+def test_document_assistant_previews_comparator_without_instances_and_with_hdl_ranges(tmp_path: Path) -> None:
+    """A component with no design instances accepts the model's HDL-style bus ranges."""
+    package_path = tmp_path / "comparator.spec"
+    endpoints = _endpoints()
+    created = endpoints["create_document"](
+        CreateDocumentRequest(path=str(package_path), document_id="comparator_3bit")
+    )
+    proposal = SpecChangeProposal(
+        proposal_id="proposal_comparator_3bit",
+        document_id=created["document_id"],
+        scope="document",
+        target=None,
+        base_source_revision_hash=created["source_revision_hash"],
+        title="Create 3-bit comparator component",
+        summary="Two 3-bit inputs and three one-bit comparison outputs.",
+        rationale="Implement the requested combinational comparator.",
+        assumptions=[],
+        operations=[{
+            "operation_id": "create_comparator_3bit",
+            "type": "create_entity",
+            "kind": "component",
+            "name": "comparator_3bit",
+            "entity_id": "component_comparator_3bit",
+            "ports": [
+                {"name": name, "family": "wire", "direction": "in", "range": "[2:0]"}
+                for name in ("A", "B")
+            ] + [
+                {"name": name, "family": "wire", "direction": "out", "range": "[0:0]"}
+                for name in ("A_greater", "A_equal", "A_less")
+            ],
+            "systemverilog": (
+                "assign A_greater = (A > B);\n"
+                "assign A_equal = (A == B);\n"
+                "assign A_less = (A < B);"
+            ),
+        }],
+    )
+    preview = endpoints["assistant_proposal_preview"](proposal)
+    assert preview["status"] == "valid", preview["diagnostics"]
+    assert endpoints["assistant_proposal_apply"](proposal)["status"] == "applied"
+    component = next(item for item in SpecRevision.load(str(package_path)).components if item.ref.entity_id == "component_comparator_3bit")
+    assert {port.name: port.range for port in component.ports} == {
+        "A": "2:0", "B": "2:0", "A_greater": "0", "A_equal": "0", "A_less": "0",
+    }
+
+
 def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path) -> None:
     package_path = tmp_path / "assistant-document.spec"
     write_test_package(package_path)
@@ -800,7 +846,7 @@ def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path
 
     context = endpoints["assistant_document_context"](opened["document_id"])
     assert context["scope"] == "document"
-    assert context["writable"]["document_operations"] == ["create_entity"]
+    assert {"create_entity", "set_entity_metadata", "upsert_component_port", "upsert_instance"} <= set(context["writable"]["document_operations"])
     before = endpoints["document_snapshot"]()["source_revision_hash"]
     preview = endpoints["assistant_proposal_preview"](proposal)
     assert preview["status"] == "valid"
@@ -830,14 +876,13 @@ def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path
                     "operation_id": "edit_existing",
                     "type": "set_entity_metadata",
                     "entity": component["ref"],
-                    "description": "Not permitted from document scope.",
+                    "description": "Refined through the original document chat.",
                 }
             ],
         }
     )
     rejected = endpoints["assistant_proposal_preview"](forbidden)
-    assert rejected["status"] == "invalid"
-    assert "may only create top-level" in rejected["diagnostics"][0]
+    assert rejected["status"] == "valid"
 
 
 def test_document_assistant_creates_populated_component_atomically(tmp_path: Path) -> None:
@@ -1118,7 +1163,7 @@ def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_
     document = schema(document_id, "document")
     assert document["schema_version"] == 1
     assert document["digest"].startswith("sha256:")
-    assert {branch["properties"]["type"]["const"] for branch in document["operation_schema"]["oneOf"]} == {"create_entity"}
+    assert {branch["properties"]["type"]["const"] for branch in document["operation_schema"]["oneOf"]} == SUPPORTED_OPERATION_TYPES
     from spec2gds.agent_spec.spec_format.assistant_operation_contract import (
         validate_assistant_operations,
     )
@@ -1128,7 +1173,7 @@ def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_
     component = schema(document_id, "entity", "component", "component_leaf")
     component_types = {branch["properties"]["type"]["const"] for branch in component["operation_schema"]["oneOf"]}
     assert "upsert_component_port" in component_types
-    assert "upsert_instance" not in component_types
+    assert "upsert_instance" in component_types  # Stable schema; ownership is checked semantically.
     design = schema(document_id, "entity", "design", opened["designs"][0]["ref"]["entity_id"])
     design_types = {branch["properties"]["type"]["const"] for branch in design["operation_schema"]["oneOf"]}
     assert "upsert_instance" in design_types

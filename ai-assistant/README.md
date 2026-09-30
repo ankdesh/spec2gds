@@ -46,15 +46,24 @@ connect another service for this process or create a new Spec or empty Circuit;
 a Workspace-row action stays within that logical design source. The same dialog
 chooses an immutable `focused`, `goal`, or `orchestrated` preset. Focused is
 one-shot; goal adds a bounded durable loop; orchestrated additionally permits
-depth-one read-only analysis children. Every interactive top-level component
-creation first appears in a product details card with labeled text boxes and
-request-derived defaults; its **Continue proposal** action submits the confirmed
-values to the same Session. For component creation, those values become the
-initial wire ports and module-body SystemVerilog in the same atomic create
-operation. The following review card is the owner-previewed safety gate and is
-the only place where the user can approve and apply the operation.
+depth-one read-only analysis children. Valid Spec submissions save automatically
+by default. Start the owner with `--require-human-approval` for component details
+and explicit review cards. Fully specified automatic requests skip confirmation;
+defaults become assumptions. Missing required values still request clarification.
+Initial wire ports and module-body SystemVerilog can be saved in one atomic
+create operation. Automatic cards display the saved revision and **Applied
+automatically** after the owner responds.
 Other immediate questions use Harness's structured question surface. Headless
 requests remain noninteractive.
+In any browser root chat, including an unbound chat, ask to create a new
+specification and include its design requirements if desired. Automatic owners
+create it and continue without confirmation; restricted owners show the editable
+creation card and **Create specification and continue**. The package
+is saved under `SPEC_DOCUMENT_ROOT/<documentId>.spec`, and a separate chat
+continues the original request. Existing chat bindings stay attached to their
+original package even when another package opens. Circuit changes retain their
+approval and save behavior. For retry and package binding behavior, see the
+[specification creation guide](../docs/assistant-spec-creation.md).
 The existing editor links also work:
 
 - `/launch` for an authenticated conversation without attached design context
@@ -77,12 +86,14 @@ turn:
 # From the repository root, after scripts/setup-all.sh
 export OPENAI_API_KEY="..."
 uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
+uv run spec2gds-assistant ./work/timer --require-human-approval -- "Refine the timer."
 uv run spec2gds-spec reviews ./work/timer
 uv run spec2gds-spec approve ./work/timer proposal_...
 ```
 
-The assistant command prompts once and only prepares proposals. The Spec command
-lists, approves, or rejects them; it does not run a model turn. See the
+The assistant command prompts once and automatically saves valid submissions.
+Its `--require-human-approval` flag leaves them pending. The Spec command lists,
+approves, rejects, and paginates history; it does not run a model turn. See the
 [focused Spec workspace guide](../docs/spec-workspace-cli.md) for path selection,
 retry behavior, and run/proposal records intended for later `agent_eval` scripts.
 The lower-level `scripts/request.mjs` remains an internal Harness test and
@@ -123,7 +134,8 @@ identities. They are loaded before the product becomes ready and sealed for the
 process lifetime. Model workflow tools can report progress and request review,
 but lifecycle, budget raises, completion approval, and owner mutation remain
 human/host authority. The browser workflow dock handles pause, resume, cancel,
-and required answers; review-card apply/send completes the workflow.
+and required answers; automatic Spec receipts or review-card apply/send complete
+the workflow.
 
 For a guided explanation of the DSH components and how these layers compose,
 read the [DSH configurable assistant tutorial](../docs/dsh-configurable-assistant-tutorial.md).
@@ -155,7 +167,9 @@ the pinned DSH keyless replay adapter, proving that replay does not contact the
 provider. The evaluation command validates the versioned corpus and writes raw
 results and metrics; see `docs/ai-assistant-evaluation.md` in the repository.
 
-Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores only
+Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores
+bindings, creation requests, and review metadata. Creation requests retain
+their original prompt and package/chat progress across reloads and restarts.
 bindings and review state. Back up the complete state root together. Old Python
 assistant data is preserved under `generated/legacy-ai-assistant-state/` for
 manual inspection and is never loaded by this product.

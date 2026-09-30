@@ -44,12 +44,19 @@ def _parser(command: str) -> argparse.ArgumentParser:
         action="store_true",
         help="restart the service when Python source files change",
     )
+    parser.add_argument(
+        "--require-human-approval",
+        action="store_true",
+        help="require explicit approval before assistant changes are saved",
+    )
     return parser
 
 
 def _run(command: str, argv: Sequence[str] | None = None) -> None:
     """Parse one public command and run the shared FastAPI application."""
     args = _parser(command).parse_args(argv)
+    # The import-string factory is recreated in uvicorn's reload subprocess.
+    os.environ["SPEC2GDS_REQUIRE_HUMAN_APPROVAL"] = "1" if args.require_human_approval else "0"
     registry = load_service_registry()
     logger = StructuredLogger("spec-editor", registry.logging)
     logger.event(

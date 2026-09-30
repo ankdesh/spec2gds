@@ -179,6 +179,6 @@ export function verifyOwnerOperationContract(current: OwnerOperationContract, la
   try { refreshed = parseOwnerOperationContract(latest); }
   catch (error) { throw new OwnerContractError(error instanceof Error ? error.message : String(error)); }
   if (refreshed.digest !== current.digest) {
-    throw new OwnerContractError("The owner operation schema changed. Start a new conversation to refresh proposal tools.");
+    throw new OwnerContractError("The owner operation schema changed. Read get_bound_context again to refresh proposal tools in this conversation.");
   }
 }

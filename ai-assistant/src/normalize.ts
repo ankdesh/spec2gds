@@ -30,6 +30,13 @@ function normalizeNarrativeBlock(value: unknown): void {
   if (Array.isArray(value.children)) value.children.forEach(normalizeNarrativeBlock);
 }
 
+/** HDL-style brackets are common in model output; the Spec API stores compact ranges. */
+export function compactWireRange(value: unknown): unknown {
+  if (typeof value !== "string") return value;
+  const bracketed = /^\[\s*([^\[\]]+?)\s*\]$/.exec(value.trim());
+  return bracketed ? bracketed[1]!.trim() : value;
+}
+
 export function normalizeSpecOperations(input: unknown[]): Record<string, unknown>[] {
   return input.map((item, index) => {
     if (!isRecord(item) || typeof item.type !== "string") {
@@ -43,6 +50,14 @@ export function normalizeSpecOperations(input: unknown[]): Record<string, unknow
       const kind = typeof operation.kind === "string" ? operation.kind : "entity";
       const name = typeof operation.name === "string" ? operation.name.replace(/[^A-Za-z0-9_.-]+/g, "_") : "new";
       operation.entity_id = `${kind}_${name}_${randomUUID().replaceAll("-", "")}`;
+      if (operation.instances === undefined) operation.instances = [];
+      if (kind === "component" && Array.isArray(operation.ports)) {
+        for (const port of operation.ports) {
+          if (isRecord(port) && port.family === "wire" && typeof port.range === "string") {
+            port.range = compactWireRange(port.range);
+          }
+        }
+      }
     }
     if (operation.type === "set_entity_metadata" && Array.isArray(operation.clear_fields)) {
       for (const field of operation.clear_fields) if (typeof field === "string") operation[field] = null;

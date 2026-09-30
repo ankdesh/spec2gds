@@ -19,6 +19,22 @@ test("normalizes Spec maps, clear fields, and server-owned identities", () => {
   assert.equal("clear_fields" in metadata!, false);
 });
 
+test("fills empty create-entity instances and compacts comparator wire ranges", () => {
+  const [component] = normalizeSpecOperations([{ type: "create_entity", kind: "component", name: "comparator_3bit",
+    ports: [
+      { name: "A", family: "wire", direction: "in", range: "[2:0]" },
+      { name: "B", family: "wire", direction: "in", range: "2:0" },
+      { name: "A_equal", family: "wire", direction: "out", range: "[0:0]" },
+    ] }]);
+  assert.deepEqual(component?.instances, []);
+  assert.deepEqual((component?.ports as Array<Record<string, unknown>>).map(port => port.range), ["2:0", "2:0", "0:0"]);
+  const [design] = normalizeSpecOperations([{ type: "create_entity", kind: "design", name: "top" }]);
+  assert.deepEqual(design?.instances, []);
+  const [populated] = normalizeSpecOperations([{ type: "create_entity", kind: "design", name: "system",
+    instances: [{ name: "u1", component_vlnv: "spec2gds.local:work:comparator_3bit:1.0" }] }]);
+  assert.equal((populated?.instances as unknown[]).length, 1);
+});
+
 test("normalizes Circuit list-form maps and rejects duplicate keys", () => {
   const [operation] = normalizeCircuitOperations([{
     type: "add_instance",

@@ -10,6 +10,7 @@ const compositeRef = { document_id: documentId, entity_id: "component_subsystem"
 const busRef = { document_id: documentId, entity_id: "bus_control", entity_kind: "bus_definition" };
 
 const snapshot = {
+  owner_document_key: "package-editor-test",
   schema_version: "spec2gds.snapshot.v2",
   document_id: documentId,
   source_revision_hash: revision,
@@ -394,6 +395,7 @@ type ApiState = {
   openedPaths: string[];
   transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
   currentRevision: string;
+  currentTitle: string;
   staleNextTransaction: boolean;
 };
 
@@ -406,6 +408,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     openedPaths: [],
     transactions: [],
     currentRevision: revision,
+    currentTitle: snapshot.narrative.title,
     staleNextTransaction: false,
   };
   await page.route("**/api/**", async (route: Route) => {
@@ -456,6 +459,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
         return route.fulfill({ json: { detail: "Specification package was not found." }, status: 422 });
       }
       state.currentRevision = revision;
+      state.currentTitle = path.endsWith("create") ? body.title ?? "" : snapshot.narrative.title;
       return json(path.endsWith("create")
         ? { ...snapshot, narrative: { ...snapshot.narrative, title: body.title ?? "" } }
         : snapshot);
@@ -463,9 +467,11 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     if (path === "/documents/snapshot") {
       return json({ ...snapshot, source_revision_hash: state.currentRevision });
     }
-    if (path === "/documents/a2ui") {
+    if (path === "/assistant/history") return json({ items: [], next_cursor: null });
+    if (path === "/documents/a2ui" || path === "/documents/view") {
       const currentBatch = structuredClone(batch);
       const components = currentBatch.messages[1].updateComponents.components as Array<Record<string, any>>;
+      components.find(component => component.component === "SpecDocument").title = state.currentTitle;
       const liveView = components.find((component) => component.component === "LiveView");
       if (options.topologyUnavailable) {
         liveView.block.options = {
@@ -482,7 +488,12 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
         }
         currentBatch.source_revision_hash = state.currentRevision;
       }
-      return json(currentBatch);
+      currentBatch.source_revision_hash = state.currentRevision;
+      return json(path === "/documents/view" ? {
+        snapshot: { ...snapshot, source_revision_hash: state.currentRevision, narrative: { ...snapshot.narrative, title: state.currentTitle } },
+        a2ui: currentBatch, activity: { executions: state.activityExecutions, artifacts: [], proposals: [], assistant_changes: [] },
+        approval_policy: "automatic", event_cursor: state.transactions.length, source_revision_hash: state.currentRevision,
+      } : currentBatch);
     }
     if (path === "/transactions") {
       const body = request.postDataJSON() as { expected_source_revision_hash: string; operations: object[] };
@@ -1092,7 +1103,8 @@ test("preserves an inline draft when the optimistic revision is stale", async ({
   await component.getByRole("button", { name: "Save changes" }).click();
 
   await expect(component.getByLabel("Specification text")).toHaveValue("Keep this draft after refresh.");
-  await expect(component.getByRole("alert")).toContainText("draft was preserved");
+  await expect(component.getByRole("alert")).toContainText("preserved draft");
+  await page.getByRole("button", { name: "Use reviewed revision for next save" }).click();
   await component.getByRole("button", { name: "Save changes" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.expected_source_revision_hash).toBe("sha256:external-change");

@@ -9,6 +9,7 @@ export interface SessionBinding {
   domain: Domain;
   ownerUrl: string;
   documentId: string;
+  ownerDocumentKey?: string | null;
   scope: BindingScope;
   entityKind: string | null;
   entityId: string | null;
@@ -98,6 +99,7 @@ export interface BindingInput {
   preset?: AssistantPreset;
   serviceBaseUrl: string;
   documentId: string;
+  ownerDocumentKey?: string;
   scope?: BindingScope;
   entityKind?: string;
   entityId?: string;
@@ -125,6 +127,27 @@ export interface WorkspaceDescriptor {
   domain: Domain;
   ownerUrl: string;
   documentId: string;
+}
+
+export interface SourceCreationRequest {
+  requestId: string;
+  sourceSessionId: string;
+  callId: string;
+  originalRequest: string;
+  preset: AssistantPreset;
+  status: "pending" | "creating" | "created" | "reserved" | "continued" | "cancelled" | "uncertain";
+  documentId: string;
+  title: string;
+  serviceBaseUrl: string;
+  destination: string;
+  destinationSessionId: string;
+  continuationRequestId: string;
+  sourceRevisionHash: string | null;
+  ownerDocumentKey?: string;
+  automatic?: boolean;
+  creationReceipts?: boolean;
+  error: string | null;
+  reservation: { session: SessionBinding; workspace: WorkspaceDescriptor } | null;
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {

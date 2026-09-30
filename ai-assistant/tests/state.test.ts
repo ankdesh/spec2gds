@@ -30,10 +30,9 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     assert.match(review.artifactDigest, /^sha256:/);
     const ready = state.transitionReview("session-1", "proposal-1", ["previewing"], "ready", { preview: { status: "valid" } });
     assert.equal(ready.version, 1);
-    assert.equal(state.markRevisionStale("session-1", "rev-2"), 1);
-    assert.equal(state.getReview("session-1", "proposal-1")?.state, "stale");
-    assert.equal(state.getReview("session-1", "proposal-1")?.error?.error_code, "STALE_REVISION");
-    state.transitionReview("session-1", "proposal-1", ["stale"], "ready", { error: null });
+    assert.equal(state.markRevisionStale("session-1", "rev-2"), 0);
+    assert.equal(state.getReview("session-1", "proposal-1")?.state, "ready");
+    assert.equal(state.getReview("session-1", "proposal-1")?.error, null);
     assert.throws(() => state.transitionReview("session-1", "proposal-1", ["previewing"], "discarded"), /Review is ready/);
     state.transitionReview("session-1", "proposal-1", ["ready"], "applying");
     assert.equal(state.recoverInterruptedReviews(), 1);

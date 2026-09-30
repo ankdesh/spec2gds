@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   A2UIDocumentSurface,
@@ -18,6 +18,7 @@ import {
   type ComponentPortInput,
   type ComponentPortUpdateInput,
   type DocumentSnapshot,
+  type DocumentView,
   type EditorTransactionOperation,
   type EntityMetadataInput,
   type EntityAction,
@@ -77,11 +78,69 @@ export default function App() {
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
   const [inlineEditActive, setInlineEditActive] = useState(false);
+  const documentEpoch = useRef(0);
+  const activeKey = useRef<string | null>(null);
+  const currentRevision = useRef("");
+  const editing = useRef(false);
+  const draftRevision = useRef<string | null>(null);
+  const reviewedRevision = useRef<string | null>(null);
+  const [reviewSource, setReviewSource] = useState<DocumentSnapshot | null>(null);
+  const [approvalPolicy, setApprovalPolicy] = useState<"automatic" | "review">("review");
+  const [syncState, setSyncState] = useState("Disconnected");
+  const eventCursor = useRef(0);
+  const [viewCursor, setViewCursor] = useState(0);
+  const viewRequest = useRef(0);
   const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
 
-  const refreshActivity = useCallback(async () => {
-    setActivity(await client.getActivity());
+  const loadView = useCallback(async () => {
+    const request = ++viewRequest.current;
+    const epoch = documentEpoch.current;
+    const key = activeKey.current;
+    if (!key) return;
+    let next: DocumentView;
+    try { next = await client.getDocumentView(key); }
+    catch (caught) {
+      if (epoch !== documentEpoch.current || key !== activeKey.current) return;
+      throw caught;
+    }
+    if (request !== viewRequest.current || epoch !== documentEpoch.current || key !== activeKey.current) return;
+    eventCursor.current = next.event_cursor;
+    setViewCursor(next.event_cursor);
+    setApprovalPolicy(next.approval_policy);
+    setActivity(next.activity);
+    if (editing.current) {
+      if (next.source_revision_hash !== currentRevision.current) {
+        setExternalChange({ sequence: next.event_cursor, owner_document_key: key,
+          document_id: next.snapshot.document_id, source_revision_hash: next.source_revision_hash,
+          origin: "external", affected_entities: [] });
+        setSyncState("Saved updates pending · draft preserved");
+      }
+      return;
+    }
+    currentRevision.current = next.source_revision_hash;
+    setSnapshot(next.snapshot);
+    setBatch(next.a2ui);
+    setExternalChange(null);
+    setSyncState("Up to date");
   }, [client]);
+
+  const editingChanged = useCallback((value: boolean) => {
+    editing.current = value;
+    setInlineEditActive(value);
+    if (value) {
+      draftRevision.current = currentRevision.current;
+      reviewedRevision.current = null;
+    } else {
+      draftRevision.current = null;
+      reviewedRevision.current = null;
+      setReviewSource(null);
+      void loadView().catch(caught => setError(String(caught)));
+    }
+  }, [loadView]);
+
+  const refreshActivity = useCallback(async () => {
+    await loadView();
+  }, [loadView]);
 
   useEffect(() => {
     void client.getServiceDirectory()
@@ -95,36 +154,41 @@ export default function App() {
 
   const openDocument = useCallback(async (nextPath: string) => {
     if (!nextPath) return false;
+    if (editing.current) { setError("Save or cancel your draft before opening another specification."); return false; }
+    const epoch = ++documentEpoch.current;
     setLoading(true);
     setError("");
     setNotice("");
     try {
       const nextSnapshot = await client.openDocument(nextPath);
-      const [nextBatch, nextActivity] = await Promise.all([
-        client.getA2UIBatch(),
-        client.getActivity(),
-      ]);
-      setSnapshot(nextSnapshot);
-      setBatch(nextBatch);
-      setActivity(nextActivity);
+      if (epoch !== documentEpoch.current) return false;
+      activeKey.current = nextSnapshot.owner_document_key;
+      client.bindDocument(nextSnapshot.owner_document_key);
+      await loadView();
+      if (epoch !== documentEpoch.current) return false;
       setPath(nextPath);
       setView("document");
       setExternalChange(null);
       browserLogger?.event("documents", "opened", "Opened specification", "info", { path: nextPath, snapshot: nextSnapshot });
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-      browserLogger?.event("documents", "open_failed", "Could not open specification", "error", { path: nextPath, error: String(caught) });
+      if (epoch === documentEpoch.current) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+        browserLogger?.event("documents", "open_failed", "Could not open specification", "error", { path: nextPath, error: String(caught) });
+      }
       return false;
     } finally {
-      setLoading(false);
+      if (epoch === documentEpoch.current) setLoading(false);
     }
-  }, [browserLogger, client]);
+  }, [browserLogger, client, loadView]);
 
   useEffect(() => {
     if (!snapshot) return;
+    const key = snapshot.owner_document_key;
+    const epoch = documentEpoch.current;
     const events = new EventSource(client.activityEventsUrl());
     const updateExecution = (event: MessageEvent<string>) => {
+      if (epoch !== documentEpoch.current || key !== activeKey.current) return;
       try {
         const execution = JSON.parse(event.data) as Record<string, unknown>;
         const executionId = text(execution.execution_id, "");
@@ -143,24 +207,26 @@ export default function App() {
       }
     };
     events.addEventListener("activity.execution.changed", updateExecution as EventListener);
-    events.onerror = () => void refreshActivity();
+    events.onerror = () => void refreshActivity().catch(() => {
+      if (epoch === documentEpoch.current && key === activeKey.current) setSyncState("Disconnected · reconnecting");
+    });
     return () => events.close();
-  }, [client, refreshActivity, snapshot]);
+  }, [client, refreshActivity, snapshot?.owner_document_key]);
 
   const createDocument = useCallback(async (nextPath: string, title: string) => {
     if (!nextPath || !title.trim()) return false;
+    if (editing.current) { setError("Save or cancel your draft before creating another specification."); return false; }
+    const epoch = ++documentEpoch.current;
     setLoading(true);
     setError("");
     setNotice("");
     try {
       const nextSnapshot = await client.createDocument(nextPath, title.trim());
-      const [nextBatch, nextActivity] = await Promise.all([
-        client.getA2UIBatch(),
-        client.getActivity(),
-      ]);
-      setSnapshot(nextSnapshot);
-      setBatch(nextBatch);
-      setActivity(nextActivity);
+      if (epoch !== documentEpoch.current) return false;
+      activeKey.current = nextSnapshot.owner_document_key;
+      client.bindDocument(nextSnapshot.owner_document_key);
+      await loadView();
+      if (epoch !== documentEpoch.current) return false;
       setPath(nextPath);
       setView("document");
       setExternalChange(null);
@@ -168,51 +234,50 @@ export default function App() {
       browserLogger?.event("documents", "created", "Created specification", "info", { path: nextPath, title, snapshot: nextSnapshot });
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-      browserLogger?.event("documents", "create_failed", "Could not create specification", "error", { path: nextPath, title, error: String(caught) });
+      if (epoch === documentEpoch.current) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+        browserLogger?.event("documents", "create_failed", "Could not create specification", "error", { path: nextPath, title, error: String(caught) });
+      }
       return false;
     } finally {
-      setLoading(false);
+      if (epoch === documentEpoch.current) setLoading(false);
     }
-  }, [browserLogger, client]);
+  }, [browserLogger, client, loadView]);
 
   useEffect(() => {
     if (!snapshot) return;
-    const source = new EventSource(client.eventsUrl());
+    const key = snapshot.owner_document_key;
+    const epoch = documentEpoch.current;
+    const source = new EventSource(client.eventsUrl(eventCursor.current));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (epoch === documentEpoch.current) void loadView().catch(() => setSyncState("Reconnecting"));
+      }, 100);
+    };
     const onChange = (event: MessageEvent<string>) => {
       try {
         const change = JSON.parse(event.data) as SourceChangeEvent;
-        if (
-          change.document_id === snapshot.document_id
-          && change.source_revision_hash !== snapshot.source_revision_hash
-        ) {
-          if (change.origin === "circuit-designer") {
-            if (inlineEditActive) {
-              setExternalChange(change);
-              return;
-            }
-            void Promise.all([
-              client.getSnapshot(),
-              client.getA2UIBatch(),
-              client.getActivity(),
-            ]).then(([nextSnapshot, nextBatch, nextActivity]) => {
-              setSnapshot(nextSnapshot);
-              setBatch(nextBatch);
-              setActivity(nextActivity);
-              setExternalChange(null);
-              setNotice("Loaded circuit changes saved to the specification.");
-            }).catch(() => setExternalChange(change));
-            return;
-          }
+        if (epoch !== documentEpoch.current || change.owner_document_key !== key) return;
+        if (change.source_revision_hash !== currentRevision.current && editing.current) {
           setExternalChange(change);
+          setSyncState("Saved updates pending · draft preserved");
+        } else if (!editing.current) {
+          schedule();
         }
       } catch {
-        // Ignore malformed optional notifications; normal refresh remains available.
+        schedule(); // Recover from authoritative state, rather than trusting notifications.
       }
     };
     source.addEventListener("source.changed", onChange as EventListener);
-    return () => source.close();
-  }, [client, inlineEditActive, snapshot?.document_id, snapshot?.source_revision_hash]);
+    source.addEventListener("source.resync", onChange as EventListener);
+    source.addEventListener("assistant.submission.changed", schedule);
+    source.addEventListener("source.unavailable", () => setSyncState("Bound package unavailable"));
+    source.onopen = () => { setSyncState(editing.current ? "Editing draft" : "Synchronizing"); schedule(); };
+    source.onerror = () => setSyncState("Disconnected · reconnecting");
+    return () => { source.close(); if (timer) clearTimeout(timer); };
+  }, [client, loadView, snapshot?.owner_document_key]);
 
   useEffect(() => {
     const onEntityAction = (event: Event) => {
@@ -417,23 +482,19 @@ export default function App() {
   };
 
   const refreshExternalChange = async () => {
-    setLoading(true);
     setError("");
     try {
-      const [nextSnapshot, nextBatch, nextActivity] = await Promise.all([
-        client.getSnapshot(),
-        client.getA2UIBatch(),
-        client.getActivity(),
-      ]);
-      setSnapshot(nextSnapshot);
-      setBatch(nextBatch);
-      setActivity(nextActivity);
-      setExternalChange(null);
-      setNotice("Loaded the latest saved specification.");
+      if (editing.current) {
+        const key = activeKey.current;
+        const epoch = documentEpoch.current;
+        const latest = await client.getDocumentView(key);
+        if (epoch === documentEpoch.current && editing.current) setReviewSource(latest.snapshot);
+      } else {
+        await loadView();
+        setNotice("Loaded the latest saved specification.");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -442,25 +503,48 @@ export default function App() {
     successNotice: string,
   ) => {
     if (!snapshot) throw new Error("No specification is open.");
+    const epoch = documentEpoch.current;
+    const key = snapshot.owner_document_key;
     try {
-      const result = await client.applyTransaction(snapshot.source_revision_hash, operations);
+      const base = reviewedRevision.current ?? draftRevision.current ?? snapshot.source_revision_hash;
+      const result = await client.applyTransaction(base, operations);
+      if (epoch !== documentEpoch.current || key !== activeKey.current) return;
+      ++viewRequest.current;
+      currentRevision.current = result.snapshot.source_revision_hash;
       setSnapshot(result.snapshot);
       setExternalChange(null);
       setError("");
       setNotice(successNotice);
       try {
-        setBatch(await client.getA2UIBatch());
+        const savedView = await client.getDocumentView(key);
+        if (epoch !== documentEpoch.current || key !== activeKey.current) return;
+        ++viewRequest.current;
+        currentRevision.current = savedView.source_revision_hash;
+        eventCursor.current = savedView.event_cursor;
+        setViewCursor(savedView.event_cursor);
+        setSnapshot(savedView.snapshot);
+        setBatch(savedView.a2ui);
+        setActivity(savedView.activity);
+        setApprovalPolicy(savedView.approval_policy);
+        setSyncState("Up to date");
+        setExternalChange(null);
       } catch (refreshError) {
+        if (epoch !== documentEpoch.current || key !== activeKey.current) return;
         setError(
           `The change was saved, but the document view could not refresh: ${refreshError instanceof Error ? refreshError.message : String(refreshError)}`,
         );
       }
     } catch (caught) {
+      if (epoch !== documentEpoch.current || key !== activeKey.current) return;
       if (caught instanceof SpecEditorHttpError && caught.status === 409) {
         const latest = await client.getSnapshot();
-        setSnapshot(latest);
-        setExternalChange(null);
-        throw new Error("The specification changed on disk. Your draft was preserved; review it and save again.");
+        if (epoch !== documentEpoch.current || key !== activeKey.current) return;
+        reviewedRevision.current = null;
+        setReviewSource(latest);
+        setExternalChange({ sequence: eventCursor.current, document_id: latest.document_id,
+          owner_document_key: latest.owner_document_key, source_revision_hash: latest.source_revision_hash,
+          origin: "external", affected_entities: [] });
+        throw new Error("The saved source changed. Review the current source below before resubmitting your preserved draft.");
       }
       throw caught;
     }
@@ -574,31 +658,45 @@ export default function App() {
       />
 
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
+      {snapshot && <div className="app-notice" role="status">
+        Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "human approval required"} · {syncState}
+      </div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
-          <span>Document changed by {externalChange.origin === "circuit-designer" ? "Circuit Designer" : "AI Assistant"}. Your current view and inline draft have not been replaced.</span>
-          <button type="button" onClick={() => void refreshExternalChange()}>Refresh</button>
-          <button type="button" aria-label="Dismiss" onClick={() => setExternalChange(null)}>×</button>
+          <span>Saved updates are pending. Your draft and its original revision are preserved.</span>
+          <button type="button" onClick={() => void refreshExternalChange()}>{inlineEditActive ? "Review current source" : "Refresh"}</button>
         </div>
       )}
+      {reviewSource && <aside className="app-refresh-notice">
+        <details open><summary>Review saved source · {reviewSource.source_revision_hash}</summary>
+          <p>Draft began at {draftRevision.current}. Compare the saved values with your draft before saving again.</p>
+          <pre style={{ maxHeight: 300, overflow: "auto" }}>{JSON.stringify(reviewSource, null, 2)}</pre>
+        </details>
+        <button type="button" onClick={() => {
+          reviewedRevision.current = reviewSource.source_revision_hash;
+          setReviewSource(null);
+          setNotice("Current source reviewed. Save your draft to resubmit against that revision, or cancel to load it.");
+        }}>Use reviewed revision for next save</button>
+      </aside>}
       {error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
 
       <main>
         {loading && <LoadingState />}
-        {!loading && view === "document" && batch && (
+        {!loading && batch && <div style={{ display: view === "document" ? undefined : "none" }}>
           <A2UIDocumentSurface
             batch={batch}
             editController={editController}
-            onEditingChange={setInlineEditActive}
+            onEditingChange={editingChanged}
           />
-        )}
+        </div>}
         {!loading && view === "activity" && (
+          <><AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />
           <ActivityView
             activity={activity}
             onCancel={cancelActivity}
             onRefresh={refreshActivity}
             onReview={reviewProposal}
-          />
+          /></>
         )}
         {!loading && view === "diagnostics" && (
           <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} sections={sectionDiagnostics} />
@@ -629,6 +727,54 @@ export default function App() {
       )}
     </div>
   );
+}
+
+function AssistantHistory({ client, documentKey, revision, onChanged }: {
+  client: SpecEditorHttpClient; documentKey: string; revision: string; onChanged: () => Promise<void>;
+}) {
+  const [page, setPage] = useState<{ items: Array<Record<string, unknown>>; next_cursor: number | null }>({ items: [], next_cursor: null });
+  const [details, setDetails] = useState<Record<string, unknown> | null>(null);
+  const [error, setError] = useState("");
+  const epoch = useRef(0);
+  const fetchPage = useCallback(async (before?: number) => {
+    const token = ++epoch.current;
+    try {
+      const value = await client.getAssistantHistory(before);
+      if (token === epoch.current) { setPage(value); setError(""); setDetails(null); }
+    } catch (caught) { if (token === epoch.current) setError(String(caught)); }
+  }, [client]);
+  useEffect(() => { if (documentKey) void fetchPage(); return () => { ++epoch.current; }; }, [documentKey, revision, fetchPage]);
+  const decide = async (id: string, decision: "approve" | "reject") => {
+    const token = epoch.current;
+    try {
+      await client.decideAssistantSubmission(id, decision);
+      if (token !== epoch.current) return;
+      await onChanged(); await fetchPage();
+    }
+    catch (caught) { if (token === epoch.current) setError(String(caught)); }
+  };
+  return <UtilityPanel title="Assistant submission history" count={page.items.length}>
+    {error && <p role="alert">{error}</p>}
+    <button onClick={() => void fetchPage()}>Latest submissions</button>
+    {page.items.map(item => <article className="activity-item" key={text(item.proposal_id)}>
+      <strong>{text(item.title)}</strong><p>{text(item.summary)}</p>
+      <p>{text(item.state)} · proposal {text(item.proposal_id)} · session {text(item.session_id)}</p>
+      <small>Base {text(item.base_source_revision_hash)} → saved {text(record(item.owner_result).source_revision_hash)}</small>
+      <button onClick={() => {
+        const token = epoch.current;
+        void client.getAssistantSubmission(text(item.proposal_id)).then(value => {
+          if (token === epoch.current) setDetails(value);
+        }).catch(caught => { if (token === epoch.current) setError(String(caught)); });
+      }}>Details and diff</button>
+      {item.state === "ready" && <>
+        <button onClick={() => void decide(text(item.proposal_id), "approve")}>Approve</button>
+        <button onClick={() => void decide(text(item.proposal_id), "reject")}>Reject</button>
+      </>}
+    </article>)}
+    {details && <pre style={{ maxHeight: 400, overflow: "auto" }}>{JSON.stringify(details, null, 2)}</pre>}
+    {page.next_cursor !== null && <button onClick={() => void fetchPage(page.next_cursor!)}>Older submissions</button>}
+    {!page.items.length && <p>No assistant submissions.</p>}
+  </UtilityPanel>;
 }
 
 function entityName(vlnv?: string): string {

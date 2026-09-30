@@ -46,6 +46,29 @@ export class OwnerClients {
   readonly circuitAllowlist: string[];
   readonly timeoutMs: number;
 
+  private specUrl(binding: SessionBinding, path: string, values: Record<string, string> = {}): string {
+    const query = new URLSearchParams(values);
+    if (binding.ownerDocumentKey) query.set("owner_document_key", binding.ownerDocumentKey);
+    return `${binding.ownerUrl}${path}${query.size ? `?${query}` : ""}`;
+  }
+
+  async specPolicy(ownerUrl: string, signal?: AbortSignal): Promise<{ approval_policy: "automatic" | "review"; submissions: boolean; creationReceipts?: boolean }> {
+    const url = normalizeSpecUrl(ownerUrl, this.specAllowlist);
+    try {
+      const value = await this.request("GET", `${url}/assistant/capabilities`, undefined, signal);
+      if (value.approval_policy !== "automatic" && value.approval_policy !== "review") {
+        throw new OwnerError(502, "Spec owner did not publish a valid approval policy.");
+      }
+      return { approval_policy: value.approval_policy, submissions: value.submission_endpoint === "/assistant/proposals/submit",
+        ...(value.creation_receipts === true ? { creationReceipts: true } : {}) };
+    } catch (error) {
+      // An older owner retains its explicit human review flow. Other discovery
+      // failures stop submission rather than assuming permission to write.
+      if (error instanceof OwnerError && error.status === 404) return { approval_policy: "review", submissions: false };
+      throw error;
+    }
+  }
+
   constructor(
     specAllowlist: string[],
     circuitAllowlist: string[],
@@ -85,6 +108,7 @@ export class OwnerClients {
         }));
       return { domain, serviceBaseUrl: url, document: {
         document_id: snapshot.document_id,
+        ...(typeof snapshot.owner_document_key === "string" ? { owner_document_key: snapshot.owner_document_key } : {}),
         title: isRecord(snapshot.narrative) ? snapshot.narrative.title : snapshot.document_id,
       }, entities };
     }
@@ -100,9 +124,9 @@ export class OwnerClients {
     return { domain, serviceBaseUrl: url, documents };
   }
 
-  async createSpec(value: string, path: string, documentId: string, title: string): Promise<Record<string, unknown>> {
+  async createSpec(value: string, path: string, documentId: string, title: string, requestId?: string): Promise<Record<string, unknown>> {
     const url = normalizeSpecUrl(value, this.specAllowlist);
-    return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title });
+    return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title, ...(requestId ? { request_id: requestId } : {}) }, undefined, true);
   }
 
   async createCircuit(value: string, documentId: string, title: string): Promise<Record<string, unknown>> {
@@ -130,6 +154,7 @@ export class OwnerClients {
     const binding: SessionBinding = {
       sessionId: "validation", status: "creating", preset: input.preset ?? "focused", domain: input.domain, ownerUrl,
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" : input.scope ?? "document",
+      ownerDocumentKey: input.ownerDocumentKey,
       entityKind: input.entityKind ?? null, entityId: input.entityId ?? null,
       title: input.title ?? input.documentId, archived: false, createdAt: "", updatedAt: "",
       workspaceKey: "validation", workspaceTitle: input.documentId, workspacePath: "validation",
@@ -144,15 +169,13 @@ export class OwnerClients {
       return this.request("GET", `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}`, undefined, signal);
     }
     if (binding.scope === "document") {
-      const query = new URLSearchParams({ document_id: binding.documentId });
-      return this.request("GET", `${binding.ownerUrl}/assistant/context/document?${query}`, undefined, signal);
+      return this.request("GET", this.specUrl(binding, "/assistant/context/document", { document_id: binding.documentId }), undefined, signal);
     }
-    const query = new URLSearchParams({
+    return this.request("GET", this.specUrl(binding, "/assistant/context", {
       document_id: binding.documentId,
       entity_kind: binding.entityKind ?? "",
       entity_id: binding.entityId ?? "",
-    });
-    return this.request("GET", `${binding.ownerUrl}/assistant/context?${query}`, undefined, signal);
+    }), undefined, signal);
   }
 
   async circuitSourceBinding(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
@@ -168,6 +191,7 @@ export class OwnerClients {
   async operationContract(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
     const query = new URLSearchParams({ document_id: binding.documentId, scope: binding.scope });
+    if (binding.ownerDocumentKey) query.set("owner_document_key", binding.ownerDocumentKey);
     if (binding.scope === "entity") {
       query.set("entity_kind", binding.entityKind ?? "");
       query.set("entity_id", binding.entityId ?? "");
@@ -177,17 +201,42 @@ export class OwnerClients {
 
   async previewSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
-    return this.request("POST", `${binding.ownerUrl}/assistant/proposals/preview`, artifact, signal);
+    return this.request("POST", this.specUrl(binding, "/assistant/proposals/preview"), artifact, signal);
   }
 
   async applySpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
-    return this.request("POST", `${binding.ownerUrl}/assistant/proposals/apply`, artifact, signal, true);
+    return this.request("POST", this.specUrl(binding, "/assistant/proposals/apply"), artifact, signal, true);
+  }
+
+  async submitSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    return this.request("POST", this.specUrl(binding, "/assistant/proposals/submit", { session_id: binding.sessionId }), artifact, signal, true);
+  }
+
+  async stageSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    return this.request("POST", this.specUrl(binding, "/assistant/proposals/stage", { session_id: binding.sessionId }), artifact, signal);
+  }
+
+  async approveSpec(binding: SessionBinding, proposalId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    return this.request("POST", this.specUrl(binding, `/assistant/proposals/${encodeURIComponent(proposalId)}/approve`), {}, signal, true);
+  }
+
+  async rejectSpec(binding: SessionBinding, proposalId: string): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    return this.request("POST", this.specUrl(binding, `/assistant/proposals/${encodeURIComponent(proposalId)}/reject`), {});
   }
 
   async specChanges(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
-    return this.request("GET", `${binding.ownerUrl}/assistant/changes`, undefined, signal);
+    return this.request("GET", this.specUrl(binding, "/assistant/changes"), undefined, signal);
+  }
+
+  async specSubmission(binding: SessionBinding, proposalId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    return this.request("GET", this.specUrl(binding, `/assistant/proposals/${encodeURIComponent(proposalId)}`), undefined, signal);
   }
 
   async previewCircuit(binding: SessionBinding, batch: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
@@ -278,18 +327,20 @@ export class OwnerClients {
       const reason = error instanceof Error ? error.message : String(error);
       throw new OwnerError(503, `Owner service request failed: ${reason}`, mutation);
     }
-    const text = await response.text();
-    if (text.length > 4 * 1024 * 1024) throw new OwnerError(502, "Owner response exceeded 4 MiB.");
+    let text: string;
+    try { text = await response.text(); }
+    catch (error) { throw new OwnerError(502, `Owner response could not be read: ${String(error)}`, mutation); }
+    if (text.length > 4 * 1024 * 1024) throw new OwnerError(502, "Owner response exceeded 4 MiB.", mutation);
     let value: unknown = {};
     if (text) {
       try { value = JSON.parse(text); }
-      catch { throw new OwnerError(502, "Owner returned non-JSON content."); }
+      catch { throw new OwnerError(502, "Owner returned non-JSON content.", mutation); }
     }
     if (!response.ok) {
       const detail = isRecord(value) && "detail" in value ? value.detail : value;
       throw new OwnerError(response.status, detail, mutation && response.status >= 500);
     }
-    if (!isRecord(value)) throw new OwnerError(502, "Owner returned a non-object JSON response.");
+    if (!isRecord(value)) throw new OwnerError(502, "Owner returned a non-object JSON response.", mutation);
     return value;
   }
 }

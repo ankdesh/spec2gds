@@ -15,6 +15,37 @@ test("owner URLs require exact configured origins", () => {
   assert.throws(() => normalizeCircuitUrl("http://localhost:6011/api/circuit-designer/v2", ["http://localhost:6011/api/circuit-designer/v1"]), /must end/);
 });
 
+test("Spec policy discovery is explicit and bound requests carry the package key", async () => {
+  const urls: URL[] = [];
+  let policy: unknown = "automatic";
+  let status = 200;
+  const server = createServer((request, response) => {
+    const url = new URL(request.url!, "http://localhost"); urls.push(url);
+    response.writeHead(status, { "Content-Type": "application/json" });
+    response.end(JSON.stringify(url.pathname === "/assistant/capabilities"
+      ? { approval_policy: policy, submission_endpoint: "/assistant/proposals/submit" }
+      : { document_id: "same-id", status: "applied", source_revision_hash: "sha256:saved" }));
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); assert.ok(address && typeof address === "object");
+  const ownerUrl = `http://127.0.0.1:${address.port}`;
+  const clients = new OwnerClients([ownerUrl], [], 5_000);
+  const binding = { domain: "spec", ownerUrl, documentId: "same-id", ownerDocumentKey: "package-A", scope: "document", sessionId: "chat" } as SessionBinding;
+  try {
+    assert.deepEqual(await clients.specPolicy(ownerUrl), { approval_policy: "automatic", submissions: true });
+    await clients.context(binding);
+    await clients.submitSpec(binding, {});
+    assert.ok(urls.filter(url => url.pathname !== "/assistant/capabilities").every(url => url.searchParams.get("owner_document_key") === "package-A"));
+    assert.equal(urls.at(-1)!.searchParams.get("session_id"), "chat");
+    policy = undefined;
+    await assert.rejects(clients.specPolicy(ownerUrl), /valid approval policy/);
+    status = 404;
+    assert.deepEqual(await clients.specPolicy(ownerUrl), { approval_policy: "review", submissions: false });
+    status = 503;
+    await assert.rejects(clients.specPolicy(ownerUrl));
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
 test("Spec target discovery uses canonical entity references", async () => {
   const server = createServer((_request, response) => {
     response.writeHead(200, { "Content-Type": "application/json" });

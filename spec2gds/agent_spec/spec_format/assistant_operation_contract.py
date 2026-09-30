@@ -46,14 +46,17 @@ def operation_contract(
         "component", "design", "bus_definition", "abstraction_definition", "narrative_block"
     }:
         raise ValueError("Unsupported entity kind for assistant operations.")
-    allowed = {"create_entity"} if scope == "document" else set(_NARRATIVE_OPERATIONS)
+    # Vocabulary depends on binding kind, never mutable composition state.
+    # Ownership and composite-boundary restrictions are semantic owner checks.
+    allowed = set(_NARRATIVE_OPERATIONS)
+    if scope == "document":
+        allowed |= {"create_entity", "set_entity_metadata", "update_bus_definition",
+                    "set_abstraction_bus_type", "upsert_abstraction_port", "delete_abstraction_port",
+                    *_COMPONENT_OPERATIONS, *_DESIGN_OPERATIONS, *_ENTITY_SECTIONS}
     if scope == "entity" and entity_kind != "narrative_block":
         allowed |= {"set_entity_metadata", *_ENTITY_SECTIONS}
     if entity_kind == "component":
-        allowed |= _COMPONENT_OPERATIONS
-        if include_owned_design:
-            allowed |= _DESIGN_OPERATIONS
-            allowed -= {"upsert_component_port", "delete_component_port"}
+        allowed |= _COMPONENT_OPERATIONS | _DESIGN_OPERATIONS
     elif entity_kind == "design":
         allowed |= _DESIGN_OPERATIONS
     elif entity_kind == "bus_definition":

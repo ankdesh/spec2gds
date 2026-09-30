@@ -31,7 +31,9 @@ export function workspaceDescriptor(
   }
   // Private CLI owners change ports each turn; the package path supplies a stable key.
   const identityOwnerUrl = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || workspaceOwnerUrl;
-  const key = digest({ domain, ownerUrl: identityOwnerUrl, documentId });
+  const ownerDocumentKey = domain === "spec" && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY
+    && typeof context.owner_document_key === "string" ? context.owner_document_key : undefined;
+  const key = digest({ domain, ownerUrl: identityOwnerUrl, documentId, ...(ownerDocumentKey ? { ownerDocumentKey } : {}) });
   return {
     key,
     title,

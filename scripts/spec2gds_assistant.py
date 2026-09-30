@@ -43,12 +43,12 @@ def _request(url: str, path: str, payload: dict[str, Any] | None = None) -> dict
 
 
 @contextmanager
-def _private_owner() -> Iterator[str]:
+def _private_owner(require_human_approval: bool = False) -> Iterator[str]:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     sock.listen()
     port = sock.getsockname()[1]
-    config = uvicorn.Config(create_app(), host="127.0.0.1", port=port, log_level="error", access_log=False)
+    config = uvicorn.Config(create_app(require_human_approval), host="127.0.0.1", port=port, log_level="error", access_log=False)
     server = uvicorn.Server(config)
     worker = threading.Thread(target=lambda: asyncio.run(server.serve(sockets=[sock])), daemon=True)
     worker.start()
@@ -75,6 +75,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2gds-assistant", description="Run one focused assistant turn against a workspace specification.")
     parser.add_argument("target", help="Workspace directory or exact .spec path")
     parser.add_argument("--preset", default="focused", help="Assistant preset (currently focused only)")
+    parser.add_argument("--require-human-approval", action="store_true", help="leave valid submissions pending for an explicit Spec CLI decision")
     return parser
 
 
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
         state_root = assistant_state_root(spec_path)
         state_root.mkdir(parents=True, exist_ok=True)
         identity_owner = f"spec2gds-cli:{spec_path}"
-        with _private_owner() as owner_url:
+        with _private_owner(args.require_human_approval) as owner_url:
             snapshot = _request(
                 owner_url,
                 "/documents/open" if spec_path.exists() else "/documents/create",
@@ -128,6 +129,7 @@ def main(argv: list[str] | None = None) -> int:
                 "SPEC2GDS_BINDING_JSON": json.dumps({
                     "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
                     "documentId": document_id, "scope": "document",
+                    "ownerDocumentKey": snapshot["owner_document_key"],
                 }),
                 "DSH_PRODUCT_RUN_CWD": str(cwd),
             }
@@ -152,6 +154,7 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": "spec2gds.assistant-workspace-run.v1",
             "spec_path": str(spec_path), "document_id": document_id,
             "session_id": session_id, "preset": "focused", "exit_code": result.returncode,
+            "approval_policy": "review" if args.require_human_approval else "automatic",
             "answer": final, "events_path": str(event_path),
             "proposals": [{"proposal_id": item["proposalId"], "state": item["state"]} for item in reviews],
         }

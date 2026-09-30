@@ -77,9 +77,11 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock, new_entity_id
+from spec2gds.agent_spec.spec_format.owner_store import OwnerBindings, OwnerJournal, document_key
 from spec2gds.agent_spec.spec_format.proposal_service import (
     ProposalApplyError,
     apply_assistant_proposal,
+    reconcile_assistant_receipts,
 )
 from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
 from spec2gds.agent_spec.spec_format.transactions import (
@@ -130,6 +132,7 @@ class CreateDocumentRequest(pydantic.BaseModel):
     title: str | None = None
     document_id: str | None = None
     sidecar_root: str | None = None
+    request_id: str | None = None
 
 
 class CreateDirectoryRequest(pydantic.BaseModel):
@@ -219,13 +222,41 @@ class V1Session:
     def __init__(self, path: str, sidecar_root: str | None = None) -> None:
         """Load and validate source before exposing the session to any route."""
         self.path = str(Path(path).expanduser().resolve())
-        self.package = SpecPackage.load(self.path)
+        self.lock = _path_lock(self.path)
+        data = Path(self.path).read_bytes()
+        self.package = SpecPackage.from_bytes(data)
         self.revision = SpecRevision.from_package(self.package)
         self.sidecar = ArtifactSidecar(sidecar_root or f"{self.path}.artifacts")
         self.activity = ActivityStore(self.package, self.sidecar)
         self.actions = ActionService(ActionRegistry(), self.sidecar)
-        self.lock = _path_lock(self.path)
-        self._disk_digest = sha256(Path(self.path).read_bytes()).hexdigest()
+        self._disk_digest = sha256(data).hexdigest()
+        self.owner_document_key = document_key(self.path, self.revision.document_id)
+        self._journal: OwnerJournal | None = None
+        self.reconciled_proposals: set[str] = set()
+
+    @property
+    def journal(self) -> OwnerJournal:
+        if self._journal is None:
+            self._journal = OwnerJournal(self.path)
+        return self._journal
+
+    def refresh_from_disk(self) -> bool:
+        """Reload authoritative disk state without changing a browser's draft."""
+        with self.lock:
+            data = Path(self.path).read_bytes()
+            digest = sha256(data).hexdigest()
+            if digest == self._disk_digest:
+                return False
+            package = SpecPackage.from_bytes(data)
+            if package.manifest.document_id != self.revision.document_id:
+                raise ValueError("Bound package was replaced by a different document.")
+            revision = SpecRevision.from_package(package)
+            changed = revision.source_revision_hash != self.revision.source_revision_hash
+            self.package = package
+            self.revision = revision
+            self.activity = ActivityStore(package, self.sidecar)
+            self._disk_digest = digest
+            return changed
 
     @classmethod
     def create(
@@ -315,7 +346,7 @@ def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtens
     return load_extension_modules(extension_modules, registry)
 
 
-def create_app() -> typing.Any:
+def create_app(require_human_approval: bool | None = None) -> typing.Any:
     """Create the production local V1 API; only the deterministic source format is accepted."""
     try:
         import fastapi
@@ -325,6 +356,11 @@ def create_app() -> typing.Any:
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
     app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
+    approval_policy = "review" if (
+        require_human_approval if require_human_approval is not None
+        else os.environ.get("SPEC2GDS_REQUIRE_HUMAN_APPROVAL", "0") == "1"
+    ) else "automatic"
+    bindings = OwnerBindings()
 
     @app.exception_handler(SpecDiskConflict)
     async def disk_conflict_handler(_request: typing.Any, exc: SpecDiskConflict) -> typing.Any:
@@ -385,6 +421,7 @@ def create_app() -> typing.Any:
         return response
     state: dict[str, typing.Any] = {
         "active": None,
+        "sessions": {},
         "source_event_sequence": 0,
         "source_event": None,
         "circuit_source_bindings": {},
@@ -403,6 +440,7 @@ def create_app() -> typing.Any:
                 session = current
             else:
                 session = V1Session(envelope.package_path, envelope.sidecar_root)
+            session.refresh_from_disk()
             if session.revision.document_id != envelope.record.target.document_id:
                 raise ValueError("Activity result package identity no longer matches its snapshot.")
             artifact_ids: list[str] = []
@@ -453,7 +491,7 @@ def create_app() -> typing.Any:
             updated = envelope.record.model_copy(update={"artifact_ids": tuple(artifact_ids)})
             session.activity.replace_activity_execution(updated)
             session.activity.save()
-            session.package.save(session.path)
+            session.save()
             return updated
 
     activity_jobs = ActivityJobManager(
@@ -485,6 +523,52 @@ def create_app() -> typing.Any:
             raise fastapi.HTTPException(status_code=400, detail="No V1 .spec package is open.")
         return session
 
+    def register_session(session: V1Session, sidecar_root: str | None = None) -> V1Session:
+        bindings.register(session.path, session.revision.document_id, sidecar_root)
+        state["sessions"][session.owner_document_key] = session
+        session.journal.observe(_source_event(session, "editor", []), seed=True)
+        reconcile_session(session)
+        return session
+
+    def bound_session(owner_document_key: str | None = None, document_id: str | None = None) -> V1Session:
+        if owner_document_key is None and document_id is not None:
+            matches = bindings.matching(document_id)
+            if len(matches) != 1:
+                raise fastapi.HTTPException(status_code=409, detail={
+                    "error_code": "BINDING_REQUIRED", "document_id": document_id,
+                    "message": "Select an exact package binding; the document ID is absent or ambiguous.",
+                })
+            owner_document_key = matches[0]["key"]
+        if owner_document_key is None:
+            session = active()
+        else:
+            record = bindings.get(owner_document_key)
+            if record is None:
+                raise fastapi.HTTPException(status_code=404, detail="Unknown package binding.")
+            session = state["sessions"].get(owner_document_key)
+            if session is None:
+                try:
+                    session = V1Session(record["path"], record["sidecar_root"])
+                except (OSError, ValueError) as exc:
+                    raise fastapi.HTTPException(status_code=409, detail={"error_code": "BINDING_UNAVAILABLE", "message": str(exc)}) from exc
+                if session.owner_document_key != owner_document_key:
+                    raise fastapi.HTTPException(status_code=409, detail="Bound package identity changed.")
+                state["sessions"][owner_document_key] = session
+        try:
+            changed = session.refresh_from_disk()
+        except (OSError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=409, detail={"error_code": "BINDING_UNAVAILABLE", "message": str(exc)}) from exc
+        if document_id is not None and document_id != session.revision.document_id:
+            raise fastapi.HTTPException(status_code=409, detail="Proposal and package binding identify different documents.")
+        if changed:
+            _publish_source_event(state, session, origin="external", affected_entities=[])
+        reconcile_session(session)
+        return session
+
+    def reconcile_session(session: V1Session) -> None:
+        """Repair interrupted journal writes from atomically saved decisions."""
+        reconcile_assistant_receipts(session)
+
     def ref(kind: str, entity_id: str) -> EntityRef:
         """Build a document-local stable entity reference from route segments."""
         session = active()
@@ -493,14 +577,15 @@ def create_app() -> typing.Any:
         except pydantic.ValidationError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    def result_or_error(result: typing.Any) -> dict[str, typing.Any]:
+    def result_or_error(result: typing.Any, session: V1Session | None = None) -> dict[str, typing.Any]:
         """Commit a successful transaction or map diagnostics to HTTP status."""
+        session = session or active()
         if result.succeeded and result.revision is not None:
-            active().commit_revision(result.revision)
-            _publish_source_event(state, active(), origin="editor", affected_entities=[])
+            session.commit_revision(result.revision)
+            _publish_source_event(state, session, origin="editor", affected_entities=[])
             return {
                 "committed": True,
-                "snapshot": _snapshot(active()),
+                "snapshot": _snapshot(session),
                 "section_validation": [item.as_json() for item in result.section_validation],
             }
         status = 409 if any("Stale" in item or "stale" in item for item in result.diagnostics) else 422
@@ -513,6 +598,12 @@ def create_app() -> typing.Any:
     def health() -> dict[str, str]:
         """Report server liveness and the source-format generation it serves."""
         return {"status": "ok", "format": "spec2gds-v1"}
+
+    @app.get("/assistant/capabilities")
+    def assistant_capabilities() -> dict[str, typing.Any]:
+        return {"schema_version": 1, "approval_policy": approval_policy,
+                "stable_package_bindings": True, "document_refinement": True,
+                "submission_endpoint": "/assistant/proposals/submit", "creation_receipts": True}
 
     @app.get("/services")
     def services() -> dict[str, typing.Any]:
@@ -635,13 +726,21 @@ def create_app() -> typing.Any:
         """Create, validate, activate, and return a new package snapshot."""
         try:
             logger.event("documents", "create_requested", "Creating specification", details=request)
-            state["active"] = V1Session.create(
+            reserved = bindings.creation(request.request_id, request.model_dump(mode="json")) if request.request_id else False
+            if reserved and Path(request.path).expanduser().resolve().exists():
+                session = V1Session(request.path, request.sidecar_root)
+                if request.document_id is None or session.revision.document_id != request.document_id:
+                    raise ValueError("Creation receipt does not match the saved package.")
+                state["active"] = register_session(session, request.sidecar_root)
+                return _snapshot(session)
+            session = V1Session.create(
                 request.path,
                 request.document_id,
                 request.sidecar_root,
                 request.title,
             )
-            return _snapshot(active())
+            state["active"] = register_session(session, request.sidecar_root)
+            return _snapshot(session)
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -650,22 +749,38 @@ def create_app() -> typing.Any:
         """Validate and activate an existing deterministic package."""
         try:
             logger.event("documents", "open_requested", "Opening specification", details=request)
-            state["active"] = V1Session(request.path, request.sidecar_root)
+            state["active"] = register_session(V1Session(request.path, request.sidecar_root), request.sidecar_root)
             return _snapshot(active())
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/documents/snapshot")
-    def document_snapshot() -> dict[str, typing.Any]:
+    def document_snapshot(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return the complete editor-facing immutable source projection."""
-        return _snapshot(active())
+        return _snapshot(bound_session(owner_document_key))
+
+    @app.get("/documents/view")
+    def document_view(owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        session = bound_session(owner_document_key)
+        with session.lock:
+            cursor = session.journal.observe(_source_event(session, "external", []))
+            activity = session.activity.state
+            return {"snapshot": _snapshot(session),
+                    "a2ui": build_a2ui_batch(build_document_projection(session.revision)).model_dump(mode="json"),
+                    "activity": {"executions": [_jsonable(item) for item in (*activity.executions, *activity.activity_executions)],
+                                 "artifacts": [_jsonable(item) for item in activity.artifacts],
+                                 "proposals": [_jsonable(item) for item in activity.proposals],
+                                 "assistant_changes": [_jsonable(item) for item in activity.assistant_changes[-50:]]},
+                    "approval_policy": approval_policy, "event_cursor": cursor,
+                    "source_revision_hash": session.revision.source_revision_hash}
 
     @app.post("/assistant/launch")
-    def launch_assistant(request: AssistantLaunchRequest) -> dict[str, typing.Any]:
+    def launch_assistant(request: AssistantLaunchRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return the AI Assistant launch URL without making the editor depend on it."""
-        target = ref(request.entity_kind, request.entity_id)
+        session = bound_session(owner_document_key)
+        target = EntityRef(document_id=session.revision.document_id, entity_kind=request.entity_kind, entity_id=request.entity_id)
         try:
-            active().revision.resolve(target)
+            session.revision.resolve(target)
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
         urls = service_urls()
@@ -674,7 +789,8 @@ def create_app() -> typing.Any:
         query = urlencode(
             {
                 "service_base_url": service,
-                "document_id": active().revision.document_id,
+                "document_id": session.revision.document_id,
+                "owner_document_key": session.owner_document_key,
                 "entity_kind": target.entity_kind,
                 "entity_id": target.entity_id,
             }
@@ -687,10 +803,11 @@ def create_app() -> typing.Any:
     @app.post("/assistant/launch/document")
     def launch_document_assistant(
         request: AssistantDocumentLaunchRequest | None = None,
+        owner_document_key: str | None = None,
     ) -> dict[str, typing.Any]:
         """Launch the Assistant, binding it when a specification is active."""
         urls = service_urls()
-        session = typing.cast(V1Session | None, state["active"])
+        session = bound_session(owner_document_key) if owner_document_key else typing.cast(V1Session | None, state["active"])
         if session is None or (
             request is not None and not request.attach_active_document
         ):
@@ -704,6 +821,7 @@ def create_app() -> typing.Any:
             {
                 "service_base_url": urls["spec_editor"]["service_url"],
                 "document_id": session.revision.document_id,
+                "owner_document_key": session.owner_document_key,
             }
         )
         return {
@@ -916,9 +1034,9 @@ def create_app() -> typing.Any:
         return response
 
     @app.get("/documents/a2ui")
-    def document_a2ui() -> dict[str, typing.Any]:
+    def document_a2ui(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return a deterministic A2UI v0.9 batch for the unified document."""
-        projection = build_document_projection(active().revision)
+        projection = build_document_projection(bound_session(owner_document_key).revision)
         return build_a2ui_batch(projection).model_dump(mode="json")
 
     @app.get("/assistant/context")
@@ -926,26 +1044,25 @@ def create_app() -> typing.Any:
         document_id: str,
         entity_kind: str,
         entity_id: str,
+        owner_document_key: str | None = None,
     ) -> dict[str, typing.Any]:
         """Return entity-bound semantic context for the external Spec agent."""
-        if document_id != active().revision.document_id:
-            raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
+        session = bound_session(owner_document_key, document_id)
         try:
-            return build_assistant_context(active().revision, ref(entity_kind, entity_id))
+            target = EntityRef(document_id=document_id, entity_kind=entity_kind, entity_id=entity_id)
+            return {**build_assistant_context(session.revision, target),
+                    "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
         except (TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/assistant/context/document")
-    def assistant_document_context(document_id: str) -> dict[str, typing.Any]:
-        """Return immutable document-wide context for a read-only Spec chat."""
-        if document_id != active().revision.document_id:
-            raise fastapi.HTTPException(
-                status_code=409,
-                detail="A different .spec document is active.",
-            )
-        return build_document_assistant_context(active().revision)
+    def assistant_document_context(document_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        """Return document-wide context and supported refinement boundaries."""
+        session = bound_session(owner_document_key, document_id)
+        return {**build_document_assistant_context(session.revision),
+                "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
 
     @app.get("/assistant/operation-schema")
     def assistant_operation_schema(
@@ -953,73 +1070,195 @@ def create_app() -> typing.Any:
         scope: str,
         entity_kind: str | None = None,
         entity_id: str | None = None,
+        owner_document_key: str | None = None,
     ) -> dict[str, typing.Any]:
         """Return the assistant operation schema owned by this specification."""
-        if document_id != active().revision.document_id:
-            raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
+        session = bound_session(owner_document_key, document_id)
         target = None
         if scope == "entity":
             if not entity_kind or not entity_id:
                 raise fastapi.HTTPException(status_code=422, detail="Entity scope requires entity_kind and entity_id.")
             try:
-                target = ref(entity_kind, entity_id)
-                active().revision.resolve(target)
+                target = EntityRef(document_id=document_id, entity_kind=entity_kind, entity_id=entity_id)
+                session.revision.resolve(target)
             except (KeyError, TypeError, ValueError) as exc:
                 raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
         try:
             return operation_contract(
                 scope, entity_kind,
-                bool(target and target.entity_kind == "component" and active().revision.internal_design(target)),
+                bool(target and target.entity_kind == "component" and session.revision.internal_design(target)),
             )
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/assistant/proposals/preview")
-    def assistant_proposal_preview(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
+    def assistant_proposal_preview(proposal: SpecChangeProposal, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Validate and project an assistant proposal without persisting a draft."""
         try:
-            result = preview_assistant_proposal(active().revision, proposal)
+            result = preview_assistant_proposal(bound_session(owner_document_key, proposal.document_id).revision, proposal)
         except (KeyError, TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
         result.pop("_revision", None)
         return result
 
-    @app.post("/assistant/proposals/apply")
-    def assistant_proposal_apply(proposal: SpecChangeProposal) -> dict[str, typing.Any]:
-        """Revalidate, atomically apply/save, and record one approved decision."""
-        session = active()
+    def commit_proposal(session: V1Session, proposal: SpecChangeProposal, mode: typing.Literal["automatic", "review"], session_id: str | None = None) -> dict[str, typing.Any]:
+        session.journal.update(proposal.proposal_id, state="applying")
         try:
-            result = apply_assistant_proposal(session, proposal)
+            result = apply_assistant_proposal(session, proposal, application_mode=mode, session_id=session_id)
         except ProposalApplyError as exc:
+            session.journal.update(proposal.proposal_id, state="stale" if exc.status == 409 else "rejected", diagnostics=exc.detail)
             raise fastapi.HTTPException(status_code=exc.status, detail=exc.detail) from exc
         except SpecDiskConflict:
+            session.journal.update(proposal.proposal_id, state="stale", diagnostics="Package changed on disk; reread context.")
             raise
-        except (OSError, ValueError, SpecValidationError) as exc:
+        except OSError as exc:
+            # The package may have been saved before the response/journal failed.
+            # Leave an uncertain receipt for reconciliation, never claim success.
+            session.journal.update(proposal.proposal_id, state="reconcile", diagnostics=str(exc))
+            raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc
+        except (ValueError, SpecValidationError) as exc:
+            session.journal.update(proposal.proposal_id, state="rejected", diagnostics=str(exc))
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        session.journal.update(proposal.proposal_id, state="applied", owner_result=result, diagnostics=[])
+        session.reconciled_proposals.add(proposal.proposal_id)
         if not result["idempotent_replay"]:
+            affected = [proposal.target.model_dump(mode="json")] if proposal.target else [
+                item.ref.model_dump(mode="json") for item in (*session.revision.components, *session.revision.designs)
+            ]
             _publish_source_event(
-                state,
-                session,
-                origin="assistant",
-                affected_entities=(
-                    [proposal.target.model_dump(mode="json")]
-                    if proposal.target is not None else []
-                ),
+                state, session, origin="assistant", affected_entities=affected,
             )
         return result
 
+    def stage_proposal(proposal: SpecChangeProposal, owner_document_key: str | None, session_id: str | None) -> tuple[V1Session, dict[str, typing.Any]]:
+        session = bound_session(owner_document_key, proposal.document_id)
+        try:
+            record = session.journal.register(proposal.model_dump(mode="json"), session_id)
+        except ValueError as exc:
+            raise fastapi.HTTPException(status_code=409, detail=str(exc)) from exc
+        if record["state"] == "applied":
+            try:
+                # Validate the complete replay envelope and package identity,
+                # including receipts copied into another package.
+                result = apply_assistant_proposal(session, proposal)
+            except ProposalApplyError as exc:
+                raise fastapi.HTTPException(status_code=exc.status, detail=exc.detail) from exc
+            record = {**record, "owner_result": result}
+            return session, record
+        if record["state"] == "discarded":
+            raise fastapi.HTTPException(status_code=409, detail="This proposal was explicitly rejected.")
+        preview = preview_assistant_proposal(session.revision, proposal)
+        preview.pop("_revision", None)
+        if preview["status"] != "valid":
+            session.journal.update(proposal.proposal_id, state="stale" if preview["status"] == "stale" else "rejected", preview=preview, diagnostics=preview["diagnostics"])
+            raise fastapi.HTTPException(status_code=409 if preview["status"] == "stale" else 422, detail=preview)
+        return session, session.journal.update(proposal.proposal_id, state="ready", preview=preview, diagnostics=[])
+
+    @app.post("/assistant/proposals/stage")
+    def assistant_proposal_stage(proposal: SpecChangeProposal, owner_document_key: str | None = None, session_id: str | None = None) -> dict[str, typing.Any]:
+        """Import a reviewed legacy artifact without automatically applying it."""
+        session = bound_session(owner_document_key, proposal.document_id)
+        with session.lock:
+            _, record = stage_proposal(proposal, session.owner_document_key, session_id)
+            if record["state"] != "applied":
+                record = session.journal.update(proposal.proposal_id, requires_review=True)
+            return record
+
+    @app.post("/assistant/proposals/submit")
+    def assistant_proposal_submit(proposal: SpecChangeProposal, owner_document_key: str | None = None, session_id: str | None = None) -> dict[str, typing.Any]:
+        """Apply automatically or persist a review, according to owner policy."""
+        session = bound_session(owner_document_key, proposal.document_id)
+        with session.lock:
+            _, record = stage_proposal(proposal, session.owner_document_key, session_id)
+            if record["state"] == "applied":
+                return {**record["owner_result"], "idempotent_replay": True}
+            if approval_policy == "review" or record.get("requires_review"):
+                session.journal.update(proposal.proposal_id, requires_review=True)
+                return {"status": "approval_required", "proposal_id": proposal.proposal_id,
+                        "source_revision_hash": session.revision.source_revision_hash,
+                        "preview": record["preview"]}
+            return commit_proposal(session, proposal, "automatic", session_id)
+
+    @app.post("/assistant/proposals/apply")
+    def assistant_proposal_apply(proposal: SpecChangeProposal, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        """Compatibility route; restricted owners require the stored-ID action."""
+        if approval_policy == "review":
+            raise fastapi.HTTPException(status_code=403, detail={"error_code": "APPROVAL_REQUIRED", "message": "Submit the proposal, then explicitly approve its stored ID."})
+        return assistant_proposal_submit(proposal, owner_document_key)
+
+    @app.get("/assistant/history")
+    def assistant_history(owner_document_key: str | None = None, before: int | None = None, limit: int = 50) -> dict[str, typing.Any]:
+        try:
+            return bound_session(owner_document_key).journal.history(before, limit)
+        except ValueError as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/assistant/proposals/{proposal_id}")
+    def assistant_submission(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        record = bound_session(owner_document_key).journal.get(proposal_id)
+        if record is None:
+            raise fastapi.HTTPException(status_code=404, detail="Unknown assistant submission.")
+        return record
+
+    @app.post("/assistant/proposals/{proposal_id}/approve")
+    def assistant_submission_approve(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        session = bound_session(owner_document_key)
+        with session.lock:
+            record = assistant_submission(proposal_id, session.owner_document_key)
+            if record["state"] == "applied":
+                try:
+                    return apply_assistant_proposal(session, SpecChangeProposal.model_validate(record["artifact"]))
+                except ProposalApplyError as exc:
+                    raise fastapi.HTTPException(status_code=exc.status, detail=exc.detail) from exc
+            if record["state"] not in {"ready", "reconcile", "applying"}:
+                raise fastapi.HTTPException(status_code=409, detail=f"Proposal is {record['state']}; reread context and submit a new proposal.")
+            return commit_proposal(session, SpecChangeProposal.model_validate(record["artifact"]), "review", record["session_id"])
+
+    @app.post("/assistant/proposals/{proposal_id}/reject")
+    def assistant_submission_reject(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        session = bound_session(owner_document_key)
+        with session.lock:
+            record = assistant_submission(proposal_id, session.owner_document_key)
+            if record["state"] == "applied":
+                raise fastapi.HTTPException(status_code=409, detail="A saved change cannot be rejected retroactively.")
+            return session.journal.update(proposal_id, state="discarded")
+
+    @app.get("/events/history")
+    def source_event_history(owner_document_key: str | None = None, after: int = 0) -> dict[str, typing.Any]:
+        session = bound_session(owner_document_key)
+        cursor = session.journal.observe(_source_event(session, "external", []))
+        return {"events": session.journal.events_after(after),
+                "event_cursor": cursor}
+
     @app.get("/events")
-    async def source_events() -> typing.Any:
-        """Stream committed source changes; consumers decide when to refresh."""
+    async def source_events(owner_document_key: str | None = None, cursor: int = 0, last_event_id: str | None = fastapi.Header(default=None)) -> typing.Any:
+        """Replay durable events and resynchronize on every connection."""
+        session = bound_session(owner_document_key)
+        key = session.owner_document_key
+        try:
+            requested = int(last_event_id) if isinstance(last_event_id, str) else cursor
+        except ValueError:
+            requested = cursor
+
         async def events() -> typing.AsyncIterator[str]:
-            observed = int(state["source_event_sequence"])
+            observed = max(0, requested)
+            # No event ID here: replay must not skip changes racing connection.
+            yield f"event: source.resync\ndata: {json.dumps(_source_event(session, 'external', []))}\n\n"
             while True:
-                if int(state["source_event_sequence"]) != observed:
-                    observed = int(state["source_event_sequence"])
-                    payload = json.dumps(state["source_event"], separators=(",", ":"))
-                    yield f"id: {observed}\nevent: source.changed\ndata: {payload}\n\n"
-                else:
-                    yield ": keep-alive\n\n"
+                try:
+                    current = bound_session(key)
+                    latest = current.journal.observe(_source_event(current, "external", []))
+                    if observed > latest:
+                        observed = latest
+                        yield f"event: source.resync\ndata: {json.dumps(_source_event(current, 'external', []))}\n\n"
+                    updates = current.journal.events_after(observed)
+                    for update in updates:
+                        observed = update["sequence"]
+                        yield f"id: {observed}\nevent: {update.get('event_type', 'source.changed')}\ndata: {json.dumps(update)}\n\n"
+                    if not updates:
+                        yield ": keep-alive\n\n"
+                except fastapi.HTTPException as exc:
+                    yield f"event: source.unavailable\ndata: {json.dumps({'detail': exc.detail})}\n\n"
                 await asyncio.sleep(1)
 
         return fastapi.responses.StreamingResponse(
@@ -1104,9 +1343,9 @@ def create_app() -> typing.Any:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/activity-events")
-    async def activity_events() -> typing.Any:
+    async def activity_events(owner_document_key: str | None = None) -> typing.Any:
         """Stream background Activity execution transitions for the active package."""
-        package_path = active().path
+        package_path = bound_session(owner_document_key).path
 
         async def events() -> typing.AsyncIterator[str]:
             observed = 0
@@ -1196,7 +1435,7 @@ def create_app() -> typing.Any:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
 
     @app.post("/transactions")
-    def transaction(request: TransactionRequest) -> dict[str, typing.Any]:
+    def transaction(request: TransactionRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Decode and atomically apply a revision-guarded edit transaction."""
         try:
             logger.event(
@@ -1205,10 +1444,12 @@ def create_app() -> typing.Any:
                 f"Applying {len(request.operations)} specification operation(s)",
                 details=request,
             )
-            operations = _decode_transaction_operations(active().revision.document_id, request.operations)
+            session = bound_session(owner_document_key)
+            operations = _decode_transaction_operations(session.revision.document_id, request.operations)
         except (KeyError, ValueError, pydantic.ValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
-        return result_or_error(SpecEditTransaction(request.expected_source_revision_hash, operations).apply(active().revision))
+        with session.lock:
+            return result_or_error(SpecEditTransaction(request.expected_source_revision_hash, operations).apply(session.revision), session)
 
     @app.post("/assets")
     def add_asset(request: AssetRequest) -> dict[str, typing.Any]:
@@ -1355,11 +1596,11 @@ def create_app() -> typing.Any:
         return {"proposals": [_jsonable(item) for item in active().activity.state.proposals]}
 
     @app.get("/assistant/changes")
-    def assistant_changes() -> dict[str, typing.Any]:
+    def assistant_changes(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """List accepted assistant decisions stored in package activity."""
         return {
             "assistant_changes": [
-                _jsonable(item) for item in active().activity.state.assistant_changes
+                _jsonable(item) for item in bound_session(owner_document_key).activity.state.assistant_changes
             ]
         }
 
@@ -1620,6 +1861,7 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
     return {
         "schema_version": "spec2gds.snapshot.v2",
         "document_id": revision.document_id,
+        "owner_document_key": session.owner_document_key,
         "source_revision_hash": revision.source_revision_hash,
         "components": [_jsonable(item) for item in revision.components],
         "designs": [_jsonable(item) for item in revision.designs],
@@ -1668,10 +1910,16 @@ def _publish_source_event(
     affected_entities: list[dict[str, typing.Any]],
 ) -> None:
     """Publish one post-commit event for lightweight local SSE subscribers."""
-    state["source_event_sequence"] = int(state["source_event_sequence"]) + 1
-    state["source_event"] = {
-        "sequence": state["source_event_sequence"],
+    event = _source_event(session, origin, affected_entities)
+    sequence = session.journal.observe(event)
+    state["source_event_sequence"] = sequence
+    state["source_event"] = {**event, "sequence": sequence}
+
+
+def _source_event(session: V1Session, origin: str, affected_entities: list[dict[str, typing.Any]]) -> dict[str, typing.Any]:
+    return {
         "document_id": session.revision.document_id,
+        "owner_document_key": session.owner_document_key,
         "source_revision_hash": session.revision.source_revision_hash,
         "origin": origin,
         "affected_entities": affected_entities,

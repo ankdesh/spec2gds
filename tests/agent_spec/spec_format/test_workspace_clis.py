@@ -35,9 +35,15 @@ def model_fixture():
                 delta = {"tool_calls": [{"index": 0, "id": "call_context", "type": "function", "function": {
                     "name": "get_bound_context", "arguments": "{}"}}]}
             elif calls == 1:
+                content = next(message["content"] for message in body["messages"] if message.get("role") == "tool")
+                if isinstance(content, list):
+                    content = "".join(part.get("text", "") for part in content)
+                context = json.loads(content)
+                revision = context["authoritative_context"]["source_revision_hash"]
                 delta = {"tool_calls": [{"index": 0, "id": "call_proposal", "type": "function", "function": {
                     "name": "prepare_spec_proposal", "arguments": json.dumps({
                         "supported": True, "unsupported_reason": None, "title": "Add timer",
+                        "base_source_revision_hash": revision,
                         "summary": "Adds a timer component.", "rationale": "Timing control is required.",
                         "assumptions": [], "operations": [{"operation_id": "create_timer",
                             "type": "create_entity", "kind": "component", "name": "timer",
@@ -86,7 +92,7 @@ def test_focused_turn_review_and_approval(tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        assert assistant_main([str(workspace), "--preset", "focused", "--", "Propose a timer"]) == 0
+        assert assistant_main([str(workspace), "--require-human-approval", "--preset", "focused", "--", "Propose a timer"]) == 0
     path = workspace / "timer-design.spec"
     run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
     assert run["session_id"]
@@ -131,7 +137,7 @@ def test_multiple_reviews_require_id_and_stale_after_apply(tmp_path, monkeypatch
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
         for _ in range(3):
-            assert assistant_main([str(workspace), "--", "Propose a timer"]) == 0
+            assert assistant_main([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
     path = workspace / "multi.spec"
     root = assistant_state_root(path)
     document_id = SpecPackage.load(str(path)).manifest.document_id
@@ -157,7 +163,7 @@ def test_interrupted_approval_reconciles_saved_proposal(tmp_path, monkeypatch):
     with model_fixture() as endpoint:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        assert assistant_main([str(workspace), "--", "Propose a timer"]) == 0
+        assert assistant_main([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
     path = workspace / "retry.spec"
     root = assistant_state_root(path)
     document_id = SpecPackage.load(str(path)).manifest.document_id
@@ -187,7 +193,24 @@ def test_editor_http_save_conflict_requires_refresh(tmp_path):
         with pytest.raises(HTTPError) as conflict:
             _request(url, "/transactions", {"expected_source_revision_hash": revision, "operations": []})
         assert conflict.value.code == 409
-        assert "refresh from disk" in conflict.value.read().decode()
+        assert "stale" in conflict.value.read().decode().lower()
+
+
+def test_focused_turn_saves_automatically_by_default(tmp_path, monkeypatch):
+    workspace = tmp_path / "automatic"
+    with model_fixture() as endpoint:
+        monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
+        monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
+        monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
+        assert assistant_main([str(workspace), "--", "Add a timer"]) == 0
+    path = workspace / "automatic.spec"
+    run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
+    assert run["approval_policy"] == "automatic"
+    assert run["proposals"][0]["state"] == "applied"
+    session = V1Session(str(path))
+    assert len(session.revision.components) == 1
+    assert len(session.activity.state.assistant_changes) == 1
+    assert session.journal.history()["items"][0]["owner_result"]["source_revision_hash"] == session.revision.source_revision_hash
 
 
 def test_assistant_creates_exact_spec_path(tmp_path, monkeypatch):

@@ -1,4 +1,4 @@
-"""Review-gated assistant context and typed Spec change proposal support.
+"""Revision-guarded assistant context and typed Spec change proposal support.
 
 The LLM-facing contract in this module deliberately contains no XML.  Typed
 operations are compiled to the ordinary :mod:`transactions` vocabulary and
@@ -209,7 +209,7 @@ def build_assistant_context(revision: SpecRevision, target: EntityRef) -> dict[s
 
 
 def build_document_assistant_context(revision: SpecRevision) -> dict[str, typing.Any]:
-    """Return document-wide context with a narrow top-level creation boundary."""
+    """Return document-wide writable context for iterative refinement."""
     snapshot = ActivitySnapshot.create(revision)
     registry = SpecExtensionRegistry()
     register_extensions(registry)
@@ -222,20 +222,24 @@ def build_document_assistant_context(revision: SpecRevision) -> dict[str, typing
         "target": None,
         "rendered_context": rendered.model_dump(mode="json"),
         "writable": {
-            "document_operations": ["create_entity"],
+            "document_operations": sorted(SUPPORTED_OPERATION_TYPES),
             "entity": None,
             "owned_internal_design": None,
-            "entity_refs": [],
-            "sections": [],
-            "linked_narrative": [],
+            "entity_refs": [item.ref.model_dump(mode="json") for item in (
+                *revision.components, *revision.designs, *revision.bus_definitions,
+                *revision.abstraction_definitions,
+            )],
+            "sections": [section.model_dump(mode="json") for section in build_document_projection(revision).sections],
+            "linked_narrative": [_jsonable(item) for item in revision.narrative.blocks],
         },
-        "read_only": {"existing_entities": True},
+        "read_only": {"existing_entities": False, "assets": True,
+                      "composite_boundary_ports": True},
         "available_references": {
-            "components": [_identity(item) for item in revision.components],
-            "designs": [_identity(item) for item in revision.designs],
-            "bus_definitions": [_identity(item) for item in revision.bus_definitions],
+            "components": [_jsonable(item) for item in revision.components],
+            "designs": [_jsonable(item) for item in revision.designs],
+            "bus_definitions": [_jsonable(item) for item in revision.bus_definitions],
             "abstraction_definitions": [
-                _identity(item) for item in revision.abstraction_definitions
+                _jsonable(item) for item in revision.abstraction_definitions
             ],
         },
         "diagnostics": list(revision.diagnostics),
@@ -252,9 +256,11 @@ def preview_assistant_proposal(
     if proposal.base_source_revision_hash != revision.source_revision_hash:
         return {
             "status": "stale",
-            "diagnostics": ["Proposal base source revision is stale."],
+            "error_code": "STALE_REVISION",
+            "diagnostics": ["Proposal base source revision is stale. Read fresh context and regenerate the operations."],
             "section_validation": [],
-            "base_source_revision_hash": revision.source_revision_hash,
+            "base_source_revision_hash": proposal.base_source_revision_hash,
+            "current_source_revision_hash": revision.source_revision_hash,
             "candidate_source_revision_hash": None,
             "current_sections": _proposal_sections(revision, proposal.target),
             "candidate_sections": [],
@@ -343,8 +349,11 @@ def compile_assistant_operations(
             entity_kind = str(raw.get("kind", ""))
             if entity_kind not in {"component", "design"}:
                 raise ValueError("create_entity kind must be component or design.")
+            instances_value = raw.get("instances", [])
+            if not isinstance(instances_value, list):
+                raise ValueError("instances must be an array.")
             instances = tuple(
-                InstanceIR(**item) for item in _list(raw, "instances")
+                InstanceIR(**item) for item in instances_value
             )
             ports_value = raw.get("ports", [])
             if not isinstance(ports_value, list):
@@ -504,12 +513,8 @@ def _assert_operation_owned(
     operation: dict[str, typing.Any],
 ) -> None:
     kind = str(operation["type"])
-    if target is None:
-        if kind != "create_entity":
-            raise ValueError(
-                "Document-scoped proposals may only create top-level components or designs."
-            )
-        return
+    if kind == "create_entity" and target is not None:
+        raise ValueError("Top-level creation requires a document binding.")
     direct_keys = {
         "set_entity_metadata": "entity",
         "upsert_parameter": "entity",
@@ -538,8 +543,8 @@ def _assert_operation_owned(
     if kind in direct_keys:
         reference = _ref(operation[direct_keys[kind]])
         _assert_document_ref(revision, reference)
-        allowed = {_ref_key(item) for item in _writable_refs(revision, target)}
-        if _ref_key(reference) not in allowed:
+        allowed = {_ref_key(item) for item in _writable_refs(revision, target)} if target else None
+        if allowed is not None and _ref_key(reference) not in allowed:
             raise ValueError(f"Operation {kind} crosses the selected entity ownership boundary.")
     if kind == "set_internal_design":
         internal = _ref(operation["internal_design"])
@@ -550,10 +555,26 @@ def _assert_operation_owned(
             for item in revision.manifest.component_compositions
         }
         owner = owners.get(internal.entity_id)
-        if owner not in {None, target.entity_id} or internal in revision.manifest.entry_designs:
+        component = _ref(operation["component"])
+        _assert_document_ref(revision, internal)
+        if owner not in {None, component.entity_id} or internal in revision.manifest.entry_designs:
             raise ValueError("A shared or entry design cannot become component-owned content.")
     if kind in {"upsert_narrative_block", "delete_narrative_block", "reorder_narrative_blocks", "set_narrative_entity_links"}:
-        _assert_narrative_operation_owned(revision, target, operation)
+        if target is not None:
+            _assert_narrative_operation_owned(revision, target, operation)
+        else:
+            # Document scope can edit shared narrative, but never foreign refs.
+            def check_refs(value: typing.Any) -> None:
+                if isinstance(value, dict):
+                    if {"document_id", "entity_id", "entity_kind"} <= value.keys():
+                        _assert_document_ref(revision, _ref(value))
+                    else:
+                        for child in value.values():
+                            check_refs(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        check_refs(child)
+            check_refs(operation)
 
 
 def _assert_component_port_editable(

@@ -2,7 +2,7 @@
 
 `spec2gds` is a specification-first hardware design workspace. It combines a
 structured specification editor, an independent circuit editor, and an
-optional review-oriented assistant.
+optional assistant with owner-validated submissions.
 
 The repository no longer ships a gallery of demos or benchmark corpora. New
 sample applications are developed one at a time through the complete system,
@@ -20,7 +20,7 @@ flowchart LR
     CircuitAPI --> CircuitFile[".circuit.json<br/>independent circuits"]
     CircuitAPI -->|"validated source commit"| SpecAPI
     User --> CircuitUI
-    Assistant["Optional assistant"] -->|"reviewed proposals"| SpecAPI
+    Assistant["Optional assistant"] -->|"validated submissions"| SpecAPI
     Assistant -->|"reviewed proposals"| CircuitAPI
 ```
 
@@ -31,9 +31,9 @@ The two editors have different source-of-truth rules:
 - A source-bound circuit is an editable projection; **Save to Specification**
   commits validated topology and layout changes back to the `.spec` package.
 - Leaf-component previews and unsupported projections remain read-only.
-- Assistant changes are proposals until a user accepts them. On a source-bound
-  Circuit, Accept stages a private draft; only **Save to Specification** writes
-  the `.spec` package.
+- Valid Spec assistant submissions save automatically by default. Launch with
+  `--require-human-approval` to require review. On a source-bound Circuit,
+  Accept stages a private draft; **Save to Specification** writes the package.
 
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
@@ -42,6 +42,14 @@ The AI Assistant is implemented as a focused DeepSeek Harness product with
 deterministic domain context, strict proposal schemas, review diffs, and
 conversation archive/rename support. It owns the canonical `ai-assistant/`
 workspace and port `6013`; see the [AI Assistant guide](docs/ai-assistant.md).
+
+In a browser chat, ask **“Create a new spec document”** and include the circuit
+description. In automatic mode the Assistant creates the package under
+`SPEC_DOCUMENT_ROOT` and continues the request in a new document-bound chat.
+Restricted owners show a creation card for review. No existing package needs
+to be open. Circuit changes retain their existing approval and save workflow.
+See [specification creation from chat](docs/assistant-spec-creation.md) for
+configuration and recovery.
 
 For proposed fixed workflows and durable event-driven agents, read the
 [agentic systems architecture report](docs/agentic-systems-architecture-report.md).
@@ -109,14 +117,17 @@ uv sync
 scripts/setup-all.sh
 export OPENAI_API_KEY="..."
 uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
+# For a restricted turn, leave the proposal pending for an explicit decision:
+uv run spec2gds-assistant ./work/timer --require-human-approval -- "Refine the timer."
 uv run spec2gds-spec reviews ./work/timer
 uv run spec2gds-spec approve ./work/timer proposal_...
 # Or discard one pending proposal:
 uv run spec2gds-spec reject ./work/timer proposal_...
 ```
 
-The assistant command creates or opens the workspace's `.spec` and leaves proposals
-pending. The Spec command owns review decisions and package updates. See the
+The assistant command creates or opens the workspace's `.spec` and saves valid
+submissions automatically unless `--require-human-approval` is set. The Spec
+command owns explicit review decisions and paginated history. See the
 [focused Spec workspace guide](docs/spec-workspace-cli.md) for exact-file targets,
 conflicts, saved run records, and future `agent_eval` integration.
 
@@ -212,22 +223,26 @@ The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
 uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
 chat already bound to the active circuit. Spec Editor opens
 a chat bound to the complete active specification, or an unbound chat when no
-specification is open. A document chat can propose new top-level components or
-designs (including a design's initial instances); use an entity's **Options →
-More actions… → Explore with AI Assistant** when a reviewed change should
-target an existing entity.
+specification is open. A document chat can create and refine supported entities
+throughout its package. An entity's **Options → More actions… → Explore with AI
+Assistant** creates a narrower entity-bound conversation.
 
 Unbound Assistant conversations fail closed with no design context or proposal
 tools; mutations require a binding to an exact editor document or entity. The
 browser offers focused, goal, and orchestrated presets;
-all preserve owner preview and explicit review as the only mutation boundary.
-Every interactive top-level Spec component creation first shows an editable
-details card with model-suggested defaults from the proposed values. Either
-domain can show a card for genuinely missing required fields. Submitting it
-stores structured confirmed values and continues the proposal; the model then
-submits typed operations for owner preview. The owner-preview card remains the
-explicit approve/apply safety gate. Operation shapes come from the bound owner
+all preserve owner validation and revision checks. Spec owners save valid
+submissions automatically by default; restricted owners retain explicit review.
+Fully specified automatic requests skip confirmation cards and record defaults
+as assumptions. Missing required values still request clarification. Operation
+shapes come from the bound owner
 through the [owner schema contract](docs/assistant-owner-operation-contract.md).
+
+Use `uv run spec2gds-editor --require-human-approval` or
+`bash scripts/serve-all.sh start --require-human-approval` for restricted mode.
+Chats stay bound to their package when another specification opens. Idle views
+follow incoming changes, while inline drafts retain their text and original
+revision. See [iterative refinement](docs/spec-editor-iterative-refinement.md)
+and its [test plan](docs/spec-editor-iterative-refinement-test-plan.md).
 Focused turns are capped at three model steps, with one additional step only
 after a visible structured-question call, and every model response is capped
 at 1,200 output tokens. Goal and orchestrated work use separate bounded
@@ -498,8 +513,10 @@ npm run build
 npm run test:harness
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 
-# End-to-end UI automation testing (Natural Language scenarios via AI Assistant & Spec Editor)
-./tests/ui-scenarios/run-test.sh
+# Separately invoked UI pass; deferred for the iterative-refinement phase
+cd ..
+bash tests/ui-scenarios/run-test.sh --scenario automatic
+bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
 ```
 
 Detailed source locations and focused commands are in

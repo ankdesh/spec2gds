@@ -106,6 +106,13 @@ npm test
 npm run test:harness
 ```
 
+Spec assistant submissions save automatically by default. Use
+`uv run spec2gds-editor --require-human-approval` or
+`bash scripts/serve-all.sh start --require-human-approval` for restricted review.
+The [iterative refinement test plan](spec-editor-iterative-refinement-test-plan.md)
+lists required non-UI checks, deterministic fixture coverage, and named isolated
+UI scenarios. UI execution for this phase is deferred to a separate pass.
+
 `setup:harness` clones and builds the commit pinned by `harness.lock.json` in
 the sibling `../deepseek-harness` checkout. It refuses dirty, wrong-origin, or
 wrong-commit existing checkouts. Use `npm run setup:harness -- --update` to

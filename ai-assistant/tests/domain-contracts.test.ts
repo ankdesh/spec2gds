@@ -168,13 +168,15 @@ test("canonical Circuit protocol assistant subset converts and rejects invalid o
 test("published Spec document and entity schemas convert without fallback", () => {
   const source = JSON.parse(readFileSync(new URL("../../spec2gds/agent_spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
   for (const scope of ["document", "entity"] as const) {
-    const branches = source.oneOf.filter((branch: { properties: { type: { const: string } } }) =>
-      (branch.properties.type.const === "create_entity") === (scope === "document"));
+    const branches = scope === "document" ? source.oneOf : source.oneOf.filter((branch: { properties: { type: { const: string } } }) =>
+      branch.properties.type.const !== "create_entity");
     const contract = parseOwnerOperationContract({ schema_version: 1, digest: `sha256:${"c".repeat(64)}`,
       operation_schema: { $schema: source.$schema, oneOf: branches } });
     assert.ok(contract.tool_schema);
     if (scope === "document") {
       assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "create", type: "create_entity", kind: "component", name: "gate" }]));
+      assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata",
+        entity: { document_id: "doc-1", entity_kind: "component", entity_id: "component-1" }, description: "Refined" }]));
       assert.throws(() => validateOwnerOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata" }]), /owner's published schema/);
     }
   }
@@ -185,7 +187,7 @@ test("changed owner schema digest requires fresh tool registration", () => {
   const current = parseOwnerOperationContract({ schema_version: 1, digest: `sha256:${"a".repeat(64)}`,
     operation_schema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: {}, additionalProperties: false } });
   assert.doesNotThrow(() => verifyOwnerOperationContract(current, { ...current }));
-  assert.throws(() => verifyOwnerOperationContract(current, { ...current, digest: `sha256:${"b".repeat(64)}` }), /Start a new conversation/);
+  assert.throws(() => verifyOwnerOperationContract(current, { ...current, digest: `sha256:${"b".repeat(64)}` }), /Read get_bound_context again/);
   assert.throws(() => verifyOwnerOperationContract(current, { ...current, schema_version: 2 }), /invalid operation schema contract/);
 });
 
@@ -201,6 +203,20 @@ test("Spec component details card uses proposed values without gate lookup defau
     component_name: "custom_gate", input_ports: "left, right", output_ports: "result",
     port_width: "8", behavior: "assign result = left ^ right;",
   });
+});
+
+test("comparator details keep 3-bit inputs and 1-bit result signals", () => {
+  const fields = proposedComponentFields({ name: "comparator_3bit", ports: [
+    { name: "A", direction: "in", range: "[2:0]" },
+    { name: "B", direction: "in", range: "2:0" },
+    { name: "A_greater", direction: "out" },
+    { name: "A_equal", direction: "out" },
+    { name: "A_less", direction: "out" },
+  ] });
+  const defaults = Object.fromEntries(fields.map(field => [field.label, field.default_value]));
+  assert.equal(defaults["A width"], "3");
+  assert.equal(defaults["B width"], "3");
+  for (const output of ["A_greater", "A_equal", "A_less"]) assert.equal(defaults[`${output} width`], "1");
 });
 
 

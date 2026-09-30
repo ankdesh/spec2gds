@@ -56,9 +56,11 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     if (payload.domain === "spec" && payload.document) {
       const document = payload.document;
       return [{ domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
+        ownerDocumentKey: document.owner_document_key,
         title: String(document.title || document.document_id), scope: "document" },
       ...(Array.isArray(payload.entities) ? payload.entities : []).map(entity => ({
         domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
+        ownerDocumentKey: document.owner_document_key,
         title: `${entity.title || entity.entity_id} · ${entity.entity_kind || "entity"}`,
         scope: "entity", entityKind: String(entity.entity_kind || "entity"), entityId: String(entity.entity_id),
       }))];
@@ -208,7 +210,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return workspace;
   }
 
-  async function createBoundSession(ctx, reserved, workspaceContext) {
+  async function createBoundSession(ctx, reserved, workspaceContext, options = {}) {
     let reservation = reserved;
     if (!reservation) {
       reservation = await reserveBindingDialog(workspaceContext);
@@ -225,18 +227,32 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         documentId: reservation.session.workspaceDocumentId,
       };
       const workspace = await ensureWorkspace(ctx, descriptor);
-      const createdId = await ctx.sessions.create({
+      const known = options.preserveReservation && ctx.sessions.list?.getSnapshot().byId?.[id];
+      const createdId = known ? id : await ctx.sessions.create({
         sessionId: id,
         workspaceId: workspace.workspaceId,
         agentPreset: reservation.session.preset || "focused",
       });
       if (createdId !== id) throw new Error(`The Harness created session ${createdId} instead of reserved binding ${id}.`);
       await api(`/bindings/${encodeURIComponent(id)}/activate`, {});
-      ctx.sessions.open(createdId);
+      if (options.open !== false) ctx.sessions.open(createdId);
+      return createdId;
     } catch (error) {
-      await api(`/bindings/${encodeURIComponent(id)}/abandon`, {}).catch(() => undefined);
+      if (!options.preserveReservation) await api(`/bindings/${encodeURIComponent(id)}/abandon`, {}).catch(() => undefined);
       throw error;
     }
+  }
+
+  async function continueSourceCreation(ctx, reserved) {
+    const sessionId = await createBoundSession(ctx, reserved, undefined, { open: false, preserveReservation: true });
+    if (!reserved.continuation.sent) {
+      const session = ctx.sessions.binding(sessionId)?.session;
+      if (!session) throw new Error("The specification chat is not ready. Retry this card to continue in the saved package.");
+      const result = await session.prompt([{ type: "text", text: reserved.continuation.message }], "queue", undefined, reserved.continuation.requestId);
+      if (!result.ok) throw new Error(result.error?.message || "The initial request could not be submitted. Retry this card.");
+      await api(`/source-requests/${encodeURIComponent(reserved.creation_request.requestId)}/continued`, {});
+    }
+    ctx.sessions.open(sessionId);
   }
 
   async function createUnboundSession(ctx) {
@@ -306,7 +322,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       finally { setBusy(false); }
     }
     return h("article", { className: "s2g-review" },
-      h("header", null, h("h4", null, artifact.title || "Design proposal"), h("span", { className: "s2g-state" }, review.state)),
+      h("header", null, h("h4", null, artifact.title || "Design proposal"), h("span", { className: "s2g-state", role: "status" }, review.state === "applied" && record(review.ownerResult).application_mode === "automatic" ? "Applied automatically" : review.state)),
+      review.state === "applied" ? h("small", null, "Saved revision: ", h("code", null, String(record(review.ownerResult).source_revision_hash || ""))) : null,
       h("section", { className: "s2g-summary" },
         h("p", null, record(review.changeSummary).text || "Proposal summary unavailable."),
         Array.isArray(record(review.changeSummary).changedTargets) && record(review.changeSummary).changedTargets.length
@@ -371,7 +388,86 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           h("div", { className: "s2g-actions" }, h("button", { className: "primary", type: "submit" }, value.submit_label || "Continue proposal"))));
   }
 
-  const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal"]);
+  function SourceCreationCard({ request, onContinue, onOpen }) {
+    const [value, setValue] = React.useState(request);
+    const [values, setValues] = React.useState(() => ({ documentId: request.documentId, title: request.title, serviceBaseUrl: request.serviceBaseUrl }));
+    const [busy, setBusy] = React.useState(true);
+    const [error, setError] = React.useState("");
+    const [automaticAttempted, setAutomaticAttempted] = React.useState(false);
+    React.useEffect(() => {
+      let mounted = true;
+      api(`/source-requests/${encodeURIComponent(request.requestId)}`).then(result => {
+        if (!mounted) return;
+        setValue(result.creation_request);
+        setValues({ documentId: result.creation_request.documentId, title: result.creation_request.title, serviceBaseUrl: result.creation_request.serviceBaseUrl });
+      }).catch(caught => { if (mounted) setError(caught.message); })
+        .finally(() => { if (mounted) setBusy(false); });
+      return () => { mounted = false; };
+    }, [request.requestId]);
+    React.useEffect(() => {
+      if (busy || automaticAttempted || !value.automatic || value.status !== "reserved" || !value.reservation || !value.continuation) return;
+      setAutomaticAttempted(true);
+      setBusy(true);
+      onContinue({ ...value.reservation, creation_request: value, continuation: value.continuation })
+        .then(() => setValue(current => ({ ...current, status: "continued", error: null })))
+        .catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
+        .finally(() => setBusy(false));
+    }, [busy, automaticAttempted, value.status, value.automatic, value.reservation, value.continuation]);
+    const editable = value.status === "pending";
+    const services = Array.isArray(value.services) ? value.services : [];
+    const unavailable = editable && !services.some(service => service.url === values.serviceBaseUrl && service.available);
+    const saved = ["created", "reserved", "continued"].includes(value.status);
+    const path = editable ? `${value.specDocumentRoot}${value.pathSeparator || "/"}${values.documentId}.spec` : value.destination;
+    const update = name => event => setValues(current => ({ ...current, [name]: event.target.value }));
+    async function refresh() {
+      const result = await api(`/source-requests/${encodeURIComponent(request.requestId)}`);
+      setValue(result.creation_request);
+      if (result.creation_request.status !== "pending") setValues({ documentId: result.creation_request.documentId, title: result.creation_request.title, serviceBaseUrl: result.creation_request.serviceBaseUrl });
+    }
+    async function submit(event) {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true); setError("");
+      try {
+        const reserved = await api("/sources/create", { domain: "spec", creationRequestId: value.requestId, ...values });
+        setValue(reserved.creation_request);
+        await onContinue(reserved);
+        setValue(current => ({ ...current, status: "continued", error: null }));
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+        await refresh().catch(() => undefined);
+      } finally { setBusy(false); }
+    }
+    async function cancel() {
+      if (busy) return;
+      setBusy(true); setError("");
+      try { setValue((await api(`/source-requests/${encodeURIComponent(value.requestId)}/cancel`, {})).creation_request); }
+      catch (caught) { setError(caught.message); }
+      finally { setBusy(false); }
+    }
+    const terminal = ["continued", "cancelled"].includes(value.status)
+      || (value.status === "uncertain" && !value.creationReceipts);
+    return h("article", { className: "s2g-review", "data-s2g-source-creation": value.status },
+      h("header", null, h("h4", null, "Create a specification"), h("span", { className: "s2g-state" }, value.status)),
+      h("p", null, value.status === "cancelled" ? "Creation cancelled. No package was created."
+        : saved ? "The package is saved. Its contents follow the Spec Editor approval policy."
+          : "Review the suggested names. Creating the package opens a new chat and continues your original request there."),
+      value.status !== "cancelled" ? h("p", null, "Save location: ", h("code", null, path)) : null,
+      error || value.error ? h("p", { className: "s2g-error", role: "alert" }, error || value.error) : null,
+      !terminal ? h("form", { className: "s2g-form", onSubmit: submit },
+        h("label", null, "Title", h("input", { name: "title", value: values.title, disabled: busy || !editable, required: true, onChange: update("title") })),
+        h("label", null, "Document ID", h("input", { name: "documentId", value: values.documentId, disabled: busy || !editable, required: true, maxLength: 128, pattern: "[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", onChange: update("documentId") })),
+        services.length > 1 ? h("label", null, "Spec service", h("select", { value: values.serviceBaseUrl, disabled: busy || !editable, onChange: update("serviceBaseUrl") },
+          services.map(service => h("option", { key: service.url, value: service.url }, `${service.url}${service.available ? "" : " (offline)"}`)))) : null,
+        unavailable ? h("p", { className: "s2g-error" }, "The selected Spec service is offline or none is configured. Start the service, then refresh availability.") : null,
+        h("div", { className: "s2g-actions" },
+          editable ? h("button", { type: "button", disabled: busy, onClick: cancel }, "Cancel") : null,
+          h("button", { type: "button", disabled: busy, onClick: () => { setBusy(true); refresh().catch(caught => setError(caught.message)).finally(() => setBusy(false)); } }, "Refresh"),
+          value.status !== "creating" ? h("button", { className: "primary", type: "submit", disabled: busy || unavailable }, value.status === "uncertain" ? "Recover creation receipt" : saved ? "Continue in specification chat" : "Create specification and continue") : null)) : null,
+      value.status === "continued" ? h("div", { className: "s2g-actions" }, h("button", { type: "button", onClick: () => onOpen(value.destinationSessionId) }, "Open specification chat")) : null);
+  }
+
+  const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal", "prepare_spec_document_creation"]);
 
   const proposalReviewsDefinition = {
     kind: "spec2gds-proposal-reviews",
@@ -395,8 +491,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const callId = String(match.event.data.message.source.callId);
       if (!context.state.calls.has(callId)) return context.state;
       const value = resultContentValue(match.event.data.message.content[0]?.content);
-      if (!value?.review && !value?.error && !value?.required_input) return context.state;
-      const result = { callId, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null };
+      if (!value?.review && !value?.error && !value?.required_input && !value?.source_creation && !value?.creation_error) return context.state;
+      const result = { callId, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null,
+        sourceCreation: value.source_creation || null, creationError: value.creation_error || null };
       return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
     },
     buildLocationData(context, scope, previous) {
@@ -412,7 +509,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return results.filter(result => result.seq < owner.seq).at(-1) || null;
   }
 
-  function ProposalReviewTail({ matched, inputActions }) {
+  function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation }) {
+    if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
+    if (matched.creationError) return h("article", { className: "s2g-review" }, h("h4", null, "Specification creation unavailable"), h("p", { className: "s2g-error" }, matched.creationError));
     if (matched.review) return h(ReviewCard, { review: matched.review });
     if (matched.requiredInput) return h(ProposalInputCard, { request: matched.requiredInput, inputActions });
     return h(ProposalErrorCard, { error: matched.error });
@@ -480,7 +579,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
     ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "s-workflow", order: 11 }, WorkflowDock));
     ctx.uiConversation.events.register(proposalReviewsDefinition);
-    ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({ name: "conversation.chat.turnTail", select: selectProposalReview }, ProposalReviewTail));
+    ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({ name: "conversation.chat.turnTail", select: selectProposalReview },
+      props => h(ProposalReviewTail, { ...props, onContinueCreation: reserved => continueSourceCreation(ctx, reserved), onOpenCreation: id => ctx.sessions.open(id) })));
     queueMicrotask(async () => {
       try {
         const stored = await api("/workspaces");

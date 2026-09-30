@@ -14,9 +14,20 @@ STATE_DIR="${PROJECT_ROOT}/logs/serve-all"
 
 SERVICES=(spec-editor circuit-designer ai-assistant)
 DEFAULT_PORTS=(6010 6011 6012 6013 6014)
+SPEC_EDITOR_OPTIONS=()
+if [[ "${2:-}" == "--require-human-approval" ]]; then
+  SPEC_EDITOR_OPTIONS+=(--require-human-approval)
+elif [[ $# -gt 1 ]]; then
+  echo "Unknown option: ${2}" >&2
+  exit 2
+fi
+if [[ $# -gt 2 ]]; then
+  echo "Unexpected arguments." >&2
+  exit 2
+fi
 
 usage() {
-  echo "Usage: scripts/serve-all.sh {start|restart|stop}"
+  echo "Usage: scripts/serve-all.sh {start|restart|stop} [--require-human-approval]"
 }
 
 pid_file() {
@@ -171,7 +182,7 @@ start_all() {
   # shared directory. Independent Circuit Designer launches do not need it.
   export SPEC2GDS_SERVICE_CONFIG="${SPEC2GDS_SERVICE_CONFIG:-${PROJECT_ROOT}/config/services.json}"
 
-  start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server
+  start_service "spec-editor" "${PROJECT_ROOT}" uv run spec2gds-server "${SPEC_EDITOR_OPTIONS[@]}"
   start_service "circuit-designer" "${PROJECT_ROOT}/circuit-designer" npm run dev
   start_service "ai-assistant" "${PROJECT_ROOT}/ai-assistant" npm run dev -- --no-open
 

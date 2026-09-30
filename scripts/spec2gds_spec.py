@@ -13,6 +13,7 @@ from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
 from spec2gds.agent_spec.spec_format.proposal_service import (
     ProposalApplyError,
     apply_assistant_proposal,
+    reconcile_assistant_receipts,
 )
 from spec2gds.agent_spec.spec_format.review_store import list_spec_reviews, review_bridge
 from spec2gds.agent_spec.spec_format.v1_api import V1Session
@@ -45,10 +46,13 @@ def _parser() -> argparse.ArgumentParser:
     pack = commands.add_parser("pack", help="Pack an unpacked V1 .spec directory.")
     pack.add_argument("--input", required=True)
     pack.add_argument("--output", required=True)
-    for action in ("reviews", "approve", "reject"):
+    for action in ("reviews", "history", "approve", "reject"):
         review = commands.add_parser(action, help=f"{action.capitalize()} assistant proposals for one specification.")
         review.add_argument("target", help="Workspace directory or exact .spec path")
-        if action != "reviews":
+        if action == "history":
+            review.add_argument("--before", type=int)
+            review.add_argument("--limit", type=int, default=50)
+        elif action != "reviews":
             review.add_argument("proposal_id", nargs="?")
     return parser
 
@@ -88,7 +92,32 @@ def _review_command(action: str, target: str, proposal_id: str | None = None) ->
     with nullcontext() if action == "reviews" else _review_lock(state_root):
         if action != "reviews" and (state_root / "assistant.sqlite3").exists():
             review_bridge(state_root, "recover")
-        reviews = list_spec_reviews(state_root, document_id)
+        reviews = list_spec_reviews(state_root, document_id) if (state_root / "assistant.sqlite3").exists() else []
+        session = V1Session(str(path))
+        reconcile_assistant_receipts(session)
+        journal = session.journal
+        node_ids = {item["proposalId"] for item in reviews}
+        cursor = None
+        while True:
+            page = journal.history(cursor)
+            for item in page["items"]:
+                if item["proposal_id"] in node_ids:
+                    if action == "reviews":
+                        receipt = journal.get(item["proposal_id"])
+                        stored = next(review for review in reviews if review["proposalId"] == item["proposal_id"])
+                        stored.update(state=receipt["state"], ownerResult=receipt["owner_result"], diagnostics=receipt["diagnostics"])
+                    continue
+                receipt = journal.get(item["proposal_id"])
+                reviews.append({"proposalId": receipt["proposal_id"], "sessionId": receipt["session_id"],
+                    "state": receipt["state"], "baseRevision": receipt["artifact"]["base_source_revision_hash"],
+                    "artifact": receipt["artifact"], "preview": receipt["preview"],
+                    "diagnostics": receipt["diagnostics"], "ownerResult": receipt["owner_result"]})
+            cursor = page["next_cursor"]
+            if cursor is None:
+                break
+        def bridge(command: str, selected: dict, result: dict | None = None) -> None:
+            if selected["proposalId"] in node_ids:
+                review_bridge(state_root, command, selected["proposalId"], result)
         if action == "reviews":
             print(json.dumps({
                 "schema_version": "spec2gds.assistant-workspace-reviews.v1",
@@ -103,27 +132,42 @@ def _review_command(action: str, target: str, proposal_id: str | None = None) ->
             return 0
         if action == "reject":
             selected = _selected_review(reviews, proposal_id, {"ready", "rejected", "stale", "reconcile"})
-            review_bridge(state_root, "discard", selected["proposalId"])
+            journal.register(selected["artifact"], selected["sessionId"])
+            if journal.get(selected["proposalId"])["state"] == "applied":
+                raise ValueError("A saved change cannot be rejected retroactively.")
+            journal.update(selected["proposalId"], state="discarded")
+            bridge("discard", selected)
             print(json.dumps({"proposal_id": selected["proposalId"], "state": "discarded"}))
             return 0
         selected = _selected_review(reviews, proposal_id, {"ready", "reconcile"})
         proposal = SpecChangeProposal.model_validate(selected["artifact"])
         if proposal.document_id != document_id:
             raise ValueError("Proposal targets a different specification document.")
-        review_bridge(state_root, "begin", selected["proposalId"])
+        journal.register(selected["artifact"], selected["sessionId"])
+        receipt = journal.get(selected["proposalId"])
+        if receipt["state"] == "discarded":
+            raise ValueError("This stored proposal was explicitly rejected.")
+        journal.update(selected["proposalId"], state="applying")
+        bridge("begin", selected)
         try:
-            session = V1Session(str(path))
-            result = apply_assistant_proposal(session, proposal)
+            result = apply_assistant_proposal(session, proposal, application_mode="review", session_id=selected["sessionId"])
         except ProposalApplyError as exc:
-            review_bridge(state_root, "stale" if exc.status == 409 else "rejected", selected["proposalId"])
+            state = "stale" if exc.status == 409 else "rejected"
+            journal.update(selected["proposalId"], state=state, diagnostics=exc.detail)
+            bridge(state, selected)
             raise ValueError(f"Proposal apply failed: {exc.detail}") from exc
         except ValueError:
-            review_bridge(state_root, "stale", selected["proposalId"])
+            journal.update(selected["proposalId"], state="stale")
+            bridge("stale", selected)
             raise
         except OSError:
-            review_bridge(state_root, "reconcile", selected["proposalId"])
+            journal.update(selected["proposalId"], state="reconcile")
+            bridge("reconcile", selected)
             raise
-        review_bridge(state_root, "complete", selected["proposalId"], result)
+        journal.update(selected["proposalId"], state="applied", owner_result=result, diagnostics=[])
+        journal.observe({"document_id": document_id, "owner_document_key": session.owner_document_key,
+            "source_revision_hash": result["source_revision_hash"], "origin": "assistant", "affected_entities": []})
+        bridge("complete", selected, result)
         print(json.dumps(result, default=str))
         return 0
 
@@ -133,6 +177,12 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command in {"reviews", "approve", "reject"}:
             return _review_command(args.command, args.target, getattr(args, "proposal_id", None))
+        if args.command == "history":
+            path = resolve_spec_target(args.target)
+            session = V1Session(str(path))
+            reconcile_assistant_receipts(session)
+            print(json.dumps(session.journal.history(args.before, args.limit), indent=2))
+            return 0
         if args.command == "create":
             output = pathlib.Path(args.output)
             if output.exists():

@@ -200,6 +200,14 @@ class AssistantChangeDecision(StrictModel):
     operations: tuple[dict[str, typing.Any], ...]
     decision: typing.Literal["accepted"] = "accepted"
     applied_at: str
+    application_mode: typing.Literal["automatic", "review"] = "review"
+    title: str = ""
+    summary: str = ""
+    rationale: str = ""
+    assumptions: tuple[str, ...] = ()
+    session_id: str | None = None
+    owner_document_key: str | None = None
+    diff: tuple[dict[str, typing.Any], ...] = ()
 
     @pydantic.model_validator(mode="after")
     def _scope(self) -> "AssistantChangeDecision":

@@ -9,12 +9,15 @@ removed.
 Design conversations are immutably bound to one Spec document, Spec entity, or
 Circuit document. An unbound conversation is also available for general
 discussion when no specification is open, but it receives no design context or
-proposal tools. A bound model can read fresh owner context and prepare typed
-previews. It has no owner mutation, source creation, filesystem, shell, browser,
-or skill tools. The selected `focused`, `goal`, or `orchestrated` preset controls
+proposal tools. A browser root chat can stage a new Spec package through an
+editable creation card, whether it is bound or unbound. A bound model can read
+fresh owner context and prepare typed previews. The model has no direct owner
+mutation, filesystem, shell, browser, or skill tools. The selected `focused`,
+`goal`, or `orchestrated` preset controls
 whether bounded workflow, goal, and read-only delegation capabilities are
-present. Spec apply and Circuit send happen only from an explicit review-card
-action using the artifact persisted by the server. The latest proposal card is
+present. Spec submissions follow the owner's approval policy: automatic by
+default, or explicit review with `--require-human-approval`. Circuit send keeps
+its explicit review action. The latest proposal card is
 kept in the completed turn footer, independent of the collapsible tool-call
 trace, so its actions remain available after the response finishes.
 
@@ -40,12 +43,13 @@ with four ordered sections: the domain persona, immutable binding and mandatory
 fresh-context rule, owner-specific operation constraints, and output contract.
 These sections coexist with deliberately enabled Harness prompt content. An
 unbound conversation instead receives a single complete fail-closed prompt and
-no domain tools, so it cannot make design claims or prepare proposals.
+no domain tools, so it cannot make design claims or prepare proposals. The
+browser root creation tool is its one source-creation exception.
 
-Document-scoped Spec conversations can propose only `create_entity`. Entity
-scope supports the complete Spec assistant operation vocabulary and enforces
-the owner's writable boundary. A component `create_entity` may carry its
-initial profiled ports and one module-body SystemVerilog section so the reviewed
+Document-scoped Spec conversations can create and refine entities throughout
+their bound package with the supported operation vocabulary. Entity scope
+enforces the narrower owner's writable boundary. A component `create_entity`
+may carry its initial profiled ports and one module-body SystemVerilog section so the
 change is applied atomically. Circuit scope supports the complete logical
 operation vocabulary for components, instances, boundary terminals, nets, and
 endpoints; geometry, routes, labels, and layout remain outside AI operations.
@@ -79,6 +83,13 @@ launcher uses the same profile and port, prints the URL, and does not open a
 browser automatically. The browser new-session button opens a
 design-source chooser for configured Spec and Circuit services. It can connect
 another service for the current process or create a new Spec or empty Circuit.
+Alternatively, request a new Spec document directly in any browser root chat.
+Automatic owners create `SPEC_DOCUMENT_ROOT/<documentId>.spec` and continue
+in a separate document chat with the original request. Restricted owners show
+the editable creation card. Package creation activates the new Spec document;
+existing conversations remain bound to their exact package. See
+[specification creation from chat](assistant-spec-creation.md) for the flow,
+retry behavior and persistent package bindings.
 Editor launch links bypass the chooser with an already validated exact target.
 After rebuilding either the product bundle or the pinned Harness checkout, run
 `scripts/serve-all.sh restart`; `start` deliberately refuses a stale or partial
@@ -104,18 +115,20 @@ versioned YAML prompt bundles. The generic `prepare-reviewed-change` workflow
 is specialized by exact Spec/Circuit adapter manifests. Its full snapshots,
 catalog digests, budgets, draft, checkpoint, and pending human decision are
 durable DSH Session events. The browser dock exposes human pause, resume,
-cancel, and answer controls. Proposal apply/send is the completion approval;
+cancel, and answer controls. A saved automatic Spec receipt or explicit proposal
+apply/send completes the workflow;
 discard cancels the workflow.
 
 Every browser root preset also exposes DSH's structured `ask_user_question`
-tool. An interactive top-level Spec component proposal first produces a
-persistent details card with model-suggested defaults from the proposed
-operation. Either domain may request a card for genuinely missing required
-fields. **Continue proposal** stores the confirmed values as structured state
+tool. Fully specified automatic Spec proposals skip confirmation cards and
+record defaults as assumptions. Restricted component proposals retain the
+details card. Either domain may request a card for genuinely missing required
+fields. **Continue proposal** stores confirmed values as structured state
 and sends them into the same Session. The model authors the typed operations
 using those values; the Assistant does not synthesize ports or SystemVerilog.
-The next card is the owner-previewed review and remains the explicit
-approve/apply boundary. Non-proposal questions use the Harness composer
+Automatic Spec submissions await validation and save, then display **Applied
+automatically** with the saved revision. Restricted owners show the
+owner-previewed approve/apply card. Non-proposal questions use the Harness composer
 takeover. A durable workflow input request instead pauses a goal or
 orchestrated run for a later answer. Headless mode and delegated children do
 not expose either interactive mechanism.
@@ -123,7 +136,9 @@ not expose either interactive mechanism.
 The proposal tool's operation shape is fetched from the selected owner at
 agent attachment. The owner publishes a binding-specific JSON Schema and
 validates against it before preview. The Assistant checks it before calling
-the owner and refuses preview if the schema digest changes. See the
+the owner. Changed Spec contracts refresh on a context read in the existing
+conversation. Spec preparation requires the model's authored
+`base_source_revision_hash`; stale context cannot be silently advanced. See the
 [owner operation schema contract](assistant-owner-operation-contract.md).
 
 Focused turns default to three model steps and receive one extra step only
@@ -188,7 +203,7 @@ multi-user application.
 ## State and recovery
 
 DSH JSONL is the transcript source of truth. `assistant.sqlite3` stores immutable
-bindings, Workspace identities, and review metadata. Back up the complete state root together. DSH
+bindings, Workspace identities, creation progress, and review metadata. Back up the complete state root together. DSH
 provides rename, archive/restore, and export. Permanent deletion is not exposed
 because the current persistence contract is append-only.
 
@@ -199,6 +214,14 @@ chat REST/SSE API are intentionally unsupported.
 Circuit documents and pending owner proposals remain process-local to Circuit
 Designer. A Harness conversation survives a Circuit restart, but the bound
 document must be reopened before an old review can reconcile.
+
+Spec bindings include a persistent `owner_document_key` for the canonical
+package path. They survive visible-document switches and owner restarts;
+copied packages with equal document IDs are distinct. The owner stores pending
+submissions and events durably, and reconciles interrupted saves from atomic
+package decisions. Existing pending reviews still require a decision after an
+upgrade. See [iterative refinement](spec-editor-iterative-refinement.md) for
+live views, drafts, history, and restricted launch commands.
 
 ## Verification and packaging
 

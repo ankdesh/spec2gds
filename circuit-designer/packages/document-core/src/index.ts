@@ -253,6 +253,7 @@ export interface TransactionResult {
 }
 
 export interface DocumentSnapshot {
+  owner_document_key: string;
   schema_version: string;
   document_id: string;
   source_revision_hash: string;
@@ -322,6 +323,7 @@ export interface FilesystemDirectoryListing {
 }
 
 export interface SourceChangeEvent {
+  owner_document_key: string;
   sequence: number;
   document_id: string;
   source_revision_hash: string;
@@ -334,6 +336,20 @@ export interface ActivityState {
   artifacts: Array<Record<string, unknown>>;
   proposals: Array<Record<string, unknown>>;
   assistant_changes: Array<Record<string, unknown>>;
+}
+
+export interface DocumentView {
+  snapshot: DocumentSnapshot;
+  a2ui: A2UIDocumentBatch;
+  activity: ActivityState;
+  approval_policy: "automatic" | "review";
+  event_cursor: number;
+  source_revision_hash: string;
+}
+
+export interface AssistantHistoryPage {
+  items: Array<Record<string, unknown>>;
+  next_cursor: number | null;
 }
 
 export interface EntityAction {
@@ -374,7 +390,31 @@ function errorMessage(detail: unknown): string {
 }
 
 export class SpecEditorHttpClient {
+  private ownerDocumentKey: string | null = null;
   constructor(private readonly baseUrl = "") {}
+
+  bindDocument(key: string): void { this.ownerDocumentKey = key; }
+
+  private documentPath(path: string, key = this.ownerDocumentKey): string {
+    if (!key) return path;
+    return `${path}${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(key)}`;
+  }
+
+  getDocumentView(key = this.ownerDocumentKey): Promise<DocumentView> {
+    return this.request(this.documentPath("/documents/view", key));
+  }
+
+  getAssistantHistory(before?: number): Promise<AssistantHistoryPage> {
+    return this.request(this.documentPath(`/assistant/history?limit=25${before === undefined ? "" : `&before=${before}`}`));
+  }
+
+  getAssistantSubmission(id: string): Promise<Record<string, unknown>> {
+    return this.request(this.documentPath(`/assistant/proposals/${encodeURIComponent(id)}`));
+  }
+
+  decideAssistantSubmission(id: string, decision: "approve" | "reject"): Promise<Record<string, unknown>> {
+    return this.request(this.documentPath(`/assistant/proposals/${encodeURIComponent(id)}/${decision}`), { method: "POST" });
+  }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${this.baseUrl}${path}`, init);
@@ -419,11 +459,11 @@ export class SpecEditorHttpClient {
   }
 
   getA2UIBatch(): Promise<A2UIDocumentBatch> {
-    return this.request("/documents/a2ui");
+    return this.request(this.documentPath("/documents/a2ui"));
   }
 
   getSnapshot(): Promise<DocumentSnapshot> {
-    return this.request("/documents/snapshot");
+    return this.request(this.documentPath("/documents/snapshot"));
   }
 
   getServiceDirectory(): Promise<ServiceDirectory> {
@@ -434,7 +474,7 @@ export class SpecEditorHttpClient {
     expectedSourceRevisionHash: string,
     operations: EditorTransactionOperation[],
   ): Promise<TransactionResult> {
-    return this.request("/transactions", {
+    return this.request(this.documentPath("/transactions"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -444,16 +484,16 @@ export class SpecEditorHttpClient {
     });
   }
 
-  eventsUrl(): string {
-    return `${this.baseUrl}/events`;
+  eventsUrl(cursor = 0): string {
+    return `${this.baseUrl}${this.documentPath(`/events?cursor=${cursor}`)}`;
   }
 
   activityEventsUrl(): string {
-    return `${this.baseUrl}/activity-events`;
+    return `${this.baseUrl}${this.documentPath("/activity-events")}`;
   }
 
   launchAssistant(ref: EntityRef): Promise<AssistantLaunch> {
-    return this.request("/assistant/launch", {
+    return this.request(this.documentPath("/assistant/launch"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -464,7 +504,7 @@ export class SpecEditorHttpClient {
   }
 
   launchDocumentAssistant(attachActiveDocument: boolean): Promise<AssistantDocumentLaunch> {
-    return this.request("/assistant/launch/document", {
+    return this.request(this.documentPath("/assistant/launch/document"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ attach_active_document: attachActiveDocument }),
@@ -480,17 +520,7 @@ export class SpecEditorHttpClient {
   }
 
   getActivity(): Promise<ActivityState> {
-    return Promise.all([
-      this.request<{ executions: Array<Record<string, unknown>> }>("/executions"),
-      this.request<{ artifacts: Array<Record<string, unknown>> }>("/artifacts"),
-      this.request<{ proposals: Array<Record<string, unknown>> }>("/proposals"),
-      this.request<{ assistant_changes: Array<Record<string, unknown>> }>("/assistant/changes"),
-    ]).then(([executions, artifacts, proposals, assistantChanges]) => ({
-      executions: executions.executions,
-      artifacts: artifacts.artifacts,
-      proposals: proposals.proposals,
-      assistant_changes: assistantChanges.assistant_changes,
-    }));
+    return this.getDocumentView().then(value => value.activity);
   }
 
   listEntityActivities(ref: EntityRef): Promise<{ activities: EntityActivity[] }> {

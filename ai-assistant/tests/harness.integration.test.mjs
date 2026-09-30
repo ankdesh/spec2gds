@@ -81,6 +81,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       : toolResults === 1
         ? { tool_calls: [{ index: 0, id: "call_proposal", type: "function", function: { name: "prepare_spec_proposal", arguments: JSON.stringify({
           supported: true,
+          base_source_revision_hash: "sha256:test",
           unsupported_reason: null,
           title: "Add timer",
           summary: "Adds a timer component.",

@@ -171,6 +171,10 @@ def parse_wire_range(value: typing.Any) -> tuple[str | None, str | None]:
     expression = "" if value is None else str(value).strip()
     if not expression:
         return None, None
+    if expression.startswith("[") and expression.endswith("]"):
+        expression = expression[1:-1].strip()
+        if not expression:
+            raise ValueError("Wire port Range cannot be empty.")
     if expression.count(":") > 1:
         raise ValueError("Wire port Range must contain at most one colon.")
     if ":" not in expression:
