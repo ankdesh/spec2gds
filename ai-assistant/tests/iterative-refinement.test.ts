@@ -8,7 +8,7 @@ import { parseOwnerOperationContract } from "../src/owner-operation-schema.js";
 import { ProductState } from "../src/state.js";
 import { registerDomainTools } from "../src/tools.js";
 
-function fixture(policy: "automatic" | "review" = "automatic") {
+function fixture(policy: "automatic" | "review" = "automatic", notificationFails = false) {
   const root = mkdtempSync(join(tmpdir(), "spec-iterative-"));
   const state = new ProductState(join(root, "state.sqlite3"));
   const binding = state.createBinding("chat", { domain: "spec", serviceBaseUrl: "http://owner", ownerUrl: "http://owner",
@@ -35,7 +35,7 @@ function fixture(policy: "automatic" | "review" = "automatic") {
   };
   const tools = new Map<string, any>();
   registerDomainTools({ tools: { register: (tool: any) => { tools.set(tool.name, tool); return () => { tools.delete(tool.name); }; } } },
-    binding, state, owners, undefined, review => { prepared.push(review); }, undefined, true, parseOwnerOperationContract(wire));
+    binding, state, owners, undefined, review => { prepared.push(review); if (notificationFails) throw new Error("Execution ledger unavailable"); }, undefined, !notificationFails, parseOwnerOperationContract(wire));
   const args: any = { supported: true, base_source_revision_hash: revision, unsupported_reason: null, title: "Create leaf", summary: "Create leaf", rationale: "Requested", assumptions: [],
     operations: [{ operation_id: "create", type: "create_entity", kind: "component", name: "leaf", ports: [{ name: "clk", family: "wire", direction: "in" }], instances: [] }] };
   const execute = (values = args) => tools.get("prepare_spec_proposal").execute(values, { callId: "call", signal: new AbortController().signal });
@@ -159,5 +159,15 @@ test("Spec context refresh retains existing pending reviews", async () => {
     f.revision = "sha256:B";
     await f.tools.get("get_bound_context").execute({}, { callId: "context", signal: new AbortController().signal });
     assert.equal(f.state.getReview("chat", "pending")!.state, "ready");
+  } finally { f.close(); }
+});
+
+for (const policy of ["automatic", "review"] as const) test(`a failed execution notification preserves the owner ${policy} result`, async () => {
+  const f = fixture(policy, true);
+  try {
+    const result = await f.execute();
+    assert.equal(result.review.state, policy === "automatic" ? "applied" : "ready");
+    assert.equal(f.state.listReviews("chat")[0].state, result.review.state);
+    assert.equal(result.error, undefined);
   } finally { f.close(); }
 });

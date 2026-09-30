@@ -14,8 +14,7 @@ editable creation card, whether it is bound or unbound. A bound model can read
 fresh owner context and prepare typed previews. The model has no direct owner
 mutation, filesystem, shell, browser, or skill tools. The selected `focused`,
 `goal`, or `orchestrated` preset controls
-whether bounded workflow, goal, and read-only delegation capabilities are
-present. Spec submissions follow the owner's approval policy: automatic by
+whether native goals and persistent read-only event agents are present. Spec submissions follow the owner's approval policy: automatic by
 default, or explicit review with `--require-human-approval`. Circuit send keeps
 its explicit review action. The latest proposal card is
 kept in the completed turn footer, independent of the collapsible tool-call
@@ -107,17 +106,15 @@ The new-conversation dialog offers three immutable execution presets:
 | Preset | Behavior |
 | --- | --- |
 | `focused` | One-shot Q&A and ordinary typed proposals; no goal or delegation tools |
-| `goal` | A durable, review-aware workflow plus DSH's bounded goal loop |
-| `orchestrated` | Goal behavior plus one-shot, depth-one, read-only analysis children |
+| `goal` | Native goal continuation with shared host accounting and review holds |
+| `orchestrated` | Persistent event-driven analyst/reviewer reactions; primary owns proposals |
 
-Service instructions remain identical across presets and come from exact,
-versioned YAML prompt bundles. The generic `prepare-reviewed-change` workflow
-is specialized by exact Spec/Circuit adapter manifests. Its full snapshots,
-catalog digests, budgets, draft, checkpoint, and pending human decision are
-durable DSH Session events. The browser dock exposes human pause, resume,
-cancel, and answer controls. A saved automatic Spec receipt or explicit proposal
-apply/send completes the workflow;
-discard cancels the workflow.
+Service instructions come from exact YAML prompt bundles. Event rosters, typed
+payload schemas, subscriptions, and Markdown prompts are fixed by trusted
+configuration and pinned to the conversation. The execution dock supplies
+pause/resume/stop, spending, failures, and acknowledged manual retry. Restart
+requires human Resume. Owner apply/send/discard records a review event without
+automatically completing a goal. See [Phase 1 usage and recovery](event-driven-assistant-phase1.md).
 
 Every browser root preset also exposes DSH's structured `ask_user_question`
 tool. Fully specified automatic Spec proposals skip confirmation cards and
@@ -129,8 +126,7 @@ using those values; the Assistant does not synthesize ports or SystemVerilog.
 Automatic Spec submissions await validation and save, then display **Applied
 automatically** with the saved revision. Restricted owners show the
 owner-previewed approve/apply card. Non-proposal questions use the Harness composer
-takeover. A durable workflow input request instead pauses a goal or
-orchestrated run for a later answer. Headless mode and delegated children do
+takeover. General durable waiting is deferred. Headless mode and specialist agents do
 not expose either interactive mechanism.
 
 The proposal tool's operation shape is fetched from the selected owner at
@@ -143,11 +139,11 @@ conversation. Spec preparation requires the model's authored
 
 Focused turns default to three model steps and receive one extra step only
 after a visible structured-question call in that turn. Goal and orchestrated
-turns allow eight steps while the workflow adds round, request, token, time,
-child, concurrency, and depth budgets. Each model response remains capped at
-1,200 output tokens. Orchestrated children inherit the immutable binding but
-can use only `get_bound_context`; they cannot propose, ask the user, mutate
-workflow state, or delegate again.
+turns allow eight steps, with aggregate round, request, token, active-time,
+member, concurrency, queue, event, byte, and causal-depth bounds. Responses
+remain capped at 1,200 output tokens. Specialist agents inherit the immutable
+owner binding and may read context, inspect execution, and publish permitted
+events; proposal tools belong to the primary.
 
 ## Design-source workspaces
 
@@ -236,7 +232,7 @@ npm run package -- /tmp/spec2gds-assistant-release
 ```
 
 The unit suite protects Harness bootstrap safety, catalog prompt/domain rules,
-preset capability boundaries, workflow controls, and complete operation
+preset capability boundaries, execution controls, and complete operation
 vocabularies. Run only the bootstrap cases with
 `npm run test:setup-harness`. The integration test boots the real headless
 profile against local owner/model fixtures and verifies context dispatch,

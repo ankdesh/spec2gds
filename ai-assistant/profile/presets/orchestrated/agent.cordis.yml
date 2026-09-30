@@ -1,28 +1,6 @@
 - id: persona
   name: '@deepseek-ai/dsh-persona'
   config:
-    prefix: You are the orchestrating spec2gds hardware-design assistant.
+    prefix: You are the event driven spec2gds hardware-design assistant.
 - id: tool-ask-user
   name: '@deepseek-ai/dsh-tool-ask-user'
-- id: command-goal
-  name: '@deepseek-ai/dsh-command-goal'
-- id: tool-goal
-  name: '@deepseek-ai/dsh-tool-goal'
-- id: tool-s-workflow
-  name: '@deepseek-ai/dsh-tool-s-workflow'
-- id: tool-subagent
-  name: '@deepseek-ai/dsh-tool-subagent'
-  config:
-    provider: spawn
-    toolName: delegate_workflow_step
-    backgroundMode: one-shot
-    enableRunInBackground: false
-    maxDepth: 1
-    persona: >-
-      You are a read-only spec2gds design-analysis specialist. Read the bound
-      owner context, complete only the delegated analysis, state assumptions,
-      and return concise findings to the parent. You cannot ask the user,
-      prepare or apply proposals, change workflow state, or delegate again.
-    toolFilter:
-      allow:
-        - get_bound_context

@@ -103,7 +103,7 @@ export function structuredQuestionPrompt(enabled: boolean): PromptSection | null
     name: "spec2gds:interactive-clarification",
     order: 250,
     text: `INTERACTIVE CLARIFICATION
-After reading bound context, if a concrete proposal needs user-supplied values, call its prepare_*_proposal tool with supported=false, an empty operations list, and every missing value in required_fields. Supply an LLM-suggested default_value for every field. When the details card is submitted, use the confirmed values as authoritative, pass its input_id as confirmed_input_id and its exact values as confirmed_values, and author the matching typed operations yourself. The client will show one editable details card and continue the proposal from its submission. Do not list missing proposal fields in an ordinary assistant response and end the turn. For a non-proposal question or choice, you MUST call ask_user_question. Ask only for information that cannot be derived from bound context, and do not ask about optional data that can safely retain its current or default value. When a goal or orchestrated workflow instead needs to stop durably for a consequential decision, use its workflow input request capability.`,
+After reading bound context, if a concrete proposal needs user-supplied values, call its prepare_*_proposal tool with supported=false, an empty operations list, and every missing value in required_fields. Supply an LLM-suggested default_value for every field. When the details card is submitted, use the confirmed values as authoritative, pass its input_id as confirmed_input_id and its exact values as confirmed_values, and author the matching typed operations yourself. The client will show one editable details card and continue the proposal from its submission. Do not list missing proposal fields in an ordinary assistant response and end the turn. For a non-proposal question or choice, you MUST call ask_user_question. Ask only for information that cannot be derived from bound context, and do not ask about optional data that can safely retain its current or default value. For a goal or orchestrated request, use these same human input tools; durable event waiting is not available in this phase.`,
   };
 }
 
@@ -162,12 +162,13 @@ export function registerDomainTools(
   state: ProductState,
   owners: OwnerClients,
   promptCatalog?: BoundPromptCatalog,
-  onReviewPrepared?: (review: ProposalReview) => void,
+  onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   currentUserRequest?: () => string,
   interactiveForms = false,
   operationContract?: OwnerOperationContract,
   schemaError?: string,
   onDomainToolUse?: () => Promise<void>,
+  readOnly = false,
 ): void {
   let specContract = operationContract;
   let disposeSpecTool: (() => void) | undefined;
@@ -193,7 +194,7 @@ export function registerDomainTools(
         owners.context(binding, exec.signal),
         binding.domain === "circuit" ? owners.circuitSvg(binding, exec.signal).catch(() => undefined) : Promise.resolve(undefined),
       ]);
-      if (binding.domain === "spec") {
+      if (binding.domain === "spec" && !readOnly) {
         if (typeof context.owner_document_key === "string" && !binding.ownerDocumentKey) {
           state.pinOwnerDocument(binding.sessionId, context.owner_document_key);
           binding.ownerDocumentKey = context.owner_document_key;
@@ -237,6 +238,7 @@ export function registerDomainTools(
     },
   }));
 
+  if (readOnly) return;
   if (!operationContract) {
     const disposeUnavailable = agentContext.tools.register(defineTool({
       name: binding.domain === "spec" ? "prepare_spec_proposal" : "prepare_circuit_proposal",
@@ -262,7 +264,7 @@ function registerSpecProposalTool(
   owners: OwnerClients,
   contract: OwnerOperationContract,
   interactiveForms: boolean,
-  onReviewPrepared?: (review: ProposalReview) => void,
+  onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   currentUserRequest?: () => string,
   onDomainToolUse?: () => Promise<void>,
 ): () => void {
@@ -331,7 +333,7 @@ function registerSpecProposalTool(
                 && receipt.state === "applied" && isRecord(receipt.owner_result)) {
               review = state.transitionReview(binding.sessionId, review.proposalId, [review.state], "applied",
                 { error: null, diagnostics: [], ownerResult: receipt.owner_result });
-              onReviewPrepared?.(review);
+              await onReviewPrepared?.(review);
             }
           } catch { /* Preserve uncertain state until the exact owner receipt is available. */ }
         }
@@ -404,9 +406,15 @@ function registerSpecProposalTool(
           review = state.transitionReview(binding.sessionId, proposalId, ["applying"],
             result.status === "applied" ? "applied" : "ready", { ownerResult: result });
         }
-        if (review.state === "ready" || review.state === "applied") onReviewPrepared?.(review);
+        if (review.state === "ready" || review.state === "applied") await onReviewPrepared?.(review);
         return reviewResult(review);
       } catch (error) {
+        const confirmed = state.getReview(binding.sessionId, proposalId);
+        // Execution notifications cannot relabel the persisted owner result.
+        if (confirmed && ["ready", "applied", "sent"].includes(confirmed.state)) {
+          console.warn(JSON.stringify({ event: "spec2gds.execution_notification_failed", proposal_id: proposalId, domain: binding.domain }));
+          return reviewResult(confirmed);
+        }
         const normalized = errorFromException(binding, proposalId, error);
         logProposalFailure(binding, normalized, proposalId);
         const current = state.getReview(binding.sessionId, proposalId)!;
@@ -427,7 +435,7 @@ function registerCircuitProposalTool(
   owners: OwnerClients,
   contract: OwnerOperationContract,
   interactiveForms: boolean,
-  onReviewPrepared?: (review: ProposalReview) => void,
+  onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   onDomainToolUse?: () => Promise<void>,
 ): void {
   agentContext.tools.register(defineTool({
@@ -507,9 +515,15 @@ function registerCircuitProposalTool(
         const review = state.transitionReview(binding.sessionId, proposalId, ["previewing"], next, {
           preview: { ...preview, base_document: snapshot.document }, diagnostics: diagnostics(preview), error: normalized,
         });
-        if (review.state === "ready") onReviewPrepared?.(review);
+        if (review.state === "ready") await onReviewPrepared?.(review);
         return reviewResult(review);
       } catch (error) {
+        const confirmed = state.getReview(binding.sessionId, proposalId);
+        // Execution notifications cannot relabel the persisted owner result.
+        if (confirmed && ["ready", "applied", "sent"].includes(confirmed.state)) {
+          console.warn(JSON.stringify({ event: "spec2gds.execution_notification_failed", proposal_id: proposalId, domain: binding.domain }));
+          return reviewResult(confirmed);
+        }
         const normalized = errorFromException(binding, proposalId, error);
         logProposalFailure(binding, normalized, proposalId);
         return reviewResult(state.transitionReview(binding.sessionId, proposalId, ["previewing"],

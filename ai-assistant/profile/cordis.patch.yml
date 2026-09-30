@@ -37,6 +37,10 @@
     compression: !!js process.env.SPEC2GDS_SESSION_COMPRESSION || 'zstd'
 
 # spec2gds domain tools replace general-purpose coding and delegation tools.
+- id: compaction-basic
+  config:
+    maxTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)
+
 - id: tool-bash
   disabled: true
 - id: tool-pwsh
@@ -66,12 +70,12 @@
 - id: tool-web
   disabled: true
 
-# Generic Harness goals can turn a single design request into an autonomous
-# multi-turn loop. Disable the state, driver, command, tool, and UI together so
-# historical goal state cannot resume in the background. Keep them unavailable
-# until spec2gds owns bounded, review-aware goal semantics.
+# Native goals are exposed only by the goal preset. The execution service
+# accounts for requests and enforces aggregate host-owned budgets.
 - id: goal
   disabled: false
+  config:
+    defaultMaxGoalRounds: 8
 - id: goal-round-driver
   disabled: false
 - id: command-goal
@@ -80,6 +84,14 @@
   disabled: true
 - id: ui-goal
   disabled: true
+
+# Cordis replaces config objects: explicitly retain the native JSON default.
+# Route the event delivery ledger to SQLite.
+- id: storage-domain
+  config:
+    backend: json
+    routes:
+      event_systems: sqlite
 
 - insert:
     - id: prompt-catalog
@@ -91,6 +103,7 @@
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/prompts'
 
+    # Retain historical workflow event decoding; new presets do not start workflows.
     - id: s-workflow
       name: '@deepseek-ai/dsh-s-workflow'
 
@@ -100,6 +113,25 @@
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/workflows'
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/adapters'
+
+    - id: event-system-storage
+      name: '@deepseek-ai/dsh-storage-sqlite'
+      config:
+        path: !!js dshHomePath('event-systems.sqlite3')
+
+    - id: event-systems
+      name: '@deepseek-ai/dsh-event-system'
+
+    - id: event-systems-invariant
+      name: '@deepseek-ai/dsh-event-system/invariant'
+
+    - id: event-systems-yaml
+      name: '@deepseek-ai/dsh-event-system-yaml'
+      config:
+        roots:
+          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/event-systems'
+        maxFileBytes: 262144
+        maxPromptBytes: 32768
 
     - id: spec2gds-assistant
       name: '@spec2gds/harness-assistant'
@@ -115,3 +147,26 @@
         maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
         maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)
         interactiveForms: !!js (process.env.ASSISTANT_PROFILE || 'spec2gds-web') === 'spec2gds-web'
+        execution:
+          goal:
+            maxRounds: 8
+            maxRequests: 32
+            maxTokens: 300000
+            maxActiveMillis: 1800000
+            maxMembers: 1
+            maxConcurrency: 1
+            maxPending: 100
+            maxEvents: 256
+            maxPayloadBytes: 131072
+            maxDepth: 16
+          orchestrated:
+            maxRounds: 8
+            maxRequests: 48
+            maxTokens: 500000
+            maxActiveMillis: 2700000
+            maxMembers: 7
+            maxConcurrency: 3
+            maxPending: 1000
+            maxEvents: 1000
+            maxPayloadBytes: 131072
+            maxDepth: 16

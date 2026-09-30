@@ -43,18 +43,24 @@ async function hostFixture(interactiveForms = true) {
   const listeners = new Map<string, Array<(...args: any[]) => any>>();
   const routes: any[] = [];
   const agents = new Map<string, any>();
-  const workflows = new Map<string, any>();
+  const executions = new Map<string, any>();
   const starts: any[] = [];
-  const answered: string[] = [];
+  const members = new Map<string, any>();
   const ctx: any = {
     agents: { get: (id: string) => agents.get(id) },
     sessionPersistence: { list: async () => [] },
     promptCatalog: { get: () => ({}), seal: () => {}, bind: () => ({ sections: ["domain-persona", "binding-context", "operation-constraints", "output-contract"].map((id, index) => ({ id, order: 100 + index * 50, text: id })) }) },
-    sWorkflow: { catalog: (domain: string) => ({ definitions: [{ value: { metadata: { id: "prepare-reviewed-change", version: "1.0.0" } } }], adapters: [{ value: { metadata: { id: `${domain}-editor`, version: "1.0.0" } } }] }),
-      seal: () => {}, get: (agent: any) => workflows.get(agent.id) ?? null,
-      start: (agent: any, request: any) => { starts.push(request); workflows.set(agent.id, { status: "active", preset: request.preset, runId: "run", revision: 0, budget: { maxDelegationDepth: 1, maxConcurrency: 2 } }); },
-      answerInput: (_agent: any, _ref: any, text: string) => { answered.push(text); }, checkpoint: () => {},
+    eventSystems: {
+      ready: Promise.resolve(), definition: (id: string) => ({ id }), seal: () => {},
+      get: (id: string) => executions.get(id), membership: (id: string) => members.get(id),
+      attach: async (agent: any, mode: string, definition: any, limits: any) => {
+        starts.push({ mode, definition, limits });
+        executions.set(agent.id, { status: "active", mode, revision: 1, definition: { primary: "primary" }, events: [], deliveries: [], limits });
+        members.set(agent.id, { conversationId: agent.id, member: "primary", primary: true });
+      },
+      publishHost: async () => {}, hold: async () => {},
     },
+    goals: { get: () => undefined },
     on: (event: string, listener: (...args: any[]) => any) => { listeners.set(event, [...(listeners.get(event) ?? []), listener]); return () => {}; },
     effect: (effect: () => any) => effect(),
     inject: (_deps: string[], callback: (context: any) => any) => callback({ ...ctx,
@@ -63,12 +69,16 @@ async function hostFixture(interactiveForms = true) {
   };
   apply(ctx, { provider: "openai", model: "fixture", stateRoot: root, scratchRoot: join(root, "workspaces"), specDocumentRoot: root,
     specAllowlist: url, circuitAllowlist: "http://127.0.0.1:9/api/circuit-designer/v1", requestTimeoutMs: 1_000,
-    maxStepsPerTurn: 3, maxOutputTokens: 1_200, interactiveForms });
+    maxStepsPerTurn: 3, maxOutputTokens: 1_200, interactiveForms,
+    execution: {
+      goal: { maxRounds: 8, maxRequests: 32, maxTokens: 300_000, maxActiveMillis: 1_800_000, maxMembers: 1, maxConcurrency: 1, maxPending: 100, maxEvents: 256, maxPayloadBytes: 131072, maxDepth: 16 },
+      orchestrated: { maxRounds: 8, maxRequests: 48, maxTokens: 500_000, maxActiveMillis: 2_700_000, maxMembers: 7, maxConcurrency: 3, maxPending: 100, maxEvents: 256, maxPayloadBytes: 131072, maxDepth: 16 },
+    } });
   const emit = async (event: string, ...args: any[]) => { for (const listener of listeners.get(event) ?? []) await listener(...args); };
   const makeAgent = async (id: string, preset = "focused", parentSession?: string) => {
     const tools = new Map<string, any>(); const sections = new Map<string, any>();
     const agent = { id, session: { header: { agentPreset: preset, parentSession, delegationDepth: parentSession ? 1 : 0 } },
-      ctx: { tools: { register: (tool: any) => { tools.set(tool.name, tool); return () => tools.delete(tool.name); }, get: (name: string) => tools.get(name) },
+      ctx: { tools: { register: (tool: any) => { tools.set(tool.name, tool); return () => tools.delete(tool.name); }, get: (name: string) => tools.get(name), guard: () => () => {} },
         systemPrompt: { section: (section: any) => { sections.set(section.name, section); return () => sections.delete(section.name); } } }, tools, sections };
     agents.set(id, agent); await emit("agent/created", { agent }); return agent;
   };
@@ -82,13 +92,13 @@ async function hostFixture(interactiveForms = true) {
     await route.handler(request, { writeHead: (code: number) => { status = code; }, end: (text: string) => { value = JSON.parse(text); } });
     return { status, value };
   };
-  return { root, url, makeAgent, emit, message, api, starts, answered, workflows,
+  return { root, url, makeAgent, emit, message, api, starts, executions, members,
     get creates() { return creates; }, get contextReads() { return contextReads; },
     async close() { await emit("dispose"); await new Promise<void>(resolve => owner.close(() => resolve())); await rm(root, { recursive: true, force: true }); },
   };
 }
 
-test("browser root presets create from an unbound chat and start workflows only in the destination", async () => {
+test("browser root presets create from an unbound chat and attach execution systems only to the bound destination", async () => {
   const f = await hostFixture();
   try {
     for (const preset of ["focused", "goal", "orchestrated"]) {
@@ -97,11 +107,11 @@ test("browser root presets create from an unbound chat and start workflows only 
       assert.match(origin.sections.get("spec2gds:unbound-session").text, /Do not read get_bound_context first/,
         "The complete unbound prompt must retain the creation instructions");
       await f.message(origin.id, original);
-      assert.equal(f.workflows.has(origin.id), false);
+      assert.equal(f.executions.has(origin.id), false);
       const prepared = await origin.tools.get("prepare_spec_document_creation").execute({ title: "Comparator", document_id: `comparator_${preset}` }, { callId: `call-${preset}` });
       const request = prepared.source_creation;
       assert.equal(request.originalRequest, original);
-      assert.equal(f.workflows.has(origin.id), false);
+      assert.equal(f.executions.has(origin.id), false);
       const created = await f.api("/sources/create", { domain: "spec", creationRequestId: request.requestId,
         documentId: request.documentId, title: request.title, serviceBaseUrl: request.serviceBaseUrl });
       assert.equal(created.status, 201, JSON.stringify(created.value));
@@ -109,10 +119,10 @@ test("browser root presets create from an unbound chat and start workflows only 
       const destination = await f.makeAgent(created.value.session.sessionId, preset);
       await f.api(`/bindings/${destination.id}/activate`, {});
       await f.message(destination.id, created.value.continuation.message);
-      assert.equal(f.workflows.has(destination.id), false);
+      assert.equal(f.executions.has(destination.id), preset !== "focused");
       await destination.tools.get("get_bound_context").execute({}, { signal: new AbortController().signal });
-      assert.equal(f.workflows.has(destination.id), preset !== "focused");
-      assert.equal(f.workflows.has(origin.id), false);
+      assert.equal(f.executions.has(destination.id), preset !== "focused");
+      assert.equal(f.executions.has(origin.id), false);
       assert.equal((await f.api(`/source-requests/${request.requestId}/continued`, {})).status, 200);
       const replay = await f.api("/sources/create", { domain: "spec", creationRequestId: request.requestId,
         documentId: request.documentId, title: request.title, serviceBaseUrl: request.serviceBaseUrl });
@@ -131,23 +141,23 @@ test("existing chooser creation works and a bound chat can create another packag
     assert.equal(existing.status, 201);
     const origin = await f.makeAgent(existing.value.session.sessionId, "goal");
     await f.api(`/bindings/${origin.id}/activate`, {});
-    f.workflows.set(origin.id, { status: "awaiting-user-input", preset: "goal", budget: {} });
+    f.executions.get(origin.id).status = "paused";
     const reads = f.contextReads;
     await f.message(origin.id, "Create a new spec document for a comparator");
     const request = (await origin.tools.get("prepare_spec_document_creation").execute({ document_id: "comparator", title: "Comparator" }, { callId: "bound-create" })).source_creation;
     assert.equal(f.contextReads, reads);
-    assert.equal(f.answered.length, 0, "Creation must not consume pending workflow input");
+    assert.equal(f.executions.get(origin.id).status, "paused", "Creation must not rearm the source conversation");
     assert.equal((await f.api("/sources/create", { domain: "spec", creationRequestId: request.requestId,
       documentId: request.documentId, title: request.title, serviceBaseUrl: f.url })).status, 201);
     const unchanged = await f.api(`/bindings/${origin.id}`);
     assert.equal(unchanged.value.session.documentId, "original");
     assert.equal(unchanged.value.session.workspaceKey, existing.value.session.workspaceKey);
-    assert.equal(f.workflows.get(origin.id).status, "awaiting-user-input");
+    assert.equal(f.executions.get(origin.id).status, "paused");
     assert.equal((await f.api(`/source-requests/${request.requestId}`, undefined, "http://evil")).status, 403);
   } finally { await f.close(); }
 });
 
-test("headless and delegated agents do not acquire the creation tool", async () => {
+test("headless and specialist agents do not acquire the creation tool", async () => {
   const headless = await hostFixture(false); const web = await hostFixture();
   try {
     const unbound = await headless.makeAgent("headless");
@@ -157,7 +167,8 @@ test("headless and delegated agents do not acquire the creation tool", async () 
     await web.api(`/bindings/${parent.id}/activate`, {});
     await web.message(parent.id, "Inspect the bound specification");
     await parent.tools.get("get_bound_context").execute({}, { signal: new AbortController().signal });
-    const child = await web.makeAgent("child", "focused", parent.id);
+    web.members.set("child", { conversationId: parent.id, member: "analyst", primary: false });
+    const child = await web.makeAgent("child", "focused");
     assert.equal(child.tools.has("prepare_spec_document_creation"), false);
     assert.equal(child.tools.has("get_bound_context"), true);
   } finally { await headless.close(); await web.close(); }

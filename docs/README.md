@@ -56,6 +56,10 @@ Read in this order:
     current support from proposed capabilities, and recommends shared execution
     foundations. Its [report plan](agentic-systems-report-plan.md) records the
     agreed scope and validation approach.
+    The proposed [event driven assistant plan](event-driven-assistant-plan.md)
+    splits replacement of `orchestrated`, reconsideration of `goal`, external
+    triggers, and visual tooling into three delivery phases. Workflow setup
+    remains outside that plan.
     The [evaluation guide](ai-assistant-evaluation.md) defines the golden
     corpus, DSH replay checks, raw metrics, and commands.
     Its preserved [Spec-to-RTL research guide](research/ai-spec-to-rtl-design-research-guide.md)
@@ -120,3 +124,5 @@ page beside it.
 
 When behavior changes, update the smallest relevant document and the root
 README in the same change.
+
+- [Event driven assistant Phase 1](event-driven-assistant-phase1.md): preset usage, limits, recovery, and verification.

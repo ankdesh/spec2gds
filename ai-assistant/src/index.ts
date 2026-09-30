@@ -1,3 +1,8 @@
+import type { Agent } from "@deepseek-ai/dsh-agent";
+import type EventSystemService from "@deepseek-ai/dsh-event-system";
+import type { EventSystemSnapshot } from "@deepseek-ai/dsh-event-system";
+import type { GoalService } from "@deepseek-ai/dsh-goal";
+import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -14,7 +19,7 @@ import { workspaceDescriptor } from "./workspaces.js";
 import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
-export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "sWorkflow", "sWorkflowYaml"];
+export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "goals"];
 export const Config = z.object({
   provider: z.string().min(1).required(),
   model: z.string().min(1).required(),
@@ -27,6 +32,7 @@ export const Config = z.object({
   maxStepsPerTurn: z.number().step(1).min(1).max(20).required(),
   maxOutputTokens: z.number().step(1).min(128).max(32_768).required(),
   interactiveForms: z.boolean().required(),
+  execution: z.object({ goal: z.any().required(), orchestrated: z.any().required() }).required(),
 });
 
 type ProductAgent = {
@@ -41,42 +47,12 @@ type PromptCatalogService = {
   };
   seal(): void;
 };
-type SWorkflowService = {
-  catalog(service?: string, preset?: "focused" | "goal" | "orchestrated"): {
-    definitions: readonly { value: { metadata: { id: string; version: string } } }[];
-    adapters: readonly { value: { metadata: { id: string; version: string } } }[];
-  };
-  get(agent: ProductAgent): null | {
-    runId: string;
-    revision: number;
-    status: string;
-    preset: "focused" | "goal" | "orchestrated";
-    budget: { maxChildren: number; maxConcurrency: number; maxDelegationDepth: number };
-    draft?: unknown;
-  };
-  start(agent: ProductAgent, request: Record<string, unknown>): unknown;
-  checkpoint(
-    agent: ProductAgent,
-    ref: { runId: string; revision: number },
-    stepId: string,
-    note: string,
-    usage?: { children?: number },
-  ): unknown;
-  updateDraft(agent: ProductAgent, ref: { runId: string; revision: number }, draft: unknown, summary: string): unknown;
-  requestCompletion(agent: ProductAgent, ref: { runId: string; revision: number }, prompt: string): unknown;
-  answerInput(agent: ProductAgent, ref: { runId: string; revision: number }, answer: string): unknown;
-  approveCompletion(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
-  pause(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
-  resume(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
-  cancel(agent: ProductAgent, ref: { runId: string; revision: number }): unknown;
-  raiseBudgets(agent: ProductAgent, ref: { runId: string; revision: number }, patch: Record<string, number>): unknown;
-  seal(): void;
-};
 type AppContext = {
   agents: { get(id: unknown): ProductAgent | undefined };
   sessionPersistence: { list(): Promise<Array<{ header: { id: string } }>> };
   promptCatalog: PromptCatalogService;
-  sWorkflow: SWorkflowService;
+  eventSystems: EventSystemService;
+  goals: GoalService;
   on(event: string, listener: (...args: any[]) => unknown): () => void;
   effect(effect: () => void | (() => void)): void;
   inject(dependencies: string[], callback: (ctx: AppContext & {
@@ -190,9 +166,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
   const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve);
   const attached = new Set<string>();
+  const legacyExecutions = new Set<string>();
   const unboundGuards = new Map<string, () => void>();
-  const delegatedParents = new Map<string, string>();
-  const activeDelegations = new Map<string, Set<string>>();
+  const executionConfig = rawConfig.execution;
+  if (!isRecord(executionConfig)) throw new Error("execution configuration is required.");
+  const limits = { goal: executionLimits("goal", executionConfig.goal, config.maxOutputTokens),
+    orchestrated: executionLimits("orchestrated", executionConfig.orchestrated, config.maxOutputTokens) };
   const clarifiedTurns = new Map<string, number>();
   const latestUserRequests = new Map<string, string>();
   const ready = (async () => {
@@ -204,20 +183,26 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     state.recoverInterruptedSourceCreations();
     for (const domain of ["spec", "circuit"] as const) {
       ctx.promptCatalog.get({ id: `spec2gds.${domain}`, version: "1.0.0" });
-      const catalog = ctx.sWorkflow.catalog(domain);
-      if (!catalog.definitions.some(entry => entry.value.metadata.id === "prepare-reviewed-change" && entry.value.metadata.version === "1.0.0")) {
-        throw new Error(`Missing workflow prepare-reviewed-change@1.0.0 for ${domain}.`);
-      }
-      if (!catalog.adapters.some(entry => entry.value.metadata.id === `${domain}-editor` && entry.value.metadata.version === "1.0.0")) {
-        throw new Error(`Missing service adapter ${domain}-editor@1.0.0.`);
+      for (const preset of ["goal", "orchestrated"] as const) {
+        ctx.eventSystems.definition(`spec2gds.${domain}.${preset}`, "1.0.0");
       }
     }
     ctx.promptCatalog.seal();
-    ctx.sWorkflow.seal();
+    await ctx.eventSystems.ready;
+    for (const binding of state.listBindings(true)) {
+      if (binding.preset !== "focused" && stored.has(binding.sessionId) && !ctx.eventSystems.get(SessionId(binding.sessionId))) legacyExecutions.add(binding.sessionId);
+    }
+    ctx.eventSystems.seal();
   })();
 
   const attach = async (agent: ProductAgent, binding: SessionBinding): Promise<void> => {
     if (attached.has(agent.id)) return;
+    if (legacyExecutions.has(String(agent.id))) {
+      agent.ctx.systemPrompt?.section({ name: "spec2gds:legacy-execution", order: 150, complete: true,
+        text: "This conversation is retained as readable history. Start a new bound conversation to use the updated preset." });
+      attached.add(agent.id);
+      return;
+    }
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
@@ -242,26 +227,32 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     } catch (error) {
       schemaError = error instanceof Error ? error.message : String(error);
     }
-    registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog, (review) => {
-      if (binding.preset === "focused") return;
-      try {
-        const workflow = ctx.sWorkflow.get(agent);
-        if (!workflow || workflow.status !== "active") return;
-        const summary = typeof review.artifact.summary === "string" && review.artifact.summary.trim()
-          ? review.artifact.summary
-          : `Prepared ${review.domain} proposal ${review.proposalId}.`;
-        ctx.sWorkflow.updateDraft(
-          agent,
-          { runId: workflow.runId, revision: workflow.revision },
-          review.artifact,
-          summary,
-        );
-        if (review.state === "applied") settleReviewedWorkflow(binding, review);
-      } catch (error) {
-        console.error("Failed to synchronize the owner-previewed proposal into workflow draft state:", error);
-      }
-    }, () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms, operationContract, schemaError,
-    () => startBoundWorkflow(agent, binding));
+    const membership = ctx.eventSystems.membership(SessionId(agent.id));
+    const specialist = membership !== undefined && !membership.primary;
+    registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog,
+      review => publishPreparedReview(binding, review),
+      () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms && !specialist,
+      operationContract, schemaError, undefined, specialist);
+    if (binding.preset !== "focused" && !specialist) {
+      await ctx.eventSystems.attach(agent as unknown as Agent, binding.preset,
+        ctx.eventSystems.definition(`spec2gds.${binding.domain}.${binding.preset}`, "1.0.0"), limits[binding.preset]);
+    }
+    if (binding.preset !== "focused") {
+      const native = agent as unknown as Agent;
+      native.ctx.tools.guard(exec => {
+        const member = ctx.eventSystems.membership(native.id);
+        const execution = member && ctx.eventSystems.get(member.conversationId);
+        if (exec.name.startsWith("prepare_") && exec.name.endsWith("_proposal")) {
+          return execution && member ? proposalExecutionDenial(execution, member.member) : "Execution membership is missing.";
+        }
+        if (exec.name === "update_goal" && isRecord(exec.arguments)
+          && ["complete", "edit"].includes(String(exec.arguments.action))
+          && state.listReviews(binding.sessionId).some(review => ["previewing", "ready", "applying", "reconcile"].includes(review.state))) {
+          return "Resolve the pending owner proposal before completing or editing this goal.";
+        }
+        return undefined;
+      });
+    }
     attached.add(agent.id);
   };
 
@@ -289,6 +280,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     { agent, turn, step }: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<unknown>,
   ) => {
+    await ready;
+    if (legacyExecutions.has(String(agent.id))) return { kind: "reject" };
+    if (!state.getBinding(String(agent.id)) && !ctx.eventSystems.membership(SessionId(agent.id)) && agentPreset(agent) === "goal" && step === 1) {
+      const goal = ctx.goals.get(agent as unknown as Agent);
+      if (goal?.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
+    }
     const limit = maxModelStepsForTurn(
       agentPreset(agent),
       config.maxStepsPerTurn,
@@ -307,35 +304,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     await ready;
     let binding = state.getBinding(String(agent.id));
     const parentSession = agent.session?.header.parentSession;
-    if (!binding && parentSession) {
-      const parentBinding = state.getBinding(String(parentSession));
-      const parent = ctx.agents.get(SessionId(String(parentSession)));
-      if (!parentBinding || !parent) throw new Error("Delegated assistant child has no live bound parent.");
-      const workflow = ctx.sWorkflow.get(parent);
-      const depth = agent.session?.header.delegationDepth ?? 0;
-      if (!workflow || workflow.status !== "active" || workflow.preset !== "orchestrated") {
-        throw new Error("Delegation requires an active orchestrated workflow.");
-      }
-      if (depth < 1 || depth > workflow.budget.maxDelegationDepth) {
-        throw new Error("Delegation depth exceeds the workflow budget.");
-      }
-      const active = activeDelegations.get(String(parentSession)) ?? new Set<string>();
-      if (active.size >= workflow.budget.maxConcurrency) {
-        throw new Error("Workflow delegation concurrency budget is exhausted.");
-      }
-      ctx.sWorkflow.checkpoint(
-        parent,
-        { runId: workflow.runId, revision: workflow.revision },
-        "delegation",
-        `Started read-only delegated analysis ${String(agent.id)}.`,
-        { children: 1 },
-      );
-      active.add(String(agent.id));
-      activeDelegations.set(String(parentSession), active);
-      delegatedParents.set(String(agent.id), String(parentSession));
+    const membership = ctx.eventSystems.membership(SessionId(agent.id));
+    if (!binding && membership && !membership.primary) {
+      const parentBinding = state.getBinding(String(membership.conversationId));
+      if (!parentBinding) throw new Error("Event agent has no immutable owner binding.");
       await attach(agent, parentBinding);
       return;
     }
+    if (!binding && parentSession) throw new Error("One-shot delegated agents are unavailable; use the event-system roster.");
     const serialized = process.env.SPEC2GDS_BINDING_JSON;
     if (!binding && serialized) {
       let input: BindingInput;
@@ -357,6 +333,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
       binding = state.activateBinding(String(agent.id));
     }
+    if (!binding) (agent as unknown as Agent).ctx.tools.guard(exec =>
+      ["create_goal", "update_goal"].includes(exec.name) && !state.getBinding(String(agent.id))
+        ? "Bind this conversation to a design before using goal controls." : undefined);
     if (binding) await attach(agent, binding);
     else guardUnbound(agent);
     if (config.interactiveForms && !parentSession) {
@@ -381,46 +360,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     if (objective) latestUserRequests.set(String(session.id), objective);
   });
 
-  async function startBoundWorkflow(agent: ProductAgent, binding: SessionBinding): Promise<void> {
-    if (binding.preset === "focused" || agent.session?.header.parentSession) return;
-    const objective = latestUserRequests.get(String(agent.id)) ?? "";
-    if (!objective) return;
-    await ready;
-    const current = ctx.sWorkflow.get(agent);
-    if (current?.status === "awaiting-user-input") {
-      ctx.sWorkflow.answerInput(agent, { runId: current.runId, revision: current.revision }, objective);
-      return;
-    }
-    if (current !== null) return;
-    ctx.sWorkflow.start(agent, {
-      definition: { id: "prepare-reviewed-change", version: "1.0.0" },
-      adapter: { id: `${binding.domain}-editor`, version: "1.0.0" },
-      preset: binding.preset,
-      objective,
-      contract: {
-        binding: {
-          domain: binding.domain,
-          ownerUrl: binding.ownerUrl,
-          documentId: binding.documentId,
-          scope: binding.scope,
-          ...(binding.entityKind ? { entityKind: binding.entityKind } : {}),
-          ...(binding.entityId ? { entityId: binding.entityId } : {}),
-        },
-        review: {
-          kind: binding.domain === "spec" ? "spec-proposal" : "circuit-proposal",
-          mutationBoundary: "explicit-review-card-action",
-        },
-      },
-    });
-  }
   ctx.on("agent/disposed", ({ agent }: { agent: ProductAgent }) => {
-    const parentSession = delegatedParents.get(String(agent.id));
-    if (parentSession) {
-      const active = activeDelegations.get(parentSession);
-      active?.delete(String(agent.id));
-      if (active?.size === 0) activeDelegations.delete(parentSession);
-      delegatedParents.delete(String(agent.id));
-    }
     attached.delete(String(agent.id));
     clarifiedTurns.delete(String(agent.id));
     latestUserRequests.delete(String(agent.id));
@@ -571,55 +511,43 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     throw new HttpError(400, "Action does not match this review domain.");
   }
 
-  function workflowFor(sessionId: string): { agent: ProductAgent; workflow: NonNullable<ReturnType<SWorkflowService["get"]>> } {
-    const agent = ctx.agents.get(SessionId(sessionId));
-    if (!agent) throw new HttpError(409, "The workflow session is not currently active.");
-    const workflow = ctx.sWorkflow.get(agent);
-    if (!workflow) throw new HttpError(404, "This session has no workflow.");
-    return { agent, workflow };
-  }
-
-  function exactWorkflowRef(workflow: NonNullable<ReturnType<SWorkflowService["get"]>>, body: Record<string, unknown>) {
-    if (body.runId !== workflow.runId || body.revision !== workflow.revision) {
-      throw new HttpError(409, "The workflow changed; reload its exact run ID and revision.");
-    }
-    return { runId: workflow.runId, revision: workflow.revision };
-  }
-
-  function settleReviewedWorkflow(binding: SessionBinding, review: ProposalReview): void {
+  async function publishPreparedReview(binding: SessionBinding, review: ProposalReview): Promise<void> {
     if (binding.preset === "focused") return;
-    const agent = ctx.agents.get(SessionId(binding.sessionId));
-    if (!agent) return;
-    let workflow = ctx.sWorkflow.get(agent);
-    if (!workflow || ["complete", "cancelled"].includes(workflow.status)) return;
-    if (review.state === "discarded") {
-      ctx.sWorkflow.cancel(agent, { runId: workflow.runId, revision: workflow.revision });
-      return;
-    }
-    if (review.state !== "applied" && review.state !== "sent") return;
-    if (workflow.status === "active") {
-      if (workflow.draft === undefined) {
-        const summary = typeof review.artifact.summary === "string" && review.artifact.summary.trim()
-          ? review.artifact.summary
-          : `Prepared ${review.domain} proposal ${review.proposalId}.`;
-        ctx.sWorkflow.updateDraft(
-          agent,
-          { runId: workflow.runId, revision: workflow.revision },
-          review.artifact,
-          summary,
-        );
-        workflow = ctx.sWorkflow.get(agent)!;
+    const id = SessionId(binding.sessionId);
+    const execution = ctx.eventSystems.get(id);
+    if (!execution) throw new Error("Proposal has no execution system.");
+    const prepared = execution.events.find(event => event.type === "review.prepared"
+      && isRecord(event.payload) && event.payload.proposal_id === review.proposalId);
+    const cause = execution.events.findLast(event => event.type === "review.ready");
+    try {
+      if (!prepared) await ctx.eventSystems.publishHost(id, { type: "review.prepared", payload: { proposal_id: review.proposalId },
+        producer: "owner", dedupeKey: `prepared:${review.proposalId}`, ...(cause ? { causation: cause.id } : {}) });
+    } finally {
+      if (binding.preset === "goal" && review.state === "ready") {
+        const agent = ctx.agents.get(id);
+        const goal = agent && ctx.goals.get(agent as unknown as Agent);
+        if (agent && goal?.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
+        await ctx.eventSystems.hold(id, "Owner review pending");
       }
-      ctx.sWorkflow.requestCompletion(
-        agent,
-        { runId: workflow.runId, revision: workflow.revision },
-        "The owner-backed proposal is ready for explicit approval.",
-      );
-      workflow = ctx.sWorkflow.get(agent)!;
     }
-    if (workflow.status === "awaiting-user-completion") {
-      ctx.sWorkflow.approveCompletion(agent, { runId: workflow.runId, revision: workflow.revision });
-    }
+    if (review.state === "applied") await settleReviewedExecution(binding, review);
+  }
+
+  async function settleReviewedExecution(binding: SessionBinding, review: ProposalReview): Promise<void> {
+    if (binding.preset === "focused" || !["applied", "sent", "discarded"].includes(review.state)) return;
+    const prepared = ctx.eventSystems.get(SessionId(binding.sessionId))?.events.findLast(event => event.type === "review.prepared"
+      && isRecord(event.payload) && event.payload.proposal_id === review.proposalId);
+    await ctx.eventSystems.publishHost(SessionId(binding.sessionId), {
+      ...(prepared ? { causation: prepared.id } : {}),
+      type: review.state === "discarded" ? "review.discarded" : "review.applied",
+      payload: { proposal_id: review.proposalId }, producer: "owner", dedupeKey: `${review.state}:${review.proposalId}`,
+    });
+  }
+
+  function executionFor(sessionId: string): EventSystemSnapshot {
+    const execution = ctx.eventSystems.get(SessionId(sessionId));
+    if (!execution) throw new HttpError(404, "This conversation has no execution system.");
+    return execution;
   }
 
   ctx.inject(["webServer", "connection"], (webCtx) => {
@@ -676,7 +604,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const result = await reserve(bindingInput(body), typeof body.sessionId === "string" ? body.sessionId : undefined);
           return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
         }
-        const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews|workflow))?$/);
+        const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews|execution))?$/);
         if (bindingMatch) {
           const sessionId = decodeURIComponent(bindingMatch[1]!);
           const resource = bindingMatch[2];
@@ -696,50 +624,47 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
                   if (!isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) continue;
                   if (receipt.state === "applied" && isRecord(receipt.owner_result)) {
                     const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "applied", { error: null, ownerResult: receipt.owner_result });
-                    settleReviewedWorkflow(binding, updated);
+                    await settleReviewedExecution(binding, updated);
                   } else if (receipt.state === "discarded") {
-                    state.transitionReview(sessionId, review.proposalId, [review.state], "discarded");
+                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "discarded");
+                    await settleReviewedExecution(binding, updated);
                   }
                 } catch { /* Keep uncertain results visible while the bound owner is offline. */ }
               }
             }
             return writeJson(response, 200, { reviews: state.listReviews(sessionId).map(publicReview) });
           }
-          if (resource === "workflow" && request.method === "GET") {
+          if (resource === "execution" && request.method === "GET") {
             const binding = state.getBinding(sessionId);
             if (!binding) throw new HttpError(404, "Unknown binding.");
-            const agent = ctx.agents.get(SessionId(sessionId));
-            return writeJson(response, 200, { workflow: agent ? ctx.sWorkflow.get(agent) : null });
+            return writeJson(response, 200, { execution: ctx.eventSystems.get(SessionId(sessionId)) ?? null,
+              legacy: legacyExecutions.has(sessionId) });
           }
         }
-        const workflowActionMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/workflow\/actions$/);
-        if (workflowActionMatch && request.method === "POST") {
-          const sessionId = decodeURIComponent(workflowActionMatch[1]!);
+        const executionActionMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/execution\/actions$/);
+        if (executionActionMatch && request.method === "POST") {
+          const sessionId = decodeURIComponent(executionActionMatch[1]!);
           const binding = state.getBinding(sessionId);
-          if (!binding || binding.preset === "focused") throw new HttpError(404, "This binding has no long-running workflow controls.");
+          if (!binding || binding.preset === "focused") throw new HttpError(404, "This binding has no execution controls.");
           const body = await readBody(request);
-          const { agent, workflow } = workflowFor(sessionId);
-          const ref = exactWorkflowRef(workflow, body);
-          const action = String(body.action ?? "");
-          let next: unknown;
-          if (action === "pause") next = ctx.sWorkflow.pause(agent, ref);
-          else if (action === "resume") next = ctx.sWorkflow.resume(agent, ref);
-          else if (action === "cancel") next = ctx.sWorkflow.cancel(agent, ref);
-          else if (action === "answer") {
-            if (typeof body.answer !== "string") throw new HttpError(400, "answer is required.");
-            next = ctx.sWorkflow.answerInput(agent, ref, body.answer);
-          } else if (action === "approve") next = ctx.sWorkflow.approveCompletion(agent, ref);
-          else if (action === "raise-budgets") {
-            if (!isRecord(body.budget)) throw new HttpError(400, "budget must be an object.");
-            const allowed = new Set(["maxRounds", "maxRequests", "maxTokens", "maxActiveMinutes", "maxChildren", "maxConcurrency", "maxDelegationDepth"]);
-            const budget = Object.fromEntries(Object.entries(body.budget).map(([key, value]) => {
-              if (!allowed.has(key)) throw new HttpError(400, `Unknown budget field ${key}.`);
-              if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new HttpError(400, `budget.${key} must be an integer.`);
-              return [key, value];
-            }));
-            next = ctx.sWorkflow.raiseBudgets(agent, ref, budget);
-          } else throw new HttpError(400, "Unknown workflow action.");
-          return writeJson(response, 200, { workflow: next });
+          if (!Number.isSafeInteger(body.revision)) throw new HttpError(400, "revision must identify the observed execution state.");
+          const action = body.action;
+          if (action !== "pause" && action !== "resume" && action !== "stop" && action !== "retry") throw new HttpError(400, "Unknown execution action.");
+          if (action === "resume" && state.listReviews(sessionId).some(review => ["previewing", "ready", "applying", "reconcile"].includes(review.state))) {
+            throw new HttpError(409, "Resolve pending owner review before resuming work.");
+          }
+          try {
+            const next = action === "retry"
+              ? await ctx.eventSystems.retry(SessionId(sessionId), Number(body.revision), String(body.deliveryId) as Parameters<EventSystemService["retry"]>[2], body.acknowledgeUncertainty === true)
+              : await ctx.eventSystems.control(SessionId(sessionId), Number(body.revision), action);
+            const agent = ctx.agents.get(SessionId(sessionId));
+            const goal = agent && binding.preset === "goal" ? ctx.goals.get(agent as unknown as Agent) : undefined;
+            if (agent && goal && goal.phase !== "complete") {
+              if (action === "resume") ctx.goals.resume(agent as unknown as Agent, goal);
+              else if (action !== "retry" && goal.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
+            }
+            return writeJson(response, 200, { execution: next });
+          } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
         }
         const reviewMatch = path.match(/^\/spec2gds-api\/reviews\/([^/]+)\/actions$/);
         if (reviewMatch && request.method === "POST") {
@@ -748,13 +673,13 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           if (!binding) throw new HttpError(404, "Unknown proposal review.");
           const action = String((await readBody(request)).action ?? "");
           if (binding.preset !== "focused" && (action === "apply" || action === "send")) {
-            const { workflow } = workflowFor(binding.sessionId);
-            if (workflow.status !== "active" && workflow.status !== "awaiting-user-completion") {
-              throw new HttpError(409, `Workflow status ${workflow.status} does not permit owner mutation.`);
+            const execution = executionFor(binding.sessionId);
+            if (execution.status !== "active" && !(execution.status === "paused" && execution.reason === "Owner review pending")) {
+              throw new HttpError(409, `Execution status ${execution.status} does not permit owner mutation.`);
             }
           }
           const updated = await reviewAction(binding, state.getReview(binding.sessionId, proposalId)!, action);
-          settleReviewedWorkflow(binding, updated);
+          await settleReviewedExecution(binding, updated);
           return writeJson(response, 200, { review: publicReview(updated) });
         }
         throw new HttpError(404, "Unknown spec2gds endpoint.");

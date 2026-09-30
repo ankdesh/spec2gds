@@ -111,13 +111,13 @@ test("catalog-backed presets separate focused, goal, and read-only orchestrated 
   }
   assert.doesNotMatch(focused, /tool-goal|tool-s-workflow|tool-subagent/);
   assert.match(goal, /@deepseek-ai\/dsh-tool-goal/);
-  assert.match(goal, /@deepseek-ai\/dsh-tool-s-workflow/);
+  assert.doesNotMatch(goal, /tool-s-workflow/);
   assert.doesNotMatch(goal, /tool-subagent/);
-  assert.match(orchestrated, /toolName: delegate_workflow_step/);
-  assert.match(orchestrated, /maxDepth: 1/);
-  assert.match(orchestrated, /enableRunInBackground: false/);
-  assert.match(orchestrated, /allow:\n        - get_bound_context/);
-  assert.doesNotMatch(orchestrated.match(/toolFilter:[\s\S]*/)?.[0] ?? "", /ask_user_question/);
+  assert.doesNotMatch(orchestrated, /tool-subagent|tool-s-workflow|tool-goal/);
+  const template = JSON.parse(readFileSync(resolve(root, "profile/catalog/event-systems/spec-orchestrated.yaml"), "utf8"));
+  assert.deepEqual(template.agents.map((agent: any) => agent.id), ["primary", "analyst", "reviewer"]);
+  assert.equal(template.subscriptions.find((subscription: any) => subscription.event === "analysis.ready").target, "reviewer");
+  assert.equal(template.agents.find((agent: any) => agent.id === "analyst").tools.includes("prepare_spec_proposal"), false);
 });
 
 test("browser presets use Harness structured questions while headless stays noninteractive", () => {
@@ -138,19 +138,17 @@ test("web proposal forms are profile-owned and do not depend on ask_user_questio
   assert.match(dev, /env\.ASSISTANT_PROFILE = profile/);
 });
 
-test("workflow controls stay human-owned and are surfaced in the conversation dock", () => {
+test("execution controls stay human-owned and are surfaced in the conversation dock", () => {
   const server = readFileSync(resolve(root, "src/index.ts"), "utf8");
   const client = readFileSync(resolve(root, "client/index.js"), "utf8");
-  assert.ok(server.includes("workflow\\/actions"));
-  for (const action of ["pause", "resume", "cancel", "answer", "approve", "raise-budgets"]) {
-    assert.ok(server.includes(`action === "${action}"`));
-  }
-  assert.match(server, /settleReviewedWorkflow\(binding, updated\)/);
-  assert.match(server, /sWorkflow\.updateDraft/);
+  assert.ok(server.includes("execution\\/actions"));
+  assert.match(server, /eventSystems\.control/);
+  assert.doesNotMatch(server, /sWorkflow\.|startBoundWorkflow/);
+  assert.match(server, /settleReviewedExecution\(binding, updated\)/);
   assert.match(server, /does not permit owner mutation/);
   assert.match(client, /conversation\.input\.dock/);
-  assert.match(client, /data-s2g-workflow/);
-  assert.match(client, /workflow\/actions/);
+  assert.match(client, /data-s2g-execution/);
+  assert.match(client, /execution\/actions/);
 });
 
 test("product policy bounds model steps and output tokens", () => {

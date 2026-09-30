@@ -102,8 +102,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           <div data-manual hidden class="s2g-pair"><label>Service type<select name="manualDomain"><option value="spec">Spec Editor</option><option value="circuit">Circuit Designer</option></select></label><label>Service URL<input name="manualUrl" spellcheck="false" placeholder="http://127.0.0.1:6010"></label></div>
           <div data-existing><label>Target<select name="target"></select></label><p class="s2g-hint">The list is browse-only. A conversation remains permanently bound to the selected target.</p></div>
           <div data-create hidden class="s2g-form"><div class="s2g-pair"><label>Document ID<input name="documentId" autocomplete="off" spellcheck="false" placeholder="my_design"></label><label>Title<input name="title" autocomplete="off" placeholder="My design"></label></div><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
-          <label>Assistant workflow<select name="preset"><option value="focused">Focused · one-shot Q&amp;A and proposals</option><option value="goal">Goal · bounded long-running work</option><option value="orchestrated">Orchestrated · bounded work with subagents</option></select></label>
-          <p class="s2g-hint">The workflow is fixed for this conversation. Service-specific context, tools, and review rules are added separately.</p>
+          <label>Assistant preset<select name="preset"><option value="focused">Focused · one-shot Q&amp;A and proposals</option><option value="goal">Goal · bounded long-running work</option><option value="orchestrated">Orchestrated · persistent event agents</option></select></label>
+          <p class="s2g-hint">The preset and agent configuration are fixed for this conversation. Service-specific context, tools, and review rules are added separately.</p>
           <p class="s2g-empty" data-empty hidden>No matching documents are available from the connected services.</p>
           <p class="s2g-error" hidden></p>
           <div class="s2g-dialog-actions"><button type="button" data-cancel>Cancel</button><button class="primary" type="submit">Start conversation</button></div>
@@ -315,7 +315,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const [error, setError] = React.useState("");
     const artifact = record(review.artifact), operations = artifact.operations || record(artifact.batch).operations;
     const actionable = ["ready", "rejected", "stale", "reconcile"].includes(review.state);
-    async function act(action) {
+    async function act(action, deliveryId) {
       setBusy(true); setError("");
       try { setReview((await api(`/reviews/${encodeURIComponent(review.proposalId)}/actions`, { action })).review); }
       catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
@@ -517,37 +517,61 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h(ProposalErrorCard, { error: matched.error });
   }
 
-  function WorkflowDock({ sessionId, useProjection }) {
-    const workflow = useProjection("sWorkflow");
+  function ExecutionDock({ sessionId }) {
+    const [execution, setExecution] = React.useState(null);
     const [busy, setBusy] = React.useState(false);
-    const [answer, setAnswer] = React.useState("");
     const [error, setError] = React.useState("");
-    if (!workflow || workflow.preset === "focused" || ["complete", "cancelled"].includes(workflow.status)) return null;
-    const pending = record(workflow.pending);
-    const usage = record(workflow.usage), budget = record(workflow.budget);
-    async function act(action, extra = {}) {
+    const [legacy, setLegacy] = React.useState(false);
+    React.useEffect(() => {
+      let disposed = false;
+      const load = async () => {
+        try {
+          const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution`);
+          if (!disposed) { setExecution(data.execution || null); setLegacy(Boolean(data.legacy)); }
+        } catch (caught) { if (!disposed) setError(caught instanceof Error ? caught.message : String(caught)); }
+      };
+      void load();
+      const timer = setInterval(() => void load(), 2000);
+      return () => { disposed = true; clearInterval(timer); };
+    }, [sessionId]);
+    if (legacy) return h("div", { className: "s2g-workflow" }, "This legacy conversation is readable history. Start a new bound conversation to use the updated preset.");
+    if (!execution) return null;
+    const requests = execution.requests || [];
+    const members = execution.members || [];
+    const deliveries = execution.deliveries || [];
+    const limits = record(execution.limits);
+    const tokens = requests.reduce((sum, request) => sum + request.tokens, 0);
+    const pending = deliveries.filter(delivery => ["pending", "dispatching", "accepted"].includes(delivery.state));
+    const failed = deliveries.filter(delivery => ["failed", "interrupted"].includes(delivery.state));
+    async function act(action) {
       setBusy(true); setError("");
       try {
-        await api(`/bindings/${encodeURIComponent(sessionId)}/workflow/actions`, {
-          action, runId: workflow.runId, revision: workflow.revision, ...extra,
-        });
-        if (action === "answer") setAnswer("");
-      } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-      finally { setBusy(false); }
+        const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/actions`, { action, revision: execution.revision, ...(deliveryId ? { deliveryId, acknowledgeUncertainty: true } : {}) });
+        setExecution(data.execution);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : String(caught));
+        const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution`).catch(() => null);
+        if (data) setExecution(data.execution);
+      } finally { setBusy(false); }
     }
-    return h("div", { className: "s2g-workflow", "data-s2g-workflow": workflow.status },
-      h("strong", null, workflow.status.replaceAll("-", " ")),
+    return h("div", { className: "s2g-workflow", "data-s2g-execution": execution.status },
+      h("strong", null, execution.status.replaceAll("-", " ")),
       h("div", { className: "s2g-workflow-main" },
-        h("div", { className: "s2g-workflow-objective", title: workflow.objective }, pending.prompt || workflow.objective),
-        h("div", { className: "s2g-workflow-meta" }, `${workflow.preset} · rounds ${usage.rounds || 0}/${budget.maxRounds || 0} · requests ${usage.requests || 0}/${budget.maxRequests || 0} · children ${usage.children || 0}/${budget.maxChildren || 0}`),
+        h("div", { className: "s2g-workflow-objective" }, execution.reason || `${execution.mode} · ${members.map(member => member.id).join(", ")}`),
+        h("div", { className: "s2g-workflow-meta" }, `rounds ${execution.rounds.length}/${limits.maxRounds} · requests ${requests.length}/${limits.maxRequests} · tokens ${tokens}/${limits.maxTokens} · active seconds ${Math.ceil(requests.reduce((sum, request) => sum + request.activeMillis, 0) / 1000)}/${Math.floor(limits.maxActiveMillis / 1000)} · pending ${pending.length} · failures ${failed.length}`),
+        h("details", null, h("summary", null, "Recent events and deliveries"),
+          h("ul", null, ...(execution.events || []).slice(-8).map(event => h("li", { key: event.id }, `${event.type} · ${event.producer}`))),
+          ...failed.map(delivery => h("div", { key: delivery.id },
+            h("p", null, `${delivery.target} · attempt ${delivery.attempt}: ${delivery.error}`),
+            execution.status === "active" && !deliveries.some(item => item.retryOf === delivery.id)
+              ? h("button", { disabled: busy, onClick: () => {
+                if (window.confirm("This attempt may already have produced results. Retry with a new activation using the remaining budget?")) void act("retry", delivery.id);
+              } }, "Acknowledge uncertainty and retry") : null))),
         error ? h("span", { className: "s2g-error" }, error) : null),
       h("div", { className: "s2g-workflow-controls" },
-        workflow.status === "awaiting-user-input" ? h(React.Fragment, null,
-          h("input", { value: answer, disabled: busy, "aria-label": "Workflow answer", placeholder: "Answer required question", onChange: event => setAnswer(event.target.value), onKeyDown: event => { if (event.key === "Enter" && answer.trim()) void act("answer", { answer }); } }),
-          h("button", { disabled: busy || !answer.trim(), onClick: () => void act("answer", { answer }) }, "Answer")) : null,
-        workflow.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,
-        ["paused", "blocked"].includes(workflow.status) ? h("button", { disabled: busy, onClick: () => void act("resume") }, "Resume") : null,
-        h("button", { disabled: busy, onClick: () => void act("cancel") }, "Cancel")));
+        execution.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,
+        ["paused", "needs-resume"].includes(execution.status) ? h("button", { disabled: busy, onClick: () => void act("resume") }, "Resume") : null,
+        execution.status !== "stopped" ? h("button", { disabled: busy, onClick: () => void act("stop") }, "Stop") : null));
   }
 
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
@@ -577,7 +601,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     } });
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
-    ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "s-workflow", order: 11 }, WorkflowDock));
+    ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "execution", order: 11 }, ExecutionDock));
     ctx.uiConversation.events.register(proposalReviewsDefinition);
     ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({ name: "conversation.chat.turnTail", select: selectProposalReview },
       props => h(ProposalReviewTail, { ...props, onContinueCreation: reserved => continueSourceCreation(ctx, reserved), onOpenCreation: id => ctx.sessions.open(id) })));

@@ -133,7 +133,7 @@ fi
 
 # Link local DSH packages and TypeScript types for compilation
 mkdir -p node_modules
-ln -sfn "${RESOLVED_DSH}/node_modules/.pnpm/node_modules/@deepseek-ai" node_modules/@deepseek-ai
+node scripts/link-harness.mjs "${RESOLVED_DSH}"
 ln -sfn "${RESOLVED_DSH}/node_modules/@types" node_modules/@types
 
 # Compile server and client bundles

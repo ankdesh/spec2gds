@@ -3,7 +3,7 @@
 This package is a DeepSeek Harness product, not a standalone chat server. DSH
 owns the browser shell, conversation transport, model loop, cancellation,
 session navigation, archive/restore, rename, export, and durable transcript.
-The spec2gds layers add immutable editor bindings, versioned prompt/workflow
+The spec2gds layers add immutable editor bindings, versioned prompt/event
 catalogs, three execution presets, domain tools, proposal reviews, product
 branding, and Spec/Circuit diff cards.
 
@@ -27,7 +27,9 @@ scripts/setup-all.sh
 ```
 
 The script manages the sibling `../deepseek-harness` checkout by default.
-Set `HARNESS_SOURCE` to select another destination.
+Set `HARNESS_SOURCE` to select another destination. Source development links
+native packages and the toolchain from that checkout; use this setup path
+instead of installing the unpublished event packages from npm.
 
 ## Browser development
 
@@ -45,8 +47,8 @@ chooser for configured Spec and Circuit services. The global chooser can
 connect another service for this process or create a new Spec or empty Circuit;
 a Workspace-row action stays within that logical design source. The same dialog
 chooses an immutable `focused`, `goal`, or `orchestrated` preset. Focused is
-one-shot; goal adds a bounded durable loop; orchestrated additionally permits
-depth-one read-only analysis children. Valid Spec submissions save automatically
+one-shot; goal adds bounded native continuation; orchestrated uses persistent
+read-only analyst and reviewer agents. Valid Spec submissions save automatically
 by default. Start the owner with `--require-human-approval` for component details
 and explicit review cards. Fully specified automatic requests skip confirmation;
 defaults become assumptions. Missing required values still request clarification.
@@ -128,17 +130,15 @@ One `.spec` package maps to one DSH Workspace. Source-bound Circuit documents
 join the source Spec Workspace; independent Circuits receive their own. Each
 conversation retains its exact document or entity binding permanently.
 
-Prompt bundles, the generic `prepare-reviewed-change` workflow, and Spec/Circuit
-service adapters are strict startup YAML with exact versions and SHA-256
-identities. They are loaded before the product becomes ready and sealed for the
-process lifetime. Model workflow tools can report progress and request review,
-but lifecycle, budget raises, completion approval, and owner mutation remain
-human/host authority. The browser workflow dock handles pause, resume, cancel,
-and required answers; automatic Spec receipts or review-card apply/send complete
-the workflow.
+Prompt bundles and event-system templates load from strict startup YAML, with
+Markdown prompts pinned to each conversation. Both updated presets have
+aggregate host-owned budgets and pause/resume/stop controls. A process restart
+requires human Resume; uncertain deliveries require acknowledged manual retry.
+The owner review boundary remains in force. See the
+[Phase 1 usage and recovery guide](../docs/event-driven-assistant-phase1.md).
 
 For a guided explanation of the DSH components and how these layers compose,
-read the [DSH configurable assistant tutorial](../docs/dsh-configurable-assistant-tutorial.md).
+read the [current assistant architecture](../docs/configurable-assistant-architecture.md).
 
 The [agentic systems architecture report](../docs/agentic-systems-architecture-report.md)
 assesses fixed tool/LLM workflows and durable event-driven teams against the
@@ -156,8 +156,6 @@ npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
 
-`npm test` includes the isolated Harness bootstrap Git-state cases. Run only
-those cases with `npm run test:setup-harness` when changing setup behavior.
 The integration test uses local owner and OpenAI-compatible fixtures. Packaging
 requires the Harness checkout to be clean and at the commit in
 `harness.lock.json`.
@@ -170,6 +168,6 @@ results and metrics; see `docs/ai-assistant-evaluation.md` in the repository.
 Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores
 bindings, creation requests, and review metadata. Creation requests retain
 their original prompt and package/chat progress across reloads and restarts.
-bindings and review state. Back up the complete state root together. Old Python
+The native event-system domain stores members, deliveries, and spending. Back up the complete state root together. Old Python
 assistant data is preserved under `generated/legacy-ai-assistant-state/` for
 manual inspection and is never loaded by this product.

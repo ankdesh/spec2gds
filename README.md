@@ -53,8 +53,12 @@ configuration and recovery.
 
 For proposed fixed workflows and durable event-driven agents, read the
 [agentic systems architecture report](docs/agentic-systems-architecture-report.md).
-It assesses current DSH support, missing capabilities, and a shared-runtime
-recommendation; the proposed modes are not implemented.
+It records the broader design discussion. For implemented conversation agents
+and native goals, use the [Phase 1 guide](docs/event-driven-assistant-phase1.md).
+
+The [three-phase event driven assistant plan](docs/event-driven-assistant-plan.md)
+updates `orchestrated` and `goal` first, then adds external triggers and
+durable waiting, then visual tooling. Workflow setup is deferred.
 
 For a focused explanation of how the two editors cooperate, including launch,
 projection, save, refresh, conflict, and security diagrams, read
@@ -246,7 +250,7 @@ and its [test plan](docs/spec-editor-iterative-refinement-test-plan.md).
 Focused turns are capped at three model steps, with one additional step only
 after a visible structured-question call, and every model response is capped
 at 1,200 output tokens. Goal and orchestrated work use separate bounded
-workflow budgets. See the Assistant guide for the full capability and limit
+execution budgets. See the Assistant guide for the full capability and limit
 matrix.
 
 ## Run only the specification editor

@@ -1,0 +1,73 @@
+{
+  "id": "spec2gds.spec.goal",
+  "version": "1.0.0",
+  "primary": "primary",
+  "agents": [
+    {
+      "id": "primary",
+      "prompt": "prompts/goal.md",
+      "agentPreset": "goal",
+      "tools": [
+        "get_bound_context",
+        "prepare_spec_proposal",
+        "ask_user_question",
+        "get_event_system",
+        "get_goal",
+        "create_goal",
+        "update_goal",
+        "prepare_spec_document_creation"
+      ],
+      "publishes": []
+    }
+  ],
+  "events": {
+    "review.prepared": {
+      "type": "object",
+      "properties": {
+        "proposal_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id"
+      ],
+      "additionalProperties": false
+    },
+    "review.applied": {
+      "type": "object",
+      "properties": {
+        "proposal_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id"
+      ],
+      "additionalProperties": false
+    },
+    "review.discarded": {
+      "type": "object",
+      "properties": {
+        "proposal_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "subscriptions": [
+    {
+      "id": "owner-receipt",
+      "event": "review.applied",
+      "target": "primary"
+    },
+    {
+      "id": "owner-discard",
+      "event": "review.discarded",
+      "target": "primary"
+    }
+  ]
+}

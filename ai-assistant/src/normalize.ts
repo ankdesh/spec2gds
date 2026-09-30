@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isRecord } from "./types.js";
 
 function entriesToMap(value: unknown): unknown {
@@ -37,19 +37,20 @@ export function compactWireRange(value: unknown): unknown {
   return bracketed ? bracketed[1]!.trim() : value;
 }
 
-export function normalizeSpecOperations(input: unknown[]): Record<string, unknown>[] {
+export function normalizeSpecOperations(input: unknown[], proposalId?: string): Record<string, unknown>[] {
   return input.map((item, index) => {
     if (!isRecord(item) || typeof item.type !== "string") {
       throw new Error(`Spec operation ${index} must be an object with a type.`);
     }
     const operation = structuredClone(item);
+    const generatedId = (field: string) => proposalId ? createHash("sha256").update(`${proposalId}:${index}:${field}`).digest("hex").slice(0, 32) : randomUUID().replaceAll("-", "");
     if (typeof operation.operation_id !== "string" || !operation.operation_id) {
-      operation.operation_id = `operation_${index + 1}_${randomUUID().replaceAll("-", "")}`;
+      operation.operation_id = `operation_${index + 1}_${generatedId("operation")}`;
     }
     if (operation.type === "create_entity") {
       const kind = typeof operation.kind === "string" ? operation.kind : "entity";
       const name = typeof operation.name === "string" ? operation.name.replace(/[^A-Za-z0-9_.-]+/g, "_") : "new";
-      operation.entity_id = `${kind}_${name}_${randomUUID().replaceAll("-", "")}`;
+      operation.entity_id = `${kind}_${name}_${generatedId("entity")}`;
       if (operation.instances === undefined) operation.instances = [];
       if (kind === "component" && Array.isArray(operation.ports)) {
         for (const port of operation.ports) {
