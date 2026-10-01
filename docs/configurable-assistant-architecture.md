@@ -1,6 +1,6 @@
 # Configurable Assistant architecture
 
-The product composes immutable owner binding and domain capabilities with one of three conversation presets. The [Phase 1 reference](event-driven-assistant-phase1.md) owns configuration, limit values, recovery, and usage details.
+The product composes immutable owner binding and domain capabilities with one of three conversation presets. The [Phase 2 reference](event-driven-assistant-phase2.md) owns trigger, waiting, recovery, and usage details; [Phase 1](event-driven-assistant-phase1.md) records the execution foundations.
 
 | Responsibility | Owner | Implementation |
 | --- | --- | --- |
@@ -12,10 +12,12 @@ The product composes immutable owner binding and domain capabilities with one of
 | Proposal validation, apply/save approval, receipt | Bound owner and product review adapter | Existing proposal tools, review cards, revision checks, automatic/restricted policy |
 | Human execution controls | Product API and dock | Revision-checked pause/resume/stop and acknowledged manual retry |
 
-The `orchestrated` primary's direct user request publishes `user.requested`. The analyst's typed `analysis.ready` result reaches the reviewer; `review.ready` returns to the primary. Specialists keep native sessions between activations and receive read-only owner context tools. Only the primary can prepare proposals, and its guard requires a causal review for the latest request. Native receipt and turn-end observations distinguish delivery acceptance from completion.
+The `orchestrated` primary's direct user request publishes `user.requested`. The analyst's typed `analysis.ready` result reaches the reviewer; `review.ready` returns to the primary. Specialists keep native sessions between activations and receive read-only owner context tools. Only the primary can prepare proposals, and its guard requires a causal review for the latest human request or HTTP observation. Native receipt and turn-end observations distinguish delivery acceptance from completion.
 
-The `goal` primary continues through the native goal driver. It does not route every round through subscriptions. A pending owner proposal pauses the native goal and new model admissions; human review resolves the proposal, then explicit Resume continues eligible work with the remaining allowance. Owner receipts do not automatically mark a goal complete.
+The `goal` primary continues through the native goal driver. It does not route every round through subscriptions. A pending owner proposal blocks native continuation with a correlated durable wait. Resolving that exact review resumes the saved goal revision with its remaining allowance. Owner receipts do not automatically mark a goal complete.
 
 Model publication cannot change capabilities or authorize owner mutation. The immutable owner binding is derived from specialist membership rather than fork lineage or model arguments. Native transcripts log every model-visible delivered message. The ledger validates its pinned configuration and relationships before recovering work; restart never grants automatic execution or fresh resources.
 
-`focused` retains its existing bounded context/proposal exchange. Existing legacy goal/orchestrated chats stay readable; new bound conversations use the replacement runtime. Historical workflow services remain only to interpret saved transcripts. Workflow authoring, graph execution, external triggers, automatic retries, and general durable waiting are deferred in the [three-phase plan](event-driven-assistant-plan.md).
+`focused` retains its existing bounded context/proposal exchange. Existing legacy goal/orchestrated chats stay readable; new bound conversations use the replacement runtime. Historical workflow services remain only to interpret saved transcripts. Workflow authoring, graph execution, webhooks, file watchers, and visual configuration are deferred in the [three-phase plan](event-driven-assistant-plan.md).
+
+HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](event-driven-assistant-phase2.md).

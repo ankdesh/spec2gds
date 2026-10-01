@@ -1,6 +1,6 @@
 # Event driven assistant — Phase 1
 
-Both `goal` and `orchestrated` use host-owned execution limits. `focused` keeps its existing request behavior. Workflow authoring, external triggers, automatic retry, and general durable waiting remain deferred.
+This guide records the Phase 1 baseline. [Phase 2](event-driven-assistant-phase2.md) supersedes its trigger, retry, and review-wait behavior. Both `goal` and `orchestrated` use host-owned execution limits. `focused` keeps its existing request behavior. Workflow authoring, external triggers, automatic retry, and general durable waiting remain deferred.
 
 ## Use the presets
 

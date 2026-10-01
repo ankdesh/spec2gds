@@ -1,6 +1,8 @@
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type EventSystemService from "@deepseek-ai/dsh-event-system";
 import type { EventSystemSnapshot } from "@deepseek-ai/dsh-event-system";
+import type HttpSourceService from "@deepseek-ai/dsh-event-system-http";
+import type { HttpSourceInput, HttpSourceId } from "@deepseek-ai/dsh-event-system-http";
 import type { GoalService } from "@deepseek-ai/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { randomUUID } from "node:crypto";
@@ -19,7 +21,7 @@ import { workspaceDescriptor } from "./workspaces.js";
 import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
-export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "goals"];
+export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals"];
 export const Config = z.object({
   provider: z.string().min(1).required(),
   model: z.string().min(1).required(),
@@ -53,6 +55,7 @@ type AppContext = {
   promptCatalog: PromptCatalogService;
   eventSystems: EventSystemService;
   goals: GoalService;
+  eventHttpSources: HttpSourceService;
   on(event: string, listener: (...args: any[]) => unknown): () => void;
   effect(effect: () => void | (() => void)): void;
   inject(dependencies: string[], callback: (ctx: AppContext & {
@@ -189,6 +192,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
     ctx.promptCatalog.seal();
     await ctx.eventSystems.ready;
+    await ctx.eventHttpSources.ready;
     for (const binding of state.listBindings(true)) {
       if (binding.preset !== "focused" && stored.has(binding.sessionId) && !ctx.eventSystems.get(SessionId(binding.sessionId))) legacyExecutions.add(binding.sessionId);
     }
@@ -525,9 +529,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     } finally {
       if (binding.preset === "goal" && review.state === "ready") {
         const agent = ctx.agents.get(id);
-        const goal = agent && ctx.goals.get(agent as unknown as Agent);
-        if (agent && goal?.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
-        await ctx.eventSystems.hold(id, "Owner review pending");
+        if (agent && !ctx.eventSystems.get(id)?.waits?.some(wait => wait.state === "waiting" && wait.kind === "review" && wait.matchValue === review.proposalId)) {
+          await ctx.eventSystems.wait(agent as unknown as Agent, { kind: "review", reason: "Owner review pending",
+            eventType: "review.applied", matchKey: "proposal_id", matchValue: review.proposalId });
+        }
       }
     }
     if (review.state === "applied") await settleReviewedExecution(binding, review);
@@ -638,8 +643,34 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             const binding = state.getBinding(sessionId);
             if (!binding) throw new HttpError(404, "Unknown binding.");
             return writeJson(response, 200, { execution: ctx.eventSystems.get(SessionId(sessionId)) ?? null,
-              legacy: legacyExecutions.has(sessionId) });
+              legacy: legacyExecutions.has(sessionId), monitorSuggestion: {
+                url: binding.domain === "spec" ? `${binding.ownerUrl}/assistant/context/document?${new URLSearchParams({ document_id: binding.documentId, ...(binding.ownerDocumentKey ? { owner_document_key: binding.ownerDocumentKey } : {}) })}` : `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}`,
+                pointer: binding.domain === "spec" ? "/source_revision_hash" : "/revision" }, sources: ctx.eventHttpSources.list(SessionId(sessionId)),
+              goal: ctx.agents.get(SessionId(sessionId)) ? ctx.goals.get(ctx.agents.get(SessionId(sessionId)) as unknown as Agent) : null });
           }
+        }
+        const sourceMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/execution\/(sources|answers)$/);
+        if (sourceMatch && request.method === "POST") {
+          const id = decodeURIComponent(sourceMatch[1]!);
+          const binding = state.getBinding(id);
+          if (!binding || binding.preset === "focused") throw new HttpError(404, "This binding has no event execution.");
+          const body = await readBody(request);
+          try {
+            if (sourceMatch[2] === "answers") {
+              if (!Number.isSafeInteger(body.revision) || typeof body.waitId !== "string" || typeof body.answer !== "string") throw new Error("Answer requires revision, waitId, and answer.");
+              await ctx.eventSystems.answerWait(SessionId(id), Number(body.revision), body.waitId as Parameters<EventSystemService["answerWait"]>[2], body.answer);
+            } else if (body.action === "add") {
+              if (!isRecord(body.definition) || typeof body.definition.url !== "string" || body.definition.eventType !== "source.changed") throw new Error("Source definition must use the approved source.changed event.");
+              const url = new URL(body.definition.url), owner = new URL(binding.ownerUrl);
+              const prefix = owner.pathname.replace(/\/$/, "");
+              if (url.origin !== owner.origin || (prefix && url.pathname !== prefix && !url.pathname.startsWith(`${prefix}/`))) throw new Error("HTTP source must monitor this conversation's bound owner service.");
+              await ctx.eventHttpSources.add(SessionId(id), body.definition as unknown as HttpSourceInput);
+            } else if (body.action === "enable" || body.action === "disable") {
+              if (typeof body.sourceId !== "string" || !Number.isSafeInteger(body.revision)) throw new Error("Source controls require sourceId and observed revision.");
+              await ctx.eventHttpSources.control(SessionId(id), body.sourceId as HttpSourceId, Number(body.revision), body.action === "enable");
+            } else throw new Error("Unknown HTTP source action.");
+            return writeJson(response, 200, { execution: executionFor(id), sources: ctx.eventHttpSources.list(SessionId(id)) });
+          } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
         }
         const executionActionMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/execution\/actions$/);
         if (executionActionMatch && request.method === "POST") {
@@ -660,7 +691,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             const agent = ctx.agents.get(SessionId(sessionId));
             const goal = agent && binding.preset === "goal" ? ctx.goals.get(agent as unknown as Agent) : undefined;
             if (agent && goal && goal.phase !== "complete") {
-              if (action === "resume") ctx.goals.resume(agent as unknown as Agent, goal);
+              if (action === "resume" && !(goal.phase === "active" && goal.activation === "armed")
+                && !next.waits?.some(wait => wait.member === next.definition.primary && wait.state === "waiting")) ctx.goals.resume(agent as unknown as Agent, goal);
               else if (action !== "retry" && goal.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
             }
             return writeJson(response, 200, { execution: next });

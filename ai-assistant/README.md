@@ -135,7 +135,7 @@ Markdown prompts pinned to each conversation. Both updated presets have
 aggregate host-owned budgets and pause/resume/stop controls. A process restart
 requires human Resume; uncertain deliveries require acknowledged manual retry.
 The owner review boundary remains in force. See the
-[Phase 1 usage and recovery guide](../docs/event-driven-assistant-phase1.md).
+[Phase 2 usage and recovery guide](../docs/event-driven-assistant-phase2.md).
 
 For a guided explanation of the DSH components and how these layers compose,
 read the [current assistant architecture](../docs/configurable-assistant-architecture.md).
@@ -171,3 +171,5 @@ their original prompt and package/chat progress across reloads and restarts.
 The native event-system domain stores members, deliveries, and spending. Back up the complete state root together. Old Python
 assistant data is preserved under `generated/legacy-ai-assistant-state/` for
 manual inspection and is never loaded by this product.
+
+HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](../docs/event-driven-assistant-phase2.md).

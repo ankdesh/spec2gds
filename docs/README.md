@@ -126,3 +126,5 @@ When behavior changes, update the smallest relevant document and the root
 README in the same change.
 
 - [Event driven assistant Phase 1](event-driven-assistant-phase1.md): preset usage, limits, recovery, and verification.
+
+HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](event-driven-assistant-phase2.md).

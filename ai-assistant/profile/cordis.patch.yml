@@ -92,6 +92,7 @@
     backend: json
     routes:
       event_systems: sqlite
+      event_http_sources: sqlite
 
 - insert:
     - id: prompt-catalog
@@ -124,6 +125,23 @@
 
     - id: event-systems-invariant
       name: '@deepseek-ai/dsh-event-system/invariant'
+
+    - id: event-http-sources
+      name: '@deepseek-ai/dsh-event-system-http'
+      config:
+        allowedOrigins: !!js Array.from(new Set((process.env.ASSISTANT_HTTP_MONITOR_ORIGINS || [process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010', process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'].join(',')).split(',').filter(Boolean).map(value => new URL(value.trim()).origin)))
+        tickMillis: 1000
+        minIntervalMillis: 5000
+        maxIntervalMillis: 3600000
+        timeoutMillis: 5000
+        maxResponseBytes: 65536
+        maxSourcesPerConversation: 2
+        maxTotalSources: 100
+        maxConcurrentChecks: 2
+        maxFailures: 5
+
+    - id: event-http-sources-invariant
+      name: '@deepseek-ai/dsh-event-system-http/invariant'
 
     - id: event-systems-yaml
       name: '@deepseek-ai/dsh-event-system-yaml'

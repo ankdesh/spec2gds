@@ -26,3 +26,10 @@ test("orchestration requires a causal reviewer result for the latest human reque
   assert.match(proposalExecutionDenial(state(), "primary")!, /recorded user request/);
   assert.match(proposalExecutionDenial(state("orchestrated", [first[0], event("unrelated", "review.ready")]), "primary")!, /Wait/);
 });
+
+test("a new source observation requires its own causal reviewer result", () => {
+  const events = [event("human", "user.requested"), event("old-review", "review.ready", "human"), event("source", "source.changed")];
+  assert.match(proposalExecutionDenial(state("orchestrated", events), "primary")!, /Wait/);
+  events.push(event("source-analysis", "analysis.ready", "source"), event("source-review", "review.ready", "source-analysis"));
+  assert.equal(proposalExecutionDenial(state("orchestrated", events), "primary"), undefined);
+});

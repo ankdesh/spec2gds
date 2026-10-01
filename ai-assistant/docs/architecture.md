@@ -206,3 +206,7 @@ records only. Scratch directories exist because DSH sessions require a working
 directory, but the product exposes no filesystem or shell tools. Permanent
 transcript deletion is not added because DSH persistence is append-only;
 archive/restore is retained.
+
+## HTTP sources and durable waiting
+
+Native `dsh-event-system-http` owns bounded JSON polling, source cursors, debounce, and publication outboxes. Native event execution owns waits, replay-safe delivery backoff, and original-budget accounting. The product validates the bound owner before source admission and correlates review decisions with the pending proposal. The execution dock exposes sources, exact human answers, and native goal state. See [Phase 2](../../docs/event-driven-assistant-phase2.md) for operation and recovery details.

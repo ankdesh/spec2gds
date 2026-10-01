@@ -517,17 +517,49 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h(ProposalErrorCard, { error: matched.error });
   }
 
+  function MonitorForm({ sessionId, suggestion, onChanged }) {
+    const [url, setUrl] = React.useState(suggestion?.url || "");
+    const [pointer, setPointer] = React.useState(suggestion?.pointer || "");
+    const [condition, setCondition] = React.useState("changed");
+    const [expected, setExpected] = React.useState("");
+    const [seconds, setSeconds] = React.useState("60");
+    const [error, setError] = React.useState("");
+    const [busy, setBusy] = React.useState(false);
+    return h("details", null, h("summary", null, "Monitor owner endpoint"),
+      h("form", { className: "s2g-form", onSubmit: async event => {
+        event.preventDefault(); setBusy(true); setError("");
+        try {
+          const definition = { url, pointer, eventType: "source.changed", condition,
+            intervalMillis: Number(seconds) * 1000, debounceMillis: 5000, emitInitial: condition === "equals",
+            ...(condition === "equals" ? { expectedJson: expected } : {}) };
+          const result = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/sources`, { action: "add", definition });
+          onChanged(result);
+        } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+        finally { setBusy(false); }
+      } },
+      h("label", null, "Approved owner URL", h("input", { type: "url", value: url, required: true, onChange: event => setUrl(event.target.value) })),
+      h("label", null, "JSON pointer", h("input", { value: pointer, placeholder: "/source_revision_hash", onChange: event => setPointer(event.target.value) })),
+      h("label", null, "Condition", h("select", { value: condition, onChange: event => setCondition(event.target.value) }, h("option", { value: "changed" }, "Value changes"), h("option", { value: "equals" }, "Value equals JSON"))),
+      condition === "equals" ? h("label", null, "Expected JSON value", h("input", { value: expected, required: true, placeholder: '"ready"', onChange: event => setExpected(event.target.value) })) : null,
+      h("label", null, "Check interval in seconds", h("input", { type: "number", min: 5, max: 3600, value: seconds, onChange: event => setSeconds(event.target.value) })),
+      h("p", null, "Unchanged checks use no model requests. Changed observations use this conversation's remaining budget and owner approval rules."),
+      h("button", { type: "submit", disabled: busy }, "Start monitoring"), error ? h("p", { className: "s2g-error" }, error) : null));
+  }
+
   function ExecutionDock({ sessionId }) {
     const [execution, setExecution] = React.useState(null);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
+    const [sources, setSources] = React.useState([]);
+    const [suggestion, setSuggestion] = React.useState(null);
+    const [goal, setGoal] = React.useState(null);
     const [legacy, setLegacy] = React.useState(false);
     React.useEffect(() => {
       let disposed = false;
       const load = async () => {
         try {
           const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution`);
-          if (!disposed) { setExecution(data.execution || null); setLegacy(Boolean(data.legacy)); }
+          if (!disposed) { setExecution(data.execution || null); setLegacy(Boolean(data.legacy)); setSources(data.sources || []); setSuggestion(data.monitorSuggestion || null); setGoal(data.goal || null); }
         } catch (caught) { if (!disposed) setError(caught instanceof Error ? caught.message : String(caught)); }
       };
       void load();
@@ -543,7 +575,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const tokens = requests.reduce((sum, request) => sum + request.tokens, 0);
     const pending = deliveries.filter(delivery => ["pending", "dispatching", "accepted"].includes(delivery.state));
     const failed = deliveries.filter(delivery => ["failed", "interrupted"].includes(delivery.state));
-    async function act(action) {
+    async function act(action, deliveryId) {
       setBusy(true); setError("");
       try {
         const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/actions`, { action, revision: execution.revision, ...(deliveryId ? { deliveryId, acknowledgeUncertainty: true } : {}) });
@@ -555,7 +587,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       } finally { setBusy(false); }
     }
     return h("div", { className: "s2g-workflow", "data-s2g-execution": execution.status },
-      h("strong", null, execution.status.replaceAll("-", " ")),
+      h("strong", null, (execution.status === "active" && execution.waits?.some(wait => wait.state === "waiting") ? "waiting" : execution.status === "active" && goal?.phase === "complete" ? "goal complete" : execution.status === "active" && goal?.phase === "blocked" ? "goal blocked" : execution.status).replaceAll("-", " ")),
       h("div", { className: "s2g-workflow-main" },
         h("div", { className: "s2g-workflow-objective" }, execution.reason || `${execution.mode} · ${members.map(member => member.id).join(", ")}`),
         h("div", { className: "s2g-workflow-meta" }, `rounds ${execution.rounds.length}/${limits.maxRounds} · requests ${requests.length}/${limits.maxRequests} · tokens ${tokens}/${limits.maxTokens} · active seconds ${Math.ceil(requests.reduce((sum, request) => sum + request.activeMillis, 0) / 1000)}/${Math.floor(limits.maxActiveMillis / 1000)} · pending ${pending.length} · failures ${failed.length}`),
@@ -567,6 +599,24 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
               ? h("button", { disabled: busy, onClick: () => {
                 if (window.confirm("This attempt may already have produced results. Retry with a new activation using the remaining budget?")) void act("retry", delivery.id);
               } }, "Acknowledge uncertainty and retry") : null))),
+        ...(execution.waits || []).filter(wait => wait.state === "waiting").map(wait => h("div", { key: wait.id },
+          h("p", null, `${wait.member} waiting for ${wait.kind}: ${wait.reason}`),
+          wait.kind === "human" && execution.status === "active" ? h("button", { disabled: busy, onClick: async () => {
+            const answer = window.prompt(wait.reason); if (!answer?.trim()) return;
+            setBusy(true); setError("");
+            try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/answers`, { waitId: wait.id, revision: execution.revision, answer }); setExecution(result.execution); }
+            catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+            finally { setBusy(false); }
+          } }, "Answer") : null)),
+        ...sources.map(source => h("div", { key: source.id },
+          h("p", null, `${source.enabled ? "Monitoring" : "Monitor disabled"} · ${source.definition.url} · events ${source.sequence}${source.error ? ` · ${source.error}` : ""}`),
+          h("button", { disabled: busy, onClick: async () => {
+            setBusy(true); setError("");
+            try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/sources`, { action: source.enabled ? "disable" : "enable", sourceId: source.id, revision: source.revision }); setSources(result.sources); }
+            catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+            finally { setBusy(false); }
+          } }, source.enabled ? "Disable monitor" : "Enable monitor"))),
+        suggestion && execution.status !== "stopped" ? h(MonitorForm, { key: sessionId, sessionId, suggestion, onChanged: result => { setExecution(result.execution); setSources(result.sources); } }) : null,
         error ? h("span", { className: "s2g-error" }, error) : null),
       h("div", { className: "s2g-workflow-controls" },
         execution.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,

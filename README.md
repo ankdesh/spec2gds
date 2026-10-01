@@ -54,7 +54,7 @@ configuration and recovery.
 For proposed fixed workflows and durable event-driven agents, read the
 [agentic systems architecture report](docs/agentic-systems-architecture-report.md).
 It records the broader design discussion. For implemented conversation agents
-and native goals, use the [Phase 1 guide](docs/event-driven-assistant-phase1.md).
+and native goals with HTTP monitoring and waiting, use the [Phase 2 guide](docs/event-driven-assistant-phase2.md).
 
 The [three-phase event driven assistant plan](docs/event-driven-assistant-plan.md)
 updates `orchestrated` and `goal` first, then adds external triggers and
@@ -525,3 +525,5 @@ bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
 
 Detailed source locations and focused commands are in
 [docs/development.md](docs/development.md).
+
+HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](docs/event-driven-assistant-phase2.md).

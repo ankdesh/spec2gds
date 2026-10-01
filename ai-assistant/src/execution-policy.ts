@@ -29,8 +29,8 @@ export function proposalExecutionDenial(state: EventSystemSnapshot, member: stri
   if (state.status !== "active") return `Execution is ${state.status}; resume it before preparing a proposal.`;
   if (member !== state.definition.primary) return "Only the primary agent may prepare owner proposals.";
   if (state.mode === "goal") return undefined;
-  const request = state.events.findLast(event => event.type === "user.requested");
-  if (!request) return "An orchestrated proposal requires a recorded user request.";
+  const request = state.events.findLast(event => ["user.requested", "source.changed"].includes(event.type));
+  if (!request) return "An orchestrated proposal requires a recorded user request or approved source change.";
   const reviewed = state.events.filter(event => event.type === "review.ready").some(event => {
     let current = event;
     while (current.causation) {

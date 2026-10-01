@@ -335,3 +335,37 @@ test("deployment persona contains identity only", () => {
   assert.match(patch, /personaPrefix: >-\n      You are the focused spec2gds hardware-design assistant\./);
   assert.doesNotMatch(patch, /Every useful conversation is permanently bound/);
 });
+
+
+test("execution dock sends exact retry, answer, and source-control identities", async () => {
+  let definition: any, dock: any;
+  const requests: Array<{ path: string; body: any }> = [];
+  const execution = { status: "active", mode: "goal", revision: 17, reason: "", members: [{ id: "primary" }],
+    limits: { maxRounds: 8, maxRequests: 32, maxTokens: 300000, maxActiveMillis: 60000 }, rounds: [], requests: [], events: [],
+    deliveries: [{ id: "delivery-1", target: "primary", state: "interrupted", attempt: 1, error: "Interrupted" }],
+    waits: [{ id: "wait-1", member: "primary", kind: "human", reason: "Which period?", state: "waiting" }] };
+  const states = [execution, false, "", [{ id: "source-1", revision: 4, enabled: true, sequence: 0, definition: { url: "http://owner/document" } }], null, null, false];
+  let stateIndex = 0;
+  const react = { createElement: (type: any, props: any, ...children: any[]) => ({ type, props, children }),
+    useState: () => [states[stateIndex++], () => {}], useEffect: () => {} };
+  vm.runInNewContext(readFileSync(resolve(root, "client/index.js"), "utf8"), {
+    URL, URLSearchParams, location: { pathname: "/", search: "", hash: "" },
+    history: { replaceState: () => {} }, document: { createElement: () => ({ dataset: {} }), head: { appendChild: () => {} } },
+    queueMicrotask: () => {}, window: { confirm: () => true, prompt: () => "10 cycles", __ModuleLoader__: { load: (value: any) => { definition = value; } } },
+    fetch: async (path: string, options: any) => { requests.push({ path, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ execution, sources: [] }) }; },
+  });
+  definition.factory(() => react).apply({ uiSession: { registerNewSessionHandler: () => {} }, uiConversation: { events: { register: () => {} } },
+    slots: { inject: (_name: string, fn: () => void) => fn(), register: (slot: any, component: any) => { if (slot.id === "execution") dock = component; } } });
+  const buttons: any[] = [];
+  function visit(node: any): void { if (!node || typeof node !== "object") return; if (node.type === "button") buttons.push(node); for (const child of node.children ?? []) visit(child); }
+  visit(dock({ sessionId: "session/x" }));
+  for (const label of ["Acknowledge uncertainty and retry", "Answer", "Disable monitor"]) {
+    const button = buttons.find(item => item.children.includes(label)); assert.ok(button);
+    await button.props.onClick(); await new Promise(resolve => setImmediate(resolve));
+  }
+  assert.deepEqual(requests, [
+    { path: "/spec2gds-api/bindings/session%2Fx/execution/actions", body: { action: "retry", revision: 17, deliveryId: "delivery-1", acknowledgeUncertainty: true } },
+    { path: "/spec2gds-api/bindings/session%2Fx/execution/answers", body: { waitId: "wait-1", revision: 17, answer: "10 cycles" } },
+    { path: "/spec2gds-api/bindings/session%2Fx/execution/sources", body: { action: "disable", sourceId: "source-1", revision: 4 } },
+  ]);
+});

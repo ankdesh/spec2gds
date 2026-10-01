@@ -60,7 +60,8 @@
     "@deepseek-ai/dsh-event-system": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-event-system-yaml": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-goal": "0.1.6-alpha.1",
-    "@deepseek-ai/dsh-storage-sqlite": "0.1.6-alpha.1"
+    "@deepseek-ai/dsh-storage-sqlite": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-event-system-http": "0.1.6-alpha.1"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",

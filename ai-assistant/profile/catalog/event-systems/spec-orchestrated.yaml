@@ -12,7 +12,8 @@
         "prepare_spec_proposal",
         "ask_user_question",
         "get_event_system",
-        "prepare_spec_document_creation"
+        "prepare_spec_document_creation",
+        "wait_for_event"
       ],
       "publishes": []
     },
@@ -113,23 +114,74 @@
         "result"
       ],
       "additionalProperties": false
+    },
+    "source.changed": {
+      "type": "object",
+      "properties": {
+        "trigger_id": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        },
+        "value_json": {
+          "type": "string"
+        },
+        "previous_digest": {
+          "type": "string"
+        },
+        "current_digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "trigger_id",
+        "url",
+        "value_json",
+        "previous_digest",
+        "current_digest"
+      ],
+      "additionalProperties": false
     }
   },
   "subscriptions": [
     {
       "id": "analyze",
       "event": "user.requested",
-      "target": "analyst"
+      "target": "analyst",
+      "retry": {
+        "replaySafe": true,
+        "maxAttempts": 3,
+        "initialBackoffMillis": 1000,
+        "maxBackoffMillis": 10000
+      }
     },
     {
       "id": "review",
       "event": "analysis.ready",
-      "target": "reviewer"
+      "target": "reviewer",
+      "retry": {
+        "replaySafe": true,
+        "maxAttempts": 3,
+        "initialBackoffMillis": 1000,
+        "maxBackoffMillis": 10000
+      }
     },
     {
       "id": "prepare",
       "event": "review.ready",
       "target": "primary"
+    },
+    {
+      "id": "source-change",
+      "event": "source.changed",
+      "target": "analyst",
+      "retry": {
+        "replaySafe": true,
+        "maxAttempts": 3,
+        "initialBackoffMillis": 1000,
+        "maxBackoffMillis": 10000
+      }
     }
   ]
 }

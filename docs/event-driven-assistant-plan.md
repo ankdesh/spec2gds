@@ -1,9 +1,9 @@
 # Event driven assistant: three-phase implementation plan
 
-Status: Phase 1 implemented and verified in the local source checkouts; release publication pending. Phases 2–3 deferred.
+Status: Phases 1–2 implemented and verified in the local source checkouts; release publication pending. Phase 3 remains deferred.
 
 Implementation details and operational behavior are captured in
-[the Phase 1 guide](event-driven-assistant-phase1.md).
+[the Phase 1 guide](event-driven-assistant-phase1.md) and [the Phase 2 guide](event-driven-assistant-phase2.md).
 
 Date: 2026-09-30.
 
@@ -237,7 +237,7 @@ requiring humans to edit every YAML field manually.
    or a product-local prototype first?
 3. **First scenario:** generic analysis/review, Spec refinement, or Circuit
    refinement? Which concrete request demonstrates success?
-4. **Trigger priority:** which external source must ship first in Phase 2?
+4. **Trigger priority — confirmed:** HTTP condition polling is the first Phase 2 source.
 5. **Configuration authority:** confirm human-only roster/subscription edits
    and conversation-pinned definitions, or identify a required exception.
 6. **Budget scope:** confirm aggregate spending per human authorization,

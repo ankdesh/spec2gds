@@ -47,6 +47,7 @@ async function hostFixture(interactiveForms = true) {
   const starts: any[] = [];
   const members = new Map<string, any>();
   const ctx: any = {
+    eventHttpSources: { list: () => [] },
     agents: { get: (id: string) => agents.get(id) },
     sessionPersistence: { list: async () => [] },
     promptCatalog: { get: () => ({}), seal: () => {}, bind: () => ({ sections: ["domain-persona", "binding-context", "operation-constraints", "output-contract"].map((id, index) => ({ id, order: 100 + index * 50, text: id })) }) },
