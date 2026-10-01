@@ -9,7 +9,7 @@ branding, and Spec/Circuit diff cards.
 
 There is no Python/FastAPI/A2A assistant and no compatibility API for the old
 custom UI. The only product HTTP routes are the small `/spec2gds-api` extension
-used to create bindings and perform explicit review actions, plus the stable
+used for bindings, explicit review actions, monitoring, and reviewed event-template configuration, plus the stable
 editor launch URLs.
 
 ## Requirements
@@ -76,6 +76,12 @@ The existing editor links also work:
 Proposal review cards remain in the completed turn footer after Harness
 collapses the tool-call trace, so approve, discard, reconcile, and send actions
 stay available.
+
+## Event templates and execution inspection
+
+For `goal` and `orchestrated`, the new-conversation dialog offers **Event template** and **Configure event template**. Edit agents, prompts, approved routes/capabilities, payload contracts, subscriptions and limits in the visual form or its canonical JSON text. Validate and review the diff before saving. Built-in edits create named templates; saved edits advance a revision. Conversations pin their selected revision and never adopt later changes silently.
+
+The execution dock's **Inspect configuration and execution** shows pinned configuration, causal event ancestry, matched subscriptions, deliveries/activations/retries, request charges and external source state. Native session-history controls open the participating agent transcripts. See [events, presets and plugins](../docs/event-driven-assistant-system.md) and [the tutorial for both presets](../docs/event-driven-assistant-tutorial.md). The tutorial also gives the isolated browser-tool setup and `npm run test:ui` command for the three keyless Chromium tests.
 
 ## Focused Spec command-line workflow
 

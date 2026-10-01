@@ -97,6 +97,8 @@ export type PublicProposalReview = Omit<ProposalReview, "artifactDigest"> & {
 export interface BindingInput {
   domain: Domain;
   preset?: AssistantPreset;
+  eventTemplateKey?: string;
+  eventTemplateRevision?: number;
   serviceBaseUrl: string;
   documentId: string;
   ownerDocumentKey?: string;

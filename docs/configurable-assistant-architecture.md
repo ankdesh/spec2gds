@@ -18,6 +18,8 @@ The `goal` primary continues through the native goal driver. It does not route e
 
 Model publication cannot change capabilities or authorize owner mutation. The immutable owner binding is derived from specialist membership rather than fork lineage or model arguments. Native transcripts log every model-visible delivered message. The ledger validates its pinned configuration and relationships before recovering work; restart never grants automatic execution or fresh resources.
 
-`focused` retains its existing bounded context/proposal exchange. Existing legacy goal/orchestrated chats stay readable; new bound conversations use the replacement runtime. Historical workflow services remain only to interpret saved transcripts. Workflow authoring, graph execution, webhooks, file watchers, and visual configuration are deferred in the [three-phase plan](event-driven-assistant-plan.md).
+`focused` retains its existing bounded context/proposal exchange. Existing legacy goal/orchestrated chats stay readable; new bound conversations use the replacement runtime. Historical workflow services remain only to interpret saved transcripts. Workflow authoring, graph execution, webhooks, and file watchers remain outside the implemented scope in the [three-phase plan](event-driven-assistant-plan.md).
 
 HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](event-driven-assistant-phase2.md).
+
+Visual template editing, reviewed revisions, immutable configuration pins and causal inspection are described in [the event/plugin reference](event-driven-assistant-system.md); [the tutorial](event-driven-assistant-tutorial.md) covers both presets and their three browser tests.

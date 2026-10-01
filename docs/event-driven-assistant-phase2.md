@@ -1,6 +1,6 @@
 # Event driven assistant — Phase 2
 
-Phase 2 adds HTTP condition polling, durable waiting, and bounded recovery to `goal` and `orchestrated`. Preset names, immutable owner bindings, and aggregate budgets remain in force. Visual authoring remains Phase 3; executable workflows are deferred.
+Phase 2 adds HTTP condition polling, durable waiting, and bounded recovery to `goal` and `orchestrated`. Preset names, immutable owner bindings, and aggregate budgets remain in force. Visual configuration and causal inspection are described in [the current event/plugin reference](event-driven-assistant-system.md); executable workflows remain deferred.
 
 ## Start and use monitoring
 

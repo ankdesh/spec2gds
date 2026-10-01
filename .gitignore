@@ -229,3 +229,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Browser-only test dependencies
+ai-assistant/.ui-test-tools/

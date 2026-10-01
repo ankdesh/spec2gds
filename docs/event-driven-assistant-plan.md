@@ -1,9 +1,9 @@
 # Event driven assistant: three-phase implementation plan
 
-Status: Phases 1–2 implemented and verified in the local source checkouts; release publication pending. Phase 3 remains deferred.
+Status: Phases 1–3 are implemented in the local source checkouts; native package publication remains separate. Phase 3 configuration and inspection run in the product adapter over the existing native runtime.
 
 Implementation details and operational behavior are captured in
-[the Phase 1 guide](event-driven-assistant-phase1.md) and [the Phase 2 guide](event-driven-assistant-phase2.md).
+[the Phase 1 guide](event-driven-assistant-phase1.md), [the Phase 2 guide](event-driven-assistant-phase2.md), and [the current event/plugin reference](event-driven-assistant-system.md). [The tutorial](event-driven-assistant-tutorial.md) covers both presets and the three Chromium UI tests.
 
 Date: 2026-09-30.
 
@@ -29,7 +29,7 @@ The current implementation is described in
 [Configurable Assistant Architecture](configurable-assistant-architecture.md).
 This plan changes the scope recommended by the older
 [agentic systems architecture report](agentic-systems-architecture-report.md);
-it does not describe shipped behavior.
+its detailed phase checklists record the agreed delivery scope. The linked implementation guides describe current behavior.
 
 ## Delivery split
 
@@ -44,9 +44,9 @@ the next phase begins. Phase 1 establishes only the contracts that its first
 working example needs; later phases extend them after experience with that
 example.
 
-## Proposed common rules
+## Common rules
 
-These are recommended defaults pending the decisions below.
+These rules describe the delivered configuration and execution policy.
 
 - Put generic execution services in the Harness fork. Let spec2gds supply
   owner context, domain events, and review integration through an adapter.
@@ -228,7 +228,7 @@ requiring humans to edit every YAML field manually.
 - UI actions retain the same host validation, authority, and review checks as
   the text/API path.
 
-## Decisions required before implementation
+## Decision record
 
 1. **Phase allocation — confirmed:** update both `orchestrated` and `goal` in
    Phase 1. External sources, durable waiting, and advanced recovery remain
@@ -251,6 +251,4 @@ requiring humans to edit every YAML field manually.
    and Circuit review/save policy, or require human approval for every change
    produced by these two presets?
 
-Answers can refine these phases without expanding Phase 1 into the full
-system. Exact package APIs, schemas, retry thresholds, and UI layout should be
-specified when their owning phase starts, using verified Harness interfaces.
+The implementation guides record the chosen policies and verified APIs. Generic execution, HTTP ingestion, and waiting live in the Harness fork; owner integration and human configuration/inspection live in the product adapter. Conversation-pinned definitions, aggregate budgets, explicit restart Resume, preserved history, and existing owner approval rules apply throughout.

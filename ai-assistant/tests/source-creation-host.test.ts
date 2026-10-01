@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
+import { readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -52,7 +53,11 @@ async function hostFixture(interactiveForms = true) {
     sessionPersistence: { list: async () => [] },
     promptCatalog: { get: () => ({}), seal: () => {}, bind: () => ({ sections: ["domain-persona", "binding-context", "operation-constraints", "output-contract"].map((id, index) => ({ id, order: 100 + index * 50, text: id })) }) },
     eventSystems: {
-      ready: Promise.resolve(), definition: (id: string) => ({ id }), seal: () => {},
+      ready: Promise.resolve(), definition: (id: string) => {
+        const [_, domain, preset] = id.split(".");
+        const template = JSON.parse(readFileSync(new URL(`../profile/catalog/event-systems/${domain}-${preset}.yaml`, import.meta.url), "utf8"));
+        return { ...template, agents: template.agents.map((agent: any) => ({ ...agent, prompt: readFileSync(new URL(`../profile/catalog/event-systems/${agent.prompt}`, import.meta.url), "utf8") })) };
+      }, seal: () => {},
       get: (id: string) => executions.get(id), membership: (id: string) => members.get(id),
       attach: async (agent: any, mode: string, definition: any, limits: any) => {
         starts.push({ mode, definition, limits });

@@ -4,11 +4,13 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   const module = { exports: {} };
   const React = require("react");
   const h = React.createElement;
+  let openNativeSession = () => {};
   document.title = "spec2gds Assistant";
 
   const style = document.createElement("style");
   style.dataset.plugin = "@spec2gds/harness-assistant";
   style.textContent = `
+    .s2g-editor{width:min(920px,100%);max-height:90vh;overflow:auto}.s2g-editor>label{display:grid;gap:4px;margin:8px 0}.s2g-editor textarea{width:100%;box-sizing:border-box;font:12px/1.4 monospace}.s2g-editor fieldset{border:1px solid #9aa5a2;border-radius:7px}.s2g-editor .s2g-inline{display:inline-flex;align-items:center;gap:4px;font-weight:400}.s2g-editor .s2g-inline input{width:auto}.s2g-editor svg{width:100%;max-height:350px}.s2g-editor pre,.s2g-inspector pre{max-height:300px;overflow:auto;white-space:pre-wrap}.s2g-inspector article{padding:8px;border:1px solid #9aa5a2}.s2g-inspector table{width:100%;text-align:left;font-size:11px}
     .s2g-brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--text-primary,#171717)}
     .s2g-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#176b5b;color:white;font:700 12px/1 system-ui}
     .s2g-review{margin:6px 0;padding:12px;border:1px solid color-mix(in srgb,#176b5b 28%,transparent);border-radius:10px;background:color-mix(in srgb,#176b5b 5%,transparent);font:13px/1.45 system-ui}
@@ -89,6 +91,16 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return results.flatMap(result => result.status === "fulfilled" ? result.value : []).filter(target => belongsToWorkspace(target, workspace));
   }
 
+  function trapDialogFocus(mask) {
+    mask.addEventListener("keydown", event => {
+      if(event.key!=="Tab"||[...document.querySelectorAll(".s2g-mask")].at(-1)!==mask)return;
+      const controls=[...mask.querySelectorAll("button,input,select,textarea,a[href]")].filter(control=>!control.disabled&&control.tabIndex!==-1&&control.getClientRects().length);
+      const first=controls[0], last=controls.at(-1);
+      if(event.shiftKey&&document.activeElement===first){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first?.focus();}
+    });
+  }
+
   function reserveBindingDialog(workspace) {
     return new Promise(resolve => {
       const mask = document.createElement("div");
@@ -103,18 +115,31 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           <div data-existing><label>Target<select name="target"></select></label><p class="s2g-hint">The list is browse-only. A conversation remains permanently bound to the selected target.</p></div>
           <div data-create hidden class="s2g-form"><div class="s2g-pair"><label>Document ID<input name="documentId" autocomplete="off" spellcheck="false" placeholder="my_design"></label><label>Title<input name="title" autocomplete="off" placeholder="My design"></label></div><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
           <label>Assistant preset<select name="preset"><option value="focused">Focused · one-shot Q&amp;A and proposals</option><option value="goal">Goal · bounded long-running work</option><option value="orchestrated">Orchestrated · persistent event agents</option></select></label>
+          <label data-event-setup hidden>Event template<select aria-label="Event template" name="eventTemplate"></select></label><button type="button" data-edit-template hidden>Configure event template</button>
           <p class="s2g-hint">The preset and agent configuration are fixed for this conversation. Service-specific context, tools, and review rules are added separately.</p>
           <p class="s2g-empty" data-empty hidden>No matching documents are available from the connected services.</p>
           <p class="s2g-error" hidden></p>
           <div class="s2g-dialog-actions"><button type="button" data-cancel>Cancel</button><button class="primary" type="submit">Start conversation</button></div>
         </form>
       </section>`;
-      document.body.appendChild(mask);
+      document.body.appendChild(mask); trapDialogFocus(mask);
       const form = mask.querySelector("form"), serviceSelect = form.elements.service, targetSelect = form.elements.target;
       const error = mask.querySelector(".s2g-error"), empty = mask.querySelector("[data-empty]");
-      let services = [], targets = [];
-      const close = value => { document.removeEventListener("keydown", escape); mask.remove(); resolve(value); };
-      const escape = event => { if (event.key === "Escape") close(null); };
+      let services = [], targets = [], eventTemplates = [];
+      const syncTemplates = () => {
+        const service = services[Number(serviceSelect.value)], preset=form.elements.preset.value;
+        const visible = eventTemplates.filter(item=>{const doc=JSON.parse(item.text);return doc.domain===service?.domain&&doc.preset===preset;});
+        form.elements.eventTemplate.innerHTML=visible.map(item=>`<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)} · revision ${item.revision}</option>`).join("");
+        mask.querySelector("[data-event-setup]").hidden=preset==="focused";mask.querySelector("[data-edit-template]").hidden=preset==="focused";
+      };
+      form.elements.preset.addEventListener("change",syncTemplates);
+      mask.querySelector("[data-edit-template]").addEventListener("click",async()=>{
+        try {const service=services[Number(serviceSelect.value)];if(!service)throw new Error("Choose a connected service first.");const saved=await editEventTemplate(service.domain,form.elements.preset.value);eventTemplates=(await api("/event-templates")).templates;syncTemplates();if(saved)form.elements.eventTemplate.value=saved.key;}
+        catch(caught){error.textContent=caught.message;error.hidden=false;}
+      });
+      const previousFocus = document.activeElement;
+      const close = value => { document.removeEventListener("keydown", escape); mask.remove(); previousFocus?.focus(); resolve(value); };
+      const escape = event => { if (event.key === "Escape" && [...document.querySelectorAll(".s2g-mask")].at(-1) === mask) close(null); };
       const setBusy = busy => [...form.querySelectorAll("button,select,input")].forEach(element => { element.disabled = busy; });
       const selectedMode = () => workspace ? "existing" : form.elements.mode.value;
       const renderTargets = () => {
@@ -127,7 +152,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const renderServices = () => {
         serviceSelect.innerHTML = services.map((service, index) => `<option value="${index}">${service.domain === "spec" ? "Spec Editor" : "Circuit Designer"} · ${escapeHtml(service.url)}${service.available === false ? " (offline)" : ""}</option>`).join("")
           + (workspace ? "" : `<option value="manual">Connect another service…</option>`);
-        renderTargets();
+        renderTargets(); syncTemplates();
       };
       const syncMode = () => {
         const create = selectedMode() === "create";
@@ -138,7 +163,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       serviceSelect.addEventListener("change", () => {
         const manual = serviceSelect.value === "manual";
         mask.querySelector("[data-manual]").hidden = !manual;
-        if (!manual) renderTargets();
+        if (!manual) { renderTargets(); syncTemplates(); }
       });
       for (const input of form.querySelectorAll("input[name=mode]")) input.addEventListener("change", syncMode);
       mask.querySelector("[data-cancel]").addEventListener("click", () => close(null));
@@ -161,14 +186,16 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           }
           if (!service) throw new Error("Choose a design service.");
           const preset = form.elements.preset.value;
+          const template=eventTemplates.find(item=>item.key===form.elements.eventTemplate.value);
+          const templateSelection=preset==="focused"?{}:{eventTemplateKey:template?.key,eventTemplateRevision:template?.revision};
           if (selectedMode() === "create") {
             const documentId = form.elements.documentId.value.trim(), title = form.elements.title.value.trim();
             if (!documentId || !title) throw new Error("Document ID and title are required.");
-            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title, preset }));
+            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title, preset, ...templateSelection }));
           } else {
             const target = targets[Number(targetSelect.value)];
             if (!target) throw new Error("Choose an available target.");
-            close(await api("/bindings/reserve", { ...target, preset }));
+            close(await api("/bindings/reserve", { ...target, preset, ...templateSelection }));
           }
         } catch (caught) {
           error.textContent = caught instanceof Error ? caught.message : String(caught); error.hidden = false;
@@ -179,6 +206,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         setBusy(true);
         try {
           const capabilities = await api("/capabilities");
+          eventTemplates=(await api("/event-templates")).templates;
           services = configuredServices(capabilities.owners);
           if (workspace) services = services.filter(service => service.available !== false);
           targets = await discoverTargets(services, workspace);
@@ -189,7 +217,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           renderServices(); syncMode();
         } catch (caught) {
           error.textContent = caught instanceof Error ? caught.message : String(caught); error.hidden = false;
-        } finally { setBusy(false); }
+        } finally { setBusy(false); serviceSelect.focus(); }
       });
     });
   }
@@ -517,6 +545,138 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h(ProposalErrorCard, { error: matched.error });
   }
 
+  async function editEventTemplate(domain, preset, sources = []) {
+    const catalog = await api("/event-templates");
+    const templates = catalog.templates.filter(template => { const doc = JSON.parse(template.text); return doc.domain === domain && doc.preset === preset; });
+    let selected = templates[0], draft = JSON.parse(selected.text), preview = null, validationGeneration = 0;
+    return new Promise(resolve => {
+      const mask = document.createElement("div"); mask.className = "s2g-mask";
+      mask.innerHTML = `<section class="s2g-dialog s2g-editor" role="dialog" aria-modal="true" aria-labelledby="s2g-editor-title">
+        <h2 id="s2g-editor-title">Event setup · ${escapeHtml(preset)}</h2>
+        <p>Edit reactions between agents and events. Saved templates apply to new conversations.</p>
+        <label>Template<select data-template></select></label><label>Template name<input data-name></label>
+        <div data-topology aria-label="Event topology"></div>
+        <details open><summary>Visual configuration</summary><form class="s2g-form" data-visual></form></details>
+        <details><summary>Text definition (JSON / YAML subset)</summary><label>Configuration text<textarea data-text rows="18" spellcheck="false"></textarea></label><button data-import>Apply text to visual editor</button></details>
+        <p class="s2g-hint">Exact event types select reactions. Payloads must match their contracts. Providers, tools, and native compositions are limited by the deployment. HTTP sources are configured separately in each conversation.</p>
+        <p data-error role="alert" class="s2g-error"></p><section data-preview hidden aria-label="Configuration review"></section>
+        <div class="s2g-dialog-actions"><button data-cancel>Close</button><button data-validate>Validate and preview</button><button data-save class="primary" disabled>Save reviewed template</button></div>
+      </section>`;
+      document.body.appendChild(mask); trapDialogFocus(mask);
+      for(const label of mask.querySelectorAll("label")){const control=label.querySelector("input,select,textarea");if(control)control.setAttribute("aria-label",[...label.childNodes].filter(node=>node.nodeType===3).map(node=>node.textContent).join("").trim());}
+      const field = selector => mask.querySelector(selector);
+      const selection = field("[data-template]");
+      const base = JSON.parse(templates.find(template => template.builtin).text);
+      const previousFocus = document.activeElement;
+      const close = value => { document.removeEventListener("keydown", escape); mask.remove(); previousFocus?.focus(); resolve(value); };
+      const escape = event => { if (event.key === "Escape" && [...document.querySelectorAll(".s2g-mask")].at(-1) === mask) close(null); };
+      const invalidate = () => { validationGeneration++; preview = null; field("[data-preview]").hidden = true; field("[data-save]").disabled = true; field("[data-error]").textContent = ""; };
+      const syncText = () => { field("[data-text]").value = JSON.stringify(draft, null, 2) + "\n"; invalidate(); renderTopology(); };
+      function renderTopology() {
+        const events = Object.keys(draft.definition.events), agents = draft.definition.agents;
+        const height = (Math.max(events.length, agents.length) + sources.length) * 38 + 24;
+        const lines = draft.definition.subscriptions.map(edge => {
+          const from = events.indexOf(edge.event), to = agents.findIndex(agent => agent.id === edge.target);
+          return from < 0 || to < 0 ? "" : `<path d="M 180 ${from * 38 + 27} C 230 ${from * 38 + 27}, 240 ${to * 38 + 27}, 290 ${to * 38 + 27}" stroke="#176b5b" fill="none"><title>${escapeHtml(edge.id)}: ${escapeHtml(edge.event)} → ${escapeHtml(edge.target)}</title></path>`;
+        }).join("");
+        const sourceRows=sources.map((source,i)=>`<text x="5" y="${(Math.max(events.length,agents.length)+i)*38+27}" font-size="12" fill="#17211f">HTTP ${escapeHtml(source.id.slice(0,8))} → source.changed (${source.enabled?"enabled":"disabled"})</text>`).join("");
+        field("[data-topology]").innerHTML = `<svg role="img" aria-label="Events react through subscriptions to agents" viewBox="0 0 470 ${height}">${sourceRows}${lines}${events.map((event, i) => `<g><rect x="5" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="10" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(event)}</text></g>`).join("")}${agents.map((agent,i) => `<g><rect x="290" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="300" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(agent.id)}</text></g>`).join("")}</svg>`;
+      }
+      function render() {
+        selection.innerHTML = templates.map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)}${item.builtin ? " (built-in)" : ` · revision ${item.revision}`}</option>`).join("");
+        selection.value = selected.key; field("[data-name]").value = selected.builtin ? `${selected.name} custom` : selected.name;
+        const visual = field("[data-visual]");
+        visual.innerHTML = `<h3>Agents and approved capabilities</h3>${draft.definition.agents.map((agent,i) => `<fieldset data-agent="${i}"><legend>${escapeHtml(agent.id)} · ${agent.id === "primary" ? "proposal owner" : "read-only specialist"}</legend>
+          <label>Prompt · ${escapeHtml(agent.id)}<textarea aria-label="Prompt · ${escapeHtml(agent.id)}" data-prompt rows="5">${escapeHtml(agent.prompt)}</textarea></label>
+          <label>Model route · ${escapeHtml(agent.id)}<select data-route><option value="inherit">Inherit selected native route</option><option value="deployment">${escapeHtml(catalog.route.provider)} / ${escapeHtml(catalog.route.model)}</option></select></label>
+          <div>Native composition: ${escapeHtml(agent.agentPreset || "read-only event member")}; skills/MCP come from that composition.</div>
+          ${(base.definition.agents.find(item=>item.id===agent.id)?.tools || ["get_bound_context","publish_event","get_event_system","wait_for_event"]).map(tool => `<label class="s2g-inline"><input type="checkbox" data-tool="${escapeHtml(tool)}" ${agent.tools.includes(tool)?"checked":""}> ${escapeHtml(tool)}</label>`).join("")}
+          <label>Published events · ${escapeHtml(agent.id)}<input data-publishes value="${escapeHtml(agent.publishes.join(", "))}"></label>
+          ${agent.id !== "primary" ? '<button type="button" data-remove-agent>Remove agent</button>' : ""}</fieldset>`).join("")}
+          <label>Add approved role<select data-add-role><option value="">Choose role</option>${base.definition.agents.filter(agent=>!draft.definition.agents.some(item=>item.id===agent.id)).map(agent=>`<option>${escapeHtml(agent.id)}</option>`).join("")}</select></label>
+          <label>New read-only agent ID<input data-agent-name placeholder="observer"></label><button type="button" data-add-agent>Add read-only agent</button><h3>Subscriptions</h3>${draft.definition.subscriptions.map((edge,i)=>`<fieldset data-edge="${i}"><legend>Reaction ${i+1}</legend><label>Subscription ID<input data-edge-id value="${escapeHtml(edge.id)}"></label><label>Event type<select data-edge-event>${Object.keys(draft.definition.events).map(event=>`<option ${event===edge.event?"selected":""}>${escapeHtml(event)}</option>`).join("")}</select></label><label>Target agent<select data-edge-target>${draft.definition.agents.map(agent=>`<option ${agent.id===edge.target?"selected":""}>${escapeHtml(agent.id)}</option>`).join("")}</select></label><label>Retry policy<select data-edge-retry><option value="human">Human-controlled recovery</option><option value="safe" ${edge.retry?"selected":""}>Replay-safe: 3 attempts, 1–10 second backoff</option></select></label><button type="button" data-remove-edge>Remove subscription</button></fieldset>`).join("")}
+          <button type="button" data-add-edge>Add subscription</button><h3>Payload contracts</h3>${Object.entries(draft.definition.events).map(([event,schema],i)=>`<fieldset data-event="${escapeHtml(event)}"><legend>${escapeHtml(event)}${event in base.definition.events?" · host contract":""}</legend><label>Schema · ${escapeHtml(event)}<textarea aria-label="Schema · ${escapeHtml(event)}" data-schema rows="5" ${event in base.definition.events?"readonly":""}>${escapeHtml(JSON.stringify(schema,null,2))}</textarea></label>${event in base.definition.events?"":'<button type="button" data-remove-event>Remove event type</button>'}</fieldset>`).join("")}
+          <label>New event type<input data-event-name placeholder="observation.ready"></label><button type="button" data-add-event>Add event type</button>
+          <h3>Aggregate limits (deployment ceilings apply)</h3>${Object.entries(draft.limits).map(([name,value])=>`<label>${escapeHtml(name)}<input type="number" min="1" data-limit="${name}" value="${value}" ${name==="maxOutputTokens"?"readonly":""}></label>`).join("")}`;
+        for(const label of visual.querySelectorAll("label")){const control=label.querySelector("input,select,textarea");if(control)control.setAttribute("aria-label",[...label.childNodes].filter(node=>node.nodeType===3).map(node=>node.textContent).join("").trim());}
+        visual.onsubmit = event => event.preventDefault();
+        for (const node of visual.querySelectorAll("[data-agent]")) {
+          const agent = draft.definition.agents[Number(node.dataset.agent)];
+          node.querySelector("[data-prompt]").oninput = event => { agent.prompt = event.target.value; syncText(); };
+          const route = node.querySelector("[data-route]"); route.value = agent.provider ? "deployment" : "inherit";
+          route.onchange = () => { delete agent.provider; delete agent.model; if (route.value === "deployment") Object.assign(agent, catalog.route); syncText(); };
+          for (const checkbox of node.querySelectorAll("[data-tool]")) checkbox.onchange = () => { agent.tools = [...node.querySelectorAll("[data-tool]:checked")].map(input=>input.dataset.tool); syncText(); };
+          node.querySelector("[data-publishes]").oninput = event => { agent.publishes = event.target.value.split(",").map(item=>item.trim()).filter(Boolean); syncText(); };
+          const remove = node.querySelector("[data-remove-agent]"); if(remove) remove.onclick = () => { draft.definition.agents.splice(Number(node.dataset.agent),1); render(); };
+        }
+        visual.querySelector("[data-add-role]").onchange = event => { const agent = base.definition.agents.find(item=>item.id===event.target.value); if(agent) draft.definition.agents.push(JSON.parse(JSON.stringify(agent))); render(); };
+        visual.querySelector("[data-add-agent]").onclick=()=>{const id=visual.querySelector("[data-agent-name]").value.trim();if(draft.preset!=="orchestrated"||!/^[a-z][a-z0-9_-]{0,47}$/.test(id)||draft.definition.agents.some(agent=>agent.id===id)){field("[data-error]").textContent="Choose a unique read-only member ID in orchestrated.";return;}draft.definition.agents.push({id,prompt:"Observe approved events and publish declared observations. Do not prepare owner proposals.",tools:["get_bound_context","publish_event","get_event_system"],publishes:[]});render();};
+        for (const node of visual.querySelectorAll("[data-edge]")) {
+          const edge = draft.definition.subscriptions[Number(node.dataset.edge)];
+          for (const [selector,key] of [["[data-edge-id]","id"],["[data-edge-event]","event"],["[data-edge-target]","target"]]) node.querySelector(selector).onchange = event => { edge[key] = event.target.value; syncText(); };
+          node.querySelector("[data-edge-retry]").onchange = event => { delete edge.retry; if(event.target.value==="safe") edge.retry={replaySafe:true,maxAttempts:3,initialBackoffMillis:1000,maxBackoffMillis:10000}; syncText(); };
+          node.querySelector("[data-remove-edge]").onclick = () => { draft.definition.subscriptions.splice(Number(node.dataset.edge),1); render(); };
+        }
+        visual.querySelector("[data-add-edge]").onclick = () => { draft.definition.subscriptions.push({id:`reaction-${draft.definition.subscriptions.length+1}`,event:Object.keys(draft.definition.events)[0],target:"primary"}); render(); };
+        for (const node of visual.querySelectorAll("[data-event]")) {
+          node.querySelector("[data-schema]").onchange = event => { try { draft.definition.events[node.dataset.event]=JSON.parse(event.target.value); syncText(); } catch(caught) { field("[data-error]").textContent=caught.message; } };
+          const remove=node.querySelector("[data-remove-event]"); if(remove) remove.onclick=()=>{delete draft.definition.events[node.dataset.event];render();};
+        }
+        visual.querySelector("[data-add-event]").onclick = () => { const event=visual.querySelector("[data-event-name]").value.trim(); if (!/^[a-z][a-z0-9_.-]{0,79}$/.test(event) || event in draft.definition.events) {field("[data-error]").textContent="Choose a new event identifier.";return;} draft.definition.events[event]={type:"object",properties:{text:{type:"string"}},required:["text"],additionalProperties:false}; render(); };
+        for (const input of visual.querySelectorAll("[data-limit]")) input.onchange=()=>{draft.limits[input.dataset.limit]=Number(input.value);syncText();};
+        syncText();
+      }
+      selection.onchange = () => { selected=templates.find(item=>item.key===selection.value); draft=JSON.parse(selected.text);render(); };
+      field("[data-text]").oninput = invalidate;
+      field("[data-import]").onclick = async () => { try { const validated=await api(`/event-templates/${encodeURIComponent(selected.key)}/preview`,{revision:selected.revision,text:field("[data-text]").value}); draft=JSON.parse(validated.after);render(); } catch(caught) {field("[data-error]").textContent=caught.message;} };
+      field("[data-name]").oninput = () => { /* Naming does not alter the reviewed execution definition. */ };
+      field("[data-validate]").onclick = async () => {
+        field("[data-save]").disabled=true;field("[data-error]").textContent="";
+        const generation=++validationGeneration, text=field("[data-text]").value;
+        try {
+          const result=await api(`/event-templates/${encodeURIComponent(selected.key)}/preview`,{revision:selected.revision,text});
+          if(generation!==validationGeneration||text!==field("[data-text]").value)return;
+          preview=result;
+          const before=preview.before.split("\n"), after=preview.after.split("\n"), lines=[];
+          for(let i=0;i<Math.max(before.length,after.length);i++) if(before[i]!==after[i]) { if(before[i]!==undefined)lines.push(`- ${before[i]}`);if(after[i]!==undefined)lines.push(`+ ${after[i]}`); }
+          field("[data-preview]").innerHTML=`<h3>Review configuration changes</h3><p>Validation passed. Saving ${selected.builtin?"creates a new template":"updates this template revision"}; existing conversations keep their pinned definition.</p><ul>${preview.warnings.map(warning=>`<li>${escapeHtml(warning)}</li>`).join("")}</ul><pre>${escapeHtml(lines.join("\n") || "No definition changes.")}</pre>`;
+          field("[data-preview]").hidden=false;field("[data-save]").disabled=false;
+        } catch(caught) { preview=null;field("[data-error]").textContent=caught.message; }
+      };
+      field("[data-save]").onclick = async () => {
+        if(!preview)return;field("[data-save]").disabled=true;
+        try { const result=await api(`/event-templates/${encodeURIComponent(selected.key)}/save`,{revision:selected.revision,text:preview.after,reviewDigest:preview.reviewDigest,name:field("[data-name]").value}); close(result.template); }
+        catch(caught){field("[data-error]").textContent=caught.message;preview=null;}
+      };
+      field("[data-cancel]").onclick=()=>close(null);document.addEventListener("keydown",escape);render();selection.focus();
+    });
+  }
+
+  function ExecutionInspector({ execution, sources, goal }) {
+    const [selected, setSelected] = React.useState("");
+    const events = execution.events || [], deliveries = execution.deliveries || [];
+    const event = events.find(item=>item.id===selected) || events.at(-1);
+    const lineage = []; let current = event;
+    while(current && !lineage.some(item=>item.id===current.id)) { lineage.unshift(current); current=events.find(item=>item.id===current.causation); }
+    return h("details", { className:"s2g-inspector" }, h("summary",null,"Inspect configuration and execution"),
+      h("h3",null,"Pinned event configuration"), h("p",null,`${execution.definition.id}@${execution.definition.version} · digest ${execution.digest}. Changes apply to new conversations.`),
+      h("button",{onClick:()=>void editEventTemplate(execution.definition.id.includes(".circuit.")?"circuit":"spec",execution.mode,sources).catch(error=>window.alert(error.message))},"Configure event templates"),
+      h("details",null,h("summary",null,"Pinned prompts, capabilities, payloads, subscriptions, and limits"),h("pre",null,JSON.stringify({definition:execution.definition,limits:execution.limits},null,2))),
+      ...execution.members.map(member=>h("button",{key:member.id,disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native session history · ${member.id}`)),
+      h("h3",null,"Why did this agent run?"),
+      h("label",null,"Inspect event",h("select",{value:event?.id||"",onChange:change=>setSelected(change.target.value)},...events.map(item=>h("option",{key:item.id,value:item.id},`${item.type} · ${item.producer} · ${item.id}`)))),
+      event?h("div",{"data-causal-event":event.id},h("p",null,`Causal chain: ${lineage.map(item=>`${item.type} (${item.producer})`).join(" → ")}`),h("p",null,`Correlation ${event.correlation} · cause ${event.causation||"root input"} · depth ${event.depth}`),h("pre",null,JSON.stringify(event.payload,null,2)),
+        ...deliveries.filter(item=>item.eventId===event.id).map(delivery=>{
+          const subscription=execution.definition.subscriptions.find(item=>item.id===delivery.subscription), member=execution.members.find(item=>item.id===delivery.target);
+          const results=events.filter(item=>item.causation===event.id);
+          return h("article",{key:delivery.id,"data-delivery":delivery.id},h("h4",null,`${delivery.target} · ${delivery.state}`),h("p",null,`Matched ${subscription?`${subscription.id}: exact ${subscription.event} → ${subscription.target}`:delivery.subscription}. Attempt ${delivery.attempt}; activation ${delivery.activationId}; delivery ${delivery.id}.`),h("p",null,`Retry of ${delivery.retryOf||"none"}${delivery.notBefore?`; eligible ${new Date(delivery.notBefore).toISOString()}`:""}. ${delivery.error||""}`),member?h("button",{disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native session history · ${member.id}`):null,h("p",null,`Causal results: ${results.map(item=>`${item.type} (${item.producer})`).join(", ")||"none recorded"}`));
+        })) : h("p",null,"No events recorded yet."),
+      goal?h("details",null,h("summary",null,"Native goal state and continuation rounds"),h("pre",null,JSON.stringify(goal,null,2))):null,
+      h("h3",null,"Where did the budget go?"),h("p",null,"All native primary, specialist, continuation, and retry requests share this allowance. Pending requests show reserved tokens until settled."),
+      h("table",null,h("caption",null,"Model request charges"),h("thead",null,h("tr",null,...["Request","Tokens","Active ms","State"].map(label=>h("th",{key:label,scope:"col"},label)))),h("tbody",null,...execution.requests.map(request=>h("tr",{key:request.id},h("td",null,request.id),h("td",null,String(request.tokens)),h("td",null,String(request.activeMillis)),h("td",null,request.settled?"settled":"reserved"))))),
+      h("h3",null,"External sources"),...(sources||[]).map(source=>h("pre",{key:source.id},JSON.stringify({id:source.id,definition:source.definition,enabled:source.enabled,sequence:source.sequence,error:source.error},null,2))));
+  }
+
   function MonitorForm({ sessionId, suggestion, onChanged }) {
     const [url, setUrl] = React.useState(suggestion?.url || "");
     const [pointer, setPointer] = React.useState(suggestion?.pointer || "");
@@ -613,10 +773,11 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           h("button", { disabled: busy, onClick: async () => {
             setBusy(true); setError("");
             try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/sources`, { action: source.enabled ? "disable" : "enable", sourceId: source.id, revision: source.revision }); setSources(result.sources); }
-            catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+            catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); const fresh=await api(`/bindings/${encodeURIComponent(sessionId)}/execution`).catch(()=>null); if(fresh){setExecution(fresh.execution);setSources(fresh.sources||[]);} }
             finally { setBusy(false); }
           } }, source.enabled ? "Disable monitor" : "Enable monitor"))),
-        suggestion && execution.status !== "stopped" ? h(MonitorForm, { key: sessionId, sessionId, suggestion, onChanged: result => { setExecution(result.execution); setSources(result.sources); } }) : null,
+        h(ExecutionInspector, { key: `inspector:${sessionId}`, execution, sources, goal }),
+        suggestion && execution.status !== "stopped" ? h(MonitorForm, { key: `monitor:${sessionId}`, sessionId, suggestion, onChanged: result => { setExecution(result.execution); setSources(result.sources); } }) : null,
         error ? h("span", { className: "s2g-error" }, error) : null),
       h("div", { className: "s2g-workflow-controls" },
         execution.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,
@@ -637,6 +798,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const titleObserver = new MutationObserver(setProductTitle);
       titleObserver.observe(document.head, { childList: true, subtree: true, characterData: true });
     }
+    openNativeSession = id => ctx.sessions.open(id);
     ctx.uiSession.registerNewSessionHandler({ id: "spec2gds", priority: -100, async handle(intent) {
       let workspace;
       if (intent?.source === "workspace") {

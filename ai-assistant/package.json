@@ -31,7 +31,8 @@
     "test:harness": "node --test tests/*integration.test.mjs",
     "eval": "npm run build:server && node scripts/evaluate.mjs",
     "request": "node scripts/request.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:ui": "node --test tests/*.ui.test.mjs"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "4.0.2",

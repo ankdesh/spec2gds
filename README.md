@@ -527,3 +527,5 @@ Detailed source locations and focused commands are in
 [docs/development.md](docs/development.md).
 
 HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](docs/event-driven-assistant-phase2.md).
+
+For visual event setup, causal inspection, and hands-on examples of both presets, see [the event/plugin guide](docs/event-driven-assistant-system.md) and [the tutorial](docs/event-driven-assistant-tutorial.md).

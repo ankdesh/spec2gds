@@ -5,6 +5,7 @@ import type HttpSourceService from "@deepseek-ai/dsh-event-system-http";
 import type { HttpSourceInput, HttpSourceId } from "@deepseek-ai/dsh-event-system-http";
 import type { GoalService } from "@deepseek-ai/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
+import { EventConfigurations } from "./event-configuration.js";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -115,6 +116,8 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
   return {
     domain: value.domain,
     preset: value.preset ?? "focused",
+    eventTemplateKey: typeof value.eventTemplateKey === "string" ? value.eventTemplateKey : undefined,
+    eventTemplateRevision: typeof value.eventTemplateRevision === "number" ? value.eventTemplateRevision : undefined,
     serviceBaseUrl: value.serviceBaseUrl.trim(),
     documentId: value.documentId.trim(),
     ownerDocumentKey: typeof value.ownerDocumentKey === "string" ? value.ownerDocumentKey : undefined,
@@ -166,6 +169,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     interactiveForms: Boolean(rawConfig.interactiveForms),
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
+  const configurations = new EventConfigurations(state.database, config);
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
   const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve);
   const attached = new Set<string>();
@@ -187,7 +191,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     for (const domain of ["spec", "circuit"] as const) {
       ctx.promptCatalog.get({ id: `spec2gds.${domain}`, version: "1.0.0" });
       for (const preset of ["goal", "orchestrated"] as const) {
-        ctx.eventSystems.definition(`spec2gds.${domain}.${preset}`, "1.0.0");
+        configurations.addBuiltin(domain, preset, ctx.eventSystems.definition(`spec2gds.${domain}.${preset}`, "1.0.0"), limits[preset]);
       }
     }
     ctx.promptCatalog.seal();
@@ -238,8 +242,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms && !specialist,
       operationContract, schemaError, undefined, specialist);
     if (binding.preset !== "focused" && !specialist) {
+      const pinned = configurations.pinned(binding.sessionId)?.document;
       await ctx.eventSystems.attach(agent as unknown as Agent, binding.preset,
-        ctx.eventSystems.definition(`spec2gds.${binding.domain}.${binding.preset}`, "1.0.0"), limits[binding.preset]);
+        pinned?.definition ?? ctx.eventSystems.definition(`spec2gds.${binding.domain}.${binding.preset}`, "1.0.0"), pinned?.limits ?? limits[binding.preset]);
     }
     if (binding.preset !== "focused") {
       const native = agent as unknown as Agent;
@@ -300,9 +305,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       : next();
   });
   ctx.on("agent/request", async (
-    _payload: { agent: ProductAgent; turn: number; step: number },
+    payload: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<Record<string, unknown>>,
-  ) => ({ ...await next(), maxTokens: config.maxOutputTokens }));
+  ) => {
+    const options = await next();
+    const membership = ctx.eventSystems.membership(SessionId(payload.agent.id));
+    const member = membership && ctx.eventSystems.get(membership.conversationId)?.definition.agents.find(item => item.id === membership.member);
+    return { ...options, ...(membership?.primary && member?.provider && member.model ? { provider: member.provider, model: member.model } : {}), maxTokens: config.maxOutputTokens };
+  });
 
   ctx.on("agent/created", async ({ agent }: { agent: ProductAgent }) => {
     await ready;
@@ -374,6 +384,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
 
   async function reserve(input: BindingInput, requestedId?: string): Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }> {
     await ready;
+    if (input.preset && input.preset !== "focused") {
+      try { configurations.selection(input.domain, input.preset, input.eventTemplateKey, input.eventTemplateRevision); }
+      catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
+    }
     let validated: Awaited<ReturnType<OwnerClients["validateBinding"]>>;
     try { validated = await owners.validateBinding(input); }
     catch (error) {
@@ -396,6 +410,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       ownerDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.ownerDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
       workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
+    if (binding.preset !== "focused") {
+      try { configurations.pin(sessionId, binding.domain, binding.preset, input.eventTemplateKey, input.eventTemplateRevision); }
+      catch (error) { state.deleteBinding(sessionId); throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
+    }
     return { binding, workspace };
   }
 
@@ -417,6 +435,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       return creations.create(body.creationRequestId, { serviceBaseUrl: body.serviceBaseUrl, documentId: body.documentId, title: body.title });
     }
     const input = bindingInput({ ...body, scope: "document" });
+    if (input.preset && input.preset !== "focused") {
+      try { configurations.selection(input.domain, input.preset, input.eventTemplateKey, input.eventTemplateRevision); }
+      catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
+    }
     const documentId = input.documentId;
     const title = body.title.trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
@@ -563,6 +585,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const requestUrl = new URL(request.url ?? "/", "http://localhost");
         const path = requestUrl.pathname;
         if (path === "/spec2gds-api/capabilities" && request.method === "GET") return writeJson(response, 200, { model: config.model, provider: config.provider, owners: await owners.capabilities() });
+        if (path === "/spec2gds-api/event-templates" && request.method === "GET") return writeJson(response, 200, { templates: configurations.list(), route: { provider: config.provider, model: config.model } });
+        const templateMatch = path.match(/^\/spec2gds-api\/event-templates\/([^/]+)\/(preview|save)$/);
+        if (templateMatch && request.method === "POST") {
+          const body = await readBody(request, 262144);
+          if (!Number.isSafeInteger(body.revision)) throw new HttpError(400, "Template revision is required.");
+          try {
+            const key = decodeURIComponent(templateMatch[1]!);
+            return writeJson(response, 200, templateMatch[2] === "preview"
+              ? configurations.preview(key, Number(body.revision), body.text)
+              : { template: configurations.save(key, Number(body.revision), body.text, body.reviewDigest, body.name) });
+          } catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
+        }
         const sourceRequestMatch = path.match(/^\/spec2gds-api\/source-requests\/([^/]+)(?:\/(cancel|continued))?$/);
         if (sourceRequestMatch) {
           const requestId = decodeURIComponent(sourceRequestMatch[1]!);
@@ -643,7 +677,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             const binding = state.getBinding(sessionId);
             if (!binding) throw new HttpError(404, "Unknown binding.");
             return writeJson(response, 200, { execution: ctx.eventSystems.get(SessionId(sessionId)) ?? null,
-              legacy: legacyExecutions.has(sessionId), monitorSuggestion: {
+              configuration: configurations.pinned(sessionId) ?? null, legacy: legacyExecutions.has(sessionId), monitorSuggestion: {
                 url: binding.domain === "spec" ? `${binding.ownerUrl}/assistant/context/document?${new URLSearchParams({ document_id: binding.documentId, ...(binding.ownerDocumentKey ? { owner_document_key: binding.ownerDocumentKey } : {}) })}` : `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}`,
                 pointer: binding.domain === "spec" ? "/source_revision_hash" : "/revision" }, sources: ctx.eventHttpSources.list(SessionId(sessionId)),
               goal: ctx.agents.get(SessionId(sessionId)) ? ctx.goals.get(ctx.agents.get(SessionId(sessionId)) as unknown as Agent) : null });
