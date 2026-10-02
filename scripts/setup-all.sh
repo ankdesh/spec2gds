@@ -36,7 +36,7 @@ echo "================================================================="
 # --- Step 0: Ensure Node.js and Package Manager Prerequisites ---
 echo ""
 echo ">>> [0/4] Checking Node.js environment..."
-if [[ -f "${HOME}/.nvm/nvm.sh" ]]; then
+if ! node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major >= 24 || (major === 22 && minor >= 19) ? 0 : 1)' 2>/dev/null && [[ -f "${HOME}/.nvm/nvm.sh" ]]; then
   # Load nvm if available
   # shellcheck source=/dev/null
   source "${HOME}/.nvm/nvm.sh"

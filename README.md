@@ -50,7 +50,14 @@ questions. In automatic mode the Assistant creates the package under
 Restricted owners show a creation card for review. No existing package needs
 to be open. Circuit changes retain their existing approval and save workflow.
 See [specification creation from chat](docs/assistant-spec-creation.md) for
-configuration and recovery.
+configuration and recovery. Architecture approval cards remain visible beside later
+creation errors; approve the intended review before continuing with its review ID.
+
+For creating, editing, switching, and closing specifications, use the
+[Assistant lifecycle rules and state machines](docs/assistant-document-lifecycle.md).
+A chat keeps its original document binding when the editor opens another package.
+The guide covers editor/direct launches, pending work, recovery, and rules that
+still need implementation.
 
 Components support multiline explanations through **Edit text…** beside interfaces
 and RTL. Stored SV defines implemented behavior; structured designs define wiring,
@@ -417,7 +424,7 @@ The deterministic `systemc.generate_at_skeleton` Activity generates a
 structural C++17/SystemC TLM 2.0 AT project for one selected design. It preserves
 reachable hierarchy, creates supported initiator/target socket bindings, and
 publishes a managed project beside the active package under
-`<spec-folder>/systemc-at/<document-id>/<design-id>/`. The Activity returns a
+`<spec-folder>/systemc-at/<document-name>/<entity-name>/`. The Activity returns a
 typed report and JSON report artifact. Phase one has no LLM dependency or inferred
 performance behavior. Packaged Jinja2 templates format normalized render
 contexts while all topology and naming decisions remain in deterministic
@@ -429,7 +436,7 @@ The `systemc.generate_cycle_accurate` Activity generates a native SystemC
 `SC_MODULE` project from a selected design's wire hierarchy and stored
 SystemVerilog bodies. It uses a configured Slang-enabled CIRCT installation and
 a CIRCT-linked emitter, and publishes separately under
-`<spec-folder>/systemc-rtl/<document-id>/<design-id>/`. Set `CIRCT_PREFIX` to
+`<spec-folder>/systemc-rtl/<document-name>/<entity-name>/`. Set `CIRCT_PREFIX` to
 the installation containing `circt-verilog` and `spec2gds-systemc-emit`; build
 the generated project against SystemC 2.3.3 or later. The
 [cycle-accurate SystemC guide](docs/systemc-cycle-accurate-activity.md) gives
@@ -439,7 +446,7 @@ The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
 project for any selected design. It emits one reusable module per
 reachable component, preserves component-owned hierarchy, connects supported
 ad-hoc physical wire nets, and publishes a managed project under
-`<spec-folder>/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
+`<spec-folder>/rtl/<document-name>/<entity-name>/`. Leaf outputs use explicit
 compile-safe defaults unless explicit component/design SV bodies provide
 behavior; no clocks, resets, parameters, or testbench are inferred. Bus
 interfaces, non-wire ports, symbolic ranges, and
@@ -561,3 +568,8 @@ bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
 
 Detailed source locations and focused commands are in
 [docs/development.md](docs/development.md).
+
+Readable document and entity names are independent of stable internal IDs and hardware symbols.
+Creation accepts a Name; display renames preserve the saved source path. See
+[Names and identifiers](docs/naming-and-identifiers.md) for naming rules, migration,
+name-based commands, and technical details.

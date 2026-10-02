@@ -66,6 +66,7 @@ export interface SpecDocumentEditController {
   addComponentInstance(design: EntityRef, value: ComponentInstanceInput): Promise<void>;
   componentInstanceOptions(): ComponentInstanceOption[];
   updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput): Promise<void>;
+  renameNarrativeSection?(blockId: string, name: string): Promise<void>;
   addComponentPort(ref: EntityRef, value: ComponentPortInput): Promise<void>;
   updateComponentPort(ref: EntityRef, name: string, value: ComponentPortUpdateInput): Promise<void>;
   upsertEntitySection(ref: EntityRef, content: string, sectionId?: string): Promise<void>;
@@ -270,12 +271,12 @@ const SpecDocument = createComponentImplementation(
                 </a>
               ))}
             </nav>
-            <dl className="spec-toc__meta">
+            <details><summary>Technical details</summary><dl className="spec-toc__meta">
               <div><dt>Document</dt><dd>{props.documentId}</dd></div>
               <div title={props.sourceRevisionHash}>
                 <dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd>
               </div>
-            </dl>
+            </dl><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ document_id: props.documentId, revision: props.sourceRevisionHash }))}>Copy identifiers</button></details>
           </div>
         </aside>
         <article className="spec-paper">
@@ -616,8 +617,8 @@ function FactList({
           <dt>{fact.label}</dt>
           <dd>
             {fact.reference_anchor
-              ? <a href={`#${fact.reference_anchor}`}>{fact.value}</a>
-              : fact.value}
+              ? <a href={`#${fact.reference_anchor}`}>{fact.display_text || fact.value}</a>
+              : fact.display_text || fact.value}
           </dd>
         </div>
       ))}
@@ -697,12 +698,13 @@ function EntityCreationForm({
           autoComplete="off"
           id={`${state.editorId}-name`}
           onChange={(event) => setName(event.target.value)}
-          pattern="[A-Za-z_][A-Za-z0-9_.-]*"
+          required
+          maxLength={200}
           ref={inputRef}
-          title="Start with a letter or underscore; then use letters, numbers, dots, underscores, or hyphens."
+          title="Enter a readable name. The hardware identifier is generated automatically."
           value={name}
         />
-        <small>This immutable name becomes the section heading.</small>
+        <small>You can rename the section later without changing its hardware identifier.</small>
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions">
@@ -799,7 +801,7 @@ function ComponentInstanceForm({ state }: { state: SectionEditState }) {
 }
 
 function EntityMetadataForm({ state }: { state: SectionEditState }) {
-  const [displayName] = useState(() => factValue(state.section, "Display name"));
+  const [displayName] = useState(() => factValue(state.section, "Display name") || state.section.title);
   const [shortDescription] = useState(() => factValue(state.section, "Short description"));
   const [description, setDescription] = useState(() => factValue(state.section, "Description"));
   const [error, setError] = useState("");
@@ -988,6 +990,15 @@ const SpecSection = createComponentImplementation(
             <div>
               {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
               <Heading>{section.title}</Heading>
+              {entityIsEditable && section.entity_ref && coordinator.controller && <RenameControl
+                id={`${section.section_id}-rename`}
+                name={section.title}
+                onSave={(name) => coordinator.controller!.updateEntityMetadata(section.entity_ref!, {
+                  display_name: name,
+                  short_description: factValue(section, "Short description"),
+                  description: factValue(section, "Description"),
+                })}
+              />}
               {entityIsEditable && section.entity_ref?.entity_kind === "component" && mode !== "metadata" && (
                 <button className="spec-text-edit" onClick={() => begin("metadata")} type="button" title="Explain this component beside its interfaces and RTL">Edit text…</button>
               )}
@@ -1012,6 +1023,7 @@ const SpecSection = createComponentImplementation(
               section={section}
             />
           </header>
+          {section.entity_ref && <details><summary>Technical details</summary><pre>{JSON.stringify({ reference: section.entity_ref, identity: section.facts.filter(fact => HIDDEN_IDENTITY_FACTS.has(fact.label)) }, null, 2)}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify(section.entity_ref))}>Copy reference</button></details>}
           {missingLeafRtl && (
             <p className="spec-implementation-status">RTL implementation missing. Generation produces a compile-safe scaffold; functional behavior is unimplemented.</p>
           )}
@@ -1140,7 +1152,7 @@ function CellValue({ cell }: { cell: DocumentCell }) {
   }
   const text = typeof cell.value === "boolean"
     ? (cell.value ? "Yes" : "No")
-    : String(cell.value ?? "");
+    : cell.display_text || String(cell.value ?? "");
   const content = cell.reference_anchor
     ? <a href={`#${cell.reference_anchor}`}>{text}</a>
     : text;
@@ -1621,6 +1633,34 @@ function safeHref(value: string): string | undefined {
   }
 }
 
+function RenameControl({ id, name, onSave }: { id: string; name: string; onSave: (name: string) => Promise<void> }) {
+  const coordinator = useContext(EditCoordinatorContext);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const finish = () => { coordinator.finishEditor(id); setEditing(false); setError(""); };
+  if (!editing) return <button type="button" className="spec-text-edit" onClick={() => {
+    if (coordinator.requestEditor(id)) { setDraft(name); setEditing(true); }
+  }}>Rename</button>;
+  return <form className="spec-inline-editor" onSubmit={async event => {
+    event.preventDefault(); setBusy(true); setError("");
+    try { await onSave(draft); finish(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); }
+  }}>
+    <label htmlFor={id}>Name</label><input autoFocus id={id} maxLength={200} required value={draft} onChange={event => setDraft(event.target.value)} />
+    {error && <p role="alert">{error}</p>}
+    <button disabled={busy} type="submit">Save</button><button disabled={busy} type="button" onClick={finish}>Cancel</button>
+  </form>;
+}
+
+function referenceLabel(block: NarrativeBlockData, ref: EntityRef) {
+  return block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`] || {
+    name: `${ref.entity_kind.replaceAll("_", " ")}`, anchor: `${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`.replaceAll("_", "-"),
+  };
+}
+
 function renderInlines(block: NarrativeBlockData): React.ReactNode {
   if (!block.inlines.length) return block.text;
   return block.inlines.map((inline, index) => {
@@ -1630,7 +1670,7 @@ function renderInlines(block: NarrativeBlockData): React.ReactNode {
     if (inline.type === "code") return <code key={key}>{inline.text}</code>;
     if (inline.type === "link") {
       const href = inline.entity_ref
-        ? `#${inline.entity_ref.entity_kind.replaceAll("_", "-")}-${inline.entity_ref.entity_id}`
+        ? `#${referenceLabel(block, inline.entity_ref).anchor}`
         : safeHref(inline.href);
       return href
         ? <a href={href} key={key}>{inline.text}</a>
@@ -1641,10 +1681,12 @@ function renderInlines(block: NarrativeBlockData): React.ReactNode {
 }
 
 function NarrativeNode({ block }: { block: NarrativeBlockData }): React.ReactNode {
+  const coordinator = useContext(EditCoordinatorContext);
   if (block.type === "section") {
     return (
-      <section className="spec-narrative__section">
+      <section className="spec-narrative__section" id={`narrative-block-${block.block_id}`.replaceAll("_", "-")}>
         <h4>{block.text}</h4>
+        {coordinator.controller?.renameNarrativeSection && <RenameControl id={`${block.block_id}-rename`} name={block.text} onSave={name => coordinator.controller!.renameNarrativeSection!(block.block_id, name)} />}
         {block.children.map((child) => <NarrativeNode block={child} key={child.block_id} />)}
       </section>
     );
@@ -1742,10 +1784,10 @@ const EntityLink = createComponentImplementation(
           <div className="spec-link-row">
             {block.entity_refs.map((ref) => (
               <a
-                href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
+                href={`#${referenceLabel(block, ref).anchor}`}
                 key={`${ref.entity_kind}-${ref.entity_id}`}
               >
-                {ref.entity_kind.replaceAll("_", " ")} · {ref.entity_id}
+                {referenceLabel(block, ref).name}
               </a>
             ))}
           </div>
@@ -1775,7 +1817,7 @@ const LiveView = createComponentImplementation(
         <div>
           <NarrativeExploreButton block={block} documentId={props.documentId} />
           <strong>{block.text || "Live design view"}</strong>
-          <p>Renderer: <code>{block.renderer_id || "default"}</code></p>
+          <details><summary>Technical details</summary><p>Renderer: <code>{block.renderer_id || "default"}</code></p></details>
           {block.entity_refs.map((ref) => (
             <a
               href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}

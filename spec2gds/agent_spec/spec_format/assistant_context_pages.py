@@ -23,6 +23,7 @@ from spec2gds.agent_spec.spec_format.assistant import (
 )
 from spec2gds.agent_spec.spec_format.ir import SpecRevision, _walk_blocks
 from spec2gds.agent_spec.spec_format.models import EntityRef
+from spec2gds.agent_spec.spec_format.naming import document_name
 
 PAGE_BYTES = 30 * 1024
 
@@ -150,6 +151,7 @@ def build_context_page(
     page: dict[str, Any] = {
         "schema_version": "spec2gds.assistant-context-page.v1",
         "document_id": revision.document_id,
+        "name": document_name(revision),
         "source_revision_hash": revision.source_revision_hash,
         "scope": "entity" if target else "document",
         "target": target.model_dump(mode="json") if target else None,

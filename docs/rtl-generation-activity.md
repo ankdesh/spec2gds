@@ -115,7 +115,7 @@ containing the active `.spec` package. With that folder as the root, output is
 published at:
 
 ```text
-rtl/<document-id>/<target-id>/
+rtl/<document-name>/<entity-name>/
 ├── Makefile
 ├── README.md
 ├── generation-manifest.json

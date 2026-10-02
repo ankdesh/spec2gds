@@ -90,6 +90,7 @@ class ComponentIR:
     vlnv: str
     ports: tuple[PortIR, ...]
     interfaces: tuple[InterfaceIR, ...]
+    display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,7 @@ class DesignIR:
     vlnv: str
     instances: tuple[InstanceIR, ...]
     connections: tuple[ConnectionIR, ...]
+    display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -163,6 +165,7 @@ class BusDefinitionIR:
 
     ref: EntityRef
     vlnv: str
+    display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -173,6 +176,7 @@ class AbstractionDefinitionIR:
     vlnv: str
     bus_vlnv: str
     logical_ports: tuple[str, ...] = ()
+    display_name: str = ""
 
 
 @dataclass(frozen=True)
@@ -230,7 +234,7 @@ class SpecRevision:
             elif entry.kind == "design":
                 designs.append(_design_ir(ref, entry.vlnv, root))
             elif entry.kind == "bus_definition":
-                buses.append(BusDefinitionIR(ref=ref, vlnv=entry.vlnv))
+                buses.append(BusDefinitionIR(ref=ref, vlnv=entry.vlnv, display_name=_text(root, "displayName")))
             else:
                 bus_type = _first(root.xpath("./*[local-name()='busType']"))
                 logical_ports = tuple(
@@ -238,7 +242,7 @@ class SpecRevision:
                     for port in root.xpath("./*[local-name()='ports']/*[local-name()='port']")
                 )
                 abstractions.append(
-                    AbstractionDefinitionIR(ref=ref, vlnv=entry.vlnv, bus_vlnv=_vlnv(bus_type), logical_ports=logical_ports)
+                    AbstractionDefinitionIR(ref=ref, vlnv=entry.vlnv, bus_vlnv=_vlnv(bus_type), logical_ports=logical_ports, display_name=_text(root, "displayName"))
                 )
 
         diagnostics = _semantic_diagnostics(
@@ -503,7 +507,7 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
             physical = _first(port_map.xpath("./*[local-name()='physicalPort']/*[local-name()='name']"))
             port_maps.append(((logical.text or "").strip() if logical is not None else "", (physical.text or "").strip() if physical is not None else ""))
         interfaces.append(InterfaceIR(_text(interface, "name"), _vlnv(bus), _vlnv(abstraction), role, tuple(port_maps)))
-    return ComponentIR(ref=ref, vlnv=vlnv, ports=tuple(ports), interfaces=tuple(interfaces))
+    return ComponentIR(ref=ref, vlnv=vlnv, ports=tuple(ports), interfaces=tuple(interfaces), display_name=_text(root, "displayName"))
 
 
 def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:
@@ -553,7 +557,7 @@ def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:
                 symbolic_slice=symbolic,
             ))
         connections.append(ConnectionIR(name=_text(connection, "name"), kind="ad_hoc", port_endpoints=tuple(endpoints), external_ports=tuple(external)))
-    return DesignIR(ref=ref, vlnv=vlnv, instances=tuple(instances), connections=tuple(connections))
+    return DesignIR(ref=ref, vlnv=vlnv, instances=tuple(instances), connections=tuple(connections), display_name=_text(root, "displayName"))
 
 
 def _semantic_diagnostics(

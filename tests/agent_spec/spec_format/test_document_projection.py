@@ -149,11 +149,11 @@ def test_every_design_has_a_revision_derived_topology_before_its_tables() -> Non
         for section in design_sections
     }
     assert all(topology_by_title.values())
-    assert topology_by_title["subsystem_internal"][0]["block_id"] == "topology_live_view"
-    assert topology_by_title["subsystem_internal"][0]["options"]["status"] == "ready"
-    assert topology_by_title["subsystem_internal"][0]["options"]["omitted_bus_items"] == ["link0"]
-    assert topology_by_title["top_a"][0]["block_id"].startswith("derived_topology_")
-    assert topology_by_title["top_a"][0]["options"]["circuit_document"]["document_id"].endswith("_v2")
+    assert topology_by_title["subsystem internal"][0]["block_id"] == "topology_live_view"
+    assert topology_by_title["subsystem internal"][0]["options"]["status"] == "ready"
+    assert topology_by_title["subsystem internal"][0]["options"]["omitted_bus_items"] == ["link0"]
+    assert topology_by_title["top a"][0]["block_id"].startswith("derived_topology_")
+    assert topology_by_title["top a"][0]["options"]["circuit_document"]["document_id"].endswith("_v2")
     assert revision.narrative.model_dump(mode="json") == narrative_before
     assert revision.manifest.assets == assets_before
 
@@ -197,6 +197,7 @@ def test_topology_projection_isolates_unsafe_and_empty_designs(monkeypatch: pyte
     assert states["design_top_a"]["status"] == "empty"
     assert "circuit_document" not in states["design_top_a"]
     assert states["design_top_b"] == {
+        "document_name": "Specification",
         "schema_version": 1,
         "status": "unavailable",
         "omitted_bus_items": [],

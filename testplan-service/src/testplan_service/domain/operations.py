@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from testplan_service.domain.enums import (
@@ -301,6 +302,7 @@ class ImplementationRebaseOp(OperationBase):
 
 class BindingSetCreateOp(OperationBase):
     op: Literal["binding_set.create"] = "binding_set.create"
+    title: str = ""
     id: str | None = None
     source_snapshot_id: str
     root_scope_id: str
@@ -367,6 +369,7 @@ class RecipeArchiveOp(OperationBase):
 
 class BackendConfigurationCreateOp(OperationBase):
     op: Literal["backend_configuration.create"] = "backend_configuration.create"
+    title: str = ""
     id: str | None = None
     plugin_id: str
     plugin_version: str

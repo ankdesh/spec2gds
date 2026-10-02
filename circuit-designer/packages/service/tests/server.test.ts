@@ -16,6 +16,21 @@ afterEach(async () => {
 });
 
 describe("Circuit Designer REST service", () => {
+  it("resolves document names through this owner and rejects unknown choices", async () => {
+    const document = simpleDocumentFixture();
+    document.label = "Straße timer";
+    service = new CircuitDesignerService({ backend: new EphemeralCircuitSessionBackend({ documents: [document] }) });
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1/documents/resolve`;
+    const selected = await fetch(`${base}?name=${encodeURIComponent("STRASSE timer")}`);
+    expect(selected.status).toBe(200);
+    expect(await selected.json()).toMatchObject({ document_id: document.document_id, label: "Straße timer" });
+    const unknown = await fetch(`${base}?name=missing`);
+    expect(unknown.status).toBe(422);
+    expect(JSON.stringify(await unknown.json())).toContain("Straße timer");
+    expect((await fetch(base)).status).toBe(422);
+  });
+
   it("accepts browser events into the trusted combined-log contract", async () => {
     const file = join(mkdtempSync(join(tmpdir(), "spec2gds-service-log-")), "combined.jsonl");
     const logger = new StructuredLogger("circuit-designer", {

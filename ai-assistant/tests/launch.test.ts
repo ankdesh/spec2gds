@@ -297,7 +297,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   assert.equal(microtasks.length, 2);
   for (const task of microtasks) await task();
   await new Promise(resolvePromise => setImmediate(resolvePromise));
-  assert.deepEqual(renamed, ["Bound design", "Bound design · 127.0.0.1:6010 · workspac"]);
+  assert.deepEqual(renamed, ["Bound design", "Bound design 2"]);
   assert.equal(JSON.stringify(created), JSON.stringify([{ sessionId: "bound-session", workspaceId: "workspace-1", agentPreset: "focused" }]));
   assert.deepEqual(opened, ["bound-session"]);
 

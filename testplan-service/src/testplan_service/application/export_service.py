@@ -10,9 +10,9 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any
 import uuid
 import zipfile
+from typing import Any
 
 from testplan_service.constants import SCHEMA_VERSION_BUNDLE
 from testplan_service.domain.hash import canonical_json, sha256_digest
@@ -178,6 +178,14 @@ class ExportService:
 
         return target_plan_id
 
+    def _scope_name(self, plan: Any, scope_id: str | None) -> str:
+        snapshot = self.repo.get_snapshot(plan.snapshot_id)
+        if snapshot:
+            for occurrence in snapshot.occurrences:
+                if occurrence.occurrence_id == scope_id:
+                    return occurrence.path or occurrence.name
+        return "Unavailable scope" if scope_id else "None"
+
     def export_markdown(self, plan_id: str) -> str:
         """Render a readable human Markdown document of the Test Plan."""
         plan = self.repo.get_plan(plan_id)
@@ -193,10 +201,10 @@ class ExportService:
 
         lines: list[str] = [
             f"# Verification Plan: {plan.name}",
-            f"\n- **Plan ID**: `{plan.id}`",
+            f"\n- **Plan**: {plan.name}",
             f"- **Edit Revision**: `{plan.edit_revision}`",
-            f"- **Pinned Snapshot ID**: `{plan.snapshot_id}`",
-            f"- **Root Scope**: `{plan.root_scope_id}`",
+            f"- **Source**: {self.repo.get_snapshot(plan.snapshot_id).source_name if self.repo.get_snapshot(plan.snapshot_id) else 'Unavailable source'}",
+            f"- **Root Scope**: `{self._scope_name(plan, plan.root_scope_id)}`",
             f"- **Checkpoints**: {', '.join(cp.key for cp in checkpoints) if checkpoints else 'None'}",
             f"\n## Description\n\n{plan.description or 'No description provided.'}",
             "\n---\n",
@@ -209,7 +217,7 @@ class ExportService:
             for req in reqs.values():
                 lines.append(f"### [{req.get('key')}] {req.get('title')}")
                 lines.append(f"**Statement**: {req.get('statement')}")
-                lines.append(f"- Scope: `{req.get('scope_id')}` | Disposition: `{req.get('disposition')}`")
+                lines.append(f"- Scope: `{self._scope_name(plan, req.get('scope_id'))}` | Disposition: `{req.get('disposition')}`")
                 lines.append("")
 
         lines.extend(["\n---\n", "## Verification Intents\n"])
@@ -219,7 +227,7 @@ class ExportService:
             for intent in intents.values():
                 parent_sec_title = secs[intent["parent_section_id"]]["title"] if intent.get("parent_section_id") in secs else "Root"
                 lines.append(f"### [{intent.get('key')}] {intent.get('title')}")
-                lines.append(f"- **Scope**: `{intent.get('scope_id')}` | **Section**: {parent_sec_title}")
+                lines.append(f"- **Scope**: `{self._scope_name(plan, intent.get('scope_id'))}` | **Section**: {parent_sec_title}")
                 lines.append(f"- **Priority**: `{intent.get('priority_override') or 'inherited'}` | **State**: `{intent.get('authoring_state')}`")
                 lines.append(f"- **Given**: {intent.get('preconditions') or 'None'}")
                 lines.append(f"- **When**: {intent.get('trigger') or 'None'}")
@@ -230,6 +238,7 @@ class ExportService:
                         lines.append(f"  - *{obs.get('name')}*: {obs.get('description')}")
                 lines.append("")
 
+        lines.extend(["\n<details><summary>Technical details</summary>\n", f"Plan ID: `{plan.id}`; snapshot: `{plan.snapshot_id}`; root scope: `{plan.root_scope_id}`", "\n</details>"])
         return "\n".join(lines)
 
     def export_csv(self, plan_id: str) -> str:
@@ -268,7 +277,7 @@ class ExportService:
             writer.writerow([
                 sanitize(item.get("key")),
                 sanitize(item.get("title")),
-                sanitize(item.get("scope_id")),
+                sanitize(self._scope_name(plan, item.get("scope_id"))),
                 sanitize(p_sec),
                 sanitize(item.get("priority_override") or "inherited"),
                 sanitize(item.get("authoring_state")),

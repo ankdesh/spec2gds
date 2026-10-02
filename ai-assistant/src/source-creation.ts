@@ -9,6 +9,7 @@ import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values"
 import { normalizeSpecUrl, OwnerClients, OwnerError } from "./owner-clients.js";
 import { ProductState } from "./state.js";
 import type { AssistantPreset, BindingInput, SourceCreationRequest, SessionBinding, WorkspaceDescriptor } from "./types.js";
+import { filenameStem } from "./naming.js";
 
 type Reservation = { session: SessionBinding; workspace: WorkspaceDescriptor };
 type Reserve = (input: BindingInput, sessionId?: string) => Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }>;
@@ -17,18 +18,18 @@ export class SourceCreationError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-export function specDestination(root: string, documentId: string): string {
+export function specDestination(root: string, documentId: string, title?: string): string {
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId)) {
     throw new SourceCreationError(400, "Document ID must start with a letter or number and contain only letters, numbers, underscores, or hyphens (at most 128 characters).");
   }
-  const destination = resolve(root, `${documentId}.spec`);
+  const destination = resolve(root, `${title ? filenameStem(title) : documentId}.spec`);
   if (dirname(destination) !== resolve(root)) throw new SourceCreationError(400, "Document path escaped the configured root.");
   return destination;
 }
 
 export function creationContinuation(request: SourceCreationRequest): string {
   return `The specification package has already been created and this chat is bound to it.\n`
-    + `Document: ${request.documentId}\nTitle: ${request.title}\nSaved at: ${request.destination}\n\n`
+    + `Specification: ${request.title}\nSaved at: ${request.destination}\n\n`
     + `Original user request:\n${request.originalRequest}\n\n`
     + (request.architectureReviewId ? `Approved architecture_review_id: ${request.architectureReviewId}\nAccepted architecture:\n${JSON.stringify(request.acceptedArchitecture)}\nUse this review ID in the initial content proposal.\n\n` : "")
     + `Continue by fulfilling the requested contents in the already-created bound document. Do not create another package or call prepare_spec_document_creation for this request. Read get_bound_context and submit contents according to the owner approval policy. If the request only asked for an empty specification, confirm that it is ready without preparing a content proposal.`;
@@ -79,13 +80,13 @@ export class SourceCreations {
     const policy = selected ? await this.owners.specPolicy(selected.url) : { approval_policy: "review", creationReceipts: false };
     const suggested = input.documentId?.trim();
     const documentId = suggested && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(suggested)
-      ? suggested : `spec_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
+      ? suggested : `spec_${randomUUID().replaceAll("-", "").slice(0, 32)}`;
     const request: SourceCreationRequest = {
       requestId: randomUUID(), sourceSessionId: input.sourceSessionId, callId: input.callId,
       originalRequest: architecture?.originalRequest || input.originalRequest, preset: input.preset, status: "pending",
       ...(architecture ? { architectureReviewId: architecture.reviewId, acceptedArchitecture: architecture.plan } : {}),
       documentId, title: input.title?.trim() || "Untitled specification", serviceBaseUrl: selected?.url ?? "",
-      destination: specDestination(this.root, documentId), destinationSessionId: randomUUID(),
+      destination: specDestination(this.root, documentId, input.title?.trim() || "Untitled specification"), destinationSessionId: randomUUID(),
       continuationRequestId: randomUUID(), sourceRevisionHash: null, error: null, reservation: null,
       automatic: policy.approval_policy === "automatic",
       creationReceipts: policy.creationReceipts === true,
@@ -146,7 +147,7 @@ export class SourceCreations {
       const documentId = values.documentId.trim();
       const title = values.title.trim();
       if (!title) throw new SourceCreationError(400, "Specification title is required.");
-      const destination = specDestination(this.root, documentId);
+      const destination = specDestination(this.root, documentId, title);
       let serviceBaseUrl: string;
       try { serviceBaseUrl = normalizeSpecUrl(values.serviceBaseUrl, this.owners.specAllowlist); }
       catch (error) { throw new SourceCreationError(400, error instanceof Error ? error.message : String(error)); }
@@ -164,6 +165,7 @@ export class SourceCreations {
           throw new OwnerError(502, "The owner creation response did not identify the requested specification.", true);
         }
         request = { ...request, status: "created", sourceRevisionHash: snapshot.source_revision_hash,
+          destination: typeof snapshot.source_path === "string" ? snapshot.source_path : destination,
           ownerDocumentKey: typeof snapshot.owner_document_key === "string" ? snapshot.owner_document_key : undefined };
         this.state.storeSourceCreation(request);
       } catch (error) {
@@ -218,7 +220,7 @@ export class SourceCreations {
 }
 
 export const SOURCE_CREATION_PROMPT = `NEW SPECIFICATION PACKAGES
-When the user explicitly asks for a new specification document/package, obtain an approved architecture review first, then call prepare_spec_document_creation with architecture_review_id. For an explicitly empty specification use empty=true. The tool creates it automatically when the selected owner allows automatic submission; restricted owners show an editable creation card. This applies even when no package is open or current context is unavailable. Do not read get_bound_context first for a new-package request. Suggest a title and document ID derived from the request. A saved receipt creates a separate document chat carrying the original request there. Do not claim contents are complete before owner application. Creating a component or design inside the current document uses get_bound_context and prepare_spec_proposal. A creation receipt in a new chat means the package already exists: populate it, do not create another package.`;
+When the user explicitly asks for a new specification document/package, obtain an approved architecture review first, then call prepare_spec_document_creation with architecture_review_id. For an explicitly empty specification use empty=true. The tool creates it automatically when the selected owner allows automatic submission; restricted owners show an editable creation card. This applies even when no package is open or current context is unavailable. Do not read get_bound_context first for a new-package request. Suggest one readable name derived from the request; the owner assigns internal identity. A saved receipt creates a separate document chat carrying the original request there. Do not claim contents are complete before owner application. Creating a component or design inside the current document uses get_bound_context and prepare_spec_proposal. A creation receipt in a new chat means the package already exists: populate it, do not create another package.`;
 
 export function registerSourceCreationTool(
   agent: { ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } } },
@@ -228,13 +230,13 @@ export function registerSourceCreationTool(
   agent.ctx.systemPrompt?.section({ name: "spec2gds:source-creation", order: 175, text: SOURCE_CREATION_PROMPT });
   agent.ctx.tools.register(defineTool({
     name: "prepare_spec_document_creation",
-    description: "Create a NEW specification with available defaults under the owner's automatic policy, or prepare a confirmation card when human approval is required. Preserve the original request for a separate document-bound chat. Use before a bound-context read for a new-package request.",
-    parameters: { title: { type: "string" }, document_id: { type: "string" }, architecture_review_id: { type: "string" }, empty: { type: "boolean" } },
+    description: "Create a NEW specification only after human architecture approval, supplying architecture_review_id; an explicitly empty package may use empty=true. Use available defaults under the owner's automatic policy, or prepare a confirmation card when human approval is required. Preserve the original request for a separate document-bound chat. Use before a bound-context read for a new-package request.",
+    parameters: { title: { type: "string" }, architecture_review_id: { type: "string" }, empty: { type: "boolean" } },
     output: { schema: { type: "json" }, render: (_args: unknown, value: unknown) => [{ type: "text", text: JSON.stringify(value) }] },
     timeoutMs: 35_000,
     async execute(args, exec) {
       try {
-        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title, documentId: args.document_id,
+        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title,
           architectureReviewId: args.architecture_review_id, empty: args.empty });
         if (creation.automatic === true) {
           const policy = await creations.owners.specPolicy(String(creation.serviceBaseUrl), exec.signal);

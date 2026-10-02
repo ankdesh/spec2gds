@@ -82,6 +82,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock, new_entity_id
+from spec2gds.agent_spec.spec_format.naming import reference_name
 from spec2gds.agent_spec.spec_format.owner_store import OwnerBindings, OwnerJournal, document_key
 from spec2gds.agent_spec.spec_format.proposal_service import (
     ProposalApplyError,
@@ -138,6 +139,7 @@ class CreateDocumentRequest(pydantic.BaseModel):
     document_id: str | None = None
     sidecar_root: str | None = None
     request_id: str | None = None
+    derive_named_path: bool = False
 
 
 class CreateDirectoryRequest(pydantic.BaseModel):
@@ -238,6 +240,7 @@ class V1Session:
         self.owner_document_key = document_key(self.path, self.revision.document_id)
         self._journal: OwnerJournal | None = None
         self.reconciled_proposals: set[str] = set()
+        self.name_catalog: OwnerBindings | None = None
 
     @property
     def journal(self) -> OwnerJournal:
@@ -304,7 +307,9 @@ class V1Session:
 
     def commit_revision(self, revision: SpecRevision) -> None:
         """Adopt validated source while retaining activity, which is not source state."""
-        with self._guarded_save():
+        from contextlib import nullcontext
+        reservation = self.name_catalog.reserve_name(self.path, revision.document_id, revision.narrative.title) if self.name_catalog else nullcontext()
+        with self._guarded_save(), reservation:
             next_package = revision.to_package()
             if "activity/v1/actions.json" in self.package.files:
                 next_package.files["activity/v1/actions.json"] = self.package.files["activity/v1/actions.json"]
@@ -319,7 +324,9 @@ class V1Session:
         decision: AssistantChangeDecision,
     ) -> None:
         """Atomically save source and its accepted assistant decision together."""
-        with self._guarded_save():
+        from contextlib import nullcontext
+        reservation = self.name_catalog.reserve_name(self.path, revision.document_id, revision.narrative.title) if self.name_catalog else nullcontext()
+        with self._guarded_save(), reservation:
             next_package = revision.to_package()
             if "activity/v1/actions.json" in self.package.files:
                 next_package.files["activity/v1/actions.json"] = self.package.files[
@@ -374,6 +381,26 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
     activity_registry = _product_activity_registry(registry.activities.extension_modules)
     logger = StructuredLogger("spec-editor", registry.logging)
     app.state.structured_logger = logger
+
+    def named_execution(item: typing.Any, session: V1Session) -> dict[str, typing.Any]:
+        from spec2gds.agent_spec.spec_format.naming import presentation_text, reference_name
+        payload = _jsonable(item)
+        try:
+            payload["title"] = (activity_registry.activity(item.activity_id).definition.title
+                                if hasattr(item, "activity_id") else session.actions.registry.get(item.action_id).title)
+        except KeyError:
+            payload["title"] = "Activity" if hasattr(item, "activity_id") else "Action"
+        target = getattr(item, "target", None)
+        if target:
+            try:
+                payload["target_name"] = reference_name(session.revision, target)
+            except KeyError:
+                payload["target_name"] = "Unavailable target"
+        report = payload.get("report", {})
+        payload["presentation_summary"] = presentation_text(session.revision, str(report.get("summary", "")))
+        payload["presentation_warnings"] = [presentation_text(session.revision, str(value)) for value in report.get("warnings", [])]
+        payload["presentation_diagnostics"] = [presentation_text(session.revision, str(value)) for value in payload.get("diagnostics", [])]
+        return payload
 
     def service_urls() -> dict[str, dict[str, str]]:
         configured = registry.public_dict()
@@ -528,10 +555,18 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             raise fastapi.HTTPException(status_code=400, detail="No V1 .spec package is open.")
         return session
 
-    def register_session(session: V1Session, sidecar_root: str | None = None) -> V1Session:
+    def register_session(session: V1Session, sidecar_root: str | None = None, *, origin: str = "editor") -> V1Session:
+        from spec2gds.agent_spec.spec_format.naming import normalize_package_names, readable_name
+        title = session.revision.narrative.title or readable_name(Path(session.path).stem)
+        session.name_catalog = None
+        with bindings.reserve_name(session.path, session.revision.document_id, title, normalize=True) as name:
+            package = session.revision.to_package()
+            if normalize_package_names(package, name):
+                session.commit_revision(SpecRevision.from_package(package))
         bindings.register(session.path, session.revision.document_id, sidecar_root)
+        session.name_catalog = bindings
         state["sessions"][session.owner_document_key] = session
-        session.journal.observe(_source_event(session, "editor", []), seed=True)
+        session.journal.observe(_source_event(session, origin, []), seed=True)
         reconcile_session(session)
         return session
 
@@ -553,7 +588,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             session = state["sessions"].get(owner_document_key)
             if session is None:
                 try:
-                    session = V1Session(record["path"], record["sidecar_root"])
+                    session = register_session(V1Session(record["path"], record["sidecar_root"]), record["sidecar_root"])
                 except (OSError, ValueError) as exc:
                     raise fastapi.HTTPException(status_code=409, detail={"error_code": "BINDING_UNAVAILABLE", "message": str(exc)}) from exc
                 if session.owner_document_key != owner_document_key:
@@ -566,6 +601,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         if document_id is not None and document_id != session.revision.document_id:
             raise fastapi.HTTPException(status_code=409, detail="Proposal and package binding identify different documents.")
         if changed:
+            register_session(session, origin="external")
             _publish_source_event(state, session, origin="external", affected_entities=[])
         reconcile_session(session)
         return session
@@ -586,7 +622,10 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         """Commit a successful transaction or map diagnostics to HTTP status."""
         session = session or active()
         if result.succeeded and result.revision is not None:
-            session.commit_revision(result.revision)
+            try:
+                session.commit_revision(result.revision)
+            except ValueError as exc:
+                raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
             _publish_source_event(state, session, origin="editor", affected_entities=[])
             return {
                 "committed": True,
@@ -731,19 +770,21 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         """Create, validate, activate, and return a new package snapshot."""
         try:
             logger.event("documents", "create_requested", "Creating specification", details=request)
-            reserved = bindings.creation(request.request_id, request.model_dump(mode="json")) if request.request_id else False
-            if reserved and Path(request.path).expanduser().resolve().exists():
-                session = V1Session(request.path, request.sidecar_root)
-                if request.document_id is None or session.revision.document_id != request.document_id:
+            identity = request.document_id or new_entity_id("spec")
+            destination = request.path
+            reserved = False
+            if request.request_id:
+                destination, identity, reserved = bindings.reserve_creation(request.request_id, request.model_dump(mode="json"))
+            if reserved and Path(destination).expanduser().resolve().exists():
+                session = V1Session(destination, request.sidecar_root)
+                if session.revision.document_id != identity:
                     raise ValueError("Creation receipt does not match the saved package.")
                 state["active"] = register_session(session, request.sidecar_root)
                 return _snapshot(session)
-            session = V1Session.create(
-                request.path,
-                request.document_id,
-                request.sidecar_root,
-                request.title,
-            )
+            from spec2gds.agent_spec.spec_format.naming import readable_name
+            title = request.title if request.title is not None else readable_name(Path(request.path).stem)
+            with bindings.reserve_name(destination, identity, title) as name:
+                session = V1Session.create(destination, identity, request.sidecar_root, name)
             state["active"] = register_session(session, request.sidecar_root)
             return _snapshot(session)
         except (OSError, ValueError, SpecValidationError) as exc:
@@ -759,10 +800,71 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @app.get("/documents")
+    def named_documents() -> dict[str, typing.Any]:
+        from spec2gds.agent_spec.spec_format.naming import document_name, entity_name
+        documents = []
+        for record in bindings.catalog():
+            try:
+                session = bound_session(record["key"], record["document_id"])
+            except fastapi.HTTPException:
+                continue
+            documents.append({"document_id": session.revision.document_id, "title": document_name(session.revision),
+                "owner_document_key": session.owner_document_key,
+                "entities": [{**item.ref.model_dump(mode="json"), "title": entity_name(item)}
+                    for item in (*session.revision.components, *session.revision.designs,
+                                 *session.revision.bus_definitions, *session.revision.abstraction_definitions)]})
+        return {"documents": documents}
+
+    @app.get("/documents/resolve")
+    def resolve_named_target(name: str | None = None, owner_document_key: str | None = None,
+                             document_id: str | None = None, entity_name: str | None = None,
+                             entity_kind: str | None = None) -> dict[str, typing.Any]:
+        """Resolve human input within an explicit owner and exact package."""
+        from spec2gds.agent_spec.spec_format.naming import document_name, name_key, select_reference
+        try:
+            if name is not None:
+                catalog = named_documents()["documents"]
+                matches = [item for item in catalog if name_key(item["title"]) == name_key(name)
+                           and (owner_document_key is None or item["owner_document_key"] == owner_document_key)
+                           and (document_id is None or item["document_id"] == document_id)]
+                if len(matches) != 1:
+                    raise ValueError(f'Unknown or ambiguous document "{name}". Choose: '
+                                     + ", ".join(item["title"] for item in catalog))
+                owner_document_key = matches[0]["owner_document_key"]
+                document_id = matches[0]["document_id"]
+            if not owner_document_key and not document_id:
+                raise ValueError("Select a document name or exact package before selecting an entity.")
+            session = bound_session(owner_document_key, document_id)
+            result = {"document_id": session.revision.document_id,
+                      "owner_document_key": session.owner_document_key,
+                      "name": document_name(session.revision)}
+            if entity_name is not None:
+                target = select_reference(session.revision, entity_name, entity_kind)
+                result.update(target.model_dump(mode="json"))
+            return result
+        except ValueError as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/documents/snapshot")
     def document_snapshot(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return the complete editor-facing immutable source projection."""
         return _snapshot(bound_session(owner_document_key))
+
+    @app.get("/documents/names")
+    def document_names(owner_document_key: str | None = None, document_id: str | None = None,
+                       entity_kind: str | None = None, entity_id: str | None = None) -> dict[str, typing.Any]:
+        from spec2gds.agent_spec.spec_format.naming import document_name, reference_name
+        session = bound_session(owner_document_key, document_id)
+        name = document_name(session.revision)
+        target_name = name
+        if entity_kind and entity_id:
+            try:
+                target_name = reference_name(session.revision, EntityRef(document_id=session.revision.document_id,
+                    entity_kind=entity_kind, entity_id=entity_id))
+            except (KeyError, ValueError) as exc:
+                raise fastapi.HTTPException(status_code=404, detail="The selected target was removed.") from exc
+        return {"name": name, "target_name": target_name, "owner_document_key": session.owner_document_key}
 
     @app.get("/documents/view")
     def document_view(owner_document_key: str | None = None) -> dict[str, typing.Any]:
@@ -772,7 +874,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             activity = session.activity.state
             return {"snapshot": _snapshot(session),
                     "a2ui": build_a2ui_batch(build_document_projection(session.revision)).model_dump(mode="json"),
-                    "activity": {"executions": [_jsonable(item) for item in (*activity.executions, *activity.activity_executions)],
+                    "activity": {"executions": [named_execution(item, session) for item in (*activity.executions, *activity.activity_executions)],
                                  "artifacts": [_jsonable(item) for item in activity.artifacts],
                                  "proposals": [_jsonable(item) for item in activity.proposals],
                                  "assistant_changes": [_jsonable(item) for item in activity.assistant_changes[-50:]]},
@@ -870,6 +972,10 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
                 "schema_version": 1,
                 "binding_id": binding_id,
                 "source_document_id": active().revision.document_id,
+                "source_name": active().revision.narrative.title,
+                "source_entity_name": reference_name(active().revision, EntityRef(document_id=active().revision.document_id,
+                    entity_kind=projection.source_entity_kind, entity_id=projection.source_entity_id)),
+                "source_owner_document_key": active().owner_document_key,
                 "source_service_url": service_urls()["spec_editor"]["service_url"],
                 "source_entity": {
                     "document_id": active().revision.document_id,
@@ -1059,7 +1165,8 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         try:
             target = EntityRef(document_id=document_id, entity_kind=entity_kind, entity_id=entity_id)
             content = build_context_page(session.revision, target, entity_ids=_context_selection(entity_ids), cursor=cursor) if paged else build_assistant_context(session.revision, target)
-            return {**content,
+            from spec2gds.agent_spec.spec_format.naming import document_name, reference_name
+            return {**content, "name": document_name(session.revision), "target_name": reference_name(session.revision, target),
                     "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1073,7 +1180,8 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         session = bound_session(owner_document_key, document_id)
         try:
             content = build_context_page(session.revision, entity_ids=_context_selection(entity_ids), cursor=cursor) if paged else build_document_assistant_context(session.revision)
-            return {**content, "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
+            from spec2gds.agent_spec.spec_format.naming import document_name
+            return {**content, "name": document_name(session.revision), "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
         except (TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -1184,13 +1292,15 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         with session.lock:
             _, record = stage_proposal(proposal, session.owner_document_key, session_id)
             if record["state"] == "applied":
-                return {**record["owner_result"], "idempotent_replay": True}
+                return {**record["owner_result"], "idempotent_replay": True, "review_number": session.journal.get(proposal.proposal_id)["ordinal"]}
             if approval_policy == "review" or record.get("requires_review"):
                 session.journal.update(proposal.proposal_id, requires_review=True)
                 return {"status": "approval_required", "proposal_id": proposal.proposal_id,
+                        "review_number": session.journal.get(proposal.proposal_id)["ordinal"],
                         "source_revision_hash": session.revision.source_revision_hash,
                         "preview": record["preview"]}
-            return commit_proposal(session, proposal, "automatic", session_id)
+            return {**commit_proposal(session, proposal, "automatic", session_id),
+                    "review_number": session.journal.get(proposal.proposal_id)["ordinal"]}
 
     @app.post("/assistant/proposals/apply")
     def assistant_proposal_apply(proposal: SpecChangeProposal, owner_document_key: str | None = None) -> dict[str, typing.Any]:
@@ -1535,14 +1645,14 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         """List legacy actions and Activity jobs for the active package."""
         session = active()
         legacy = [
-            {"execution_type": "action", **_jsonable(item)}
+            {"execution_type": "action", **named_execution(item, session)}
             for item in session.activity.state.executions
         ]
         persisted = {item.execution_id: item for item in session.activity.state.activity_executions}
         for item in activity_jobs.list_for_package(session.path):
             persisted[item.execution_id] = item
         return {
-            "executions": [*legacy, *[_jsonable(item) for item in persisted.values()]],
+            "executions": [*legacy, *[named_execution(item, session) for item in persisted.values()]],
         }
 
     @app.get("/executions/{execution_id}")
@@ -1661,6 +1771,13 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             headers={"Cache-Control": "no-store"},
         )
 
+    # Normalize the service-known catalog deterministically before serving it.
+    # Invalid/unavailable bindings remain catalogued for explicit recovery.
+    for record in bindings.catalog():
+        try:
+            register_session(V1Session(record["path"], record["sidecar_root"]), record["sidecar_root"])
+        except (OSError, ValueError, SpecValidationError):
+            continue
     return app
 
 
@@ -1874,11 +1991,14 @@ def _reject_operation_fields(value: dict[str, typing.Any], allowed: set[str], la
 def _snapshot(session: V1Session) -> dict[str, typing.Any]:
     """Build the single payload from which every editor view is rendered."""
     revision = session.revision
+    from spec2gds.agent_spec.spec_format.naming import document_name
     section_validation = validate_revision_sections(revision)
     return {
         "schema_version": "spec2gds.snapshot.v2",
         "document_id": revision.document_id,
+        "name": document_name(revision),
         "owner_document_key": session.owner_document_key,
+        "source_path": session.path,
         "source_revision_hash": revision.source_revision_hash,
         "components": [_jsonable(item) for item in revision.components],
         "designs": [_jsonable(item) for item in revision.designs],

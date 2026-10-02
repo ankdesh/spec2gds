@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from testplan_service.constants import (
@@ -74,6 +75,7 @@ class TargetBindingSet(BaseModel):
 
     id: str
     key: str
+    title: str = ""
     record_type: str = "target_binding_set"
     record_revision: int = 1
     plan_id: str
@@ -149,6 +151,7 @@ class BackendConfiguration(BaseModel):
 
     id: str
     key: str
+    title: str = ""
     record_type: str = "backend_configuration"
     record_revision: int = 1
     plan_id: str

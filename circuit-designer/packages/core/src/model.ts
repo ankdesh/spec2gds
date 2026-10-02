@@ -1,3 +1,4 @@
+import { availableHumanName, cleanHumanName } from "./naming";
 import type {
   CircuitDocument,
   CircuitLayout,
@@ -238,6 +239,14 @@ function rangesOverlap(
 
 export function validateDocumentSemantics(document: CircuitDocument): Diagnostic[] {
   const diagnostics: Diagnostic[] = [];
+  const names: string[] = [];
+  for (const component of document.components) {
+    try {
+      const name = cleanHumanName(component.label), suggestion = availableHumanName(name, names);
+      if (name !== suggestion) diagnostics.push(diagnostic("error", "duplicate_component_name", `Component name “${name}” already exists. Use “${suggestion}” or another name.`, component.id));
+      names.push(name);
+    } catch (cause) { diagnostics.push(diagnostic("error", "invalid_name", String(cause), component.id)); }
+  }
   const componentIds = new Set(document.components.map((component) => component.id));
   for (const id of duplicates(document.components.map((component) => component.id))) {
     diagnostics.push(diagnostic("error", "duplicate_component_id", `Component ID is duplicated: ${id}`, id));

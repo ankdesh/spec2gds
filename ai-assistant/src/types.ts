@@ -14,6 +14,7 @@ export interface SessionBinding {
   entityKind: string | null;
   entityId: string | null;
   title: string;
+  sourceName?: string;
   workspaceKey: string;
   workspaceTitle: string;
   workspacePath: string;
@@ -92,6 +93,7 @@ export interface ProposalReview {
 
 export type PublicProposalReview = Omit<ProposalReview, "artifactDigest"> & {
   changeSummary: ProposalChangeSummary;
+  reviewNumber?: number;
 };
 
 export interface BindingInput {
@@ -106,6 +108,7 @@ export interface BindingInput {
   entityKind?: string;
   entityId?: string;
   title?: string;
+  sourceName?: string;
 }
 
 export interface ServiceConfig {

@@ -99,7 +99,7 @@ test("unbound creation stages a durable card without accessing bound context or 
     assert.equal(f.creations.get(request.requestId).originalRequest, comparatorRequest);
     const result = await f.creations.create(request.requestId, f.values) as any;
     assert.equal(f.creates, 1);
-    assert.equal(await readFile(join(f.root, "comparator_3bit.spec"), "utf8"), "comparator_3bit");
+    assert.equal(await readFile(join(f.root, "3-bit-comparator.spec"), "utf8"), "comparator_3bit");
     assert.equal(result.session.scope, "document");
     assert.notEqual(result.session.sessionId, "unbound-chat");
     assert.ok(result.continuation.message.includes(comparatorRequest));
@@ -200,11 +200,11 @@ test("owner rejection and offline services leave an editable request; existing f
     await assert.rejects(f.creations.create(request.requestId, f.values), /offline/);
     assert.equal(f.creates, 0); assert.equal(f.creations.get(request.requestId).status, "pending");
     f.mode = "normal";
-    await writeFile(join(f.root, "comparator_3bit.spec"), "original");
+    await writeFile(join(f.root, "3-bit-comparator.spec"), "original");
     await assert.rejects(f.creations.create(request.requestId, f.values), /Refusing to replace/);
-    assert.equal(await readFile(join(f.root, "comparator_3bit.spec"), "utf8"), "original");
+    assert.equal(await readFile(join(f.root, "3-bit-comparator.spec"), "utf8"), "original");
     assert.equal(f.creations.get(request.requestId).status, "pending");
-    await f.creations.create(request.requestId, { ...f.values, documentId: "comparator_3bit_new" });
+    await f.creations.create(request.requestId, { ...f.values, title: "3-bit comparator new" });
     assert.equal(f.creations.get(request.requestId).status, "reserved");
   } finally { await f.close(); }
 });
@@ -277,7 +277,7 @@ test("model tool captures the host request and supplies safe empty-spec defaults
       () => ({ sourceSessionId: "chat", originalRequest: "Create an empty specification", preset: "focused" }));
     const result = await tool.execute({ empty: true }, { callId: "empty-call" });
     assert.equal(tool.name, "prepare_spec_document_creation");
-    assert.match(result.source_creation.documentId, /^spec_[a-f0-9]{12}$/);
+    assert.match(result.source_creation.documentId, /^spec_[a-f0-9]{32}$/);
     assert.equal(f.creates, 0);
     assert.match(sections[0].text, /Do not read get_bound_context first/);
     assert.match(creationContinuation(result.source_creation), /only asked for an empty specification/);
@@ -292,7 +292,8 @@ test("automatic creation returns a saved receipt and continuation with no confir
     let tool: any;
     registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } } } }, f.creations,
       () => ({ sourceSessionId: "chat", originalRequest: comparatorRequest, preset: "focused" }));
-    const result = await tool.execute({ document_id: "comparator_3bit", title: "Comparator", architecture_review_id: "architecture-chat" }, { callId: "automatic-call" });
+    const result = await tool.execute({ document_id: "comparator_3bit", title: "3-bit comparator", architecture_review_id: "architecture-chat" }, { callId: "automatic-call" });
+    assert.ok(result.source_creation, JSON.stringify(result));
     assert.equal(result.source_creation.status, "reserved");
     assert.equal(result.source_creation.automatic, true);
     assert.equal(f.creates, 1);

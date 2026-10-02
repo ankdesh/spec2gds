@@ -108,7 +108,7 @@ async function customTemplate(page,dialog,preset) {
   await expect(editor).not.toBeVisible();
 }
 async function start(page,dialog) {const previous=await page.evaluate(()=>window.currentSession);await dialog.getByRole('button',{name:'Start conversation',exact:true}).click();await page.waitForFunction(old=>window.currentSession&&window.currentSession!==old,previous);await expect(page.locator('[data-s2g-execution]')).toBeVisible();return page.evaluate(()=>window.currentSession);}
-async function inspect(page) {await page.getByText('Inspect configuration and execution',{exact:true}).click();}
+async function inspect(page) {await page.locator('.s2g-inspector > summary').click();}
 
 test('orchestrated UI saves text-backed reactions, runs analyst/reviewer, and explains causal deliveries', {timeout:45000},async()=>{
   const f=await fixture();try {

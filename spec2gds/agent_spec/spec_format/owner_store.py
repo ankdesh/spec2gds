@@ -21,6 +21,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any, Iterator
 
+from spec2gds.agent_spec.spec_format.naming import name_key, require_unique_name, unique_name
 from spec2gds.agent_spec.spec_format.workspace_target import assistant_state_root
 
 
@@ -58,13 +59,50 @@ class OwnerBindings(_Database):
         with self.connection() as db:
             db.execute("CREATE TABLE IF NOT EXISTS bindings (key TEXT PRIMARY KEY, path TEXT NOT NULL, document_id TEXT NOT NULL, sidecar_root TEXT)")
             db.execute("CREATE TABLE IF NOT EXISTS creations (request_id TEXT PRIMARY KEY, input_json TEXT NOT NULL)")
+            creation_columns = {row["name"] for row in db.execute("PRAGMA table_info(creations)")}
+            for column in ("destination", "document_id"):
+                if column not in creation_columns:
+                    db.execute(f"ALTER TABLE creations ADD COLUMN {column} TEXT")
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(bindings)")}
+            for column in ("display_name", "name_key"):
+                if column not in columns:
+                    db.execute(f"ALTER TABLE bindings ADD COLUMN {column} TEXT")
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS binding_name ON bindings(name_key)")
 
     def register(self, path: str, document_id: str, sidecar_root: str | None = None) -> str:
         path = str(Path(path).expanduser().resolve())
         key = document_key(path, document_id)
         with self.connection() as db:
-            db.execute("INSERT INTO bindings VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET sidecar_root=excluded.sidecar_root", (key, path, document_id, sidecar_root))
+            db.execute("INSERT INTO bindings(key,path,document_id,sidecar_root) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET sidecar_root=COALESCE(excluded.sidecar_root,bindings.sidecar_root)", (key, path, document_id, sidecar_root))
         return key
+
+    @contextmanager
+    def reserve_name(self, path: str, document_id: str, title: str, *, normalize: bool = False) -> Iterator[str]:
+        """Hold a service-wide name reservation across the guarded package save.
+
+        SQLite serializes concurrent admissions/renames; failed saves roll back
+        their reservation. Missing package paths do not reserve visible names.
+        """
+        path = str(Path(path).expanduser().resolve())
+        key = document_key(path, document_id)
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            names = []
+            for row in db.execute("SELECT key,path,display_name FROM bindings WHERE name_key IS NOT NULL").fetchall():
+                if row["key"] == key:
+                    continue
+                if Path(row["path"]).is_file():
+                    names.append(row["display_name"])
+                else:
+                    db.execute("UPDATE bindings SET display_name=NULL,name_key=NULL WHERE key=?", (row["key"],))
+            name = unique_name(title, names) if normalize else require_unique_name(title, names)
+            db.execute("INSERT INTO bindings(key,path,document_id,display_name,name_key) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET display_name=excluded.display_name,name_key=excluded.name_key", (key, path, document_id, name, name_key(name)))
+            yield name
+
+    def catalog(self) -> list[dict[str, Any]]:
+        with self.connection() as db:
+            rows = db.execute("SELECT * FROM bindings ORDER BY path").fetchall()
+        return [dict(row) for row in rows if Path(row["path"]).is_file()]
 
     def get(self, key: str) -> dict[str, Any] | None:
         with self.connection() as db:
@@ -87,8 +125,39 @@ class OwnerBindings(_Database):
                 return True
             if Path(values["path"]).expanduser().resolve().exists():
                 raise ValueError("Creation destination already exists.")
-            db.execute("INSERT INTO creations VALUES (?,?)", (request_id, encoded))
+            db.execute("INSERT INTO creations(request_id,input_json) VALUES (?,?)", (request_id, encoded))
         return False
+
+    def reserve_creation(self, request_id: str, values: dict[str, Any]) -> tuple[str, str, bool]:
+        """Reserve identity and readable destination before any network retry."""
+        from spec2gds.agent_spec.spec_format.models import new_entity_id
+        from spec2gds.agent_spec.spec_format.naming import filename_stem
+        encoded = _json(values)
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT * FROM creations WHERE request_id=?", (request_id,)).fetchone()
+            if row:
+                if row["input_json"] != encoded:
+                    raise ValueError("Creation request ID was reused with different values.")
+                destination = row["destination"] or values["path"]
+                identity = row["document_id"] or values.get("document_id") or new_entity_id("spec")
+                db.execute("UPDATE creations SET destination=?,document_id=? WHERE request_id=?",
+                           (destination, identity, request_id))
+                return destination, identity, True
+            identity = values.get("document_id") or new_entity_id("spec")
+            destination = Path(values["path"]).expanduser().resolve()
+            if values.get("derive_named_path"):
+                base = destination.with_name(filename_stem(values.get("title") or destination.stem) + ".spec")
+                destination, number = base, 2
+                reserved = {item[0] for item in db.execute("SELECT destination FROM creations WHERE destination IS NOT NULL")}
+                while destination.exists() or str(destination) in reserved:
+                    destination = base.with_name(f"{base.stem}-{number}.spec")
+                    number += 1
+            elif destination.exists():
+                raise ValueError("Creation destination already exists.")
+            db.execute("INSERT INTO creations(request_id,input_json,destination,document_id) VALUES (?,?,?,?)",
+                       (request_id, encoded, str(destination), identity))
+            return str(destination), identity, False
 
 
 class OwnerJournal(_Database):
@@ -125,8 +194,8 @@ class OwnerJournal(_Database):
 
     def get(self, proposal_id: str) -> dict[str, Any] | None:
         with self.connection() as db:
-            row = db.execute("SELECT record_json FROM submissions WHERE proposal_id=?", (proposal_id,)).fetchone()
-        return json.loads(row[0]) if row else None
+            row = db.execute("SELECT record_json,ordinal FROM submissions WHERE proposal_id=?", (proposal_id,)).fetchone()
+        return {**json.loads(row[0]), "ordinal": row[1]} if row else None
 
     def update(self, proposal_id: str, **values: Any) -> dict[str, Any]:
         with self.connection() as db:
@@ -146,7 +215,7 @@ class OwnerJournal(_Database):
                     "source_revision_hash": result.get("source_revision_hash", artifact["base_source_revision_hash"]),
                     "origin": "assistant", "affected_entities": [],
                 }),))
-        return record
+        return self.get(proposal_id)
 
     def history(self, before: int | None = None, limit: int = 50) -> dict[str, Any]:
         if not 1 <= limit <= 100:

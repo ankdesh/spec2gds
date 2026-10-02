@@ -10,6 +10,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import json
+import re
 import typing
 
 import lxml.etree as etree
@@ -36,6 +37,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.naming import reference_name, select_entity
 from spec2gds.agent_spec.spec_format.source_edits import (
     set_entity_metadata,
     upsert_component_port,
@@ -167,7 +169,7 @@ def build_assistant_context(revision: SpecRevision, target: EntityRef) -> dict[s
         sections = [
             DocumentSection(
                 section_id=f"narrative-block-{target.entity_id}",
-                title=f"Narrative block {target.entity_id}",
+                title=reference_name(revision, target),
                 level=2,
                 eyebrow="Narrative",
                 entity_ref=target,
@@ -295,7 +297,7 @@ def preview_assistant_proposal(
         "candidate_source_revision_hash": result.revision.source_revision_hash,
         "current_sections": current,
         "candidate_sections": candidate,
-        "diff": _json_diff(current, candidate),
+        "diff": _named_diff(current, candidate),
         "_revision": result.revision,
     }
 
@@ -314,10 +316,13 @@ def compile_assistant_operations(
     if not creates:
         return _compile_assistant_operations(revision, target, raw_operations)
     creates.sort(key=lambda raw: raw.get("kind") == "design")
-    creation_operations = _compile_assistant_operations(revision, target, creates)
     package = revision.to_package()
-    for operation in creation_operations:
-        _apply_operation(package, operation)
+    creation_operations: list[EditOperation] = []
+    for raw in creates:
+        operations = _compile_assistant_operations(SpecRevision.from_package(package), target, [raw])
+        for operation in operations:
+            _apply_operation(package, operation)
+            creation_operations.append(operation)
     staged = SpecRevision.from_package(package)
     remaining = [raw for raw in raw_operations if not isinstance(raw, dict) or raw.get("type") != "create_entity"]
     return (*creation_operations, *_compile_assistant_operations(staged, target, remaining))
@@ -382,7 +387,8 @@ def _compile_assistant_operations(
             if not isinstance(instances_value, list):
                 raise ValueError("instances must be an array.")
             instances = tuple(
-                InstanceIR(**item) for item in instances_value
+                InstanceIR(**{**item, "component_vlnv": select_entity(revision, item["component_vlnv"], ("component",)).vlnv})
+                for item in instances_value
             )
             ports_value = raw.get("ports", [])
             if not isinstance(ports_value, list):
@@ -715,7 +721,7 @@ def _proposal_sections(
         block = typing.cast(NarrativeBlock, revision.resolve(target))
         result.append(DocumentSection(
             section_id=f"narrative-block-{target.entity_id}",
-            title=f"Narrative block {target.entity_id}",
+            title=reference_name(revision, target),
             level=2,
             eyebrow="Narrative",
             entity_ref=target,
@@ -739,6 +745,36 @@ def _invalid_preview(
         "candidate_sections": [],
         "diff": [],
     }
+
+
+def _named_diff(before: typing.Any, after: typing.Any) -> list[dict[str, typing.Any]]:
+    """Add readable target descriptions; retain exact diff paths for tools."""
+    labels: dict[str, str] = {}
+    def visit(value: typing.Any, path: str, context: tuple[str, ...]) -> None:
+        if isinstance(value, dict):
+            label = value.get("title") or value.get("label")
+            if not label and isinstance(value.get("cells"), dict):
+                cell = value["cells"].get("name", {})
+                label = (cell.get("display_text") or cell.get("value")) if isinstance(cell, dict) else None
+            if isinstance(label, str) and label and (not context or label != context[-1]):
+                context = (*context, label)
+            labels[path] = " › ".join(context) or "Document"
+            for key, item in value.items():
+                visit(item, f"{path}.{key}", context)
+        elif isinstance(value, list):
+            keyed = _keyed_list(value)
+            if keyed is not None:
+                for key, item in keyed.items():
+                    visit(item, f"{path}[{key}]", context)
+    visit(before, "$", ())
+    visit(after, "$", ())
+    result = _json_diff(before, after)
+    for item in result:
+        path = item["path"]
+        nearest = max((key for key in labels if path.startswith(key + ".") or path == key), key=len, default="$")
+        field = re.sub(r"[^A-Za-z ]", " ", path.rsplit(".", 1)[-1].replace("_", " ")).strip()
+        item["label"] = labels.get(nearest, "Document") + (f" › {field.capitalize()}" if field else "")
+    return result
 
 
 def _json_diff(before: typing.Any, after: typing.Any, path: str = "$") -> list[dict[str, typing.Any]]:
@@ -799,7 +835,8 @@ def _entity_usages(revision: SpecRevision, target: EntityRef) -> list[dict[str, 
 
 
 def _identity(entity: typing.Any) -> dict[str, typing.Any]:
-    return {"ref": entity.ref.model_dump(mode="json"), "vlnv": entity.vlnv}
+    from spec2gds.agent_spec.spec_format.naming import entity_name
+    return {"ref": entity.ref.model_dump(mode="json"), "vlnv": entity.vlnv, "name": entity_name(entity)}
 
 
 def _ref_key(reference: EntityRef) -> tuple[str, str]:

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import copy
+import uuid
 from datetime import datetime, timezone
 from typing import Any
-import uuid
 
 from testplan_service.constants import (
     KEY_PREFIX_BCFG,
@@ -1021,6 +1021,7 @@ class CommandHandler:
                 bnd_set = TargetBindingSet(
                     id=bnd_id,
                     key=key,
+                    title=raw_op.get("title") or raw_op["top_module"],
                     plan_id=plan_id,
                     source_snapshot_id=raw_op["source_snapshot_id"],
                     root_scope_id=raw_op["root_scope_id"],
@@ -1167,6 +1168,7 @@ class CommandHandler:
                 bcfg = BackendConfiguration(
                     id=cfg_id,
                     key=key,
+                    title=raw_op.get("title") or raw_op.get("toolchain_identifier", "Reference backend"),
                     plan_id=plan_id,
                     plugin_id=plugin_id,
                     plugin_version=plugin_version,

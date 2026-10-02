@@ -1,5 +1,8 @@
 # Create a specification from Assistant chat
 
+For the complete creation/edit/switch/close rules and edge cases, see the
+[document lifecycle state machines](assistant-document-lifecycle.md).
+
 In a browser Assistant chat, ask for a new specification. You can include its
 design requirements in the same message, for example: “Create a new spec
 document for a 3-bit comparator with two 3-bit inputs and three 1-bit result
@@ -8,10 +11,14 @@ clocks/reset, rationale, assumptions and concrete configuration. Approve, revise
 cancel it; essential questions require revision. The accepted review ID and
 architecture transfer into the new chat. After architecture approval, automatic
 owners create the package and continue without a final-save confirmation.
-Restricted owners show a creation card: review or edit the title and document
-ID, then select **Create specification and continue**. If several Spec services
+Restricted owners show a creation card: review or edit **Name**, then select
+**Create specification and continue**. If several Spec services
 are configured, the card can select one. The destination is always
-`SPEC_DOCUMENT_ROOT/<documentId>.spec`.
+derived from the name under `SPEC_DOCUMENT_ROOT`, for example
+`Timer controller` becomes `timer-controller.spec`. Filename collisions receive
+readable numbers. The owner generates and reserves the internal identity and
+destination independently. Display renames preserve the saved path; see
+[naming and identifiers](naming-and-identifiers.md).
 
 The Spec API creates and activates the empty package. The Assistant creates a
 new document-bound chat with the same execution preset and submits the
@@ -37,7 +44,9 @@ progress. New owners advertise durable creation receipts: an uncertain response
 can be recovered with the same request ID and exact saved details. Older owners
 retain the uncertain status and do not repeat the call; inspect the displayed
 destination before making another request. Existing destinations are never
-overwritten. Correct a rejected document ID or retry an offline service.
+overwritten. Correct a rejected name or retry an offline service. Once creation
+has started, replay its original request to recover the reserved destination;
+changing the name requires a new request.
 
 Creating a package makes it the service's visible document. Existing chats use
 their persistent `owner_document_key` and can continue refining the original
@@ -51,3 +60,28 @@ not receive it. The new package itself is created through the existing Spec
 `POST /spec2gds-api/sources/create` endpoint also supports the existing
 new-conversation chooser; card requests add a persisted creation-request ID
 to resume safely after partial success.
+
+
+## Creation blocked after architecture preparation
+
+`prepare_architecture_review` prepares a review; it does not approve it.
+Contentful creation requires human approval and `architecture_review_id` from
+that approved review. The unbound-chat prompt and creation tool description
+state this order explicitly. Only an explicitly empty package may skip review.
+
+The chat footer previously selected only the latest tool result in a turn.
+A premature creation call could therefore replace the architecture approval
+card with “Specification creation unavailable,” leaving no visible way to
+approve it. The footer now retains each distinct architecture review alongside
+the latest result, including creation errors. It still fetches durable review
+status, and approval continues through the existing server decision endpoint.
+
+After rebuilding and restarting the assistant, reload the affected chat,
+approve the intended architecture card, and continue with its displayed review number.
+If preparation itself failed, inspect the tool result and resolve that error
+before preparing another review. Existing conversation history is preserved.
+
+Validation (from `ai-assistant/` using the supported Node runtime):
+`npm test`, `npm run typecheck`, and `npm run build`. All 119 assistant tests
+pass. Running the suite through `npm --prefix` can conflict with nvm in the
+setup test; run `npm test` from the assistant directory instead.

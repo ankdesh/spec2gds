@@ -1,6 +1,7 @@
 import {
   renderCircuitSvg,
   validateCircuitDocument,
+  publicFilenameStem,
   type CircuitDocument,
 } from "@spec2gds/circuit-core";
 import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
@@ -39,11 +40,7 @@ export async function renderDesignTopology(document: CircuitDocument): Promise<R
   return { svg, width: Number(dimensions[1]), height: Number(dimensions[2]) };
 }
 
-export function circuitSvgFilename(documentId: string, entityId: string): string {
-  const stem = `${documentId}-${entityId}-circuit`
-    .normalize("NFKD")
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 120) || "circuit";
+export function circuitSvgFilename(documentName: string, entityName: string): string {
+  const stem = `${publicFilenameStem(documentName).slice(0, 50)}-${publicFilenameStem(entityName, "design").slice(0, 50)}-circuit`;
   return `${stem}.svg`;
 }

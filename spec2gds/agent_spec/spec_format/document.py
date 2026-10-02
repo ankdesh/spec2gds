@@ -29,6 +29,12 @@ from spec2gds.agent_spec.spec_format.ir import (
     SpecRevision,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.agent_spec.spec_format.naming import (
+    document_name,
+    entity_name,
+    qualified_reference_name,
+    reference_name,
+)
 from spec2gds.agent_spec.spec_format.sections import SECTION_TYPES
 from spec2gds.agent_spec.spec_format.source_edits import format_wire_range
 from spec2gds.agent_spec.spec_format.sv_validation import validate_revision_sections
@@ -63,6 +69,7 @@ class DocumentCell(pydantic.BaseModel):
     presence: CellPresence = "explicit"
     schema_path: str
     reference_anchor: str = ""
+    display_text: str = ""
 
 
 class DocumentColumn(pydantic.BaseModel):
@@ -105,6 +112,7 @@ class DocumentFact(pydantic.BaseModel):
     value: str
     schema_path: str = ""
     reference_anchor: str = ""
+    display_text: str = ""
 
 
 class SectionDiagnostic(pydantic.BaseModel):
@@ -154,6 +162,7 @@ class DocumentSection(pydantic.BaseModel):
     section_id: str
     title: str
     level: int
+    qualified_name: str = ""
     eyebrow: str = ""
     entity_ref: EntityRef | None = None
     facts: list[DocumentFact] = pydantic.Field(default_factory=list)
@@ -616,7 +625,7 @@ def _design_tables(
         "Component instances",
         _columns(
             ("name", "Instance", "/componentInstances/componentInstance/instanceName"),
-            ("component", "Component VLNV", "/componentInstances/componentInstance/componentRef"),
+            ("component", "Component", "/componentInstances/componentInstance/componentRef"),
         ),
         instances,
     ))
@@ -959,6 +968,24 @@ def _content_sections(
 def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     """Build the deterministic unified document from one validated revision."""
     roots = _document_roots(revision)
+    def named_block(block: NarrativeBlock) -> dict[str, typing.Any]:
+        value = block.model_dump(mode="json")
+        refs = [*block.entity_refs, *(inline.entity_ref for inline in block.inlines if inline.entity_ref)]
+        labels = {}
+        for ref in refs:
+            try:
+                labels[f"{ref.entity_kind}:{ref.entity_id}"] = {
+                    "name": reference_name(revision, ref),
+                    "qualified_name": qualified_reference_name(revision, ref),
+                    "anchor": _anchor(ref.entity_kind.replace("_", "-"), ref.entity_id),
+                }
+            except KeyError:
+                labels[f"{ref.entity_kind}:{ref.entity_id}"] = {"name": "Unavailable reference", "anchor": ""}
+        value["entity_labels"] = labels
+        value["children"] = [named_block(child) for child in block.children]
+        if block.type == "live_view":
+            value["options"] = {**value["options"], "document_name": document_name(revision)}
+        return value
     overview_narrative, attached, cross_cutting = _split_narrative(revision.narrative.blocks)
     sections: list[DocumentSection] = []
 
@@ -967,7 +994,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         title="Overview",
         level=1,
         eyebrow="Unified source document",
-        narrative=[block.model_dump(mode="json") for block in overview_narrative],
+        narrative=[named_block(block) for block in overview_narrative],
     ))
 
     sections.append(DocumentSection(section_id="designs", title="Designs", level=1, eyebrow="IP-XACT hierarchy"))
@@ -997,13 +1024,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         )
         sections.append(DocumentSection(
             section_id=_anchor("design", design.ref.entity_id),
-            title=design.vlnv.split(":")[-2],
+            title=entity_name(design),
             level=2,
             eyebrow="Entry design" if design.ref.entity_id in entry_ids else "Design",
             entity_ref=design.ref,
             facts=_identity_facts(root, design.vlnv),
             tables=_design_tables(design, root, anchors_by_vlnv),
-            narrative=[block.model_dump(mode="json") for block in narrative],
+            narrative=[named_block(block) for block in narrative],
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
@@ -1022,6 +1049,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             facts.append(DocumentFact(
                 label="Internal design",
                 value=design.vlnv,
+                display_text=entity_name(design),
                 reference_anchor=_anchor("design", design_id),
             ))
         narrative = _topology_live_views(
@@ -1032,13 +1060,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         )
         sections.append(DocumentSection(
             section_id=_anchor("component", component.ref.entity_id),
-            title=component.vlnv.split(":")[-2],
+            title=entity_name(component),
             level=2,
             eyebrow="Composite component" if component.ref.entity_id in composition else "Component",
             entity_ref=component.ref,
             facts=facts,
             tables=_component_tables(component, root, anchors_by_vlnv),
-            narrative=[block.model_dump(mode="json") for block in narrative],
+            narrative=[named_block(block) for block in narrative],
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
@@ -1048,13 +1076,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         root = roots[bus.ref.entity_id]
         sections.append(DocumentSection(
             section_id=_anchor("bus-definition", bus.ref.entity_id),
-            title=bus.vlnv.split(":")[-2],
+            title=entity_name(bus),
             level=2,
             eyebrow="Bus definition",
             entity_ref=bus.ref,
             facts=_identity_facts(root, bus.vlnv),
             tables=_bus_tables(bus, root, anchors_by_vlnv),
-            narrative=[block.model_dump(mode="json") for block in attached.pop(bus.ref.entity_id, [])],
+            narrative=[named_block(block) for block in attached.pop(bus.ref.entity_id, [])],
         ))
     for abstraction in revision.abstraction_definitions:
         root = roots[abstraction.ref.entity_id]
@@ -1067,13 +1095,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
         ))
         sections.append(DocumentSection(
             section_id=_anchor("abstraction-definition", abstraction.ref.entity_id),
-            title=abstraction.vlnv.split(":")[-2],
+            title=entity_name(abstraction),
             level=2,
             eyebrow="Abstraction definition",
             entity_ref=abstraction.ref,
             facts=facts,
             tables=_abstraction_tables(abstraction, root),
-            narrative=[block.model_dump(mode="json") for block in attached.pop(abstraction.ref.entity_id, [])],
+            narrative=[named_block(block) for block in attached.pop(abstraction.ref.entity_id, [])],
         ))
 
     for remaining in attached.values():
@@ -1084,15 +1112,26 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             title="Cross-cutting Notes",
             level=1,
             eyebrow="Multi-entity narrative",
-            narrative=[block.model_dump(mode="json") for block in cross_cutting],
+            narrative=[named_block(block) for block in cross_cutting],
         ))
 
+    names_by_vlnv = {item.vlnv: entity_name(item) for item in (*revision.components, *revision.designs, *revision.bus_definitions, *revision.abstraction_definitions)}
+    for section in sections:
+        section.qualified_name = qualified_reference_name(revision, section.entity_ref) if section.entity_ref else f"{document_name(revision)} › {section.title}"
+        for fact in section.facts:
+            if fact.reference_anchor:
+                fact.display_text = names_by_vlnv.get(fact.value, "Unavailable reference")
+        for table in section.tables:
+            for row in table.rows:
+                for cell in row.cells.values():
+                    if cell.kind == "reference" and cell.reference_anchor:
+                        cell.display_text = names_by_vlnv.get(str(cell.value), "Unavailable reference")
     sections = _editor_sections(sections)
 
     return DocumentProjection(
         document_id=revision.document_id,
         source_revision_hash=revision.source_revision_hash,
-        title=revision.narrative.title or revision.document_id.replace("_", " ").title(),
+        title=document_name(revision),
         summary=f"{len(revision.components)} components · {len(revision.designs)} designs",
         toc=[TocEntry(section_id=section.section_id, title=section.title, level=section.level) for section in sections],
         sections=sections,

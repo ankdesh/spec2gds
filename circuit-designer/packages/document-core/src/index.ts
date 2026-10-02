@@ -27,6 +27,7 @@ export interface DocumentCell {
   presence: CellPresence;
   schema_path: string;
   reference_anchor: string;
+  display_text?: string;
 }
 
 export interface DocumentColumn {
@@ -53,6 +54,7 @@ export interface DocumentFact {
   value: string;
   schema_path: string;
   reference_anchor: string;
+  display_text?: string;
 }
 
 export type SectionValidationStatus = "verified" | "warnings" | "unverified" | "errors";
@@ -115,6 +117,7 @@ export interface NarrativeBlock {
   entity_refs: EntityRef[];
   renderer_id: string;
   options: Record<string, unknown>;
+  entity_labels?: Record<string, { name: string; anchor: string; qualified_name?: string }>;
 }
 
 export interface DesignTopologyLiveViewOptionsV1 {
@@ -163,6 +166,7 @@ export interface A2UIDocumentBatch {
 export interface HardwareEntitySummary {
   ref: EntityRef;
   vlnv: string;
+  display_name?: string;
 }
 
 export interface ComponentComposition {
@@ -222,6 +226,7 @@ export interface ComponentInstanceInput {
 export type EditorTransactionOperation =
   | { type: "create_entity"; kind: "component" | "design"; name: string }
   | { type: "set_document_title"; title: string }
+  | { type: "upsert_narrative_block"; block: NarrativeBlock }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
   | { type: "upsert_instance"; design: EntityRef; instance: ComponentInstanceInput }
   | { type: "add_component_port"; component: EntityRef; port: ComponentPortInput }
@@ -260,6 +265,7 @@ export interface DocumentSnapshot {
   owner_document_key: string;
   schema_version: string;
   document_id: string;
+  source_path?: string;
   source_revision_hash: string;
   components: HardwareEntitySummary[];
   designs: HardwareEntitySummary[];
@@ -441,11 +447,11 @@ export class SpecEditorHttpClient {
     });
   }
 
-  createDocument(path: string, title: string): Promise<DocumentSnapshot> {
+  createDocument(path: string, title: string, requestId?: string): Promise<DocumentSnapshot> {
     return this.request("/documents/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path, title }),
+      body: JSON.stringify({ path, title, ...(requestId ? { request_id: requestId, derive_named_path: true } : {}) }),
     });
   }
 

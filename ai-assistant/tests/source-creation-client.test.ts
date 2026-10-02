@@ -72,7 +72,7 @@ async function browserFixture(automatic = false) {
   const settle = async () => { for (const effect of effects.splice(0)) effect(); await new Promise(resolve => setImmediate(resolve)); for (const task of microtasks.splice(0)) await task(); };
   render(); await settle();
   const nodes = (tree: any): any[] => [tree, ...(tree.children ?? []).filter((child: any) => child && typeof child === "object").flatMap(nodes)];
-  return { render, settle, nodes, created, opened, prompts, calls, request, continuation,
+  return { render, settle, nodes, created, opened, prompts, calls, request, continuation, events, tracking, tail,
     set failPrompt(value: boolean) { failPrompt = value; },
     submit: async () => { const form = nodes(render()).find(node => node.type === "form"); await form.props.onSubmit({ preventDefault() {} }); await settle(); },
   };
@@ -81,7 +81,7 @@ async function browserFixture(automatic = false) {
 test("creation footer creates the destination chat and submits the original description there", async () => {
   const f = await browserFixture();
   const tree = f.render();
-  assert.ok(f.nodes(tree).some(node => node.type === "code" && node.children[0] === "/spec-documents/comparator_3bit.spec"));
+  assert.ok(f.nodes(tree).some(node => node.type === "code" && node.children[0] === "/spec-documents"));
   await f.submit();
   assert.deepEqual(JSON.parse(JSON.stringify(f.created)), [{ sessionId: "destination", workspaceId: "workspace-1", agentPreset: "focused" }]);
   assert.deepEqual(f.opened, ["destination"]);
@@ -122,4 +122,37 @@ test("cancel keeps the user in the original chat and creates no destination", as
   await button.props.onClick();
   assert.equal(f.created.length, 0); assert.equal(f.prompts.length, 0); assert.equal(f.opened.length, 0);
   assert.equal(f.render().props["data-s2g-source-creation"], "cancelled");
+});
+
+
+test("architecture approval cards survive subsequent creation errors and replay", async () => {
+  const f = await browserFixture();
+  let tracking = f.events.start({}, { event: { type: "turn/start", data: { turn: 2 } } });
+  const results = [
+    { architecture_review: { reviewId: "review-1", status: "pending", plan: {} } },
+    { architecture_review: { reviewId: "review-1", status: "pending", plan: {} } },
+    { architecture_review: { reviewId: "review-2", status: "pending", plan: {} } },
+    { creation_error: "Supply architecture_review_id." },
+  ];
+  results.forEach((value, i) => {
+    const callId = `call-${i}`;
+    tracking = f.events.update({ state: tracking }, { event: { type: "tool/call", data: {
+      callId, name: i === 3 ? "prepare_spec_document_creation" : "prepare_architecture_review",
+    } } });
+    tracking = f.events.update({ state: tracking }, { event: { type: "tool/result", seq: i + 1, data: {
+      message: { source: { callId }, content: [{ content: [{ type: "text", text: JSON.stringify(value) }] }] },
+    } } });
+  });
+  const location = f.events.buildLocationData({ state: tracking }, "turn", null);
+  const select = (seq: number) => f.tail.options.select({ seq, turn: { data: { get: () => location.value } } });
+  const matched = select(5);
+  assert.deepEqual(Array.from(matched.earlierArchitectureReviews, (review: any) => review.reviewId), ["review-1", "review-2"]);
+  const node = f.tail.component({ matched });
+  const tree = node.type(node.props);
+  assert.equal(tree.children.filter((child: any) => child.type?.name === "ArchitectureReviewCard").length, 2);
+  const latest = tree.children.at(-1);
+  assert.equal(latest.type(latest.props).children[0].children[0], "Specification creation unavailable");
+  assert.equal(select(3).architectureReview.reviewId, "review-1", "Later results cannot appear before their sequence");
+  assert.equal(select(3).earlierArchitectureReviews.length, 0, "Repeated results do not duplicate a review card");
+  assert.equal(select(1), null);
 });

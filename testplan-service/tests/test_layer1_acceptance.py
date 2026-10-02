@@ -7,11 +7,16 @@ from __future__ import annotations
 
 import io
 from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
-
 from testplan_service.api.app import create_app
-from testplan_service.domain.enums import AuthoringState, Priority, RequirementDisposition, SourceAuditDisposition
+from testplan_service.domain.enums import (
+    AuthoringState,
+    Priority,
+    RequirementDisposition,
+    SourceAuditDisposition,
+)
 from testplan_service.fixtures.fifo_snapshot import (
     get_fifo_snapshot_bytes,
     get_modified_fifo_snapshot_bytes,
@@ -746,7 +751,7 @@ def test_l1_11_rename_occurrence_with_stable_ids(client: TestClient) -> None:
     # In T1, ingress occurrence path is "fifo_pipeline/ingress"
     hier_1 = client.get(f"/api/verification/v1/plans/{plan_id}/hierarchy?scope_id=ingress").json()
     assert hier_1[0]["id"] == "ingress"
-    assert hier_1[0]["path"] == "fifo_pipeline/ingress"
+    assert hier_1[0]["path"] == "fifo pipeline/ingress"
 
     # 3. Upload renamed snapshot T2 (same occurrence_id='ingress', but path='fifo_pipeline/ingress_renamed')
     t2_bytes = get_renamed_two_fifo_snapshot_bytes()
@@ -766,7 +771,7 @@ def test_l1_11_rename_occurrence_with_stable_ids(client: TestClient) -> None:
     # 5. Check hierarchy: occurrence ID is still "ingress", but path and name reflect the rename!
     hier_2 = client.get(f"/api/verification/v1/plans/{plan_id}/hierarchy?scope_id=ingress").json()
     assert hier_2[0]["id"] == "ingress"
-    assert hier_2[0]["path"] == "fifo_pipeline/ingress_renamed"
+    assert hier_2[0]["path"] == "fifo pipeline/ingress_renamed"
     assert hier_2[0]["name"] == "ingress_renamed"
 
     # The intent still cleanly belongs to scope "ingress"

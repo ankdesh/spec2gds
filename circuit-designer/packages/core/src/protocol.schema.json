@@ -1952,6 +1952,9 @@
         },
         {
           "$ref": "#/$defs/SetSubjectClockDomainOperation"
+        },
+        {
+          "$ref": "#/$defs/SetDocumentLabelOperation"
         }
       ]
     },
@@ -2027,7 +2030,8 @@
             "boundary_terminal",
             "net",
             "layout",
-            "timing"
+            "timing",
+            "document"
           ]
         },
         "id": {
@@ -2444,6 +2448,28 @@
           "items": {
             "$ref": "#/$defs/Diagnostic"
           }
+        }
+      }
+    },
+    "SetDocumentLabelOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "type",
+        "label"
+      ],
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "const": "set_document_label"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
         }
       }
     }

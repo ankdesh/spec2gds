@@ -6,20 +6,48 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "document": { "$ref": "#/$defs/CircuitDocument" },
-    "snapshot": { "$ref": "#/$defs/CircuitSnapshot" },
-    "construction": { "$ref": "#/$defs/CircuitConstruction" },
-    "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
-    "result": { "$ref": "#/$defs/CircuitChangeResult" },
-    "proposal_create_request": { "$ref": "#/$defs/CircuitProposalCreateRequest" },
-    "proposal": { "$ref": "#/$defs/CircuitProposal" },
-    "lease": { "$ref": "#/$defs/EditLease" },
-    "provider": { "$ref": "#/$defs/ResolvedComponentDesign" },
-    "summary": { "$ref": "#/$defs/DocumentSummary" },
-    "provider_commit_request": { "$ref": "#/$defs/ProviderCommitRequest" },
-    "provider_commit_result": { "$ref": "#/$defs/ProviderCommitResult" },
-    "event": { "$ref": "#/$defs/ServiceEvent" },
-    "error": { "$ref": "#/$defs/ServiceError" }
+    "document": {
+      "$ref": "#/$defs/CircuitDocument"
+    },
+    "snapshot": {
+      "$ref": "#/$defs/CircuitSnapshot"
+    },
+    "construction": {
+      "$ref": "#/$defs/CircuitConstruction"
+    },
+    "batch": {
+      "$ref": "#/$defs/CircuitOperationBatch"
+    },
+    "result": {
+      "$ref": "#/$defs/CircuitChangeResult"
+    },
+    "proposal_create_request": {
+      "$ref": "#/$defs/CircuitProposalCreateRequest"
+    },
+    "proposal": {
+      "$ref": "#/$defs/CircuitProposal"
+    },
+    "lease": {
+      "$ref": "#/$defs/EditLease"
+    },
+    "provider": {
+      "$ref": "#/$defs/ResolvedComponentDesign"
+    },
+    "summary": {
+      "$ref": "#/$defs/DocumentSummary"
+    },
+    "provider_commit_request": {
+      "$ref": "#/$defs/ProviderCommitRequest"
+    },
+    "provider_commit_result": {
+      "$ref": "#/$defs/ProviderCommitResult"
+    },
+    "event": {
+      "$ref": "#/$defs/ServiceEvent"
+    },
+    "error": {
+      "$ref": "#/$defs/ServiceError"
+    }
   },
   "$defs": {
     "Slug": {
@@ -27,756 +55,1541 @@
       "minLength": 1,
       "pattern": "^[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
     },
-    "NonEmptyString": { "type": "string", "minLength": 1 },
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1
+    },
     "JsonScalar": {
       "oneOf": [
-        { "type": "string" },
-        { "type": "number" },
-        { "type": "boolean" },
-        { "type": "null" }
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "null"
+        }
       ]
     },
     "ParameterValue": {
       "oneOf": [
-        { "type": "string" },
-        { "type": "number" },
-        { "type": "boolean" }
+        {
+          "type": "string"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "boolean"
+        }
       ]
     },
     "Point": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "properties": {
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       }
     },
     "NodeGeometry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y", "width", "height"],
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
       "properties": {
-        "x": { "type": "number" },
-        "y": { "type": "number" },
-        "width": { "type": "number", "exclusiveMinimum": 0 },
-        "height": { "type": "number", "exclusiveMinimum": 0 },
-        "pinned": { "type": "boolean", "default": true }
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "pinned": {
+          "type": "boolean",
+          "default": true
+        }
       }
     },
     "TerminalPlacement": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["side", "order"],
+      "required": [
+        "side",
+        "order"
+      ],
       "properties": {
-        "side": { "enum": ["NORTH", "EAST", "SOUTH", "WEST"] },
-        "order": { "type": "integer", "minimum": 0 },
-        "locked": { "type": "boolean", "default": true }
+        "side": {
+          "enum": [
+            "NORTH",
+            "EAST",
+            "SOUTH",
+            "WEST"
+          ]
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "locked": {
+          "type": "boolean",
+          "default": true
+        }
       }
     },
     "RouteVertex": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "point"],
+      "required": [
+        "id",
+        "kind",
+        "point"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/NonEmptyString" },
-        "kind": { "enum": ["endpoint", "bend", "junction"] },
-        "point": { "$ref": "#/$defs/Point" },
-        "terminal_id": { "type": ["string", "null"] },
-        "locked": { "type": "boolean", "default": false }
+        "id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "kind": {
+          "enum": [
+            "endpoint",
+            "bend",
+            "junction"
+          ]
+        },
+        "point": {
+          "$ref": "#/$defs/Point"
+        },
+        "terminal_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "locked": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "RouteSegment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["from_vertex", "to_vertex"],
+      "required": [
+        "from_vertex",
+        "to_vertex"
+      ],
       "properties": {
-        "id": { "type": ["string", "null"] },
-        "from_vertex": { "$ref": "#/$defs/NonEmptyString" },
-        "to_vertex": { "$ref": "#/$defs/NonEmptyString" },
-        "locked": { "type": "boolean", "default": false }
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "from_vertex": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "to_vertex": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "locked": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "NetRoute": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["vertices", "segments"],
+      "required": [
+        "vertices",
+        "segments"
+      ],
       "properties": {
-        "vertices": { "type": "array", "items": { "$ref": "#/$defs/RouteVertex" } },
-        "segments": { "type": "array", "items": { "$ref": "#/$defs/RouteSegment" } }
+        "vertices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteVertex"
+          }
+        },
+        "segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RouteSegment"
+          }
+        }
       }
     },
     "LabelGeometry": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["x", "y"],
+      "required": [
+        "x",
+        "y"
+      ],
       "properties": {
-        "x": { "type": "number" },
-        "y": { "type": "number" },
-        "anchor": { "enum": ["start", "middle", "end"], "default": "middle" }
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "anchor": {
+          "enum": [
+            "start",
+            "middle",
+            "end"
+          ],
+          "default": "middle"
+        }
       }
     },
     "ClockSignalReference": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "id"],
+      "required": [
+        "kind",
+        "id"
+      ],
       "properties": {
-        "kind": { "enum": ["boundary", "net"] },
-        "id": { "$ref": "#/$defs/Slug" }
+        "kind": {
+          "enum": [
+            "boundary",
+            "net"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        }
       }
     },
     "ClockDomainV1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label"],
+      "required": [
+        "id",
+        "label"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "color": { "type": "string", "pattern": "^#[0-9a-fA-F]{6}$" },
-        "signal": { "$ref": "#/$defs/ClockSignalReference" }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$"
+        },
+        "signal": {
+          "$ref": "#/$defs/ClockSignalReference"
+        }
       }
     },
     "CycleEdgeMarkerV1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "x", "locked"],
+      "required": [
+        "id",
+        "x",
+        "locked"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "x": { "type": "number" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "next_stage_label": { "$ref": "#/$defs/NonEmptyString" },
-        "locked": { "type": "boolean", "default": false }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "x": {
+          "type": "number"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "next_stage_label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "locked": {
+          "type": "boolean",
+          "default": false
+        }
       }
     },
     "CircuitTimingV1": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["schema_version", "clock_domains", "cycle_edges", "subject_domain_overrides"],
+      "required": [
+        "schema_version",
+        "clock_domains",
+        "cycle_edges",
+        "subject_domain_overrides"
+      ],
       "properties": {
-        "schema_version": { "const": 1 },
-        "clock_domains": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/ClockDomainV1" } },
-        "cycle_edges": { "type": "array", "items": { "$ref": "#/$defs/CycleEdgeMarkerV1" } },
-        "subject_domain_overrides": { "type": "object", "additionalProperties": { "$ref": "#/$defs/Slug" } },
-        "leading_stage_label": { "$ref": "#/$defs/NonEmptyString" }
+        "schema_version": {
+          "const": 1
+        },
+        "clock_domains": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/ClockDomainV1"
+          }
+        },
+        "cycle_edges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CycleEdgeMarkerV1"
+          }
+        },
+        "subject_domain_overrides": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Slug"
+          }
+        },
+        "leading_stage_label": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
       }
     },
     "CircuitLayout": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["grid_size", "direction", "instance_geometry", "terminal_placements", "net_routes", "label_geometry"],
+      "required": [
+        "grid_size",
+        "direction",
+        "instance_geometry",
+        "terminal_placements",
+        "net_routes",
+        "label_geometry"
+      ],
       "properties": {
-        "grid_size": { "type": "number", "exclusiveMinimum": 0, "default": 20 },
-        "direction": { "enum": ["RIGHT", "DOWN"], "default": "RIGHT" },
+        "grid_size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 20
+        },
+        "direction": {
+          "enum": [
+            "RIGHT",
+            "DOWN"
+          ],
+          "default": "RIGHT"
+        },
         "instance_geometry": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/NodeGeometry" }
+          "additionalProperties": {
+            "$ref": "#/$defs/NodeGeometry"
+          }
         },
         "terminal_placements": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/TerminalPlacement" }
+          "additionalProperties": {
+            "$ref": "#/$defs/TerminalPlacement"
+          }
         },
         "net_routes": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/NetRoute" }
+          "additionalProperties": {
+            "$ref": "#/$defs/NetRoute"
+          }
         },
         "label_geometry": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/LabelGeometry" }
+          "additionalProperties": {
+            "$ref": "#/$defs/LabelGeometry"
+          }
         }
       }
     },
     "StringParameterDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "type", "default"],
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "type": { "const": "string" },
-        "default": { "type": "string" }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "const": "string"
+        },
+        "default": {
+          "type": "string"
+        }
       }
     },
     "NumberParameterDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "type", "default"],
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "type": { "const": "number" },
-        "default": { "type": "number" },
-        "minimum": { "type": "number" },
-        "maximum": { "type": "number" }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "const": "number"
+        },
+        "default": {
+          "type": "number"
+        },
+        "minimum": {
+          "type": "number"
+        },
+        "maximum": {
+          "type": "number"
+        }
       }
     },
     "BooleanParameterDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "type", "default"],
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "type": { "const": "boolean" },
-        "default": { "type": "boolean" }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "const": "boolean"
+        },
+        "default": {
+          "type": "boolean"
+        }
       }
     },
     "EnumParameterDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "type", "default", "values"],
+      "required": [
+        "id",
+        "label",
+        "type",
+        "default",
+        "values"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "type": { "const": "enum" },
-        "default": { "type": "string" },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "const": "enum"
+        },
+        "default": {
+          "type": "string"
+        },
         "values": {
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": { "type": "string" }
+          "items": {
+            "type": "string"
+          }
         }
       }
     },
     "ParameterDefinition": {
       "oneOf": [
-        { "$ref": "#/$defs/StringParameterDefinition" },
-        { "$ref": "#/$defs/NumberParameterDefinition" },
-        { "$ref": "#/$defs/BooleanParameterDefinition" },
-        { "$ref": "#/$defs/EnumParameterDefinition" }
+        {
+          "$ref": "#/$defs/StringParameterDefinition"
+        },
+        {
+          "$ref": "#/$defs/NumberParameterDefinition"
+        },
+        {
+          "$ref": "#/$defs/BooleanParameterDefinition"
+        },
+        {
+          "$ref": "#/$defs/EnumParameterDefinition"
+        }
       ]
     },
     "TerminalDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "direction", "width"],
+      "required": [
+        "id",
+        "label",
+        "direction",
+        "width"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output", "inout"] },
-        "width": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "minLength": 1 }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "inout"
           ]
         },
-        "category": { "enum": ["port", "interface"] }
+        "width": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "category": {
+          "enum": [
+            "port",
+            "interface"
+          ]
+        }
       }
     },
     "ComponentAppearance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["renderer_key", "properties"],
+      "required": [
+        "renderer_key",
+        "properties"
+      ],
       "properties": {
-        "renderer_key": { "$ref": "#/$defs/NonEmptyString" },
+        "renderer_key": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
         "properties": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/JsonScalar" }
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonScalar"
+          }
         }
       }
     },
     "ComponentDefinition": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "origin", "editable", "terminals", "parameters", "appearance"],
+      "required": [
+        "id",
+        "label",
+        "origin",
+        "editable",
+        "terminals",
+        "parameters",
+        "appearance"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "origin": { "enum": ["local", "builtin", "provider"] },
-        "editable": { "type": "boolean" },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "origin": {
+          "enum": [
+            "local",
+            "builtin",
+            "provider"
+          ]
+        },
+        "editable": {
+          "type": "boolean"
+        },
         "terminals": {
           "type": "array",
-          "items": { "$ref": "#/$defs/TerminalDefinition" }
+          "items": {
+            "$ref": "#/$defs/TerminalDefinition"
+          }
         },
         "parameters": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ParameterDefinition" }
+          "items": {
+            "$ref": "#/$defs/ParameterDefinition"
+          }
         },
-        "appearance": { "$ref": "#/$defs/ComponentAppearance" }
+        "appearance": {
+          "$ref": "#/$defs/ComponentAppearance"
+        }
       }
     },
     "BoundaryTerminal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "direction", "width"],
+      "required": [
+        "id",
+        "label",
+        "direction",
+        "width"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output", "inout"] },
-        "width": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "minLength": 1 }
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "inout"
           ]
         },
-        "category": { "enum": ["port", "interface"] }
+        "width": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "category": {
+          "enum": [
+            "port",
+            "interface"
+          ]
+        }
       }
     },
     "CircuitInstance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "component_id", "parameter_values"],
+      "required": [
+        "id",
+        "label",
+        "component_id",
+        "parameter_values"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "component_id": { "$ref": "#/$defs/Slug" },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "component_id": {
+          "$ref": "#/$defs/Slug"
+        },
         "parameter_values": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterValue"
+          }
         }
       }
     },
     "EndpointSlice": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lsb", "width"],
+      "required": [
+        "lsb",
+        "width"
+      ],
       "properties": {
-        "lsb": { "type": "integer", "minimum": 0 },
-        "width": { "type": "integer", "minimum": 1 }
+        "lsb": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1
+        }
       }
     },
     "InstanceNetEndpoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "instance_id", "terminal_id"],
+      "required": [
+        "kind",
+        "instance_id",
+        "terminal_id"
+      ],
       "properties": {
-        "kind": { "const": "instance" },
-        "instance_id": { "$ref": "#/$defs/Slug" },
-        "terminal_id": { "$ref": "#/$defs/Slug" },
-        "slice": { "$ref": "#/$defs/EndpointSlice" }
+        "kind": {
+          "const": "instance"
+        },
+        "instance_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "terminal_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "slice": {
+          "$ref": "#/$defs/EndpointSlice"
+        }
       }
     },
     "BoundaryNetEndpoint": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "terminal_id"],
+      "required": [
+        "kind",
+        "terminal_id"
+      ],
       "properties": {
-        "kind": { "const": "boundary" },
-        "terminal_id": { "$ref": "#/$defs/Slug" },
-        "slice": { "$ref": "#/$defs/EndpointSlice" }
+        "kind": {
+          "const": "boundary"
+        },
+        "terminal_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "slice": {
+          "$ref": "#/$defs/EndpointSlice"
+        }
       }
     },
     "NetEndpoint": {
       "oneOf": [
-        { "$ref": "#/$defs/InstanceNetEndpoint" },
-        { "$ref": "#/$defs/BoundaryNetEndpoint" }
+        {
+          "$ref": "#/$defs/InstanceNetEndpoint"
+        },
+        {
+          "$ref": "#/$defs/BoundaryNetEndpoint"
+        }
       ]
     },
     "CircuitNet": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "endpoints"],
+      "required": [
+        "id",
+        "label",
+        "endpoints"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "type": "string" },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "type": "string"
+        },
         "endpoints": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/NetEndpoint" }
+          "items": {
+            "$ref": "#/$defs/NetEndpoint"
+          }
         }
       }
     },
     "CircuitDesign": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "boundary_terminals", "instances", "nets"],
+      "required": [
+        "id",
+        "label",
+        "boundary_terminals",
+        "instances",
+        "nets"
+      ],
       "properties": {
-        "id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
         "boundary_terminals": {
           "type": "array",
-          "items": { "$ref": "#/$defs/BoundaryTerminal" }
+          "items": {
+            "$ref": "#/$defs/BoundaryTerminal"
+          }
         },
         "instances": {
           "type": "array",
-          "items": { "$ref": "#/$defs/CircuitInstance" }
+          "items": {
+            "$ref": "#/$defs/CircuitInstance"
+          }
         },
         "nets": {
           "type": "array",
-          "items": { "$ref": "#/$defs/CircuitNet" }
+          "items": {
+            "$ref": "#/$defs/CircuitNet"
+          }
         }
       }
     },
     "CircuitDocument": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["protocol_version", "document_id", "label", "components", "design", "layout"],
+      "required": [
+        "protocol_version",
+        "document_id",
+        "label",
+        "components",
+        "design",
+        "layout"
+      ],
       "properties": {
-        "protocol_version": { "const": "circuit-designer.v1" },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
+        "protocol_version": {
+          "const": "circuit-designer.v1"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
         "components": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ComponentDefinition" }
+          "items": {
+            "$ref": "#/$defs/ComponentDefinition"
+          }
         },
-        "design": { "$ref": "#/$defs/CircuitDesign" },
-        "layout": { "$ref": "#/$defs/CircuitLayout" },
-        "timing": { "$ref": "#/$defs/CircuitTimingV1" }
+        "design": {
+          "$ref": "#/$defs/CircuitDesign"
+        },
+        "layout": {
+          "$ref": "#/$defs/CircuitLayout"
+        },
+        "timing": {
+          "$ref": "#/$defs/CircuitTimingV1"
+        }
       }
     },
     "CircuitSnapshot": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["revision", "document"],
+      "required": [
+        "revision",
+        "document"
+      ],
       "properties": {
-        "revision": { "$ref": "#/$defs/NonEmptyString" },
-        "document": { "$ref": "#/$defs/CircuitDocument" }
+        "revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "document": {
+          "$ref": "#/$defs/CircuitDocument"
+        }
       }
     },
     "ConstructionComponent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
-        "alias": { "$ref": "#/$defs/Slug" },
-        "name": { "$ref": "#/$defs/NonEmptyString" },
-        "template": { "type": "string" },
+        "alias": {
+          "$ref": "#/$defs/Slug"
+        },
+        "name": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "template": {
+          "type": "string"
+        },
         "template_parameters": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterValue"
+          }
         },
         "terminals": {
           "type": "array",
-          "items": { "$ref": "#/$defs/TerminalDefinition" }
+          "items": {
+            "$ref": "#/$defs/TerminalDefinition"
+          }
         },
         "parameters": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ParameterDefinition" }
+          "items": {
+            "$ref": "#/$defs/ParameterDefinition"
+          }
         },
-        "renderer_key": { "type": "string" }
+        "renderer_key": {
+          "type": "string"
+        }
       }
     },
     "ConstructionInstance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "component"],
+      "required": [
+        "name",
+        "component"
+      ],
       "properties": {
-        "alias": { "$ref": "#/$defs/Slug" },
-        "name": { "$ref": "#/$defs/NonEmptyString" },
-        "component": { "$ref": "#/$defs/NonEmptyString" },
+        "alias": {
+          "$ref": "#/$defs/Slug"
+        },
+        "name": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "component": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
         "parameter_values": {
           "type": "object",
-          "additionalProperties": { "$ref": "#/$defs/ParameterValue" }
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterValue"
+          }
         },
-        "position": { "$ref": "#/$defs/Point" }
+        "position": {
+          "$ref": "#/$defs/Point"
+        }
       }
     },
     "ConstructionBoundaryTerminal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "direction"],
+      "required": [
+        "name",
+        "direction"
+      ],
       "properties": {
-        "alias": { "$ref": "#/$defs/Slug" },
-        "name": { "$ref": "#/$defs/NonEmptyString" },
-        "direction": { "enum": ["input", "output", "inout"] },
-        "width": {
-          "oneOf": [
-            { "type": "integer", "minimum": 1 },
-            { "type": "string", "minLength": 1 }
+        "alias": {
+          "$ref": "#/$defs/Slug"
+        },
+        "name": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "direction": {
+          "enum": [
+            "input",
+            "output",
+            "inout"
           ]
         },
-        "category": { "enum": ["port", "interface"] }
+        "width": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 1
+            },
+            {
+              "type": "string",
+              "minLength": 1
+            }
+          ]
+        },
+        "category": {
+          "enum": [
+            "port",
+            "interface"
+          ]
+        }
       }
     },
     "ConstructionNet": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["endpoints"],
+      "required": [
+        "endpoints"
+      ],
       "properties": {
-        "alias": { "$ref": "#/$defs/Slug" },
-        "name": { "type": "string" },
+        "alias": {
+          "$ref": "#/$defs/Slug"
+        },
+        "name": {
+          "type": "string"
+        },
         "endpoints": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/NonEmptyString" }
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          }
         }
       }
     },
     "CircuitConstruction": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["mode", "document_id", "label", "design_id", "design_label", "components", "instances", "boundary_terminals", "nets"],
+      "required": [
+        "mode",
+        "document_id",
+        "label",
+        "design_id",
+        "design_label",
+        "components",
+        "instances",
+        "boundary_terminals",
+        "nets"
+      ],
       "properties": {
-        "mode": { "enum": ["create", "replace"] },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "design_id": { "$ref": "#/$defs/Slug" },
-        "design_label": { "$ref": "#/$defs/NonEmptyString" },
-        "expected_revision": { "type": "string" },
+        "mode": {
+          "enum": [
+            "create",
+            "replace"
+          ]
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "design_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "design_label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "expected_revision": {
+          "type": "string"
+        },
         "components": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ConstructionComponent" }
+          "items": {
+            "$ref": "#/$defs/ConstructionComponent"
+          }
         },
         "instances": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ConstructionInstance" }
+          "items": {
+            "$ref": "#/$defs/ConstructionInstance"
+          }
         },
         "boundary_terminals": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ConstructionBoundaryTerminal" }
+          "items": {
+            "$ref": "#/$defs/ConstructionBoundaryTerminal"
+          }
         },
         "nets": {
           "type": "array",
-          "items": { "$ref": "#/$defs/ConstructionNet" }
+          "items": {
+            "$ref": "#/$defs/ConstructionNet"
+          }
         },
-        "layout": { "$ref": "#/$defs/CircuitLayout" }
+        "layout": {
+          "$ref": "#/$defs/CircuitLayout"
+        }
       }
     },
     "OperationBase": {
       "type": "object",
-      "required": ["operation_id", "type"],
+      "required": [
+        "operation_id",
+        "type"
+      ],
       "properties": {
-        "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-        "type": { "type": "string" }
+        "operation_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "type": {
+          "type": "string"
+        }
       }
     },
     "AddComponentOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "component"],
+          "required": [
+            "operation_id",
+            "type",
+            "component"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "add_component" },
-            "component": { "$ref": "#/$defs/ComponentDefinition" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "add_component"
+            },
+            "component": {
+              "$ref": "#/$defs/ComponentDefinition"
+            }
           }
         }
       ]
     },
     "UpdateComponentOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "component"],
+          "required": [
+            "operation_id",
+            "type",
+            "component"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "update_component" },
-            "component": { "$ref": "#/$defs/ComponentDefinition" },
-            "cascade": { "type": "boolean", "default": false }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "update_component"
+            },
+            "component": {
+              "$ref": "#/$defs/ComponentDefinition"
+            },
+            "cascade": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ]
     },
     "RemoveComponentOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "component_id"],
+          "required": [
+            "operation_id",
+            "type",
+            "component_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "remove_component" },
-            "component_id": { "$ref": "#/$defs/Slug" },
-            "cascade": { "type": "boolean", "default": false }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "remove_component"
+            },
+            "component_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "cascade": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ]
     },
     "AddInstanceOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "instance"],
+          "required": [
+            "operation_id",
+            "type",
+            "instance"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "add_instance" },
-            "instance": { "$ref": "#/$defs/CircuitInstance" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "add_instance"
+            },
+            "instance": {
+              "$ref": "#/$defs/CircuitInstance"
+            }
           }
         }
       ]
     },
     "UpdateInstanceOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "instance"],
+          "required": [
+            "operation_id",
+            "type",
+            "instance"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "update_instance" },
-            "instance": { "$ref": "#/$defs/CircuitInstance" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "update_instance"
+            },
+            "instance": {
+              "$ref": "#/$defs/CircuitInstance"
+            }
           }
         }
       ]
     },
     "RemoveInstanceOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "instance_id"],
+          "required": [
+            "operation_id",
+            "type",
+            "instance_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "remove_instance" },
-            "instance_id": { "$ref": "#/$defs/Slug" },
-            "cascade": { "type": "boolean", "default": false }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "remove_instance"
+            },
+            "instance_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "cascade": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ]
     },
     "AddBoundaryTerminalOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "terminal"],
+          "required": [
+            "operation_id",
+            "type",
+            "terminal"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "add_boundary_terminal" },
-            "terminal": { "$ref": "#/$defs/BoundaryTerminal" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "add_boundary_terminal"
+            },
+            "terminal": {
+              "$ref": "#/$defs/BoundaryTerminal"
+            }
           }
         }
       ]
     },
     "UpdateBoundaryTerminalOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "terminal"],
+          "required": [
+            "operation_id",
+            "type",
+            "terminal"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "update_boundary_terminal" },
-            "terminal": { "$ref": "#/$defs/BoundaryTerminal" },
-            "cascade": { "type": "boolean", "default": false }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "update_boundary_terminal"
+            },
+            "terminal": {
+              "$ref": "#/$defs/BoundaryTerminal"
+            },
+            "cascade": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ]
     },
     "RemoveBoundaryTerminalOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "terminal_id"],
+          "required": [
+            "operation_id",
+            "type",
+            "terminal_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "remove_boundary_terminal" },
-            "terminal_id": { "$ref": "#/$defs/Slug" },
-            "cascade": { "type": "boolean", "default": false }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "remove_boundary_terminal"
+            },
+            "terminal_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "cascade": {
+              "type": "boolean",
+              "default": false
+            }
           }
         }
       ]
     },
     "CreateNetOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net"],
+          "required": [
+            "operation_id",
+            "type",
+            "net"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "create_net" },
-            "net": { "$ref": "#/$defs/CircuitNet" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "create_net"
+            },
+            "net": {
+              "$ref": "#/$defs/CircuitNet"
+            }
           }
         }
       ]
     },
     "UpdateNetOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net"],
+          "required": [
+            "operation_id",
+            "type",
+            "net"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "update_net" },
-            "net": { "$ref": "#/$defs/CircuitNet" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "update_net"
+            },
+            "net": {
+              "$ref": "#/$defs/CircuitNet"
+            }
           }
         }
       ]
     },
     "DeleteNetOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net_id"],
+          "required": [
+            "operation_id",
+            "type",
+            "net_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "delete_net" },
-            "net_id": { "$ref": "#/$defs/Slug" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "delete_net"
+            },
+            "net_id": {
+              "$ref": "#/$defs/Slug"
+            }
           }
         }
       ]
     },
     "ConnectEndpointOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net_id", "endpoint"],
+          "required": [
+            "operation_id",
+            "type",
+            "net_id",
+            "endpoint"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "connect_endpoint" },
-            "net_id": { "$ref": "#/$defs/Slug" },
-            "endpoint": { "$ref": "#/$defs/NetEndpoint" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "connect_endpoint"
+            },
+            "net_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/NetEndpoint"
+            }
           }
         }
       ]
     },
     "DisconnectEndpointOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net_id", "endpoint"],
+          "required": [
+            "operation_id",
+            "type",
+            "net_id",
+            "endpoint"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "disconnect_endpoint" },
-            "net_id": { "$ref": "#/$defs/Slug" },
-            "endpoint": { "$ref": "#/$defs/NetEndpoint" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "disconnect_endpoint"
+            },
+            "net_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "endpoint": {
+              "$ref": "#/$defs/NetEndpoint"
+            }
           }
         }
       ]
     },
     "SetInstanceGeometryOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "instance_id", "geometry"],
+          "required": [
+            "operation_id",
+            "type",
+            "instance_id",
+            "geometry"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_instance_geometry" },
-            "instance_id": { "$ref": "#/$defs/Slug" },
-            "geometry": { "$ref": "#/$defs/NodeGeometry" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_instance_geometry"
+            },
+            "instance_id": {
+              "$ref": "#/$defs/Slug"
+            },
+            "geometry": {
+              "$ref": "#/$defs/NodeGeometry"
+            }
           }
         }
       ]
     },
     "SetTerminalPlacementOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "terminal_key"],
+          "required": [
+            "operation_id",
+            "type",
+            "terminal_key"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_terminal_placement" },
-            "terminal_key": { "$ref": "#/$defs/NonEmptyString" },
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_terminal_placement"
+            },
+            "terminal_key": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
             "placement": {
               "oneOf": [
-                { "$ref": "#/$defs/TerminalPlacement" },
-                { "type": "null" }
+                {
+                  "$ref": "#/$defs/TerminalPlacement"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           }
@@ -785,19 +1598,35 @@
     },
     "SetNetRouteOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "net_id"],
+          "required": [
+            "operation_id",
+            "type",
+            "net_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_net_route" },
-            "net_id": { "$ref": "#/$defs/Slug" },
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_net_route"
+            },
+            "net_id": {
+              "$ref": "#/$defs/Slug"
+            },
             "route": {
               "oneOf": [
-                { "$ref": "#/$defs/NetRoute" },
-                { "type": "null" }
+                {
+                  "$ref": "#/$defs/NetRoute"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           }
@@ -806,19 +1635,35 @@
     },
     "SetLabelGeometryOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type", "element_key"],
+          "required": [
+            "operation_id",
+            "type",
+            "element_key"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_label_geometry" },
-            "element_key": { "$ref": "#/$defs/NonEmptyString" },
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_label_geometry"
+            },
+            "element_key": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
             "geometry": {
               "oneOf": [
-                { "$ref": "#/$defs/LabelGeometry" },
-                { "type": "null" }
+                {
+                  "$ref": "#/$defs/LabelGeometry"
+                },
+                {
+                  "type": "null"
+                }
               ]
             }
           }
@@ -827,315 +1672,805 @@
     },
     "SetLayoutSettingsOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["operation_id", "type"],
+          "required": [
+            "operation_id",
+            "type"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_layout_settings" },
-            "grid_size": { "type": "number", "exclusiveMinimum": 0 },
-            "direction": { "enum": ["RIGHT", "DOWN"] }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_layout_settings"
+            },
+            "grid_size": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "direction": {
+              "enum": [
+                "RIGHT",
+                "DOWN"
+              ]
+            }
           }
         }
       ]
     },
     "AddCycleEdgeOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "edge"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "edge"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "add_cycle_edge" },
-            "edge": { "$ref": "#/$defs/CycleEdgeMarkerV1" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "add_cycle_edge"
+            },
+            "edge": {
+              "$ref": "#/$defs/CycleEdgeMarkerV1"
+            }
           }
         }
       ]
     },
     "UpdateCycleEdgeOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "edge"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "edge"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "update_cycle_edge" },
-            "edge": { "$ref": "#/$defs/CycleEdgeMarkerV1" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "update_cycle_edge"
+            },
+            "edge": {
+              "$ref": "#/$defs/CycleEdgeMarkerV1"
+            }
           }
         }
       ]
     },
     "RemoveCycleEdgeOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "edge_id"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "edge_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "remove_cycle_edge" },
-            "edge_id": { "$ref": "#/$defs/Slug" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "remove_cycle_edge"
+            },
+            "edge_id": {
+              "$ref": "#/$defs/Slug"
+            }
           }
         }
       ]
     },
     "SetClockDomainOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "domain"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "domain"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_clock_domain" },
-            "domain": { "$ref": "#/$defs/ClockDomainV1" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_clock_domain"
+            },
+            "domain": {
+              "$ref": "#/$defs/ClockDomainV1"
+            }
           }
         }
       ]
     },
     "RemoveClockDomainOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "domain_id"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "domain_id"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "remove_clock_domain" },
-            "domain_id": { "$ref": "#/$defs/Slug" }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "remove_clock_domain"
+            },
+            "domain_id": {
+              "$ref": "#/$defs/Slug"
+            }
           }
         }
       ]
     },
     "SetSubjectClockDomainOperation": {
       "allOf": [
-        { "$ref": "#/$defs/OperationBase" },
-        { "type": "object", "additionalProperties": false, "required": ["operation_id", "type", "subject_key"],
+        {
+          "$ref": "#/$defs/OperationBase"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operation_id",
+            "type",
+            "subject_key"
+          ],
           "properties": {
-            "operation_id": { "$ref": "#/$defs/NonEmptyString" },
-            "type": { "const": "set_subject_clock_domain" },
-            "subject_key": { "type": "string", "pattern": "^(instance|boundary):[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$" },
-            "domain_id": { "oneOf": [{ "$ref": "#/$defs/Slug" }, { "type": "null" }] }
+            "operation_id": {
+              "$ref": "#/$defs/NonEmptyString"
+            },
+            "type": {
+              "const": "set_subject_clock_domain"
+            },
+            "subject_key": {
+              "type": "string",
+              "pattern": "^(instance|boundary):[a-z][a-z0-9]*(?:[_-][a-z0-9]+)*$"
+            },
+            "domain_id": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Slug"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
           }
         }
       ]
     },
     "CircuitOperation": {
       "oneOf": [
-        { "$ref": "#/$defs/AddComponentOperation" },
-        { "$ref": "#/$defs/UpdateComponentOperation" },
-        { "$ref": "#/$defs/RemoveComponentOperation" },
-        { "$ref": "#/$defs/AddInstanceOperation" },
-        { "$ref": "#/$defs/UpdateInstanceOperation" },
-        { "$ref": "#/$defs/RemoveInstanceOperation" },
-        { "$ref": "#/$defs/AddBoundaryTerminalOperation" },
-        { "$ref": "#/$defs/UpdateBoundaryTerminalOperation" },
-        { "$ref": "#/$defs/RemoveBoundaryTerminalOperation" },
-        { "$ref": "#/$defs/CreateNetOperation" },
-        { "$ref": "#/$defs/UpdateNetOperation" },
-        { "$ref": "#/$defs/DeleteNetOperation" },
-        { "$ref": "#/$defs/ConnectEndpointOperation" },
-        { "$ref": "#/$defs/DisconnectEndpointOperation" },
-        { "$ref": "#/$defs/SetInstanceGeometryOperation" },
-        { "$ref": "#/$defs/SetTerminalPlacementOperation" },
-        { "$ref": "#/$defs/SetNetRouteOperation" },
-        { "$ref": "#/$defs/SetLabelGeometryOperation" },
-        { "$ref": "#/$defs/SetLayoutSettingsOperation" },
-        { "$ref": "#/$defs/AddCycleEdgeOperation" },
-        { "$ref": "#/$defs/UpdateCycleEdgeOperation" },
-        { "$ref": "#/$defs/RemoveCycleEdgeOperation" },
-        { "$ref": "#/$defs/SetClockDomainOperation" },
-        { "$ref": "#/$defs/RemoveClockDomainOperation" },
-        { "$ref": "#/$defs/SetSubjectClockDomainOperation" }
+        {
+          "$ref": "#/$defs/AddComponentOperation"
+        },
+        {
+          "$ref": "#/$defs/UpdateComponentOperation"
+        },
+        {
+          "$ref": "#/$defs/RemoveComponentOperation"
+        },
+        {
+          "$ref": "#/$defs/AddInstanceOperation"
+        },
+        {
+          "$ref": "#/$defs/UpdateInstanceOperation"
+        },
+        {
+          "$ref": "#/$defs/RemoveInstanceOperation"
+        },
+        {
+          "$ref": "#/$defs/AddBoundaryTerminalOperation"
+        },
+        {
+          "$ref": "#/$defs/UpdateBoundaryTerminalOperation"
+        },
+        {
+          "$ref": "#/$defs/RemoveBoundaryTerminalOperation"
+        },
+        {
+          "$ref": "#/$defs/CreateNetOperation"
+        },
+        {
+          "$ref": "#/$defs/UpdateNetOperation"
+        },
+        {
+          "$ref": "#/$defs/DeleteNetOperation"
+        },
+        {
+          "$ref": "#/$defs/ConnectEndpointOperation"
+        },
+        {
+          "$ref": "#/$defs/DisconnectEndpointOperation"
+        },
+        {
+          "$ref": "#/$defs/SetInstanceGeometryOperation"
+        },
+        {
+          "$ref": "#/$defs/SetTerminalPlacementOperation"
+        },
+        {
+          "$ref": "#/$defs/SetNetRouteOperation"
+        },
+        {
+          "$ref": "#/$defs/SetLabelGeometryOperation"
+        },
+        {
+          "$ref": "#/$defs/SetLayoutSettingsOperation"
+        },
+        {
+          "$ref": "#/$defs/AddCycleEdgeOperation"
+        },
+        {
+          "$ref": "#/$defs/UpdateCycleEdgeOperation"
+        },
+        {
+          "$ref": "#/$defs/RemoveCycleEdgeOperation"
+        },
+        {
+          "$ref": "#/$defs/SetClockDomainOperation"
+        },
+        {
+          "$ref": "#/$defs/RemoveClockDomainOperation"
+        },
+        {
+          "$ref": "#/$defs/SetSubjectClockDomainOperation"
+        },
+        {
+          "$ref": "#/$defs/SetDocumentLabelOperation"
+        }
       ]
     },
     "CircuitOperationBatch": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["request_id", "expected_revision", "operations"],
+      "required": [
+        "request_id",
+        "expected_revision",
+        "operations"
+      ],
       "properties": {
-        "request_id": { "$ref": "#/$defs/NonEmptyString" },
-        "expected_revision": { "$ref": "#/$defs/NonEmptyString" },
+        "request_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "expected_revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
         "operations": {
           "type": "array",
           "minItems": 1,
-          "items": { "$ref": "#/$defs/CircuitOperation" }
+          "items": {
+            "$ref": "#/$defs/CircuitOperation"
+          }
         }
       }
     },
     "Diagnostic": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["severity", "code", "message"],
+      "required": [
+        "severity",
+        "code",
+        "message"
+      ],
       "properties": {
-        "severity": { "enum": ["info", "warning", "error"] },
-        "code": { "$ref": "#/$defs/NonEmptyString" },
-        "message": { "$ref": "#/$defs/NonEmptyString" },
-        "element_key": { "type": "string" },
-        "operation_id": { "type": "string" },
-        "path": { "type": "string" }
+        "severity": {
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ]
+        },
+        "code": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "element_key": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
       }
     },
     "ElementChange": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "id"],
+      "required": [
+        "kind",
+        "id"
+      ],
       "properties": {
-        "kind": { "enum": ["component", "instance", "boundary_terminal", "net", "layout", "timing"] },
-        "id": { "$ref": "#/$defs/NonEmptyString" }
+        "kind": {
+          "enum": [
+            "component",
+            "instance",
+            "boundary_terminal",
+            "net",
+            "layout",
+            "timing",
+            "document"
+          ]
+        },
+        "id": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
       }
     },
     "CircuitDiff": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["added", "removed", "changed", "connections_changed"],
+      "required": [
+        "added",
+        "removed",
+        "changed",
+        "connections_changed"
+      ],
       "properties": {
-        "added": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
-        "removed": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
-        "changed": { "type": "array", "items": { "$ref": "#/$defs/ElementChange" } },
-        "connections_changed": { "type": "array", "items": { "$ref": "#/$defs/Slug" } }
+        "added": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ElementChange"
+          }
+        },
+        "removed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ElementChange"
+          }
+        },
+        "changed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ElementChange"
+          }
+        },
+        "connections_changed": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Slug"
+          }
+        }
       }
     },
     "CircuitChangeResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status", "diagnostics", "diff", "alias_map"],
+      "required": [
+        "status",
+        "diagnostics",
+        "diff",
+        "alias_map"
+      ],
       "properties": {
-        "status": { "enum": ["accepted", "rejected", "conflict", "locked", "provider_failed"] },
-        "snapshot": { "$ref": "#/$defs/CircuitSnapshot" },
-        "candidate": { "$ref": "#/$defs/CircuitDocument" },
-        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } },
-        "diff": { "$ref": "#/$defs/CircuitDiff" },
+        "status": {
+          "enum": [
+            "accepted",
+            "rejected",
+            "conflict",
+            "locked",
+            "provider_failed"
+          ]
+        },
+        "snapshot": {
+          "$ref": "#/$defs/CircuitSnapshot"
+        },
+        "candidate": {
+          "$ref": "#/$defs/CircuitDocument"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "diff": {
+          "$ref": "#/$defs/CircuitDiff"
+        },
         "alias_map": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "additionalProperties": {
+            "type": "string"
+          }
         }
       }
     },
     "EditLease": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lease_id", "document_id", "owner_id", "expires_at"],
+      "required": [
+        "lease_id",
+        "document_id",
+        "owner_id",
+        "expires_at"
+      ],
       "properties": {
-        "lease_id": { "$ref": "#/$defs/NonEmptyString" },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "owner_id": { "$ref": "#/$defs/NonEmptyString" },
-        "expires_at": { "$ref": "#/$defs/NonEmptyString" }
+        "lease_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "owner_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "expires_at": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
       }
     },
     "CircuitProposalCreateRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["proposal_id", "document_id", "base_revision", "title", "summary"],
+      "required": [
+        "proposal_id",
+        "document_id",
+        "base_revision",
+        "title",
+        "summary"
+      ],
       "properties": {
-        "proposal_id": { "$ref": "#/$defs/NonEmptyString" },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "base_revision": { "$ref": "#/$defs/NonEmptyString" },
-        "title": { "$ref": "#/$defs/NonEmptyString" },
-        "summary": { "$ref": "#/$defs/NonEmptyString" },
-        "rationale": { "type": "string" },
+        "proposal_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "base_revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "title": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "summary": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "rationale": {
+          "type": "string"
+        },
         "assumptions": {
           "type": "array",
-          "items": { "$ref": "#/$defs/NonEmptyString" }
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          }
         },
-        "construction": { "$ref": "#/$defs/CircuitConstruction" },
-        "batch": { "$ref": "#/$defs/CircuitOperationBatch" }
+        "construction": {
+          "$ref": "#/$defs/CircuitConstruction"
+        },
+        "batch": {
+          "$ref": "#/$defs/CircuitOperationBatch"
+        }
       },
       "oneOf": [
-        { "required": ["construction"] },
-        { "required": ["batch"] }
+        {
+          "required": [
+            "construction"
+          ]
+        },
+        {
+          "required": [
+            "batch"
+          ]
+        }
       ]
     },
     "CircuitProposal": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["proposal_id", "document_id", "base_revision", "title", "summary", "status", "diagnostics", "diff", "created_at"],
+      "required": [
+        "proposal_id",
+        "document_id",
+        "base_revision",
+        "title",
+        "summary",
+        "status",
+        "diagnostics",
+        "diff",
+        "created_at"
+      ],
       "properties": {
-        "proposal_id": { "$ref": "#/$defs/NonEmptyString" },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "base_revision": { "$ref": "#/$defs/NonEmptyString" },
-        "title": { "$ref": "#/$defs/NonEmptyString" },
-        "summary": { "$ref": "#/$defs/NonEmptyString" },
-        "rationale": { "type": "string" },
+        "proposal_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "base_revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "title": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "summary": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "rationale": {
+          "type": "string"
+        },
         "assumptions": {
           "type": "array",
-          "items": { "$ref": "#/$defs/NonEmptyString" }
+          "items": {
+            "$ref": "#/$defs/NonEmptyString"
+          }
         },
-        "status": { "enum": ["pending", "stale"] },
-        "construction": { "$ref": "#/$defs/CircuitConstruction" },
-        "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
-        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } },
-        "diff": { "$ref": "#/$defs/CircuitDiff" },
-        "created_at": { "$ref": "#/$defs/NonEmptyString" }
+        "status": {
+          "enum": [
+            "pending",
+            "stale"
+          ]
+        },
+        "construction": {
+          "$ref": "#/$defs/CircuitConstruction"
+        },
+        "batch": {
+          "$ref": "#/$defs/CircuitOperationBatch"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        },
+        "diff": {
+          "$ref": "#/$defs/CircuitDiff"
+        },
+        "created_at": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
       },
       "oneOf": [
-        { "required": ["construction"] },
-        { "required": ["batch"] }
+        {
+          "required": [
+            "construction"
+          ]
+        },
+        {
+          "required": [
+            "batch"
+          ]
+        }
       ]
     },
     "DocumentSummary": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["document_id", "label", "design_id", "component_count", "instance_count", "net_count", "warning_count"],
+      "required": [
+        "document_id",
+        "label",
+        "design_id",
+        "component_count",
+        "instance_count",
+        "net_count",
+        "warning_count"
+      ],
       "properties": {
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "label": { "$ref": "#/$defs/NonEmptyString" },
-        "design_id": { "$ref": "#/$defs/Slug" },
-        "component_count": { "type": "integer", "minimum": 0 },
-        "instance_count": { "type": "integer", "minimum": 0 },
-        "net_count": { "type": "integer", "minimum": 0 },
-        "warning_count": { "type": "integer", "minimum": 0 }
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "label": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "design_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "component_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "instance_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "net_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "warning_count": {
+          "type": "integer",
+          "minimum": 0
+        }
       }
     },
     "ResolvedComponentDesign": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["status"],
+      "required": [
+        "status"
+      ],
       "properties": {
-        "status": { "enum": ["available", "unavailable"] },
-        "document": { "$ref": "#/$defs/CircuitDocument" },
-        "provider_revision": { "type": "string" },
-        "writable": { "type": "boolean" },
-        "message": { "type": "string" }
+        "status": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        },
+        "document": {
+          "$ref": "#/$defs/CircuitDocument"
+        },
+        "provider_revision": {
+          "type": "string"
+        },
+        "writable": {
+          "type": "boolean"
+        },
+        "message": {
+          "type": "string"
+        }
       }
     },
     "ProviderCommitRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["component", "base_provider_revision", "batch", "document", "diagnostics"],
+      "required": [
+        "component",
+        "base_provider_revision",
+        "batch",
+        "document",
+        "diagnostics"
+      ],
       "properties": {
-        "component": { "$ref": "#/$defs/ComponentDefinition" },
-        "base_provider_revision": { "$ref": "#/$defs/NonEmptyString" },
-        "batch": { "$ref": "#/$defs/CircuitOperationBatch" },
-        "document": { "$ref": "#/$defs/CircuitDocument" },
-        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+        "component": {
+          "$ref": "#/$defs/ComponentDefinition"
+        },
+        "base_provider_revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "batch": {
+          "$ref": "#/$defs/CircuitOperationBatch"
+        },
+        "document": {
+          "$ref": "#/$defs/CircuitDocument"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
       }
     },
     "ProviderCommitResult": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["accepted", "provider_revision", "diagnostics"],
+      "required": [
+        "accepted",
+        "provider_revision",
+        "diagnostics"
+      ],
       "properties": {
-        "accepted": { "type": "boolean" },
-        "provider_revision": { "$ref": "#/$defs/NonEmptyString" },
-        "document": { "$ref": "#/$defs/CircuitDocument" },
-        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+        "accepted": {
+          "type": "boolean"
+        },
+        "provider_revision": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "document": {
+          "$ref": "#/$defs/CircuitDocument"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
       }
     },
     "ServiceEvent": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["event_id", "kind", "document_id", "timestamp"],
+      "required": [
+        "event_id",
+        "kind",
+        "document_id",
+        "timestamp"
+      ],
       "properties": {
-        "event_id": { "$ref": "#/$defs/NonEmptyString" },
-        "kind": { "enum": ["document.changed", "lock.changed", "proposal.changed", "provider.requested"] },
-        "document_id": { "$ref": "#/$defs/Slug" },
-        "revision": { "type": "string" },
-        "timestamp": { "$ref": "#/$defs/NonEmptyString" }
+        "event_id": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "kind": {
+          "enum": [
+            "document.changed",
+            "lock.changed",
+            "proposal.changed",
+            "provider.requested"
+          ]
+        },
+        "document_id": {
+          "$ref": "#/$defs/Slug"
+        },
+        "revision": {
+          "type": "string"
+        },
+        "timestamp": {
+          "$ref": "#/$defs/NonEmptyString"
+        }
       }
     },
     "ServiceError": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["code", "message"],
+      "required": [
+        "code",
+        "message"
+      ],
       "properties": {
-        "code": { "$ref": "#/$defs/NonEmptyString" },
-        "message": { "$ref": "#/$defs/NonEmptyString" },
-        "diagnostics": { "type": "array", "items": { "$ref": "#/$defs/Diagnostic" } }
+        "code": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "message": {
+          "$ref": "#/$defs/NonEmptyString"
+        },
+        "diagnostics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Diagnostic"
+          }
+        }
+      }
+    },
+    "SetDocumentLabelOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "operation_id",
+        "type",
+        "label"
+      ],
+      "properties": {
+        "operation_id": {
+          "type": "string"
+        },
+        "type": {
+          "const": "set_document_label"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
       }
     }
   }

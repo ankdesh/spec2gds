@@ -11,6 +11,7 @@ import type { GoalService } from "@deepseek-ai/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { EventConfigurations } from "./event-configuration.js";
 import { randomUUID } from "node:crypto";
+import { sourceName } from "./naming.js";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
@@ -164,7 +165,7 @@ export function maxModelStepsForTurn(
 
 export const UNBOUND_SOURCE_PROMPT = `This conversation is not bound to a design source.
 Do not answer questions about an existing document, component, design, or requested edit without a binding. Do not claim that work was completed and do not create a goal.
-If prepare_spec_document_creation is available and the user requests a new specification document, use it to show the creation card. No existing package or context read is needed. Otherwise tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
+If prepare_spec_document_creation is available and the user requests a new specification document with contents, first call prepare_architecture_review and wait for human approval. Then call prepare_spec_document_creation with the approved architecture_review_id. Only an explicitly empty specification may use empty=true without a review. No existing package or context read is needed. Otherwise tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
 
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
   const config: ServiceConfig = {
@@ -237,7 +238,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const policy = await owners.specPolicy(binding.ownerUrl);
         agent.ctx.systemPrompt?.section({ name: "spec2gds:approval-policy", order: 205,
           text: policy.approval_policy === "automatic"
-            ? "The Spec owner currently allows automatic validated submissions. Await its saved receipt and report the resulting revision. Record defaults as assumptions; clarify genuinely missing inputs."
+            ? "The Spec owner currently allows automatic validated submissions. Await its saved receipt and describe the saved changes using source names. Record defaults as assumptions; clarify genuinely missing inputs."
             : "The Spec owner currently requires human approval. Keep submissions pending until an explicit stored-proposal decision." });
       }
       if (binding.domain === "spec" && !binding.ownerDocumentKey) {
@@ -353,14 +354,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       const temporary = {
         sessionId: String(agent.id), status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
         documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
-        entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
+        entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? sourceName(validated.context),
         workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
         workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
       };
       const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
         await owners.circuitSourceBinding(temporary));
       await mkdir(workspace.path, { recursive: true, mode: 0o700 });
-      state.createBinding(String(agent.id), { ...input, ownerUrl: validated.ownerUrl,
+      state.createBinding(String(agent.id), { ...input, ownerUrl: validated.ownerUrl, sourceName: sourceName(validated.context),
         workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
         workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
       binding = state.activateBinding(String(agent.id));
@@ -429,7 +430,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     const temporary = {
       sessionId, status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
-      entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? input.documentId,
+      entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? sourceName(validated.context),
       workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
       workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
     };
@@ -438,7 +439,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
       await owners.circuitSourceBinding(temporary));
     await mkdir(workspace.path, { recursive: true, mode: 0o700 });
-    const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl,
+    const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl, sourceName: sourceName(validated.context),
       ownerDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.ownerDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
       workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
@@ -461,14 +462,15 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   }
 
   async function createSource(body: Record<string, unknown>): Promise<Record<string, unknown>> {
-    if (typeof body.serviceBaseUrl !== "string" || typeof body.documentId !== "string" || typeof body.title !== "string") {
-      throw new HttpError(400, "serviceBaseUrl, documentId, and title are required.");
+    if (typeof body.serviceBaseUrl !== "string" || typeof body.title !== "string") {
+      throw new HttpError(400, "Service and document name are required.");
     }
     if (body.creationRequestId !== undefined) {
       if (body.domain !== "spec" || typeof body.creationRequestId !== "string") throw new HttpError(400, "A creation request must target a Spec document.");
-      return creations.create(body.creationRequestId, { serviceBaseUrl: body.serviceBaseUrl, documentId: body.documentId, title: body.title });
+      const reserved = creations.get(body.creationRequestId);
+      return creations.create(body.creationRequestId, { serviceBaseUrl: body.serviceBaseUrl, documentId: reserved.documentId, title: body.title });
     }
-    const input = bindingInput({ ...body, scope: "document" });
+    const input = bindingInput({ ...body, documentId: typeof body.documentId === "string" ? body.documentId : `spec_${randomUUID().replaceAll("-", "")}`, scope: "document" });
     if (input.preset && input.preset !== "focused") {
       try { configurations.selection(input.domain, input.preset, input.eventTemplateKey, input.eventTemplateRevision); }
       catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
@@ -478,7 +480,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
     owners.normalize(input);
     if (input.domain === "spec") {
-      const snapshot = await owners.createSpec(input.serviceBaseUrl, specDestination(config.specDocumentRoot, documentId), documentId, title);
+      const snapshot = await owners.createSpec(input.serviceBaseUrl, specDestination(config.specDocumentRoot, documentId, title), documentId, title);
       if (typeof snapshot.owner_document_key === "string") input.ownerDocumentKey = snapshot.owner_document_key;
     }
     else await owners.createCircuit(input.serviceBaseUrl, documentId, title);
@@ -711,8 +713,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const sessionId = decodeURIComponent(bindingMatch[1]!);
           const resource = bindingMatch[2];
           if (!resource && request.method === "GET") {
-            const binding = state.getBinding(sessionId);
+            let binding = state.getBinding(sessionId);
             if (!binding) throw new HttpError(404, "Unknown binding.");
+            try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
+            catch { /* Retain the last source name while the owner is unavailable. */ }
             return writeJson(response, 200, { session: binding });
           }
           if (resource === "activate" && request.method === "POST") return writeJson(response, 200, { session: await activate(sessionId) });

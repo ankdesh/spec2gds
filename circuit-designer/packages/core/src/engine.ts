@@ -18,6 +18,7 @@ import type {
   NodeGeometry,
 } from "./types.generated";
 import { clone, emptyLayout, endpointKey, endpointTerminalKey, validateDocumentSemantics } from "./model";
+import { cleanHumanName } from "./naming";
 import { DEFAULT_CLOCK_DOMAIN_ID, effectiveCircuitTiming } from "./timing";
 import { createPrimitiveComponent, isPrimitiveTemplate } from "./primitives";
 
@@ -99,7 +100,7 @@ export function diffDocuments(before: CircuitDocument | undefined, after: Circui
   return {
     added: groups.flatMap((group) => group.added),
     removed: groups.flatMap((group) => group.removed),
-    changed: [...groups.flatMap((group) => group.changed), ...layoutChanged, ...timingChanged],
+    changed: [...groups.flatMap((group) => group.changed), ...layoutChanged, ...timingChanged, ...(before.label === after.label ? [] : [{ kind: "document" as const, id: after.document_id }])],
     connections_changed: after.design.nets
       .filter((net) => !equal(oldNets.get(net.id)?.endpoints, net.endpoints))
       .map((net) => net.id),
@@ -195,11 +196,16 @@ function updateComponent(
 function applyOne(document: CircuitDocument, operation: CircuitOperation, options: ApplyOperationOptions): Diagnostic[] {
   const id = operation.operation_id;
   switch (operation.type) {
+    case "set_document_label":
+      try { document.label = cleanHumanName(operation.label); return []; }
+      catch (cause) { return [error("invalid_name", String(cause), id)]; }
     case "add_component":
       if (document.components.some((item) => item.id === operation.component.id)) return [error("duplicate_component", `Component already exists: ${operation.component.id}`, id)];
-      document.components.push(clone(operation.component)); return [];
+      try { document.components.push({ ...clone(operation.component), label: cleanHumanName(operation.component.label) }); return []; }
+      catch (cause) { return [error("invalid_name", String(cause), id)]; }
     case "update_component":
-      return updateComponent(document, operation.component, operation.cascade ?? false, id, options);
+      try { return updateComponent(document, { ...operation.component, label: cleanHumanName(operation.component.label) }, operation.cascade ?? false, id, options); }
+      catch (cause) { return [error("invalid_name", String(cause), id)]; }
     case "remove_component":
       return removeComponent(document, operation.component_id, operation.cascade ?? false, id, options);
     case "add_instance":

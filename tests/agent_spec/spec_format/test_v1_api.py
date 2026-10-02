@@ -233,7 +233,7 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
     assert execution["status"] == "succeeded", execution
     output_path = Path(execution["workspace_output_path"])
     assert output_path.is_dir()
-    assert output_path == tmp_path / "rtl" / "activity_api" / target["entity_id"]
+    assert output_path == tmp_path / "rtl" / "activity-api" / "top"
     assert not (tmp_path / "generated" / "rtl").exists()
     assert execution["artifact_ids"]
     assert endpoints["activities"]()["workspace_root"] == str(tmp_path)
@@ -252,7 +252,7 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
         time.sleep(0.02)
     assert systemc_execution["status"] == "succeeded", systemc_execution
     assert Path(systemc_execution["workspace_output_path"]) == (
-        tmp_path / "systemc-at" / "activity_api" / target["entity_id"]
+        tmp_path / "systemc-at" / "activity-api" / "top"
     )
 
     endpoints["open_document"](OpenDocumentRequest(path=str(path)))
@@ -440,7 +440,7 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
     with pytest.raises(fastapi.HTTPException) as duplicate:
         endpoints["transaction"](TransactionRequest(
             expected_source_revision_hash=updated["source_revision_hash"],
-            operations=[{"type": "create_entity", "kind": "component", "name": "timer"}],
+            operations=[{"type": "create_entity", "kind": "component", "name": "Timer block"}],
         ))
     assert duplicate.value.status_code == 422
     assert "already exists" in str(duplicate.value.detail)

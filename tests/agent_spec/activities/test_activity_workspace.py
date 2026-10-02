@@ -108,3 +108,42 @@ def test_workspace_restores_previous_tree_when_atomic_commit_fails(
     assert (target / "include/model.h").read_text() == "original"
     assert not list(target.parent.glob(".design_test.stage-*"))
     assert not list(target.parent.glob(".design_test.backup-*"))
+
+
+def test_readable_collision_numbers_preserve_existing_ownership(tmp_path: Path) -> None:
+    workspace = LocalActivityWorkspace(tmp_path)
+    first = publish(workspace)
+    other_files = files("other")
+    manifest = json.loads(other_files["generation-manifest.json"])
+    manifest["document_id"] = "another_document"
+    other_files["generation-manifest.json"] = json.dumps(manifest).encode()
+    second = workspace.replace_directory(relative_path=first.relative_path, files=other_files,
+        generator_id="tests.generator", document_id="another_document", design_id="design_test")
+    assert second.relative_path == first.relative_path + "-2"
+    assert (tmp_path / first.relative_path / "include/model.h").read_text() == "first"
+    assert workspace.replace_directory(relative_path=first.relative_path, files=other_files,
+        generator_id="tests.generator", document_id="another_document", design_id="design_test").relative_path == second.relative_path
+
+
+def test_public_migration_checks_ownership_and_never_replaces_a_destination(tmp_path: Path):
+    workspace = LocalActivityWorkspace(tmp_path)
+    original = publish(workspace)
+    options = dict(generator_id="tests.generator", document_id="document_test", design_id="design_test")
+    with pytest.raises(ValueError, match="another generation target"):
+        workspace.move_owned_directory(original.relative_path, "named/project", **{**options, "document_id": "other"})
+    occupied = tmp_path / "occupied"
+    occupied.mkdir()
+    with pytest.raises(ValueError, match="already exists"):
+        workspace.move_owned_directory(original.relative_path, "occupied", **options)
+    workspace.move_owned_directory(original.relative_path, "named/project", **options)
+    assert (tmp_path / "named/project/include/model.h").read_text() == "first"
+    assert not (tmp_path / original.relative_path).exists()
+
+
+def test_invalid_ownership_cannot_be_treated_as_a_filename_collision(tmp_path: Path):
+    workspace = LocalActivityWorkspace(tmp_path)
+    original = publish(workspace)
+    (tmp_path / original.relative_path / "generation-manifest.json").write_text("{}")
+    with pytest.raises(ValueError, match="invalid ownership"):
+        publish(workspace, "replacement")
+    assert not (tmp_path / (original.relative_path + "-2")).exists()

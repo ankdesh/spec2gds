@@ -19,6 +19,10 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     assert.equal(state.getBinding("session-1")?.status, "creating");
     state.activateBinding("session-1");
     assert.equal(state.updateBinding("session-1", { title: "Renamed", archived: true }).title, "Renamed");
+    state.refreshSourceName("session-1", "Timer controller", "Timer controller");
+    assert.equal(state.getBinding("session-1")?.sourceName, "Timer controller");
+    assert.equal(state.getBinding("session-1")?.title, "Renamed");
+    assert.equal(state.getBinding("session-1")?.documentId, "doc-1");
     assert.equal(state.listBindings().length, 0);
     assert.equal(state.listBindings(true)[0]?.archived, true);
     state.updateBinding("session-1", { archived: false });
@@ -41,6 +45,8 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
 
     const reopened = new ProductState(join(root, "product.sqlite3"));
     assert.equal(reopened.getBinding("session-1")?.documentId, "doc-1");
+    assert.equal(reopened.getBinding("session-1")?.sourceName, "Timer controller");
+    assert.equal(reopened.getBinding("session-1")?.title, "Renamed");
     assert.equal(reopened.getReview("session-1", "proposal-1")?.state, "reconcile");
     assert.equal(reopened.getReview("session-1", "proposal-1")?.error, null);
     reopened.close();

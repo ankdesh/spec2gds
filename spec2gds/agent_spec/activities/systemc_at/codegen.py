@@ -17,6 +17,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     InterfaceIR,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
+from spec2gds.agent_spec.spec_format.naming import entity_name
 
 GENERATOR_ID = "systemc.generate_at_skeleton"
 GENERATOR_VERSION = "1.0.0"
@@ -545,9 +546,9 @@ def _render_module(module: _Module) -> str:
 
 def _render_main(root: _Module, design: DesignIR) -> str:
     include = root.header_path.removeprefix("include/")
-    start_message = _cpp_string(f"[CYCLE: 0] [SYSTEM] Starting {design.vlnv} (AT skeleton)\\n")
+    start_message = _cpp_string(f"[CYCLE: 0] [SYSTEM] Starting {entity_name(design)} (AT skeleton)\\n")
     finish_message = _cpp_string(
-        f"[CYCLE: 10] [SYSTEM] Finished {design.vlnv} (AT skeleton)\\n"
+        f"[CYCLE: 10] [SYSTEM] Finished {entity_name(design)} (AT skeleton)\\n"
     )
     return _render_template(
         "main.cpp.j2",
@@ -565,7 +566,7 @@ def _render_cmake(design: DesignIR) -> str:
 
 def _render_readme(design: DesignIR) -> str:
     project = _identifier(design.vlnv.split(":")[2])
-    return _render_template("README.md.j2", design_vlnv=design.vlnv, project=project)
+    return _render_template("README.md.j2", design_vlnv=entity_name(design), project=project)
 
 
 def _render_template(name: str, **context: object) -> str:

@@ -559,6 +559,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     if (/^\/entities\/[^/]+\/[^/]+\/activities\/rtl.generate\/executions$/.test(path)) {
       const execution = {
         execution_type: "activity",
+        title: "Generate RTL",
+        target_name: "Processor",
         execution_id: "activity_execution_test",
         activity_id: "rtl.generate",
         activity_version: "1.1.0",
@@ -627,15 +629,15 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await expect(page.getByText("/home/designer/specifications", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /New folder/ }).click();
   await page.getByLabel("New folder name").fill("Project Alpha");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByLabel("Server directory browser").getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("/home/designer/specifications/Project Alpha", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Select folder" }).click();
   await expect(page.getByLabel("Server-local package path"))
-    .toHaveValue("/home/designer/specifications/Project Alpha/New editor specification.spec");
+    .toHaveValue("/home/designer/specifications/Project Alpha/new-editor-specification.spec");
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("New editor specification", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New editor specification", exact: true })).toBeVisible();
   expect(state.createdPaths).toEqual([
-    "/home/designer/specifications/Project Alpha/New editor specification.spec",
+    "/home/designer/specifications/Project Alpha/new-editor-specification.spec",
   ]);
   expect(state.createdTitles).toEqual(["New editor specification"]);
 
@@ -643,12 +645,12 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toBeDisabled();
   await page.getByRole("menuitem", { name: "Refresh From Disk" }).click();
   await expect.poll(() => state.openedPaths).toEqual([
-    "/home/designer/specifications/Project Alpha/New editor specification.spec",
+    "/home/designer/specifications/Project Alpha/new-editor-specification.spec",
   ]);
 
   await page.keyboard.press("Control+O");
   await expect(page.getByLabel("Server-local package path"))
-    .toHaveValue("/home/designer/specifications/Project Alpha/New editor specification.spec");
+    .toHaveValue("/home/designer/specifications/Project Alpha/new-editor-specification.spec");
   await page.getByRole("button", { name: "Browse…" }).click();
   await page.getByRole("button", { name: "Home" }).click();
   await page.getByRole("button", { name: /specifications/ }).dblclick();
@@ -904,12 +906,12 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(activityDialog.getByText(/dut.clk is unconnected/)).toBeVisible();
   await activityDialog.getByRole("button", { name: "Run" }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
-  await expect(page.getByText("rtl.generate", { exact: true })).toBeVisible();
+  await expect(page.getByText("Generate RTL", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Document", exact: true }).click();
 
   await design.getByRole("button", { name: "Options" }).click();
   await design.getByRole("menuitem", { name: /More actions/ }).click();
-  const actionDialog = page.getByRole("dialog", { name: /Actions for design_top/ });
+  const actionDialog = page.getByRole("dialog", { name: /Actions for Processor/ });
   await expect(actionDialog).toBeVisible();
   await expect(actionDialog.getByText("Explore with AI Assistant", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Close" }).click();
@@ -963,13 +965,13 @@ test("creates entities and edits all three port families inline", async ({ page 
   await expect(structuredRow).toContainText("Packed status fields");
   await component.getByRole("button", { name: "Options" }).click();
   await component.getByRole("menuitem", { name: "Edit text…" }).click();
-  await component.getByLabel("Specification text").fill("A programmable timer.");
+  await component.getByLabel("Component explanation").fill("A programmable timer.");
   await component.getByRole("button", { name: "Save changes" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations[0]).toEqual({
     type: "set_entity_metadata",
     entity: componentRef,
-    display_name: "",
+    display_name: "Timer",
     short_description: "",
     description: "A programmable timer.",
   });
@@ -1098,11 +1100,11 @@ test("preserves an inline draft when the optimistic revision is stale", async ({
   const component = page.locator("#component-component_timer");
   await component.getByRole("button", { name: "Options" }).click();
   await component.getByRole("menuitem", { name: "Edit text…" }).click();
-  await component.getByLabel("Specification text").fill("Keep this draft after refresh.");
+  await component.getByLabel("Component explanation").fill("Keep this draft after refresh.");
   state.staleNextTransaction = true;
   await component.getByRole("button", { name: "Save changes" }).click();
 
-  await expect(component.getByLabel("Specification text")).toHaveValue("Keep this draft after refresh.");
+  await expect(component.getByLabel("Component explanation")).toHaveValue("Keep this draft after refresh.");
   await expect(component.getByRole("alert")).toContainText("preserved draft");
   await page.getByRole("button", { name: "Use reviewed revision for next save" }).click();
   await component.getByRole("button", { name: "Save changes" }).click();

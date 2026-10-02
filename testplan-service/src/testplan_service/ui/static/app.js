@@ -1,3 +1,10 @@
+// Names are authored text, including punctuation; render them literally.
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, character => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[character]);
+}
+
 /** Verification Planner browser projections and authoring forms.
  * Keep draft edit revisions separate from campaign revisions and immutable
  * checkpoint IDs. Commands go through server preview/commit; rendered status
@@ -34,6 +41,33 @@ const state = {
   backendPlugins: [],
   generationJobs: [],
 };
+
+// Resolve presentation only inside the selected plan and imported source snapshot.
+function recordName(id) {
+  if (!id) return "None";
+  const occurrence = (state.snapshot?.occurrences || []).find(item => item.occurrence_id === id);
+  if (occurrence) return occurrence.path || occurrence.name;
+  const item = state.records[id] || [...state.targetBindingSets, ...state.backendConfigurations, ...(state.checkpoints || [])].find(item => item.id === id);
+  if (!item) return "Unavailable record";
+  const plugin = state.backendPlugins.find(plugin => plugin.plugin_id === item.plugin_id);
+  const title = item.title || item.display_name || item.top_module || plugin?.display_name || (item.layer ? `${item.layer} checkpoint` : "Target binding");
+  return item.key ? `${item.key} · ${title}` : title;
+}
+function populateNamedChoices(elementId, kind, selected = []) {
+  const select = document.getElementById(elementId);
+  select.replaceChildren();
+  Object.values(state.records).filter(item => item.record_type === kind).forEach(item => {
+    const option = document.createElement("option"); option.value = item.id;
+    option.textContent = recordName(item.id); option.selected = selected.includes(item.id); select.appendChild(option);
+  });
+}
+function selectedChoices(elementId) {
+  return Array.from(document.getElementById(elementId).selectedOptions, option => option.value);
+}
+function searchNamedChoices(input, elementId) {
+  const query = input.value.normalize("NFKC").toLowerCase();
+  Array.from(document.getElementById(elementId).options).forEach(option => { option.hidden = !option.selected && !option.text.toLowerCase().includes(query); });
+}
 
 // --- DOM References ---
 const planSelector = document.getElementById("planSelector");
@@ -254,7 +288,7 @@ async function loadPlan(planId) {
     // Update Header and Breadcrumbs
     breadcrumbPath.textContent = state.plan.name;
     breadcrumbRevision.textContent = `r${state.plan.edit_revision}`;
-    footerSnapshot.textContent = `Snapshot: ${state.plan.snapshot_id ? state.plan.snapshot_id.substring(0, 16) + '...' : 'none'}`;
+    footerSnapshot.textContent = `Snapshot: ${state.plan.snapshot_id ? (state.snapshot?.source_name || "Imported source") : 'none'}`;
 
     renderHierarchy();
     renderOutlineTable();
@@ -295,7 +329,7 @@ function renderHierarchy() {
 
     el.innerHTML = `
       <span class="tree-node-icon">${icon}</span>
-      <span class="tree-node-title" title="${node.title || node.name}">${node.title || node.name}</span>
+      <span class="tree-node-title" title="${escapeHtml(node.title || node.name)}">${escapeHtml(node.title || node.name)}</span>
       ${node.key ? `<span class="tree-node-badge">${node.key}</span>` : ""}
     `;
 
@@ -342,7 +376,7 @@ function renderOutlineTable() {
     tr.innerHTML = `
       <td>
         <strong style="color: var(--plan-accent); margin-right: 6px;">${intent.key}</strong>
-        <span>${intent.title}</span>
+        <span>${escapeHtml(intent.title)}</span>
       </td>
       <td>
         <span class="badge badge-priority-${priority}">${priority}</span>
@@ -397,7 +431,7 @@ function renderInspector() {
         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
           <div>
             <span class="badge badge-${item.authoring_state}" style="margin-bottom: 4px;">${item.authoring_state}</span>
-            <h3 style="font-size: 15px;">[${item.key}] ${item.title}</h3>
+            <h3 style="font-size: 15px;">[${item.key}] ${escapeHtml(item.title)}</h3>
           </div>
           <button id="btnEditSelectedItem" class="btn btn-secondary btn-sm">Edit</button>
         </div>
@@ -414,7 +448,7 @@ function renderInspector() {
         </div>
 
         <div style="font-size: 12px; color: var(--muted-text);">
-          <div><strong>Scope:</strong> <code>${item.scope_id}</code></div>
+          <div><strong>Scope:</strong> <code>${escapeHtml(recordName(item.scope_id))}</code></div>
           <div><strong>Priority:</strong> ${item.priority_override || 'inherited'}</div>
           <div><strong>Origin:</strong> ${item.origin}</div>
         </div>
@@ -428,7 +462,7 @@ function renderInspector() {
         const req = state.records[rid];
         return req
           ? `<div style="margin-bottom: 10px; padding: 8px; border: 1px solid var(--border); border-radius: 4px;">
-              <strong>[${req.key}] ${req.title}</strong>
+              <strong>[${req.key}] ${escapeHtml(req.title)}</strong>
               <p style="font-size: 12px; margin-top: 4px;">${req.statement}</p>
             </div>`
           : `<div>Requirement ID: ${rid}</div>`;
@@ -441,8 +475,8 @@ function renderInspector() {
     } else if (state.activeInspectorTab === "related") {
       inspectorContent.innerHTML = `
         <div style="font-size: 13px;">
-          <p><strong>Dependencies:</strong> ${(item.dependency_ids || []).join(", ") || "None"}</p>
-          <p style="margin-top: 8px;"><strong>Participants:</strong> ${(item.participants || []).join(", ") || "None"}</p>
+          <p><strong>Dependencies:</strong> ${(item.dependency_ids || []).map(id => escapeHtml(recordName(id))).join(", ") || "None"}</p>
+          <p style="margin-top: 8px;"><strong>Participants:</strong> ${(item.participants || []).map(id => escapeHtml(recordName(id))).join(", ") || "None"}</p>
         </div>
       `;
     } else if (state.activeInspectorTab === "history") {
@@ -459,13 +493,13 @@ function renderInspector() {
     inspectorContent.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
         <div>
-          <h3 style="font-size: 15px;">[${item.key}] ${item.title}</h3>
+          <h3 style="font-size: 15px;">[${item.key}] ${escapeHtml(item.title)}</h3>
           <p style="font-size: 12px; color: var(--muted-text);">${item.description || 'No description'}</p>
         </div>
       </div>
       <div style="font-size: 12px; color: var(--muted-text); margin-top: 10px;">
         <div><strong>Default Priority:</strong> ${item.default_priority}</div>
-        <div><strong>Scope:</strong> <code>${item.scope_id}</code></div>
+        <div><strong>Scope:</strong> <code>${escapeHtml(recordName(item.scope_id))}</code></div>
       </div>
     `;
   }
@@ -509,7 +543,7 @@ async function loadSourceRequirementsView() {
     secContainer.innerHTML = sections.map((s) => `
       <div style="margin-bottom: 12px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface);">
         <div style="display: flex; justify-content: space-between; align-items: center;">
-          <strong>${s.title}</strong>
+          <strong>${escapeHtml(s.qualified_name || s.title)}</strong>
           <span class="badge ${s.audit && s.audit.disposition !== 'unreviewed' ? 'badge-ready' : 'badge-draft'}">
             ${s.audit ? s.audit.disposition : 'unreviewed'}
           </span>
@@ -526,7 +560,7 @@ async function loadSourceRequirementsView() {
     const reqContainer = document.getElementById("capturedRequirementsList");
     reqContainer.innerHTML = reqs.map((r) => `
       <div style="margin-bottom: 10px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface);">
-        <div><strong>[${r.key}] ${r.title}</strong></div>
+        <div><strong>[${r.key}] ${escapeHtml(r.title)}</strong></div>
         <p style="font-size: 13px; margin: 4px 0;">${r.statement}</p>
         <div style="font-size: 11px; color: var(--muted-text);">
           Disposition: <code>${r.disposition}</code> | Mapped Intents: ${r.linked_intent_count}
@@ -627,7 +661,7 @@ function openIntentModal(existingIntent = null) {
   Object.values(state.records).filter((r) => r.record_type === "section").forEach((s) => {
     const opt = document.createElement("option");
     opt.value = s.id;
-    opt.textContent = `${s.key}: ${s.title}`;
+    opt.textContent = `${s.key}: ${escapeHtml(s.qualified_name || s.title)}`;
     secSelect.appendChild(opt);
   });
 
@@ -1041,12 +1075,12 @@ async function loadProfiles() {
       state.profiles.forEach((p) => {
         const opt = document.createElement("option");
         opt.value = p.id;
-        opt.textContent = `${p.display_name} (${p.id})`;
+        opt.textContent = p.display_name;
         profileSelect.appendChild(opt);
 
         const opt2 = document.createElement("option");
         opt2.value = p.id;
-        opt2.textContent = `${p.display_name} (${p.id})`;
+        opt2.textContent = p.display_name;
         importProfileSelect.appendChild(opt2);
       });
       profileSelect.value = prevVal;
@@ -1432,6 +1466,7 @@ async function openReviewCoverageModal() {
     // Populate upstream P1 checkpoints
     const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
     const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
     const planCps = checkpoints.filter((c) => c.layer === "plan");
 
     const p1Select = document.getElementById("reviewCovUpstreamP1");
@@ -1619,6 +1654,7 @@ async function submitFreezeReport() {
   // Find latest coverage checkpoint C1
   const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
   const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
   const covCp = checkpoints.filter((c) => c.layer === "coverage").pop();
   if (!covCp) {
     alert("Freezing report requires an approved Coverage checkpoint (C1). Please complete Review Coverage first.");
@@ -1641,7 +1677,7 @@ async function submitFreezeReport() {
     }
 
     const rpt = await res.json();
-    alert(`Immutable Evidence Report ${rpt.id} frozen successfully! Status: ${rpt.status}`);
+    alert(`Immutable Evidence Report ${rpt.title || "report"} frozen successfully! Status: ${rpt.status}`);
     document.getElementById("modalFreezeReport").classList.remove("open");
   } catch (err) {
     alert(`Freeze evidence report failed: ${err.message}`);
@@ -1661,6 +1697,7 @@ async function submitNewCampaign() {
   // Find latest coverage checkpoint C1
   const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
   const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
   const covCp = checkpoints.filter((c) => c.layer === "coverage").pop() || checkpoints[0];
   const covCpId = covCp ? covCp.id : "c1-draft";
 
@@ -1782,11 +1819,11 @@ function renderRecipesTable() {
     const kindBadge = `<span class="badge badge-${r.kind}">${r.kind.toUpperCase()}</span>`;
 
     tr.innerHTML = `
-      <td><code>${r.key || r.id}</code></td>
+      <td><code>${r.key || "Recipe"}</code></td>
       <td><strong>${escapeHtml(r.title)}</strong></td>
       <td>${kindBadge}</td>
-      <td><code>${escapeHtml(r.backend_configuration_id || "none")}</code></td>
-      <td><code>${escapeHtml(r.target_binding_set_id || "none")}</code></td>
+      <td><code>${escapeHtml(recordName(r.backend_configuration_id))}</code></td>
+      <td><code>${escapeHtml(recordName(r.target_binding_set_id))}</code></td>
       <td>${stateBadge}</td>
       <td>
         <button class="btn btn-outline btn-xs" onclick="openRecipeModal('${r.id}')">Edit</button>
@@ -1812,9 +1849,9 @@ function renderBindingsTable() {
     const portsCount = b.ports ? b.ports.length : 0;
     const clkReset = `${b.clock ? b.clock.signal : '-'} / ${b.reset ? b.reset.signal : '-'}`;
     tr.innerHTML = `
-      <td><code>${b.key || b.id}</code></td>
-      <td><strong>${escapeHtml(b.title)}</strong></td>
-      <td><code>${escapeHtml(b.scope_id)}</code></td>
+      <td><code>${b.key || "Binding"}</code></td>
+      <td><strong>${escapeHtml(recordName(b.id))}</strong></td>
+      <td><code>${escapeHtml(recordName(b.root_scope_id))}</code></td>
       <td><span class="badge" style="background: var(--surface-muted);">${portsCount} signals</span></td>
       <td><code>${escapeHtml(clkReset)}</code></td>
       <td><span class="badge">${escapeHtml(b.permission || "full_access")}</span></td>
@@ -1875,9 +1912,9 @@ function renderJobsTable() {
     const artCount = job.result_data && job.result_data.artifact_records ? job.result_data.artifact_records.length : 0;
 
     tr.innerHTML = `
-      <td><code>${escapeHtml(job.id)}</code></td>
-      <td><code>${escapeHtml(job.checkpoint_id)}</code></td>
-      <td>${escapeHtml(job.plugin_id)}</td>
+      <td><code>${`Generation ${job.number}`}</code></td>
+      <td><code>${escapeHtml(recordName(job.checkpoint_id))}</code></td>
+      <td>${escapeHtml(state.backendPlugins.find(p => p.plugin_id === job.plugin_id)?.display_name || "Backend")}</td>
       <td>${statusBadge}</td>
       <td><span class="badge">${artCount} files</span></td>
       <td>${new Date(job.created_at).toLocaleString()}</td>
@@ -1897,7 +1934,7 @@ async function openRecipeModal(recipeId = null) {
   state.targetBindingSets.forEach((b) => {
     const opt = document.createElement("option");
     opt.value = b.id;
-    opt.textContent = `${b.title} (${b.key || b.id})`;
+    opt.textContent = recordName(b.id);
     bndSel.appendChild(opt);
   });
 
@@ -1908,7 +1945,7 @@ async function openRecipeModal(recipeId = null) {
     state.backendConfigurations.forEach((c) => {
       const opt = document.createElement("option");
       opt.value = c.id;
-      opt.textContent = `${c.plugin_id} (v${c.plugin_version})`;
+      opt.textContent = recordName(c.id);
       bcfgSel.appendChild(opt);
     });
   } else {
@@ -1921,13 +1958,14 @@ async function openRecipeModal(recipeId = null) {
   // Populate coverage checkpoint select
   const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
   const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
   const covCps = checkpoints.filter((c) => c.layer === "coverage");
   const cpSel = document.getElementById("rcpFormCoverageCp");
   cpSel.innerHTML = "";
   covCps.forEach((c) => {
     const opt = document.createElement("option");
     opt.value = c.id;
-    opt.textContent = `${c.key || c.id} — ${c.created_at}`;
+    opt.textContent = `${c.key || "Checkpoint"} — ${c.created_at}`;
     cpSel.appendChild(opt);
   });
 
@@ -1942,16 +1980,16 @@ async function openRecipeModal(recipeId = null) {
       if (recipe.target_binding_set_id) bndSel.value = recipe.target_binding_set_id;
       if (recipe.backend_configuration_id) bcfgSel.value = recipe.backend_configuration_id;
       if (recipe.coverage_checkpoint_id) cpSel.value = recipe.coverage_checkpoint_id;
-      document.getElementById("rcpFormIntents").value = (recipe.intent_ids || []).join(", ");
-      document.getElementById("rcpFormObjectives").value = (recipe.objective_ids || []).join(", ");
+      populateNamedChoices("rcpFormIntents", "intent", recipe.intent_ids || []);
+      populateNamedChoices("rcpFormObjectives", "objective", recipe.objective_ids || []);
       document.getElementById("rcpFormState").value = recipe.authoring_state || "draft";
       document.getElementById("rcpFormTestIR").value = JSON.stringify(recipe.test_ir || {}, null, 2);
     }
   } else {
     document.getElementById("rcpFormTitle").value = "";
     document.getElementById("rcpFormKind").value = "scenario";
-    document.getElementById("rcpFormIntents").value = "";
-    document.getElementById("rcpFormObjectives").value = "";
+    populateNamedChoices("rcpFormIntents", "intent");
+    populateNamedChoices("rcpFormObjectives", "objective");
     document.getElementById("rcpFormState").value = "ready";
     // Default Worked Test IR AST
     const defaultIR = {
@@ -2000,7 +2038,7 @@ async function validateRecipeById(recipeId) {
     });
     const data = await res.json();
     if (data.valid) {
-      alert(`Recipe '${recipeId}' passed preflight validation!`);
+      alert(`Recipe '${recordName(recipeId)}' passed preflight validation!`);
     } else {
       const msgs = (data.diagnostics || []).map((d) => d.message).join("\n- ");
       alert(`Preflight validation issues for '${recipeId}':\n- ${msgs}`);
@@ -2017,8 +2055,8 @@ async function submitRecipe() {
   const bindingId = document.getElementById("rcpFormBinding").value;
   let backendConfigId = document.getElementById("rcpFormBackend").value;
   const covCpId = document.getElementById("rcpFormCoverageCp").value;
-  const intents = document.getElementById("rcpFormIntents").value.split(",").map((s) => s.trim()).filter(Boolean);
-  const objectives = document.getElementById("rcpFormObjectives").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const intents = selectedChoices("rcpFormIntents");
+  const objectives = selectedChoices("rcpFormObjectives");
   const authState = document.getElementById("rcpFormState").value;
   const irText = document.getElementById("rcpFormTestIR").value.trim();
 
@@ -2186,6 +2224,7 @@ async function openReviewImplementationModal() {
   try {
     const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
     const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
     const covCps = checkpoints.filter((c) => c.layer === "coverage");
 
     const c1Select = document.getElementById("reviewImplUpstreamC1");
@@ -2193,7 +2232,7 @@ async function openReviewImplementationModal() {
     covCps.forEach((cp) => {
       const opt = document.createElement("option");
       opt.value = cp.id;
-      opt.textContent = `${cp.key || cp.id} — ${cp.created_at} (${cp.reviewer_label})`;
+      opt.textContent = `${cp.key || "Checkpoint"} — ${cp.created_at} (${cp.reviewer_label})`;
       c1Select.appendChild(opt);
     });
 
@@ -2270,6 +2309,7 @@ async function submitReviewImplementation() {
 async function openGenerationModal() {
   const cpRes = await fetch(`${API_BASE}/plans/${state.activePlanId}/checkpoints`);
   const checkpoints = cpRes.ok ? await cpRes.json() : [];
+  state.checkpoints = checkpoints;
   const implCps = checkpoints.filter((c) => c.layer === "implementation");
 
   const cpSel = document.getElementById("genCheckpointSelect");
@@ -2283,7 +2323,7 @@ async function openGenerationModal() {
     implCps.forEach((cp) => {
       const opt = document.createElement("option");
       opt.value = cp.id;
-      opt.textContent = `${cp.key || cp.id} — ${cp.created_at}`;
+      opt.textContent = `${cp.key || "Checkpoint"} — ${cp.created_at}`;
       cpSel.appendChild(opt);
     });
   }

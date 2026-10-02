@@ -32,10 +32,12 @@ import {
 } from "@spec2gds/document-core";
 
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
+import { browserRandomUuid } from "@spec2gds/circuit-app-react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
 
 type ActionDialogState = {
   ref: EntityRef;
+  name?: string;
   actions: EntityAction[];
   loading: boolean;
   runningId: string;
@@ -170,7 +172,7 @@ export default function App() {
       client.bindDocument(nextSnapshot.owner_document_key);
       await loadView();
       if (epoch !== documentEpoch.current) return false;
-      setPath(nextPath);
+      setPath(nextSnapshot.source_path || nextPath);
       setView("document");
       setExternalChange(null);
       browserLogger?.event("documents", "opened", "Opened specification", "info", { path: nextPath, snapshot: nextSnapshot });
@@ -217,6 +219,7 @@ export default function App() {
     return () => events.close();
   }, [client, refreshActivity, snapshot?.owner_document_key]);
 
+  const pendingCreation = useRef<{ path: string; title: string; requestId: string } | null>(null);
   const createDocument = useCallback(async (nextPath: string, title: string) => {
     if (!nextPath || !title.trim()) return false;
     if (editing.current) { setError("Save or cancel your draft before creating another specification."); return false; }
@@ -225,7 +228,11 @@ export default function App() {
     setError("");
     setNotice("");
     try {
-      const nextSnapshot = await client.createDocument(nextPath, title.trim());
+      const name = title.trim();
+      if (pendingCreation.current?.path !== nextPath || pendingCreation.current.title !== name) {
+        pendingCreation.current = { path: nextPath, title: name, requestId: browserRandomUuid() };
+      }
+      const nextSnapshot = await client.createDocument(nextPath, name, pendingCreation.current.requestId);
       if (epoch !== documentEpoch.current) return false;
       activeKey.current = nextSnapshot.owner_document_key;
       client.bindDocument(nextSnapshot.owner_document_key);
@@ -361,7 +368,7 @@ export default function App() {
       const entity = [...(snapshot?.designs ?? []), ...(snapshot?.components ?? [])]
         .find((item) => item.ref.entity_id === entityId);
       setNotice(
-        `Opened ${entityName(entity?.vlnv)} in Circuit Designer`
+        `Opened ${entity?.display_name || entityName(entity?.vlnv)} in Circuit Designer`
         + (omittedBuses || omittedPorts
           ? `; omitted ${[
             omittedBuses ? `${omittedBuses} bus item${omittedBuses === 1 ? "" : "s"}` : "",
@@ -410,14 +417,14 @@ export default function App() {
     const ref = activityDialog.ref;
     setActivityDialog({ ...activityDialog, runningId: item.definition.activity_id });
     try {
-      const execution = await client.launchEntityActivity(
+      await client.launchEntityActivity(
         ref,
         item.definition.activity_id,
         snapshot.source_revision_hash,
       );
       await refreshActivity();
       setActivityDialog(null);
-      setNotice(`Queued ${item.definition.title} as ${text(execution.execution_id)}.`);
+      setNotice(`Queued ${item.definition.title} for ${referenceName(snapshot, ref)}.`);
       setView("activity");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -449,7 +456,7 @@ export default function App() {
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
       setActionDialog(null);
-      setNotice(`Opened a new AI Assistant chat for ${target.entity_id}.`);
+      setNotice(`Opened a new AI Assistant chat for ${referenceName(snapshot, target)}.`);
     } catch (caught) {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -475,7 +482,7 @@ export default function App() {
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
       setNotice(launch.scope === "document"
-        ? `Opened a read-only AI Assistant chat for ${launch.document_id}.`
+        ? `Opened a read-only AI Assistant chat for ${snapshot?.narrative.title || "this specification"}.`
         : "Opened the AI Assistant without an attached specification.");
     } catch (caught) {
       pendingWindow?.close();
@@ -577,7 +584,7 @@ export default function App() {
       },
       componentInstanceOptions() {
         return snapshot.components.map((component) => ({
-          label: entityName(component.vlnv),
+          label: component.display_name || entityName(component.vlnv),
           vlnv: component.vlnv,
         }));
       },
@@ -586,6 +593,19 @@ export default function App() {
           [{ type: "set_entity_metadata", entity: ref, ...value }],
           `${ref.entity_kind === "component" ? "Component" : "Design"} details saved automatically.`,
         );
+      },
+      async renameNarrativeSection(blockId: string, name: string) {
+        const find = (blocks: DocumentSnapshot["narrative"]["blocks"]): DocumentSnapshot["narrative"]["blocks"][number] | undefined => {
+          for (const block of blocks) {
+            if (block.block_id === blockId) return block;
+            const nested = find(block.children);
+            if (nested) return nested;
+          }
+          return undefined;
+        };
+        const block = find(snapshot.narrative.blocks);
+        if (!block || block.type !== "section") throw new Error("The section is no longer available. Refresh the source.");
+        await commitEditorOperations([{ type: "upsert_narrative_block", block: { ...block, text: name } }], `Section renamed to ${name}.`);
       },
       async addComponentPort(ref: EntityRef, value: ComponentPortInput) {
         await commitEditorOperations(
@@ -636,7 +656,7 @@ export default function App() {
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
   const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
     result.diagnostics.map((item) =>
-      `${result.section_id} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
+      `${snapshot && snapshot.entity_sections.find(section => section.section_id === result.section_id) ? referenceName(snapshot, snapshot.entity_sections.find(section => section.section_id === result.section_id)!.owner) : "Document"} › ${snapshot?.entity_sections.find(section => section.section_id === result.section_id)?.section_type === "sv" ? "SystemVerilog" : "Section"} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
     ),
   ) ?? [];
 
@@ -672,7 +692,8 @@ export default function App() {
         </div>
       )}
       {reviewSource && <aside className="app-refresh-notice">
-        <details open><summary>Review saved source · {reviewSource.source_revision_hash}</summary>
+        <details open><summary>Review saved source</summary>
+          <details><summary>Technical details</summary><code>{reviewSource.source_revision_hash}</code></details>
           <p>Draft began at {draftRevision.current}. Compare the saved values with your draft before saving again.</p>
           <pre style={{ maxHeight: 300, overflow: "auto" }}>{JSON.stringify(reviewSource, null, 2)}</pre>
         </details>
@@ -697,6 +718,7 @@ export default function App() {
           <><AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />
           <ActivityView
             activity={activity}
+            snapshot={snapshot}
             onCancel={cancelActivity}
             onRefresh={refreshActivity}
             onReview={reviewProposal}
@@ -715,7 +737,7 @@ export default function App() {
 
       {actionDialog && (
         <ActionDialog
-          state={actionDialog}
+          state={{ ...actionDialog, name: referenceName(snapshot, actionDialog.ref) }}
           onClose={() => setActionDialog(null)}
           onExecute={executeAction}
           onExplore={launchAssistant}
@@ -762,8 +784,8 @@ function AssistantHistory({ client, documentKey, revision, onChanged }: {
     <button onClick={() => void fetchPage()}>Latest submissions</button>
     {page.items.map(item => <article className="activity-item" key={text(item.proposal_id)}>
       <strong>{text(item.title)}</strong><p>{text(item.summary)}</p>
-      <p>{text(item.state)} · proposal {text(item.proposal_id)} · session {text(item.session_id)}</p>
-      <small>Base {text(item.base_source_revision_hash)} → saved {text(record(item.owner_result).source_revision_hash)}</small>
+      <p>{text(item.state)} · Proposal {String(item.ordinal)} · {text(item.created_at)}</p>
+      <details><summary>Technical details</summary><p>Proposal {text(item.proposal_id)} · session {text(item.session_id)}</p><small>Base {text(item.base_source_revision_hash)} → saved {text(record(item.owner_result).source_revision_hash)}</small></details>
       <button onClick={() => {
         const token = epoch.current;
         void client.getAssistantSubmission(text(item.proposal_id)).then(value => {
@@ -781,8 +803,26 @@ function AssistantHistory({ client, documentKey, revision, onChanged }: {
   </UtilityPanel>;
 }
 
+function referenceName(snapshot: DocumentSnapshot | null, ref: EntityRef): string {
+  const entity = [...(snapshot?.components ?? []), ...(snapshot?.designs ?? [])].find(item => item.ref.entity_id === ref.entity_id);
+  if (entity) return entity.display_name || entityName(entity.vlnv);
+  const find = (blocks: DocumentSnapshot["narrative"]["blocks"]): string => {
+    for (const block of blocks) {
+      if (block.block_id === ref.entity_id) return block.text.split("\n")[0] || "Note";
+      const name = find(block.children); if (name) return name;
+    }
+    return "";
+  };
+  return find(snapshot?.narrative.blocks ?? []) || ref.entity_kind.replaceAll("_", " ");
+}
+
 function entityName(vlnv?: string): string {
   return vlnv?.split(":")[2] || "source";
+}
+
+function TechnicalDetails({ value }: { value: unknown }) {
+  const content = JSON.stringify(value, null, 2);
+  return <details><summary>Technical details</summary><pre>{content}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(content)}>Copy details</button></details>;
 }
 
 function LoadingState() {
@@ -796,11 +836,13 @@ function LoadingState() {
 
 function ActivityView({
   activity,
+  snapshot,
   onCancel,
   onRefresh,
   onReview,
 }: {
   activity: ActivityState;
+  snapshot: DocumentSnapshot | null;
   onCancel: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
   onReview: (id: string, decision: "accept" | "reject") => Promise<void>;
@@ -816,21 +858,22 @@ function ActivityView({
           {activity.executions.slice().reverse().map((value) => {
             const item = record(value);
             const report = record(item.report);
-            const diagnostics = Array.isArray(item.diagnostics) ? item.diagnostics : [];
+            const diagnostics = Array.isArray(item.presentation_diagnostics) ? item.presentation_diagnostics : Array.isArray(item.diagnostics) ? item.diagnostics : [];
             const activityExecution = text(item.execution_type, "action") === "activity";
             const executionId = text(item.execution_id);
             const status = text(item.status, "unknown");
             const cancelling = Boolean(item.cancel_requested) && ["queued", "running"].includes(status);
-            const warnings = Array.isArray(report.warnings) ? report.warnings : [];
+            const warnings = Array.isArray(item.presentation_warnings) ? item.presentation_warnings : Array.isArray(report.warnings) ? report.warnings : [];
             const files = Array.isArray(report.files) ? report.files : [];
             return (
               <article className="activity-item" key={executionId}>
                 <span className={`status status--${cancelling ? "running" : status}`}>
                   {cancelling ? "cancelling" : status}
                 </span>
-                <strong>{text(item.activity_id, text(item.action_id))}</strong>
-                <small>{executionId}</small>
-                <p>{text(report.summary, text(diagnostics[0], "No report summary"))}</p>
+                <strong>{text(item.title, activityExecution ? "Activity" : "Action")}</strong>
+                <p>{text(item.target_name, "")}</p>
+                <TechnicalDetails value={item} />
+                <p>{text(item.presentation_summary, text(report.summary, text(diagnostics[0], "No report summary")))}</p>
                 {activityExecution && text(item.workspace_output_path, "") && (
                   <p><strong>Server path:</strong> <code>{text(item.workspace_output_path)}</code></p>
                 )}
@@ -856,7 +899,7 @@ function ActivityView({
             return (
               <article className="activity-item" key={text(item.artifact_id)}>
                 <strong>{text(item.role, "Artifact")}</strong>
-                <small>{text(item.artifact_id)}</small>
+                <TechnicalDetails value={item} />
                 <p>{text(item.media_type)} · {text(item.byte_length, "0")} bytes</p>
               </article>
             );
@@ -896,10 +939,10 @@ function ActivityView({
                 <span className="status status--succeeded">accepted</span>
                 <strong>
                   {documentScope
-                    ? "document · top-level creation"
-                    : `${text(target.entity_kind, "entity")} · ${text(target.entity_id)}`}
+                    ? snapshot?.narrative.title || "Specification"
+                    : referenceName(snapshot, target as unknown as EntityRef)}
                 </strong>
-                <small>{text(item.proposal_id)}</small>
+                <TechnicalDetails value={item} />
                 <p>{operations.length} applied {operations.length === 1 ? "operation" : "operations"}</p>
               </article>
             );
@@ -944,7 +987,8 @@ function ActivityDialog({
             <article className="action-option" key={item.definition.activity_id}>
               <div>
                 <strong>{item.definition.title}</strong>
-                <small>{item.definition.activity_id} · v{item.definition.version}</small>
+                <small>Version {item.definition.version}</small>
+                <TechnicalDetails value={{ activity: item.definition.activity_id, version: item.definition.version }} />
                 <p>{item.definition.description}</p>
                 {diagnostics.map((diagnostic, index) => (
                   <p className={item.availability.available ? "activity-warning" : "diagnostic"} key={index}>
@@ -1042,7 +1086,7 @@ function ActionDialog({
         <header>
           <div>
             <p className="utility-kicker">{state.ref.entity_kind.replaceAll("_", " ")}</p>
-            <h2 id="action-dialog-title">Actions for {state.ref.entity_id}</h2>
+            <h2 id="action-dialog-title">Actions for {state.name || state.ref.entity_kind.replaceAll("_", " ")}</h2>
           </div>
           <button aria-label="Close" className="icon-button" onClick={onClose}>×</button>
         </header>

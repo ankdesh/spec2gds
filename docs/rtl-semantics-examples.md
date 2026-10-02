@@ -43,7 +43,7 @@ uv run python scripts/generate_rtl_examples.py --check
 uv run python scripts/generate_rtl_examples.py --update
 ```
 
-`--update` derives both packages from `single_component.spec`, adds their
+`--update` preserves existing package identities and topology, refreshes their
 component-owned SV bodies, and runs `rtl.generate` into the configured
 workspace. It prints each absolute generated project path; run `make lint` in
 those directories. `--check` is read-only and fails when either `.spec` package
@@ -51,3 +51,8 @@ or configured generated project is missing or stale. Set
 `SPEC2GDS_SERVICE_CONFIG` to use a different registry without changing the
 script. The Python RTL tests generate into temporary workspaces and simulate
 reset, valid/hold behavior, and both pipeline latencies with Verilator 5.x.
+
+Public project paths use readable names, for example
+`generated/rtl/single-component-3/top-design/`. Exact identities remain in ownership
+manifests. Name collisions receive numeric suffixes; generated files keep their
+existing hardware symbols. See [Names and identifiers](naming-and-identifiers.md).

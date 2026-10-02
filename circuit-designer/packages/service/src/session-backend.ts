@@ -4,6 +4,7 @@
  * synchronization as a separate owner-mediated boundary in the HTTP service. */
 import {
   applyOperations,
+  availableHumanName, cleanHumanName, publicFilenameStem,
   commitProviderDocument,
   CircuitBackendError,
   clone,
@@ -89,8 +90,11 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
       .find(Boolean);
     if (existingRequest) return clone(existingRequest);
     if (this.records.has(document.document_id)) {
-      return this.conflict("document_exists", `Document already exists: ${document.document_id}`);
+      return this.conflict("document_exists", `The document “${this.records.get(document.document_id)!.snapshot.document.label}” already exists.`);
     }
+    const naming = this.nameDiagnostics(document);
+    if (naming.length) return this.rejected(naming, document);
+    document = { ...document, label: cleanHumanName(document.label) };
     const checked = validateCircuitDocument(document);
     if (!checked.valid) return this.rejected(checked.diagnostics, document);
     const record = this.makeRecord(document);
@@ -132,6 +136,9 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
       }], document);
     }
     if (this.activeLease(record)) return this.locked(record);
+    const naming = this.nameDiagnostics(document);
+    if (naming.length) return this.rejected(naming, document);
+    document = { ...document, label: cleanHumanName(document.label) };
     const checked = validateCircuitDocument(document);
     if (!checked.valid) return this.rejected(checked.diagnostics, document);
     const before = record.snapshot.document;
@@ -283,11 +290,19 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
 
   async export(documentId: string, options: CircuitExportOptions): Promise<CircuitExport> {
     const document = this.record(documentId).snapshot.document;
-    const stem = `${document.document_id}-${document.design.id}`;
+    const used = new Set<string>();
+    let stem = publicFilenameStem(document.label);
+    for (const record of this.records.values()) {
+      const base = publicFilenameStem(record.snapshot.document.label);
+      let candidate = base, number = 2;
+      while (used.has(candidate)) candidate = `${base}-${number++}`;
+      used.add(candidate);
+      if (record.snapshot.document.document_id === documentId) { stem = candidate; break; }
+    }
     if (options.format === "json") {
       return {
         media_type: "application/json",
-        filename: `${document.document_id}.circuit.json`,
+        filename: `${stem}.circuit.json`,
         data: exportCircuitJson(document),
       };
     }
@@ -405,6 +420,13 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
   }
 
   private insertInitial(document: CircuitDocument, revision = "1"): void {
+    document = clone(document);
+    document.label = availableHumanName(document.label || "Circuit", [...this.records.values()].map(record => record.snapshot.document.label));
+    const names: string[] = [];
+    for (const component of document.components) {
+      component.label = availableHumanName(component.label || "Component", names);
+      names.push(component.label);
+    }
     this.records.set(document.document_id, {
       snapshot: { revision, document: clone(document) },
       revisionNumber: Number(revision) || 1,
@@ -454,6 +476,8 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
   private evaluate(document: CircuitDocument, batch: CircuitOperationBatch): CircuitChangeResult {
     const result = applyOperations(document, batch.operations);
     if (!result.candidate) return result;
+    const naming = this.nameDiagnostics(result.candidate);
+    if (naming.length) return this.rejected(naming, result.candidate);
     const checked = validateCircuitDocument(result.candidate);
     if (checked.valid) {
       return {
@@ -462,6 +486,14 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
       };
     }
     return this.rejected(checked.diagnostics, result.candidate);
+  }
+
+  private nameDiagnostics(document: CircuitDocument): CircuitChangeResult["diagnostics"] {
+    try {
+      const name = cleanHumanName(document.label);
+      const suggestion = availableHumanName(name, [...this.records.values()].filter(record => record.snapshot.document.document_id !== document.document_id).map(record => record.snapshot.document.label));
+      return suggestion === name ? [] : [{ severity: "error", code: "duplicate_name", message: `A document named “${name}” already exists. Use “${suggestion}” or another name.`, element_key: document.document_id }];
+    } catch (cause) { return [{ severity: "error", code: "invalid_name", message: String(cause) }]; }
   }
 
   private rejected(diagnostics: CircuitChangeResult["diagnostics"], candidate?: CircuitDocument): CircuitChangeResult {

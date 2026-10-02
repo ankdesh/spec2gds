@@ -56,7 +56,7 @@ test("uses a compact menubar and the reclaimed full-width canvas", async ({ page
   const canvasBox = await page.locator(".canvas-surface").boundingBox();
   expect(appBox?.height).toBeGreaterThan(500);
   expect(canvasBox?.height).toBeGreaterThan(400);
-  await expect(page.locator(".notice")).toContainText("REST session");
+  await expect(page.locator(".notice")).toContainText("Untitled circuit");
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await expect(page.locator(".library")).toHaveCount(0);
   await expect(page.locator(".canvas-action-bar")).toHaveCount(0);
@@ -167,9 +167,9 @@ test("edits a writable specification binding and saves it through source preview
   expect(registered.ok()).toBe(true);
 
   await page.goto(`/?document_id=${document.document_id}`);
-  await expect(page.locator(".document-status")).toContainText("specification bound");
+  await expect(page.locator(".document-status")).toContainText("Specification bound");
   await menuAction(page, "Edit", "Begin editing");
-  await expect(page.locator(".document-status")).toContainText("specification draft");
+  await expect(page.locator(".document-status")).toContainText("Specification draft");
 
   const pane = page.locator(".react-flow__pane");
   await pane.click({ button: "right", position: { x: 420, y: 260 } });
@@ -177,14 +177,14 @@ test("edits a writable specification binding and saves it through source preview
   await expect(createLocal).toBeEnabled();
   await createLocal.click();
   await page.getByLabel("Name", { exact: true }).fill("spec_block");
-  await expect(page.getByText("VLNV: spec2gds.local:work:spec_block:1.0")).toBeVisible();
+  await expect(page.getByText("VLNV: spec2gds.local:work:spec_block:1.0")).not.toBeVisible();
   await page.getByRole("button", { name: "Create definition + instance" }).click();
 
   const save = page.getByRole("button", { name: "Save to Specification", exact: true });
   await expect(save).toBeVisible();
   await save.click();
-  await expect(page.locator(".document-status")).toContainText("specification bound");
-  await expect(page.locator(".notice")).toContainText("Saved to the specification");
+  await expect(page.locator(".document-status")).toContainText("Specification bound");
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
   expect(sourceProviderCalls).toEqual(["/source/preview", "/source/commit"]);
 });
 
@@ -431,7 +431,7 @@ test("downloads and reopens a portable circuit file from File commands", async (
   const downloadPromise = page.waitForEvent("download");
   await menuAction(page, "File", /Save changes/);
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/^local_.*\.circuit\.json$/);
+  expect(download.suggestedFilename()).toMatch(/^untitled-circuit(?:-\d+)?\.circuit\.json$/);
   const filePath = await download.path();
   expect(filePath).not.toBeNull();
   const saved = JSON.parse(await readFile(filePath!, "utf8")) as {
@@ -442,9 +442,11 @@ test("downloads and reopens a portable circuit file from File commands", async (
 
   await menuAction(page, "File", /New circuit/);
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
-  await page.getByLabel("Circuit file").setInputFiles(filePath!);
+  const chooserPromise = page.waitForEvent("filechooser");
+  await menuAction(page, "File", /Open circuit/);
+  await (await chooserPromise).setFiles(filePath!);
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
-  await expect(page.locator(".notice")).toContainText(".circuit.json");
+  await expect(page.locator(".notice")).toContainText("Untitled circuit");
 });
 
 test("exports the visible canvas layout consistently to SVG and PNG", async ({ page }) => {
@@ -474,7 +476,7 @@ test("exports the visible canvas layout consistently to SVG and PNG", async ({ p
   const exportedPosition = svg.match(/data-instance-id="visual_export"><rect x="([\d.-]+)" y="([\d.-]+)"/);
   expect(svgBox).not.toBeNull();
   expect(exportedPosition?.slice(1)).toEqual(canvasPosition?.slice(1));
-  expect(svg).toContain(".canvas-background{fill:#f4f2ec}");
+  expect(svg).toContain(".canvas-background{fill:#f7f9fc}");
   expect(svg).toContain('fill="url(#canvas-grid)"');
   expect(svg).toContain('data-terminal-id="visual_export:input"');
   expect(svg).toContain('data-terminal-id="visual_export:output"');
@@ -493,9 +495,11 @@ test("exports the visible canvas layout consistently to SVG and PNG", async ({ p
 
 test("rejects an invalid file without replacing the current circuit", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".notice")).toContainText("REST session");
+  await expect(page.locator(".notice")).toContainText("Untitled circuit");
   const nodeCount = await page.locator(".react-flow__node").count();
-  await page.getByLabel("Circuit file").setInputFiles({
+  const chooserPromise = page.waitForEvent("filechooser");
+  await menuAction(page, "File", /Open circuit/);
+  await (await chooserPromise).setFiles({
     name: "broken.circuit.json",
     mimeType: "application/json",
     buffer: Buffer.from("{"),

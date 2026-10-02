@@ -13,6 +13,7 @@ from pathlib import Path
 from spec2gds.agent_spec.activities.view import SpecAccess
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, DesignIR, PortIR
 from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
+from spec2gds.agent_spec.spec_format.naming import entity_name
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "systemc.generate_cycle_accurate"
@@ -46,6 +47,7 @@ class PreparedProject:
     instance_count: int
     connection_count: int
     source_sections: tuple[dict[str, str], ...]
+    display_name: str = "Design"
 
 
 @dataclass(frozen=True)
@@ -157,6 +159,7 @@ class _Assembler:
             instance_count=self.instance_count,
             connection_count=self.connection_count,
             source_sections=tuple(self.section_records),
+            display_name=entity_name(design),
         )
 
     @staticmethod
@@ -172,10 +175,10 @@ class _Assembler:
         if key in self.done:
             return
         if key in self.visiting:
-            raise ValueError(f"Component hierarchy contains a cycle at {component.vlnv}.")
+            raise ValueError(f"Component hierarchy contains a cycle at {entity_name(component)}.")
         self.visiting.add(key)
         if component.interfaces:
-            raise ValueError(f"Component {component.vlnv} has unsupported bus interfaces.")
+            raise ValueError(f"Component {entity_name(component)} has unsupported bus interfaces.")
         for port in component.ports:
             _port_width(port)
             _checked_identifier(port.name, "Port")
@@ -183,7 +186,7 @@ class _Assembler:
         if internal is None:
             body = self.sections.get(("component", key))
             if body is None or not body.content.strip():
-                raise ValueError(f"Leaf component {component.vlnv} has no SystemVerilog body.")
+                raise ValueError(f"Leaf component {entity_name(component)} has no SystemVerilog body.")
             self._write_module(self._component_name(component), component, "", (body,))
         else:
             self._emit_design(internal, component)
@@ -468,7 +471,7 @@ def _cmake(prepared: PreparedProject) -> str:
 
 def _project_readme(prepared: PreparedProject) -> str:
     return (
-        f"# {prepared.design_vlnv} native SystemC model\n\n"
+        f"# {prepared.display_name} native SystemC model\n\n"
         f"Top module: `{prepared.top_module}`.\n\n"
         "Build with SystemC 2.3.3 or later:\n\n"
         "```bash\n"

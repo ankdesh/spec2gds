@@ -77,10 +77,11 @@ export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;
   sourceDescription: string;
+  onRenameComponent?: (id: string, name: string) => void;
   sourceIdentifierPattern?: string;
   sourceIdentifierHint?: string;
   proposals: CircuitProposal[];
-  terminals: Array<{ id: string }>;
+  terminals: Array<{ id: string; label?: string }>;
   netName: string;
   endpointA: string;
   endpointB: string;
@@ -136,8 +137,8 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     return <CircuitModal onClose={props.onClose} title="Create connection">
       <form className="circuit-dialog__form" onSubmit={submit}>
         <label>Net label<input autoFocus value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
-        <label>Endpoint A<select value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.id}</option>)}</select></label>
-        <label>Endpoint B<select value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.id}</option>)}</select></label>
+        <label>Endpoint A<select value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        <label>Endpoint B<select value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
         <div className="slice-row"><label>LSB<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.endpointA || !props.endpointB} type="submit">Create net</button></div>
       </form>
@@ -145,7 +146,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
   }
 
   if (props.dialog === "new-component") {
-    const sourceNameValid = !props.sourceIdentifierPattern || new RegExp(props.sourceIdentifierPattern).test(props.componentName.trim());
+    const sourceNameValid = Boolean(props.componentName.trim());
     return <CircuitModal onClose={props.onClose} title="New local component">
       <form className="circuit-dialog__form" onSubmit={(event) => {
         event.preventDefault();
@@ -153,7 +154,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         props.onCreateComponent(); props.onClose();
       }}>
         <p>Create a local two-terminal component definition and its first instance.</p>
-        <label>Name<input autoFocus pattern={props.sourceIdentifierPattern} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder={props.sourceIdentifierPattern ? "arithmetic_unit" : "Arithmetic unit"} /></label>
+        <label>Name<input autoFocus maxLength={200} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder="Arithmetic unit" /></label>
         {props.sourceIdentifierPattern && !sourceNameValid && <p role="alert">{props.sourceIdentifierHint ?? "Use a source-compatible name."}</p>}
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim() || !sourceNameValid} type="submit">Create definition + instance</button></div>
       </form>
@@ -167,8 +168,8 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         <p>{props.sourceDescription}</p>
         <div className="metrics"><div><b>{props.document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{props.document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-dialog__grid">
-          <div className="catalog-list">{props.document?.components.map((component) => <button className={component.id === selectedComponentId ? "active" : ""} key={component.id} onClick={() => setSelectedComponentId(component.id)} type="button"><b>{component.label}</b><small>{component.origin} · {component.appearance.renderer_key}</small></button>)}</div>
-          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3><code>{selected.id}</code><p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source owned"}</p><button className="primary" onClick={() => { props.onPlaceComponent(selected.id); props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
+          <div className="catalog-list">{props.document?.components.map((component) => <button className={component.id === selectedComponentId ? "active" : ""} key={component.id} onClick={() => setSelectedComponentId(component.id)} type="button"><b>{component.label}</b><small>{component.origin}</small></button>)}</div>
+          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3>{selected.editable && props.onRenameComponent && <button type="button" onClick={() => { const name = window.prompt("Component name", selected.label); if (name?.trim()) props.onRenameComponent?.(selected.id, name); }}>Rename</button>}<p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source owned"}</p><details><summary>Technical details</summary><code>{selected.id}</code></details><button className="primary" onClick={() => { props.onPlaceComponent(selected.id); props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
         </div>
         {!props.document?.components.length && <p className="empty-copy">No component definitions are available yet.</p>}
       </div>

@@ -130,7 +130,7 @@ function reviewResult(review: ProposalReview): JsonValue {
     ...(review.error ? { error: review.error } : {}),
     review: publicReview(review),
     instruction: review.state === "applied"
-      ? "The owner saved this change. Report the applied result and saved revision; no approval is needed."
+      ? "The owner saved this change. Describe the applied changes using source names; no approval is needed."
       : review.state === "ready"
       ? "The preview is ready. Tell the user to inspect the review card and use its explicit action button."
       : "The owner did not accept this preview. Explain the diagnostics and do not claim any change was made.",
@@ -239,6 +239,10 @@ export function registerDomainTools(
         model_context: binding.domain === "spec" ? "Use authoritative_context below; stored RTL defines implemented behavior and component descriptions guide implementation." : shaped.text,
         warnings: shaped.warnings,
         authoritative_context: context,
+        architecture_reviews: binding.domain === "spec" ? state.listArchitectureReviews().filter(review => {
+          try { state.requireArchitecture(binding.sessionId, review.reviewId, typeof revision === "string" ? revision : undefined); return true; }
+          catch { return false; }
+        }).map(review => ({ review_id: review.reviewId, number: review.reviewNumber || null, title: review.plan.title, status: review.status, plan: review.plan })) : [],
         rules: [
           "Owner-provided IDs and revision values are authoritative.",
           "Stay inside the writable boundary stated by Spec context.",

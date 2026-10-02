@@ -18,6 +18,7 @@ from spec2gds.agent_spec.spec_format.ir import (
     PortIR,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
+from spec2gds.agent_spec.spec_format.naming import entity_name
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "rtl.generate"
@@ -528,12 +529,12 @@ class _Analyzer:
         for kind, name in names:
             if not _is_plain_identifier(name):
                 self.errors.append(
-                    f"Design {analysis.design.vlnv} {kind} name {name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
+                    f"Design {entity_name(analysis.design)} {kind} name {name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
                 )
             previous = seen.get(name)
             if previous is not None:
                 self.errors.append(
-                    f"Design {analysis.design.vlnv} {kind} name {name!r} collides with a {previous} in the module namespace."
+                    f"Design {entity_name(analysis.design)} {kind} name {name!r} collides with a {previous} in the module namespace."
                 )
             else:
                 seen[name] = kind
@@ -542,22 +543,22 @@ class _Analyzer:
         section = self.sections_by_owner.get(component.ref.entity_id)
         for interface in component.interfaces:
             self.errors.append(
-                f"Component {component.vlnv} declares unsupported bus interface {interface.name}."
+                f"Component {entity_name(component)} declares unsupported bus interface {interface.name}."
             )
         for port in component.ports:
             if section is not None and section.content.strip() and not _is_plain_identifier(port.name):
                 self.errors.append(
-                    f"Component {component.vlnv} port {port.name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
+                    f"Component {entity_name(component)} port {port.name!r} must be a plain non-keyword SystemVerilog identifier while SV is active."
                 )
             if port.style != "wire":
                 self.errors.append(
-                    f"Component {component.vlnv} port {port.name} is {port.style}; only wire ports are supported."
+                    f"Component {entity_name(component)} port {port.name} is {port.style}; only wire ports are supported."
                 )
                 continue
             shape = _port_shape(port)
             if shape is None:
                 self.errors.append(
-                    f"Component {component.vlnv} port {port.name} uses unsupported symbolic range {port.width}."
+                    f"Component {entity_name(component)} port {port.name} uses unsupported symbolic range {port.width}."
                 )
                 continue
             self.shapes[(component.ref.entity_id, port.name)] = shape
@@ -569,7 +570,7 @@ class _Analyzer:
         occupied: dict[tuple[str, str, str], list[tuple[int, int, str]]] = {}
         connections: list[_Connection] = []
         for connection in design.connections:
-            label = f"Design {design.vlnv} connection {connection.name}"
+            label = f"Design {entity_name(design)} connection {connection.name}"
             if connection.kind != "ad_hoc":
                 self.errors.append(f"{label} is an unsupported bus-interface connection.")
                 continue
@@ -632,7 +633,7 @@ class _Analyzer:
             component = self.components_by_vlnv[instance.component_vlnv]
             for port in component.ports:
                 if port.style == "wire" and (instance.name, port.name) not in referenced:
-                    self.warnings.append(f"Design {design.vlnv} instance {instance.name} port {port.name} is unconnected.")
+                    self.warnings.append(f"Design {entity_name(design)} instance {instance.name} port {port.name} is unconnected.")
         return _DesignAnalysis(design, owner, tuple(connections))
 
 
@@ -888,7 +889,7 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
     files["Makefile"] = _render_template("Makefile.j2", top_module=top_module).encode("utf-8")
     files["README.md"] = _render_template(
         "README.md.j2",
-        design_vlnv=analysis.target.vlnv,
+        design_name=entity_name(analysis.target),
         top_module=top_module,
     ).encode("utf-8")
 

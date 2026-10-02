@@ -9,6 +9,9 @@ export interface CircuitSourceBindingV1 {
   schema_version: 1;
   binding_id: string;
   source_document_id: string;
+  source_name?: string;
+  source_entity_name?: string;
+  source_owner_document_key?: string;
   /** Public Spec service identity used for cross-editor navigation grouping. */
   source_service_url?: string;
   source_entity: {
@@ -61,6 +64,9 @@ export function isCircuitSourceBindingV1(value: unknown): value is CircuitSource
     || !isStringArray(value.omitted_ports)
   ) return false;
   if (value.editable_design_id !== undefined && typeof value.editable_design_id !== "string") return false;
+  for (const field of ["source_name", "source_entity_name", "source_owner_document_key"]) {
+    if (value[field] !== undefined && typeof value[field] !== "string") return false;
+  }
   if (value.source_service_url !== undefined
     && (typeof value.source_service_url !== "string" || !value.source_service_url)) return false;
   if (value.message !== undefined && typeof value.message !== "string") return false;

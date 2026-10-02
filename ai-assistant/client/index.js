@@ -60,21 +60,24 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     (Array.isArray(owners?.[domain]) ? owners[domain] : []).map(item => ({ domain, url: item.url, available: item.available })));
 
   function targetRows(payload) {
+    if (payload.domain === "spec" && Array.isArray(payload.documents)) {
+      return payload.documents.flatMap(document => targetRows({ ...payload, documents: undefined, document, entities: document.entities }));
+    }
     if (payload.domain === "spec" && payload.document) {
       const document = payload.document;
       return [{ domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
         ownerDocumentKey: document.owner_document_key,
-        title: String(document.title || document.document_id), scope: "document" },
+        title: String(document.title || "Specification"), scope: "document" },
       ...(Array.isArray(payload.entities) ? payload.entities : []).map(entity => ({
         domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
         ownerDocumentKey: document.owner_document_key,
-        title: `${entity.title || entity.entity_id} · ${entity.entity_kind || "entity"}`,
+        title: `${entity.title || "Entity"} · ${entity.entity_kind || "entity"}`,
         scope: "entity", entityKind: String(entity.entity_kind || "entity"), entityId: String(entity.entity_id),
       }))];
     }
     return (Array.isArray(payload.documents) ? payload.documents : []).map(document => ({
       domain: "circuit", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
-      title: String(document.label || document.title || document.document_id), scope: "document",
+      title: String(document.label || document.title || "Circuit"), scope: "document",
       sourceBinding: document.source_binding || null,
     }));
   }
@@ -118,7 +121,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           <label data-service>Design service<select name="service"></select></label>
           <div data-manual hidden class="s2g-pair"><label>Service type<select name="manualDomain"><option value="spec">Spec Editor</option><option value="circuit">Circuit Designer</option></select></label><label>Service URL<input name="manualUrl" spellcheck="false" placeholder="http://127.0.0.1:6010"></label></div>
           <div data-existing><label>Target<select name="target"></select></label><p class="s2g-hint">The list is browse-only. A conversation remains permanently bound to the selected target.</p></div>
-          <div data-create hidden class="s2g-form"><div class="s2g-pair"><label>Document ID<input name="documentId" autocomplete="off" spellcheck="false" placeholder="my_design"></label><label>Title<input name="title" autocomplete="off" placeholder="My design"></label></div><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
+          <div data-create hidden class="s2g-form"><label>Name<input name="title" autocomplete="off" maxlength="200" placeholder="My design"></label><p class="s2g-hint">Specs are created under the configured Spec document root. Circuits start as empty documents.</p></div>
           <label>Assistant preset<select name="preset"><option value="focused">Focused · one-shot Q&amp;A and proposals</option><option value="goal">Goal · bounded long-running work</option><option value="orchestrated">Orchestrated · persistent event agents</option></select></label>
           <label data-event-setup hidden>Event template<select aria-label="Event template" name="eventTemplate"></select></label><button type="button" data-edit-template hidden>Configure event template</button>
           <p class="s2g-hint">The preset and agent configuration are fixed for this conversation. Service-specific context, tools, and review rules are added separately.</p>
@@ -194,9 +197,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           const template=eventTemplates.find(item=>item.key===form.elements.eventTemplate.value);
           const templateSelection=preset==="focused"?{}:{eventTemplateKey:template?.key,eventTemplateRevision:template?.revision};
           if (selectedMode() === "create") {
-            const documentId = form.elements.documentId.value.trim(), title = form.elements.title.value.trim();
-            if (!documentId || !title) throw new Error("Document ID and title are required.");
-            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, documentId, title, preset, ...templateSelection }));
+            const title = form.elements.title.value.trim();
+            if (!title) throw new Error("Name is required.");
+            close(await api("/sources/create", { domain: service.domain, serviceBaseUrl: service.url, title, preset, ...templateSelection }));
           } else {
             const target = targets[Number(targetSelect.value)];
             if (!target) throw new Error("Choose an available target.");
@@ -246,10 +249,11 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       try { return await ctx.workspaces.rename(workspace.workspaceId, descriptor.title); }
       catch (error) {
         if (!String(error instanceof Error ? error.message : error).includes("workspace/name-conflict")) throw error;
-        let owner = "design source";
-        try { owner = new URL(descriptor.ownerUrl).host; } catch { /* Use the stable fallback below. */ }
-        const disambiguated = `${descriptor.title} · ${owner} · ${String(descriptor.key).slice(0, 8)}`;
-        return ctx.workspaces.rename(workspace.workspaceId, disambiguated);
+        for (let number = 2; number < 10000; number++) {
+          try { return await ctx.workspaces.rename(workspace.workspaceId, `${descriptor.title} ${number}`); }
+          catch (caught) { if (!String(caught.message).includes("workspace/name-conflict")) throw caught; }
+        }
+        throw new Error("No available workspace name.");
       }
     }
     return workspace;
@@ -320,6 +324,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     try { return JSON.parse(content[0].text); } catch { return null; }
   }
 
+  const roleName = value => String(value || "Assistant").replaceAll("_", " ").replaceAll("-", " ").replace(/(^| )([a-z])/g, (_, prefix, character) => prefix + character.toUpperCase());
   const pretty = value => JSON.stringify(value, null, 2);
   const record = value => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
@@ -328,10 +333,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     if (!changes.length) return h("p", null, "No semantic section changes reported.");
     return h("div", null, changes.map((change, index) => {
       const item = record(change);
-      return h("details", { key: index }, h("summary", null, `${item.path || "change"} · ${item.change || "changed"}`),
+      return h("section", { key: index }, h("p", null, `${item.label || "Section"} · ${item.change || "changed"}`),
+        h("details", null, h("summary", null, "Technical details"),
+        h("code", null, item.path), h("button", { onClick: () => navigator.clipboard.writeText(pretty(item)) }, "Copy details"),
         h("div", { className: "s2g-diff" },
           h("div", null, h("small", null, "Before"), h("pre", null, pretty(item.before))),
-          h("div", null, h("small", null, "After"), h("pre", null, pretty(item.after)))));
+          h("div", null, h("small", null, "After"), h("pre", null, pretty(item.after))))));
     }));
   }
 
@@ -353,7 +360,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h("div", null, h("small", null, side), h("svg", { className: "s2g-circuit", viewBox: `0 0 ${width} ${height}` }, lines,
       instances.map(item => {
         const point = points.get(String(item.id));
-        return h("g", { key: item.id }, h("rect", { x: point.x, y: point.y, width: 104, height: 36, rx: 6, fill: changed.has(`instance:${item.id}`) ? "#fef3c7" : "#e8f2ef", stroke: changed.has(`instance:${item.id}`) ? "#d97706" : "#176b5b" }), h("text", { x: point.x + 52, y: point.y + 22, textAnchor: "middle", fontSize: 11, fill: "#17211f" }, String(item.label || item.id)));
+        return h("g", { key: item.id }, h("rect", { x: point.x, y: point.y, width: 104, height: 36, rx: 6, fill: changed.has(`instance:${item.id}`) ? "#fef3c7" : "#e8f2ef", stroke: changed.has(`instance:${item.id}`) ? "#d97706" : "#176b5b" }), h("text", { x: point.x + 52, y: point.y + 22, textAnchor: "middle", fontSize: 11, fill: "#17211f" }, String(item.label || "Instance")));
       })));
   }
 
@@ -378,8 +385,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       finally { setBusy(false); }
     }
     return h("article", { className: "s2g-review" },
-      h("header", null, h("h4", null, artifact.title || "Design proposal"), h("span", { className: "s2g-state", role: "status" }, review.state === "applied" && record(review.ownerResult).application_mode === "automatic" ? "Applied automatically" : review.state)),
-      review.state === "applied" ? h("small", null, "Saved revision: ", h("code", null, String(record(review.ownerResult).source_revision_hash || ""))) : null,
+      h("header", null, h("h4", null, `${review.reviewNumber ? `Review ${review.reviewNumber} · ` : ""}${artifact.title || "Design proposal"}`), h("span", { className: "s2g-state", role: "status" }, review.state === "applied" && record(review.ownerResult).application_mode === "automatic" ? "Applied automatically" : review.state)),
+      review.state === "applied" ? h("small", null, "Changes saved") : null,
       h("section", { className: "s2g-summary" },
         h("p", null, record(review.changeSummary).text || "Proposal summary unavailable."),
         Array.isArray(record(review.changeSummary).changedTargets) && record(review.changeSummary).changedTargets.length
@@ -390,7 +397,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         h("p", null, String(record(review.error).details || "The proposal was not accepted.")),
         h("small", null, record(review.error).retryable ? "This may be retried after the underlying condition changes." : "No automatic retry will be attempted.")) : null,
       review.domain === "spec" ? h(SpecDiff, { preview: review.preview }) : h(CircuitDiff, { preview: review.preview }),
-      h("details", null, h("summary", null, "Exact operations"), h("pre", null, pretty(operations))),
+      h("details", null, h("summary", null, "Technical details"), h("button", { onClick: () => navigator.clipboard.writeText(pretty(review)) }, "Copy details"), h("pre", null, pretty({ operations, proposal: review.proposalId, saved_revision: record(review.ownerResult).source_revision_hash }))),
       h("details", null, h("summary", null, "Requested change, rationale, assumptions, and owner preview"), h("pre", null, pretty({ requested_change: artifact.summary, rationale: artifact.rationale, assumptions: artifact.assumptions, preview: review.preview, diagnostics: review.diagnostics }))),
       actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Approve and apply" : "Send to Circuit Designer") : null) : null,
       error ? h("p", { className: "s2g-error" }, error) : null);
@@ -402,7 +409,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h("article", { className: "s2g-review" },
       h("header", null, h("h4", null, "Proposal not created"), h("span", { className: "s2g-state" }, value.error_code || "ERROR")),
       h("p", { className: "s2g-error" }, value.details || "The request could not be represented safely."),
-      value.target ? h("p", null, "Target: ", h("code", null, String(value.target))) : null,
+      value.target ? h("details", null, h("summary", null, "Technical details"), h("pre", null, pretty(value))) : null,
       actions.length ? h("ul", null, actions.map(action => h("li", { key: action }, action))) : null,
       h("small", null, value.retryable ? "Retryable after the underlying condition changes." : "No automatic retry will be attempted."));
   }
@@ -463,9 +470,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const result = await api(`/architecture-reviews/${encodeURIComponent(value.reviewId)}/${action}`, { feedback });
         setValue(result.architecture_review);
         if (action !== "cancel") {
-          inputActions.setDraft(JSON.stringify({ kind: "architecture_decision", architecture_review_id: value.reviewId,
-            decision: result.architecture_review.status, feedback,
-            instruction: action === "approve" ? "Continue with the approved architecture. Use this review ID for creation and initial contents." : "Prepare a revised architecture incorporating this feedback. Await its approval." }));
+          inputActions.setDraft(`Architecture review ${value.reviewNumber || ""} · ${record(value.plan).title || "Architecture"}: ${result.architecture_review.status}. ${action === "approve" ? "Continue with the approved architecture. Read current context before creating its contents." : "Prepare a revised architecture incorporating this feedback and await approval."}${feedback ? ` Feedback: ${feedback}` : ""}`);
           queueMicrotask(() => inputActions.submit());
         }
       } catch (caught) { setError(caught.message); }
@@ -473,7 +478,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     }
     const plan = record(value.plan);
     return h("article", { className: "s2g-review", "data-s2g-architecture-review": value.status },
-      h("header", null, h("h4", null, plan.title || "Architecture review"), h("span", { className: "s2g-state" }, value.status)),
+      h("header", null, h("h4", null, `${value.reviewNumber ? `Review ${value.reviewNumber} · ` : ""}${plan.title || "Architecture review"}`), h("span", { className: "s2g-state" }, value.status)),
       ["components", "designs", "interfaces", "clocks_resets", "decomposition_rationale", "assumptions", "open_questions", "concrete_configuration"].map(key =>
         h("details", { key, open: true }, h("summary", null, key.replaceAll("_", " ")), h("pre", null, typeof plan[key] === "string" ? plan[key] : pretty(plan[key])))),
       value.status === "pending" ? h("div", null,
@@ -514,7 +519,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const services = Array.isArray(value.services) ? value.services : [];
     const unavailable = editable && !services.some(service => service.url === values.serviceBaseUrl && service.available);
     const saved = ["created", "reserved", "continued"].includes(value.status);
-    const path = editable ? `${value.specDocumentRoot}${value.pathSeparator || "/"}${values.documentId}.spec` : value.destination;
+    const path = editable ? value.specDocumentRoot : value.destination;
     const update = name => event => setValues(current => ({ ...current, [name]: event.target.value }));
     async function refresh() {
       const result = await api(`/source-requests/${encodeURIComponent(request.requestId)}`);
@@ -552,8 +557,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       value.status !== "cancelled" ? h("p", null, "Save location: ", h("code", null, path)) : null,
       error || value.error ? h("p", { className: "s2g-error", role: "alert" }, error || value.error) : null,
       !terminal ? h("form", { className: "s2g-form", onSubmit: submit },
-        h("label", null, "Title", h("input", { name: "title", value: values.title, disabled: busy || !editable, required: true, onChange: update("title") })),
-        h("label", null, "Document ID", h("input", { name: "documentId", value: values.documentId, disabled: busy || !editable, required: true, maxLength: 128, pattern: "[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", onChange: update("documentId") })),
+        h("label", null, "Name", h("input", { name: "title", value: values.title, disabled: busy || !editable, required: true, maxLength: 200, onChange: update("title") })),
         services.length > 1 ? h("label", null, "Spec service", h("select", { value: values.serviceBaseUrl, disabled: busy || !editable, onChange: update("serviceBaseUrl") },
           services.map(service => h("option", { key: service.url, value: service.url }, `${service.url}${service.available ? "" : " (offline)"}`)))) : null,
         unavailable ? h("p", { className: "s2g-error" }, "The selected Spec service is offline or none is configured. Start the service, then refresh availability.") : null,
@@ -603,10 +607,22 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
 
   function selectProposalReview(owner) {
     const results = owner.turn.data.get("spec2gds-proposal-reviews")?.results || [];
-    return results.filter(result => result.seq < owner.seq).at(-1) || null;
+    const visible = results.filter(result => result.seq < owner.seq);
+    const latest = visible.at(-1);
+    if (!latest) return null;
+    // Approval controls must survive a later tool error in the same turn.
+    const reviews = new Map();
+    for (const result of visible) {
+      if (result.architectureReview) reviews.set(result.architectureReview.reviewId, result.architectureReview);
+    }
+    reviews.delete(latest.architectureReview?.reviewId);
+    return { ...latest, earlierArchitectureReviews: [...reviews.values()] };
   }
 
   function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation }) {
+    if (matched.earlierArchitectureReviews?.length) return h("div", null,
+      matched.earlierArchitectureReviews.map(request => h(ArchitectureReviewCard, { key: request.reviewId, request, inputActions })),
+      h(ProposalReviewTail, { matched: { ...matched, earlierArchitectureReviews: [] }, inputActions, onContinueCreation, onOpenCreation }));
     if (matched.architectureReview) return h(ArchitectureReviewCard, { key: matched.architectureReview.reviewId, request: matched.architectureReview, inputActions });
     if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
     if (matched.creationError) return h("article", { className: "s2g-review" }, h("h4", null, "Specification creation unavailable"), h("p", { className: "s2g-error" }, matched.creationError));
@@ -652,16 +668,16 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const height = (Math.max(events.length, agents.length) + sources.length) * 38 + 24;
         const lines = draft.definition.subscriptions.map(edge => {
           const from = events.indexOf(edge.event), to = agents.findIndex(agent => agent.id === edge.target);
-          return from < 0 || to < 0 ? "" : `<path d="M 180 ${from * 38 + 27} C 230 ${from * 38 + 27}, 240 ${to * 38 + 27}, 290 ${to * 38 + 27}" stroke="#176b5b" fill="none"><title>${escapeHtml(edge.id)}: ${escapeHtml(edge.event)} → ${escapeHtml(edge.target)}</title></path>`;
+          return from < 0 || to < 0 ? "" : `<path d="M 180 ${from * 38 + 27} C 230 ${from * 38 + 27}, 240 ${to * 38 + 27}, 290 ${to * 38 + 27}" stroke="#176b5b" fill="none"><title>${escapeHtml(roleName(edge.event))} → ${escapeHtml(roleName(edge.target))}</title></path>`;
         }).join("");
-        const sourceRows=sources.map((source,i)=>`<text x="5" y="${(Math.max(events.length,agents.length)+i)*38+27}" font-size="12" fill="#17211f">HTTP ${escapeHtml(source.id.slice(0,8))} → source.changed (${source.enabled?"enabled":"disabled"})</text>`).join("");
-        field("[data-topology]").innerHTML = `<svg role="img" aria-label="Events react through subscriptions to agents" viewBox="0 0 470 ${height}">${sourceRows}${lines}${events.map((event, i) => `<g><rect x="5" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="10" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(event)}</text></g>`).join("")}${agents.map((agent,i) => `<g><rect x="290" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="300" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(agent.id)}</text></g>`).join("")}</svg>`;
+        const sourceRows=sources.map((source,i)=>`<text x="5" y="${(Math.max(events.length,agents.length)+i)*38+27}" font-size="12" fill="#17211f">Source monitor ${i+1} → source.changed (${source.enabled?"enabled":"disabled"})</text>`).join("");
+        field("[data-topology]").innerHTML = `<svg role="img" aria-label="Events react through subscriptions to agents" viewBox="0 0 470 ${height}">${sourceRows}${lines}${events.map((event, i) => `<g><rect x="5" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="10" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(event)}</text></g>`).join("")}${agents.map((agent,i) => `<g><rect x="290" y="${i*38+10}" width="175" height="30" rx="5" fill="#e8f3ef"/><text x="300" y="${i*38+30}" font-size="12" fill="#17211f">${escapeHtml(roleName(agent.id))}</text></g>`).join("")}</svg>`;
       }
       function render() {
         selection.innerHTML = templates.map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)}${item.builtin ? " (built-in)" : ` · revision ${item.revision}`}</option>`).join("");
         selection.value = selected.key; field("[data-name]").value = selected.builtin ? `${selected.name} custom` : selected.name;
         const visual = field("[data-visual]");
-        visual.innerHTML = `<h3>Agents and approved capabilities</h3>${draft.definition.agents.map((agent,i) => `<fieldset data-agent="${i}"><legend>${escapeHtml(agent.id)} · ${agent.id === "primary" ? "proposal owner" : "read-only specialist"}</legend>
+        visual.innerHTML = `<h3>Agents and approved capabilities</h3>${draft.definition.agents.map((agent,i) => `<fieldset data-agent="${i}"><legend>${escapeHtml(roleName(agent.id))} · ${agent.id === "primary" ? "proposal owner" : "read-only specialist"}</legend>
           <label>Prompt · ${escapeHtml(agent.id)}<textarea aria-label="Prompt · ${escapeHtml(agent.id)}" data-prompt rows="5">${escapeHtml(agent.prompt)}</textarea></label>
           <label>Model route · ${escapeHtml(agent.id)}<select data-route><option value="inherit">Inherit selected native route</option><option value="deployment">${escapeHtml(catalog.route.provider)} / ${escapeHtml(catalog.route.model)}</option></select></label>
           <div>Native composition: ${escapeHtml(agent.agentPreset || "read-only event member")}; skills/MCP come from that composition.</div>
@@ -669,7 +685,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           <label>Published events · ${escapeHtml(agent.id)}<input data-publishes value="${escapeHtml(agent.publishes.join(", "))}"></label>
           ${agent.id !== "primary" ? '<button type="button" data-remove-agent>Remove agent</button>' : ""}</fieldset>`).join("")}
           <label>Add approved role<select data-add-role><option value="">Choose role</option>${base.definition.agents.filter(agent=>!draft.definition.agents.some(item=>item.id===agent.id)).map(agent=>`<option>${escapeHtml(agent.id)}</option>`).join("")}</select></label>
-          <label>New read-only agent ID<input data-agent-name placeholder="observer"></label><button type="button" data-add-agent>Add read-only agent</button><h3>Subscriptions</h3>${draft.definition.subscriptions.map((edge,i)=>`<fieldset data-edge="${i}"><legend>Reaction ${i+1}</legend><label>Subscription ID<input data-edge-id value="${escapeHtml(edge.id)}"></label><label>Event type<select data-edge-event>${Object.keys(draft.definition.events).map(event=>`<option ${event===edge.event?"selected":""}>${escapeHtml(event)}</option>`).join("")}</select></label><label>Target agent<select data-edge-target>${draft.definition.agents.map(agent=>`<option ${agent.id===edge.target?"selected":""}>${escapeHtml(agent.id)}</option>`).join("")}</select></label><label>Retry policy<select data-edge-retry><option value="human">Human-controlled recovery</option><option value="safe" ${edge.retry?"selected":""}>Replay-safe: 3 attempts, 1–10 second backoff</option></select></label><button type="button" data-remove-edge>Remove subscription</button></fieldset>`).join("")}
+          <label>New read-only role name<input data-agent-name placeholder="observer"></label><button type="button" data-add-agent>Add read-only agent</button><h3>Subscriptions</h3>${draft.definition.subscriptions.map((edge,i)=>`<fieldset data-edge="${i}"><legend>Reaction ${i+1}</legend><details><summary>Technical details</summary><label>Subscription ID<input data-edge-id readonly value="${escapeHtml(edge.id)}"></label></details><label>Event type<select data-edge-event>${Object.keys(draft.definition.events).map(event=>`<option ${event===edge.event?"selected":""}>${escapeHtml(event)}</option>`).join("")}</select></label><label>Target agent<select data-edge-target>${draft.definition.agents.map(agent=>`<option value="${escapeHtml(agent.id)}" ${agent.id===edge.target?"selected":""}>${escapeHtml(roleName(agent.id))}</option>`).join("")}</select></label><label>Retry policy<select data-edge-retry><option value="human">Human-controlled recovery</option><option value="safe" ${edge.retry?"selected":""}>Replay-safe: 3 attempts, 1–10 second backoff</option></select></label><button type="button" data-remove-edge>Remove subscription</button></fieldset>`).join("")}
           <button type="button" data-add-edge>Add subscription</button><h3>Payload contracts</h3>${Object.entries(draft.definition.events).map(([event,schema],i)=>`<fieldset data-event="${escapeHtml(event)}"><legend>${escapeHtml(event)}${event in base.definition.events?" · host contract":""}</legend><label>Schema · ${escapeHtml(event)}<textarea aria-label="Schema · ${escapeHtml(event)}" data-schema rows="5" ${event in base.definition.events?"readonly":""}>${escapeHtml(JSON.stringify(schema,null,2))}</textarea></label>${event in base.definition.events?"":'<button type="button" data-remove-event>Remove event type</button>'}</fieldset>`).join("")}
           <label>New event type<input data-event-name placeholder="observation.ready"></label><button type="button" data-add-event>Add event type</button>
           <h3>Aggregate limits (deployment ceilings apply)</h3>${Object.entries(draft.limits).map(([name,value])=>`<label>${escapeHtml(name)}<input type="number" min="1" data-limit="${name}" value="${value}" ${name==="maxOutputTokens"?"readonly":""}></label>`).join("")}`;
@@ -685,14 +701,14 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           const remove = node.querySelector("[data-remove-agent]"); if(remove) remove.onclick = () => { draft.definition.agents.splice(Number(node.dataset.agent),1); render(); };
         }
         visual.querySelector("[data-add-role]").onchange = event => { const agent = base.definition.agents.find(item=>item.id===event.target.value); if(agent) draft.definition.agents.push(JSON.parse(JSON.stringify(agent))); render(); };
-        visual.querySelector("[data-add-agent]").onclick=()=>{const id=visual.querySelector("[data-agent-name]").value.trim();if(draft.preset!=="orchestrated"||!/^[a-z][a-z0-9_-]{0,47}$/.test(id)||draft.definition.agents.some(agent=>agent.id===id)){field("[data-error]").textContent="Choose a unique read-only member ID in orchestrated.";return;}draft.definition.agents.push({id,prompt:"Observe approved events and publish declared observations. Do not prepare owner proposals.",tools:["get_bound_context","publish_event","get_event_system"],publishes:[]});render();};
+        visual.querySelector("[data-add-agent]").onclick=()=>{const name=visual.querySelector("[data-agent-name]").value.normalize("NFKC").trim();const baseName=name.normalize("NFKD").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").toLowerCase().slice(0,40);let id=baseName;for(let number=2;draft.definition.agents.some(agent=>agent.id===id);number++)id=`${baseName}_${number}`;if(draft.preset!=="orchestrated"||!/^[a-z][a-z0-9_-]{0,47}$/.test(id)||draft.definition.agents.some(agent=>agent.id===id)){field("[data-error]").textContent="Choose a readable role name in orchestrated.";return;}draft.definition.agents.push({id,prompt:"Observe approved events and publish declared observations. Do not prepare owner proposals.",tools:["get_bound_context","publish_event","get_event_system"],publishes:[]});render();};
         for (const node of visual.querySelectorAll("[data-edge]")) {
           const edge = draft.definition.subscriptions[Number(node.dataset.edge)];
           for (const [selector,key] of [["[data-edge-id]","id"],["[data-edge-event]","event"],["[data-edge-target]","target"]]) node.querySelector(selector).onchange = event => { edge[key] = event.target.value; syncText(); };
           node.querySelector("[data-edge-retry]").onchange = event => { delete edge.retry; if(event.target.value==="safe") edge.retry={replaySafe:true,maxAttempts:3,initialBackoffMillis:1000,maxBackoffMillis:10000}; syncText(); };
           node.querySelector("[data-remove-edge]").onclick = () => { draft.definition.subscriptions.splice(Number(node.dataset.edge),1); render(); };
         }
-        visual.querySelector("[data-add-edge]").onclick = () => { draft.definition.subscriptions.push({id:`reaction-${draft.definition.subscriptions.length+1}`,event:Object.keys(draft.definition.events)[0],target:"primary"}); render(); };
+        visual.querySelector("[data-add-edge]").onclick = () => { let number=1;while(draft.definition.subscriptions.some(edge=>edge.id===`reaction-${number}`))number++;draft.definition.subscriptions.push({id:`reaction-${number}`,event:Object.keys(draft.definition.events)[0],target:"primary"}); render(); };
         for (const node of visual.querySelectorAll("[data-event]")) {
           node.querySelector("[data-schema]").onchange = event => { try { draft.definition.events[node.dataset.event]=JSON.parse(event.target.value); syncText(); } catch(caught) { field("[data-error]").textContent=caught.message; } };
           const remove=node.querySelector("[data-remove-event]"); if(remove) remove.onclick=()=>{delete draft.definition.events[node.dataset.event];render();};
@@ -740,7 +756,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     // which input caused a delivery or an owner proposal.
     const lineage = []; let current = event;
     while(current && !lineage.some(item=>item.id===current.id)) { lineage.unshift(current); current=events.find(item=>item.id===current.causation); }
-    return h("details", { className:"s2g-inspector" }, h("summary",null,"Inspect configuration and execution"),
+    return h("details", { className:"s2g-inspector" }, h("summary",null,"Technical details"),
       h("h3",null,"Pinned event configuration"), h("p",null,`${execution.definition.id}@${execution.definition.version} · digest ${execution.digest}. Changes apply to new conversations.`),
       h("button",{onClick:()=>void editEventTemplate(execution.definition.id.includes(".circuit.")?"circuit":"spec",execution.mode,sources).catch(error=>window.alert(error.message))},"Configure event templates"),
       h("details",null,h("summary",null,"Pinned prompts, capabilities, payloads, subscriptions, and limits"),h("pre",null,JSON.stringify({definition:execution.definition,limits:execution.limits},null,2))),
@@ -835,9 +851,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h("div", { className: "s2g-workflow", "data-s2g-execution": execution.status },
       h("strong", null, (execution.status === "active" && execution.waits?.some(wait => wait.state === "waiting") ? "waiting" : execution.status === "active" && goal?.phase === "complete" ? "goal complete" : execution.status === "active" && goal?.phase === "blocked" ? "goal blocked" : execution.status).replaceAll("-", " ")),
       h("div", { className: "s2g-workflow-main" },
-        h("div", { className: "s2g-workflow-objective" }, execution.reason || `${execution.mode} · ${members.map(member => member.id).join(", ")}`),
+        h("div", { className: "s2g-workflow-objective" }, execution.reason || `${execution.mode} · ${members.map(member => member.name || member.id.replaceAll("_", " ")).join(", ")}`),
         h("div", { className: "s2g-workflow-meta" }, `rounds ${execution.rounds.length}/${limits.maxRounds} · requests ${requests.length}/${limits.maxRequests} · tokens ${tokens}/${limits.maxTokens} · active seconds ${Math.ceil(requests.reduce((sum, request) => sum + request.activeMillis, 0) / 1000)}/${Math.floor(limits.maxActiveMillis / 1000)} · pending ${pending.length} · failures ${failed.length}`),
-        h("details", null, h("summary", null, "Recent events and deliveries"),
+        h("details", null, h("summary", null, "Technical details"),
           h("ul", null, ...(execution.events || []).slice(-8).map(event => h("li", { key: event.id }, `${event.type} · ${event.producer}`))),
           ...failed.map(delivery => h("div", { key: delivery.id },
             h("p", null, `${delivery.target} · attempt ${delivery.attempt}: ${delivery.error}`),
@@ -855,7 +871,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
             finally { setBusy(false); }
           } }, "Answer") : null)),
         ...sources.map(source => h("div", { key: source.id },
-          h("p", null, `${source.enabled ? "Monitoring" : "Monitor disabled"} · ${source.definition.url} · events ${source.sequence}${source.error ? ` · ${source.error}` : ""}`),
+          h("p", null, `${source.enabled ? "Monitoring" : "Monitor disabled"} · Source changes · events ${source.sequence}${source.error ? ` · ${source.error}` : ""}`),
           h("button", { disabled: busy, onClick: async () => {
             setBusy(true); setError("");
             try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}/execution/sources`, { action: source.enabled ? "disable" : "enable", sourceId: source.id, revision: source.revision }); setSources(result.sources); }
@@ -869,6 +885,23 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         execution.status === "active" ? h("button", { disabled: busy, onClick: () => void act("pause") }, "Pause") : null,
         ["paused", "needs-resume"].includes(execution.status) ? h("button", { disabled: busy, onClick: () => void act("resume") }, "Resume") : null,
         execution.status !== "stopped" ? h("button", { disabled: busy, onClick: () => void act("stop") }, "Stop") : null));
+  }
+
+  function SourceNameDock({ sessionId, onSourceNamed }) {
+    const [source, setSource] = React.useState(null);
+    React.useEffect(() => {
+      let disposed = false;
+      const refresh = async () => {
+        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
+        catch { /* An unbound chat has no source label. */ }
+      };
+      void refresh(); const timer = setInterval(() => void refresh(), 15000);
+      return () => { disposed = true; clearInterval(timer); };
+    }, [sessionId]);
+    if (!source) return null;
+    return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}`),
+      h("details", null, h("summary", null, "Technical details"), h("pre", null, pretty({ document: source.documentId, entity: source.entityId, owner: source.ownerDocumentKey })),
+        h("button", { onClick: () => void navigator.clipboard.writeText(pretty({ document: source.documentId, entity: source.entityId, owner: source.ownerDocumentKey })) }, "Copy identifiers")));
   }
 
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
@@ -899,6 +932,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     } });
     ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.register({ name: "sidebar.brand.mark" }, BrandMark));
     ctx.slots.inject("sidebar.brand.name", () => ctx.slots.register({ name: "sidebar.brand.name" }, BrandName));
+    ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "source-name", order: 10 }, props => h(SourceNameDock, { ...props, onSourceNamed: source => ensureWorkspace(ctx, { path: source.workspacePath, title: source.workspaceTitle }) })));
     ctx.slots.inject("conversation.input.dock", () => ctx.slots.register({ name: "conversation.input.dock", id: "execution", order: 11 }, ExecutionDock));
     ctx.uiConversation.events.register(proposalReviewsDefinition);
     ctx.slots.inject("conversation.chat.turnTail", () => ctx.slots.register({ name: "conversation.chat.turnTail", select: selectProposalReview },

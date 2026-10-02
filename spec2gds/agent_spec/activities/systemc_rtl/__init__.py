@@ -40,6 +40,8 @@ class CycleAccurateGenerationReport(pydantic.BaseModel):
     source_revision_hash: str
     design: EntityRef
     design_vlnv: str
+    target_name: str = ""
+    document_name: str = ""
     output_path: str
     top_module: str
     component_count: int
@@ -80,9 +82,7 @@ def generate_cycle_accurate(context: ActivityContext) -> ActivityResult:
 
     project = generate_project(context.spec, context.target)
     context.cancellation.raise_if_cancelled()
-    relative_path = (
-        f"systemc-rtl/{context.target.document_id}/{context.target.entity_id}"
-    )
+    relative_path = context.spec.high.project_path(context.target, "systemc-rtl")
     published = context.workspace.replace_directory(
         relative_path=relative_path,
         files=project.files,
@@ -97,6 +97,8 @@ def generate_cycle_accurate(context: ActivityContext) -> ActivityResult:
         source_revision_hash=context.snapshot.source.source_revision_hash,
         design=context.target,
         design_vlnv=project.design_vlnv,
+        target_name=context.spec.high.entity(context.target).display_name,
+        document_name=context.spec.high.document["title"],
         output_path=published.relative_path,
         top_module=project.top_module,
         component_count=project.component_count,

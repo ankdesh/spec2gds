@@ -29,6 +29,12 @@ from spec2gds.agent_spec.spec_format.circuit_timings import (
 )
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, ConnectionIR, PortIR, SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef
+from spec2gds.agent_spec.spec_format.naming import (
+    clean_name,
+    document_name,
+    entity_name,
+    hardware_name,
+)
 
 _DIRECTION = {"in": "input", "out": "output", "inout": "inout"}
 _PROJECTION_VERSION = "v2"
@@ -135,7 +141,7 @@ def _component_definition(
     """Build one read-only Circuit Designer component definition."""
     return {
         "id": component_id,
-        "label": component.vlnv.split(":")[2],
+        "label": entity_name(component),
         "origin": "provider",
         "editable": False,
         "terminals": terminals,
@@ -433,7 +439,7 @@ def project_design_to_circuit(
     )
     design_ids = _Ids()
     circuit_design_id = design_ids.get(design.ref.entity_id, "design")
-    label = design.vlnv.split(":")[2]
+    label = entity_name(design)
     source_map = CircuitSourceMap(
         component_vlnv_by_id={component_id_by_vlnv[vlnv]: vlnv for vlnv in component_id_by_vlnv},
         component_entity_id_by_id=component_entity_id_by_id,
@@ -451,7 +457,7 @@ def project_design_to_circuit(
     document = {
         "protocol_version": "circuit-designer.v1",
         "document_id": document_id,
-        "label": label,
+        "label": f"{document_name(revision)} › {label}",
         "components": circuit_components,
         "design": {
             "id": circuit_design_id,
@@ -525,7 +531,7 @@ def project_component_to_circuit(
     component_definition_id = _Ids().get(component.ref.entity_id, "component")
     design_id = _Ids().get(component.ref.entity_id, "component")
     preview_instance_id = _Ids().get(f"{component.ref.entity_id}_preview", "instance")
-    label = component.vlnv.split(":")[2]
+    label = entity_name(component)
     source_map = CircuitSourceMap(
         component_vlnv_by_id={component_definition_id: component.vlnv},
         component_entity_id_by_id={component_definition_id: component.ref.entity_id},
@@ -757,6 +763,8 @@ def compile_circuit_sync_operations(
         raise CircuitAdapterError("This source projection has no editable internal design.")
     if candidate.get("document_id") != projection.document.get("document_id"):
         raise CircuitAdapterError("Candidate document does not match its source-bound Circuit session.")
+    if candidate.get("label") != projection.document.get("label"):
+        raise CircuitAdapterError("Rename the source document in Spec Editor before refreshing this Circuit view.")
     design = next(item for item in revision.designs if item.ref.entity_id == design_id)
     design_ref = design.ref
     operations: list[typing.Any] = []
@@ -773,13 +781,12 @@ def compile_circuit_sync_operations(
     for component_id, component in candidate_components.items():
         if component_id in base_components:
             continue
-        name = str(component.get("label", "")).strip()
-        if not ID_PATTERN.fullmatch(name):
-            raise CircuitAdapterError(f"New component name {name!r} must be an XML-compatible identifier.")
+        display_name = clean_name(str(component.get("label", "")))
+        name = hardware_name(display_name, (item.split(":")[2] for item in component_vlnv.values()))
         entity_id = component_id
         if any(item.ref.entity_id == entity_id for item in [*revision.components, *revision.designs]):
             entity_id = f"component_{component_id}"
-        operations.append(CreateEntity("component", name, entity_id))
+        operations.append(CreateEntity("component", display_name, entity_id))
         component_ref = EntityRef(document_id=revision.document_id, entity_id=entity_id, entity_kind="component")
         for terminal in component.get("terminals", []):
             terminal_name = str(terminal.get("label", "")).strip()

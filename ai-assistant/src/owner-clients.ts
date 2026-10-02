@@ -98,6 +98,10 @@ export class OwnerClients {
       ? normalizeSpecUrl(value, this.specAllowlist)
       : normalizeCircuitUrl(value, this.circuitAllowlist);
     if (domain === "spec") {
+      try {
+        const catalog = await this.request("GET", `${url}/documents`);
+        if (Array.isArray(catalog.documents)) return { domain, serviceBaseUrl: url, documents: catalog.documents };
+      } catch (error) { if (!(error instanceof OwnerError && [400, 404].includes(error.status))) throw error; }
       const snapshot = await this.request("GET", `${url}/documents/snapshot`);
       const entities = ([
         ["components", "component"], ["designs", "design"],
@@ -108,12 +112,12 @@ export class OwnerClients {
           const ref = isRecord(item.ref) ? item.ref : {};
           const entityId = ref.entity_id ?? item.id ?? item.name;
           return typeof entityId === "string" ? [{ document_id: snapshot.document_id, entity_id: entityId,
-            entity_kind: kind, title: item.title ?? item.name ?? item.vlnv ?? entityId }] : [];
+            entity_kind: kind, title: item.display_name || item.title || item.name || "Entity" }] : [];
         }));
       return { domain, serviceBaseUrl: url, document: {
         document_id: snapshot.document_id,
         ...(typeof snapshot.owner_document_key === "string" ? { owner_document_key: snapshot.owner_document_key } : {}),
-        title: isRecord(snapshot.narrative) ? snapshot.narrative.title : snapshot.document_id,
+        title: snapshot.name || (isRecord(snapshot.narrative) ? snapshot.narrative.title : "Specification"),
       }, entities };
     }
     const listed = await this.request("GET", `${url}/documents`);
@@ -130,7 +134,8 @@ export class OwnerClients {
 
   async createSpec(value: string, path: string, documentId: string, title: string, requestId?: string): Promise<Record<string, unknown>> {
     const url = normalizeSpecUrl(value, this.specAllowlist);
-    return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title, ...(requestId ? { request_id: requestId } : {}) }, undefined, true);
+    return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title,
+      request_id: requestId || `assistant-create:${documentId}`, derive_named_path: true }, undefined, true);
   }
 
   async createCircuit(value: string, documentId: string, title: string): Promise<Record<string, unknown>> {
@@ -185,11 +190,39 @@ export class OwnerClients {
   async circuitSourceBinding(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
     if (binding.domain !== "circuit") return null;
     try {
-      return await this.request("GET", `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`, undefined, signal);
+      const source = await this.request("GET", `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`, undefined, signal);
+      try {
+        const names = await this.sourceNames(source);
+        return names ? { ...source, source_name: names.name, source_entity_name: names.target_name } : source;
+      } catch { return source; }
     } catch (error) {
       if (error instanceof OwnerError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  private async sourceNames(source: Record<string, unknown>): Promise<Record<string, unknown> | null> {
+    if (typeof source.source_service_url !== "string" || typeof source.source_owner_document_key !== "string") return null;
+    const url = normalizeSpecUrl(source.source_service_url, this.specAllowlist);
+    const ref = isRecord(source.source_entity) ? source.source_entity : {};
+    const query = new URLSearchParams({ owner_document_key: source.source_owner_document_key,
+      document_id: String(source.source_document_id), entity_kind: String(ref.entity_kind), entity_id: String(ref.entity_id) });
+    return this.request("GET", `${url}/documents/names?${query}`);
+  }
+
+  async names(binding: SessionBinding): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    if (binding.domain === "spec") return this.request("GET", this.specUrl(binding, "/documents/names", {
+      document_id: binding.documentId,
+      ...(binding.scope === "entity" ? { entity_kind: binding.entityKind ?? "", entity_id: binding.entityId ?? "" } : {}),
+    }));
+    const source = await this.circuitSourceBinding(binding);
+    if (source) {
+      const names = await this.sourceNames(source);
+      if (names) return names;
+    }
+    const snapshot = await this.context(binding);
+    return { name: isRecord(snapshot.document) ? snapshot.document.label : "Circuit" };
   }
 
   async contextPage(binding: SessionBinding, options: { cursor?: string; entity_ids?: string[] }, signal?: AbortSignal): Promise<Record<string, unknown>> {

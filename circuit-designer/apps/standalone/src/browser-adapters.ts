@@ -28,7 +28,9 @@ export function createBrowserFileAdapter(): CircuitFileAdapter {
         input.click();
       });
       if (!file) return undefined;
-      const parsed = JSON.parse(await file.text()) as unknown;
+      let parsed: unknown;
+      try { parsed = JSON.parse(await file.text()); }
+      catch (cause) { throw new Error(`Could not open ${file.name}: ${cause instanceof Error ? cause.message : String(cause)}`); }
       const result = validateContractDefinition("CircuitDocument", parsed);
       if (!result.valid) throw new Error(result.errors.map((item) => item.message).join(" · "));
       return { document: parsed as CircuitDocument, displayName: file.name };
@@ -61,7 +63,7 @@ export function createBrowserPreferencesAdapter(backend: HttpCircuitDesignerBack
 export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): CircuitSourceAdapter {
   const state = (binding: Awaited<ReturnType<HttpCircuitDesignerBackend["getSourceBinding"]>>) => binding ? ({
     id: binding.binding_id,
-    label: "Specification package",
+    label: binding.source_name || "Specification package",
     revision: binding.base_source_revision_hash,
     writable: binding.writable,
     capabilities: binding.capabilities,

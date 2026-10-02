@@ -18,6 +18,10 @@ import {
   renderCircuitPng,
   renderCircuitSvg,
   uniqueSlug,
+  publicFilenameStem,
+  availableHumanName,
+  circuitTerminalLabel,
+  circuitEndpointLabel,
   type CircuitDocument,
   type ClockDomainV1,
   type CycleEdgeMarkerV1,
@@ -261,14 +265,16 @@ export function App({
             ? binding.message ?? `Bound to ${binding.label}. Save commits topology and layout back to its authoritative source.`
             : binding?.message ?? `Read-only projection owned by ${binding?.label ?? "an external source"}.`);
           setMessage(binding?.writable
-            ? `Opened writable source design at revision ${binding.revision.slice(0, 20)}…`
-            : binding?.message ?? `Opened source-owned projection at revision ${next.revision}.`);
+            ? `Opened ${next.document.label} for source editing.`
+            : binding?.message ?? `Opened ${next.document.label}.`);
           draftRef.current = undefined;
           return;
         }
         let joined = false;
         let next: CircuitSnapshot | undefined;
         try {
+          const known = await backend.listDocuments();
+          initial.label = availableHumanName(initial.label, known.filter(item => item.document_id !== initial.document_id).map(item => item.label));
           next = (await backend.create(initial, operationId("initialize"))).snapshot;
         } catch (reason) {
           if (!isConflictError(reason)) throw reason;
@@ -287,8 +293,8 @@ export function App({
         setStagedProposalId(undefined);
         setSourceDescription("Empty local circuit. Add definitions and instances after unlocking.");
         setMessage(joined
-          ? `Joined the existing REST session at revision ${next.revision}.`
-          : `Created REST session at revision ${next.revision}.`);
+          ? `Joined ${next.document.label}.`
+          : `Opened ${next.document.label}.`);
         telemetry.event(
           "documents", joined ? "joined" : "created",
           joined ? "Joined Circuit Designer session" : "Created Circuit Designer session",
@@ -377,7 +383,7 @@ export function App({
         setDocument(next.document);
         setSelection([]);
         setLayout(undefined);
-        setMessage(`REST session updated by another client to revision ${next.revision}.`);
+        setMessage(`Updated ${next.document.label} from another client.`);
       }).catch((reason) => {
         setMessage(`Could not refresh the REST session: ${reason instanceof Error ? reason.message : String(reason)}`);
       });
@@ -492,7 +498,7 @@ export function App({
       setSelection([]);
       setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
       setSourceConflict(false);
-      setMessage(`Saved to the source at ${result.revision.slice(0, 20)}… Edit mode closed.`);
+      setMessage("Changes saved to the source. Edit mode closed.");
       void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
       return;
     }
@@ -511,7 +517,7 @@ export function App({
     setSnapshot(result.snapshot);
     setDocument(result.snapshot.document);
     await downloadCircuitDocument(result.snapshot.document);
-    setMessage(`Saved revision ${result.snapshot.revision} and downloaded ${circuitDocumentFilename(result.snapshot.document)}.`);
+    setMessage(`Saved and downloaded ${circuitDocumentFilename(result.snapshot.document)}.`);
   }
 
   async function reopenLatestSource(): Promise<void> {
@@ -555,10 +561,6 @@ export function App({
 
   function addLocalComponent(): void {
     if (!document || !componentName.trim()) return;
-    if (!isSourceIdentifier(componentName.trim())) {
-      setMessage(sourceBinding?.identifierHint ?? "Use a source-compatible component name.");
-      return;
-    }
     const componentId = uniqueSlug(componentName, document.components.map((item) => item.id));
     const instanceId = uniqueSlug(componentName, document.design.instances.map((item) => item.id));
     const component: ComponentDefinition = {
@@ -578,7 +580,7 @@ export function App({
       {
         operation_id: operationId("instance"),
         type: "add_instance",
-        instance: { id: instanceId, label: componentName.trim(), component_id: componentId, parameter_values: {} },
+        instance: { id: instanceId, label: sourceBinding ? instanceId : componentName.trim(), component_id: componentId, parameter_values: {} },
       },
     ];
     if (componentCreationPoint) {
@@ -693,7 +695,7 @@ export function App({
       setMessage("The cycle edge cannot divide a component or boundary terminal.");
       return false;
     }
-    return mutate({ operation_id: operationId("cycle_edge"), type: "update_cycle_edge", edge }, `Updated ${edge.label ?? edge.id}.`);
+    return mutate({ operation_id: operationId("cycle_edge"), type: "update_cycle_edge", edge }, `Updated ${edge.label ?? "Timing relationship"}.`);
   }
 
   function setClockDomain(domain: ClockDomainV1): void {
@@ -797,7 +799,7 @@ export function App({
         },
       };
       const options = { boundaryGeometry: layout.boundary_geometry };
-      const stem = `${snapshot.document.document_id}-${snapshot.document.design.id}`;
+      const stem = publicFilenameStem(snapshot.document.label || snapshot.document.design.label || "Circuit");
       if (format === "svg") {
         await files.write({ suggestedName: `${stem}.svg`, mediaType: "image/svg+xml", data: renderCircuitSvg(exportDocument, options) });
       } else {
@@ -822,7 +824,8 @@ export function App({
       if (!opened) return;
       const parsed = parseCircuitDocumentJson(exportCircuitJson(opened.document));
       if (!parsed.valid) throw new Error(summarizeFileDiagnostics(parsed.diagnostics));
-      const displayName = opened.displayName ?? circuitDocumentFilename(parsed.document);
+      const displayName = parsed.document.label;
+      telemetry.event("documents", "file_opened", "Opened circuit file", "info", { filename: opened.displayName, document: parsed.document });
       let joined = false;
       let next: CircuitSnapshot | undefined;
       try {
@@ -832,7 +835,7 @@ export function App({
         const existing = await backend.get(parsed.document.document_id);
         if (exportCircuitJson(existing.document) !== exportCircuitJson(parsed.document)) {
           setMessage(
-            `Could not open ${displayName}: a different REST session already uses document ID “${parsed.document.document_id}”.`,
+            `Could not open ${displayName}: this source identity is already bound to different contents.`,
           );
           return;
         }
@@ -855,7 +858,7 @@ export function App({
       setSourceDescription(`Opened from ${displayName}; permanent changes are saved by downloading a new file.`);
       const warnings = parsed.diagnostics.filter((item) => item.severity === "warning");
       setMessage(
-        `${joined ? "Joined matching session for" : "Opened"} ${displayName} at revision ${next.revision}`
+        `${joined ? "Joined matching session for" : "Opened"} ${displayName}`
         + (warnings.length ? ` with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}.` : "."),
       );
     } catch (reason) {
@@ -1121,22 +1124,22 @@ export function App({
   function resetTerminalPlacement(target: CircuitCanvasContextTarget | undefined): boolean {
     const context = terminalContext(target);
     if (!context) return false;
-    return mutate({ operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: context.terminalKey, placement: null }, `Reset ${context.terminalKey} to automatic placement.`);
+    return mutate({ operation_id: operationId("placement"), type: "set_terminal_placement", terminal_key: context.terminalKey, placement: null }, `Reset ${document ? circuitTerminalLabel(document, context.terminalKey) : "Port"} to automatic placement.`);
   }
 
   function disconnectContextTerminal(target: CircuitCanvasContextTarget | undefined): boolean {
     const terminalKey = targetTerminalKey(target);
     const net = terminalKey ? document?.design.nets.find((item) => item.endpoints.some((endpoint) => endpointTerminalKey(endpoint) === terminalKey)) : undefined;
     const endpoint = net?.endpoints.find((item) => endpointTerminalKey(item) === terminalKey);
-    if (!net || !endpoint) return false;
-    if (net.endpoints.length > 2) return mutate({ operation_id: operationId("disconnect"), type: "disconnect_endpoint", net_id: net.id, endpoint }, `Disconnected ${terminalKey} from ${net.label || net.id}.`);
+    if (!terminalKey || !net || !endpoint) return false;
+    if (net.endpoints.length > 2) return mutate({ operation_id: operationId("disconnect"), type: "disconnect_endpoint", net_id: net.id, endpoint }, `Disconnected ${document ? circuitTerminalLabel(document, terminalKey) : "Port"} from ${net.label || "Net"}.`);
     setConfirmation({
       title: "Delete the connected net?",
-      message: `Disconnecting ${terminalKey} would leave “${net.label || net.id}” with fewer than two endpoints. Delete the whole net instead?`,
+      message: `Disconnecting ${document ? circuitTerminalLabel(document, terminalKey) : "Port"} would leave “${net.label || "Net"}” with fewer than two endpoints. Delete the whole net instead?`,
       confirmLabel: "Delete net",
       onConfirm: () => {
         setConfirmation(undefined);
-        if (mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: net.id }, `Deleted net ${net.label || net.id}.`)) setSelection([]);
+        if (mutate({ operation_id: operationId("delete_net"), type: "delete_net", net_id: net.id }, `Deleted net ${net.label || "Net"}.`)) setSelection([]);
       },
     });
     return true;
@@ -1147,11 +1150,11 @@ export function App({
     if (!item || item.kind !== "boundary") return false;
     setConfirmation({
       title: "Delete boundary terminal?",
-      message: `Delete boundary terminal “${item.id}” and explicitly cascade its connectivity?`,
+      message: `Delete boundary terminal “${document ? circuitTerminalLabel(document, `boundary:${item.id}`) : "Port"}” and explicitly cascade its connectivity?`,
       confirmLabel: "Delete boundary terminal",
       onConfirm: () => {
         setConfirmation(undefined);
-        if (mutate({ operation_id: operationId("remove_boundary"), type: "remove_boundary_terminal", terminal_id: item.id, cascade: true }, `Deleted boundary terminal ${item.id}.`)) setSelection([]);
+        if (mutate({ operation_id: operationId("remove_boundary"), type: "remove_boundary_terminal", terminal_id: item.id, cascade: true }, "Deleted boundary terminal.")) setSelection([]);
       },
     });
     return true;
@@ -1401,6 +1404,21 @@ export function App({
     return event.target instanceof Element && event.target.classList.contains("react-flow__pane");
   }
 
+  // Preserve exact diagnostics for inspection; resolve presentation from this
+  // selected document only, without turning labels into selection values.
+  const readableMessage = (() => {
+    let value = message;
+    const labels = document ? [
+      [document.document_id, document.label],
+      ...document.components.map(item => [item.id, item.label]),
+      ...document.design.nets.map(item => [item.id, item.label || "Connection"]),
+    ] : [];
+    for (const [key, label] of labels.sort((a, b) => b[0].length - a[0].length)) {
+      if (key && label && key !== label) value = value.split(key).join(label);
+    }
+    return value.replace(/sha256:[a-f0-9]{16,}/gi, "source revision")
+      .replace(/\b[a-f0-9]{24,}\b/gi, "internal reference");
+  })();
   const themeStyle = circuitThemeCssProperties(theme) as CSSProperties;
 
   return <main className="cd-app standalone-shell" ref={appRef} style={themeStyle}>
@@ -1423,7 +1441,11 @@ export function App({
       />
       <div className="document-status" title={sourceDescription}>
         <strong>{document?.label ?? "Loading…"}</strong>
-        <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source-owned read only" : lease ? "private draft" : `revision ${snapshot?.revision ?? "…"}`}</small>
+        {!sourceBinding && lease && document && <button type="button" onClick={() => {
+          const name = window.prompt("Document name", document.label);
+          if (name?.trim()) mutate({ operation_id: operationId("rename_document"), type: "set_document_label", label: name }, "Document renamed.");
+        }}>Rename</button>}
+        <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source-owned read only" : lease ? "private draft" : "saved circuit"}</small>
       </div>
       {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
         className="source-save-button"
@@ -1436,7 +1458,8 @@ export function App({
       {activePage === "actions" ? "Actions & shortcuts" : sourceBinding?.writable ? sourceBinding.label : linkedDocumentId ? "Source projection" : "Independent document"}
       <span>{activePage === "actions"
         ? `Shared preference file · ${preferenceStatus === "loading" ? "loading…" : preferenceStatus === "saving" ? "saving…" : preferenceStatus === "saved" ? "saved" : "save failed"}`
-        : layoutProgress || message}</span>
+        : layoutProgress || readableMessage}</span>
+      {readableMessage !== message && <details><summary>Technical details</summary><pre>{message}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(message)}>Copy details</button></details>}
       {sourceConflict && <span className="source-recovery">
         <button onClick={() => void reopenLatestSource()} type="button">Reopen Latest</button>
         <button onClick={() => { if (document) void downloadCircuitDocument(document); }} type="button">Download Draft JSON</button>
@@ -1508,7 +1531,7 @@ export function App({
         >New Boundary Port</button>}
         {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net to inspect its properties.</p></div>}
         {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p></div>}
-        {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2><code>{selectedInstance.id}</code>
+        {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2>
           <label>{sourceBinding ? "Instance name" : "Label"}<input pattern={sourceIdentifierPattern} value={selectedInstance.label} onChange={(event) => {
             const label = event.target.value || selectedInstance.id;
             if (!isSourceIdentifier(label)) {
@@ -1517,9 +1540,9 @@ export function App({
             }
             mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label } }, "Instance name updated.");
           }} disabled={!lease} /></label>
-          <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
+          <details><summary>Technical details</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
-        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2><code>{selectedBoundary.id}</code>
+        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2>
           <label>Name<input
             disabled={!lease}
             pattern={sourceIdentifierPattern}
@@ -1551,12 +1574,12 @@ export function App({
             }}
           /></label>
           <p className="draw-hint">Width reductions that invalidate connected slices are rejected.</p>
-          <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details>
+          <details><summary>Technical details</summary><pre>{JSON.stringify(selectedBoundary, null, 2)}</pre></details>
         </>}
-        {selectedNet && <><span className="kind">net</span><h2>{selectedNet.label || selectedNet.id}</h2><code>{selectedNet.id}</code>
+        {selectedNet && <><span className="kind">net</span><h2>{selectedNet.label || "Net"}</h2>
           <p className="draw-hint">{selectedRouteLocked ? "Route locked. Use Route → Unlock Selected Route before editing." : "Drag highlighted segments or handles to edit this route."}</p>
-          <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => JSON.stringify(endpoint)).join("\n")}</p>
-          <details><summary>Canonical data</summary><pre>{JSON.stringify(selectedNet, null, 2)}</pre></details>
+          <p className="draw-hint">{selectedNet.endpoints.map((endpoint) => document ? circuitEndpointLabel(document, endpoint) : "Port").join("\n")}</p>
+          <details><summary>Technical details</summary><pre>{JSON.stringify(selectedNet, null, 2)}</pre></details>
         </>}
         {selectedCycleEdge && <><span className="kind">cycle edge</span><h2>{selectedCycleEdge.label ?? `Cycle edge ${timing.cycle_edges.findIndex((edge) => edge.id === selectedCycleEdge.id) + 1}`}</h2><code>x = {selectedCycleEdge.x}</code>
           <p className="draw-hint">Every same-domain path crossing this marker gains one cycle.</p>
@@ -1575,6 +1598,7 @@ export function App({
       onClose={() => { setDialog(undefined); setComponentCreationPoint(undefined); }}
       onComponentNameChange={setComponentName}
       onCreateComponent={addLocalComponent}
+      onRenameComponent={lease ? (id, name) => { const component = document?.components.find(item => item.id === id); if (component) mutate({ operation_id: operationId("rename_component"), type: "update_component", component: { ...component, label: name } }, "Component renamed."); } : undefined}
       onPlaceComponent={placeCatalogComponent}
       onCreateConnection={createConnectionFromDialog}
       onDecideProposal={(proposalId, decision) => void decideProposal(proposalId, decision)}
@@ -1589,7 +1613,7 @@ export function App({
       sourceDescription={sourceDescription}
       sourceIdentifierPattern={sourceIdentifierPattern}
       sourceIdentifierHint={sourceBinding?.identifierHint}
-      terminals={terminals}
+      terminals={terminals.map(terminal => ({ ...terminal, label: document ? circuitTerminalLabel(document, terminal.id) : "Port" }))}
       timing={timing}
       timingAnalysis={timingAnalysis}
       selectedCycleEdge={selectedCycleEdge}

@@ -46,9 +46,7 @@ function diagnosticValues(value: unknown): unknown[] {
 }
 
 function bindingTarget(binding: SessionBinding): string {
-  return binding.scope === "entity" && binding.entityId
-    ? `${binding.entityKind ?? "entity"}:${binding.entityId}`
-    : `document:${binding.documentId}`;
+  return binding.sourceName || (binding.scope === "entity" ? "Selected entity" : "Selected document");
 }
 
 export function proposalError(
@@ -146,22 +144,35 @@ function operationCounts(review: ProposalReview): Array<{ type: string; count: n
 function specTargets(preview: Record<string, unknown>): string[] {
   if (!Array.isArray(preview.diff)) return [];
   return preview.diff.filter(isRecord).flatMap(item => {
-    if (typeof item.path !== "string") return [];
-    return [`${typeof item.change === "string" ? item.change : "changed"} ${item.path}`];
+    if (typeof item.label !== "string") return [];
+    return [`${typeof item.change === "string" ? item.change : "changed"} ${item.label}`];
   });
 }
 
 function circuitTargets(preview: Record<string, unknown>): string[] {
   const diff = isRecord(preview.diff) ? preview.diff : {};
   const targets: string[] = [];
+  const name = (kind: string, id: string): string => {
+    for (const value of [preview.candidate, preview.base_document]) {
+      const document = isRecord(value) ? value : {};
+      if (kind === "document" && typeof document.label === "string") return document.label;
+      const design = isRecord(document.design) ? document.design : {};
+      const arrays = kind === "component" ? [document.components] : [design.instances, design.nets, design.boundary_terminals];
+      for (const array of arrays) {
+        const item = Array.isArray(array) ? array.find(item => isRecord(item) && item.id === id) : null;
+        if (isRecord(item) && typeof item.label === "string") return item.label;
+      }
+    }
+    return `Unavailable ${kind.replaceAll("_", " ")}`;
+  };
   for (const key of ["added", "removed", "changed"] as const) {
     if (!Array.isArray(diff[key])) continue;
     for (const value of diff[key]) {
-      if (isRecord(value) && typeof value.id === "string") targets.push(`${key}:${String(value.kind ?? "element")}:${value.id}`);
+      if (isRecord(value) && typeof value.id === "string") targets.push(`${key} ${name(String(value.kind ?? "element"), value.id)}`);
     }
   }
   if (Array.isArray(diff.connections_changed)) {
-    for (const value of diff.connections_changed) if (typeof value === "string") targets.push(`connections_changed:net:${value}`);
+    for (const value of diff.connections_changed) if (typeof value === "string") targets.push(`Updated connections · ${name("net", value)}`);
   }
   return targets;
 }
@@ -176,7 +187,7 @@ export function changeSummaryFor(review: ProposalReview): ProposalChangeSummary 
     ? review.domain === "spec" ? specTargets(review.preview) : circuitTargets(review.preview)
     : [])].sort();
   const count = counts.reduce((total, item) => total + item.count, 0);
-  const countText = counts.map(item => `${item.count} ${item.type}`).join(", ");
+  const countText = counts.map(item => `${item.count} ${item.type.replaceAll("_", " ")}`).join(", ");
   const targetText = changedTargets.length
     ? ` Owner preview reports ${changedTargets.length} changed target${changedTargets.length === 1 ? "" : "s"}.`
     : " Owner preview reports no semantic diff targets.";
@@ -191,7 +202,9 @@ export function changeSummaryFor(review: ProposalReview): ProposalChangeSummary 
 
 export function publicReview(review: ProposalReview): PublicProposalReview {
   const { artifactDigest: _digest, ...value } = review;
-  return { ...value, changeSummary: changeSummaryFor(review) };
+  const result = isRecord(review.ownerResult) ? review.ownerResult : {};
+  return { ...value, changeSummary: changeSummaryFor(review),
+    ...(typeof result.review_number === "number" ? { reviewNumber: result.review_number } : {}) };
 }
 
 export function logProposalFailure(binding: SessionBinding, error: ProposalError, proposalId?: string): void {

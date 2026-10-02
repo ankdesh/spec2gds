@@ -141,7 +141,7 @@ class HighLevelSpecApi:
         """Return compact immutable-by-copy document identity metadata."""
         return {
             "document_id": self._revision.document_id,
-            "title": self._revision.narrative.title,
+            "title": self._revision.narrative.title or "Specification",
             "source_revision_hash": self._revision.source_revision_hash,
         }
 
@@ -162,6 +162,12 @@ class HighLevelSpecApi:
         summaries.extend(_summary(asset, self._revision.document_id) for asset in self._revision.assets)
         result = EntityQuery(summaries)
         return result.where(kind=kind) if kind is not None else result
+
+    def project_path(self, reference: EntityRef, family: str) -> str:
+        """Readable public generation path; ownership remains reference-based."""
+        from spec2gds.agent_spec.spec_format.naming import generated_path
+        self._revision.resolve(reference)
+        return generated_path(self._revision, reference, family)
 
     def entity(self, reference: EntityRef) -> EntitySummary:
         """Resolve one entity to its generic high-level identity."""
@@ -292,22 +298,23 @@ def _text_view(document_id: str, block: NarrativeBlock) -> TextBlockView:
 
 
 def _summary(entity: typing.Any, document_id: str | None = None) -> EntitySummary:
+    from spec2gds.agent_spec.spec_format.naming import entity_name, readable_name
     if isinstance(entity, (ComponentIR, DesignIR, BusDefinitionIR, AbstractionDefinitionIR)):
         name = entity.vlnv.split(":")[2]
-        return EntitySummary(ref=entity.ref, name=name, display_name=name, vlnv=entity.vlnv)
+        return EntitySummary(ref=entity.ref, name=name, display_name=entity_name(entity), vlnv=entity.vlnv)
     if isinstance(entity, NarrativeBlock):
         assert document_id is not None
         return EntitySummary(
             ref=EntityRef(document_id=document_id, entity_kind="narrative_block", entity_id=entity.block_id),
             name=entity.block_id,
-            display_name=entity.text or entity.block_id,
+            display_name=(entity.text.strip().splitlines() or ["Note"])[0][:200] or "Note",
         )
     if isinstance(entity, AssetEntry):
         assert document_id is not None
         return EntitySummary(
             ref=EntityRef(document_id=document_id, entity_kind="asset", entity_id=entity.asset_id),
             name=entity.asset_id,
-            display_name=entity.path,
+            display_name=readable_name(entity.asset_id, "Image"),
         )
     raise TypeError(f"Unsupported semantic entity: {type(entity).__name__}")
 

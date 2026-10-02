@@ -2,6 +2,7 @@
 import {
   exportCircuitJson,
   validateCircuitDocument,
+  publicFilenameStem,
   type CircuitDocument,
   type Diagnostic,
 } from "@spec2gds/circuit-core";
@@ -36,7 +37,7 @@ export function parseCircuitDocumentJson(text: string): CircuitFileParseResult {
 }
 
 export function circuitDocumentFilename(document: CircuitDocument): string {
-  return `${document.document_id}.circuit.json`;
+  return `${publicFilenameStem(document.label || document.design.label || "Circuit")}.circuit.json`;
 }
 
 export function circuitDocumentFileContents(document: CircuitDocument): string {

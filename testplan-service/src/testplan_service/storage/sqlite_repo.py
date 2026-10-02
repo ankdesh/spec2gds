@@ -8,11 +8,11 @@ are separate boundaries; SQLite durability is not cross-store atomic publication
 from __future__ import annotations
 
 import json
-from pathlib import Path
 import sqlite3
 import threading
-from typing import Any
 import uuid
+from pathlib import Path
+from typing import Any
 
 from testplan_service.domain.evidence import (
     CampaignPurpose,
@@ -1426,12 +1426,13 @@ class SqlitePlanRepository:
     def list_generation_jobs(self, plan_id: str) -> list[dict[str, Any]]:
         with self._lock, self._get_connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM generation_jobs WHERE plan_id = ? ORDER BY created_at DESC",
+                "SELECT * FROM generation_jobs WHERE plan_id = ? ORDER BY rowid ASC",
                 (plan_id,),
             ).fetchall()
             return [
                 {
                     "id": r["id"],
+                    "number": number,
                     "plan_id": r["plan_id"],
                     "checkpoint_id": r["checkpoint_id"],
                     "plugin_id": r["plugin_id"],
@@ -1443,7 +1444,7 @@ class SqlitePlanRepository:
                     "created_at": r["created_at"],
                     "updated_at": r["updated_at"],
                 }
-                for r in rows
+                for number, r in reversed(list(enumerate(rows, start=1)))
             ]
 
     def update_generation_job_status(

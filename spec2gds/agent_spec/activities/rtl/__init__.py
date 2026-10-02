@@ -60,6 +60,8 @@ class RtlGenerationReport(pydantic.BaseModel):
     source_revision_hash: str
     target: EntityRef
     target_vlnv: str
+    target_name: str = ""
+    document_name: str = ""
     implementation_status: dict[str, str] = pydantic.Field(default_factory=dict)
     output_path: str
     top_module: str
@@ -118,7 +120,7 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
     target = context.spec.high.entity(context.target)
     project = generate_project(context.spec, context.target)
     source_entities = tuple(sorted(project.source_entities, key=lambda ref: (ref.entity_kind, ref.entity_id)))
-    relative_path = f"rtl/{context.target.document_id}/{context.target.entity_id}"
+    relative_path = context.spec.high.project_path(context.target, "rtl")
     published = context.workspace.replace_directory(
         relative_path=relative_path,
         files=project.files,
@@ -133,6 +135,8 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
         source_revision_hash=context.snapshot.source.source_revision_hash,
         target=context.target,
         target_vlnv=target.vlnv,
+        target_name=target.display_name,
+        document_name=context.spec.high.document["title"],
         implementation_status=project.implementation_status,
         output_path=published.relative_path,
         top_module=project.top_module,

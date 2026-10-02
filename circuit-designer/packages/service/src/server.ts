@@ -5,6 +5,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
+  humanNameKey,
   assistantCircuitOperationSchema,
   createEmptyCircuitDocument,
   isCircuitSourceBindingV1,
@@ -189,6 +190,14 @@ export class CircuitDesignerService {
       if (method === "GET" && parts[0] === "documents" && parts.length === 1) {
         const documents = await this.backend.listDocuments();
         return this.jsonResponse(response, 200, { documents });
+      }
+      if (method === "GET" && parts[0] === "documents" && parts[1] === "resolve" && parts.length === 2) {
+        const name = url.searchParams.get("name");
+        if (!name) return this.error(response, 422, "invalid_name", "Select a document name.");
+        const documents = await this.backend.listDocuments();
+        const matches = documents.filter(item => humanNameKey(item.label) === humanNameKey(name));
+        if (matches.length !== 1) return this.error(response, 422, "ambiguous_name", `Unknown or ambiguous document “${name}”. Choose: ${documents.map(item => item.label).join(", ")}.`);
+        return this.jsonResponse(response, 200, matches[0]);
       }
       if (method === "POST" && parts[0] === "documents" && parts[1] === "empty" && parts.length === 2) {
         const body = await this.json(request) as { document_id?: string; label?: string; request_id?: string };

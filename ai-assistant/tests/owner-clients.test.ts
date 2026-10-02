@@ -65,8 +65,8 @@ test("Spec target discovery uses canonical entity references", async () => {
     const targets = await new OwnerClients([ownerUrl], [], 5_000).targets("spec", ownerUrl);
     assert.deepEqual(targets.document, { document_id: "doc-1", title: "Demo specification" });
     assert.deepEqual(targets.entities, [
-      { document_id: "doc-1", entity_id: "component-1", entity_kind: "component", title: "acme:demo:component:1.0" },
-      { document_id: "doc-1", entity_id: "design-1", entity_kind: "design", title: "acme:demo:design:1.0" },
+      { document_id: "doc-1", entity_id: "component-1", entity_kind: "component", title: "Entity" },
+      { document_id: "doc-1", entity_id: "design-1", entity_kind: "design", title: "Entity" },
     ]);
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));

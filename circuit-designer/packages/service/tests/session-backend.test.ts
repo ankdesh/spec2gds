@@ -7,6 +7,31 @@ import {
 import { EphemeralCircuitSessionBackend } from "../src/session-backend";
 
 describe("ephemeral circuit session backend", () => {
+  it("normalizes admitted names, rejects equivalent names, and preserves identity on rename", async () => {
+    const first = simpleDocumentFixture();
+    first.label = "Straße";
+    first.components[0].label = "Timer";
+    first.components[1].label = "timer";
+    const second = { ...simpleDocumentFixture(), document_id: "second", label: "STRASSE" };
+    const backend = new EphemeralCircuitSessionBackend({ documents: [first, second] });
+    expect((await backend.get("second")).document.label).toBe("STRASSE 2");
+    const before = await backend.get(first.document_id);
+    expect(before.document.components.map(item => item.label)).toEqual(["Timer", "timer 2"]);
+    const third = { ...simpleDocumentFixture(), document_id: "third", label: "ＳＴＲＡＳＳＥ" };
+    expect((await backend.create(third, "duplicate-name")).status).toBe("rejected");
+    const batch: CircuitOperationBatch = {
+      request_id: "rename-document", expected_revision: before.revision,
+      operations: [{ operation_id: "rename", type: "set_document_label", label: "  Readable timer  " }],
+    };
+    const result = await backend.commit(first.document_id, batch);
+    expect(result.status).toBe("accepted");
+    expect(result.snapshot?.document.label).toBe("Readable timer");
+    expect(result.snapshot?.document.design).toEqual(before.document.design);
+    expect(result.snapshot?.document.document_id).toBe(first.document_id);
+    expect((await backend.commit(first.document_id, batch)).snapshot?.revision).toBe(result.snapshot?.revision);
+    expect((await backend.export(first.document_id, { format: "json" })).filename).toBe("readable-timer.circuit.json");
+  });
+
   it("commits atomically, guards revisions, and replays request ids", async () => {
     const backend = new EphemeralCircuitSessionBackend({ documents: [simpleDocumentFixture()] });
     const snapshot = await backend.get("fixture_simple");
@@ -113,11 +138,20 @@ describe("ephemeral circuit session backend", () => {
     const json = await backend.export("fixture_simple", { format: "json" });
     const svg = await backend.export("fixture_simple", { format: "svg" });
     const png = await backend.export("fixture_simple", { format: "png" });
-    expect(json.filename).toBe("fixture_simple.circuit.json");
+    expect(json.filename).toBe("simple.circuit.json");
     expect(String(json.data)).toContain('"protocol_version": "circuit-designer.v1"');
     expect(String(svg.data)).toContain("<svg");
     expect(String(svg.data)).toContain('data-instance-id="producer_0"');
     expect([...png.data as Uint8Array].slice(0, 8)).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  });
+
+  it("numbers filename collisions after transliteration without changing identity", async () => {
+    const first = { ...simpleDocumentFixture(), label: "Café" };
+    const second = { ...simpleDocumentFixture(), document_id: "second", label: "Cafe" };
+    const backend = new EphemeralCircuitSessionBackend({ documents: [first, second] });
+    expect((await backend.export(first.document_id, { format: "json" })).filename).toBe("cafe.circuit.json");
+    expect((await backend.export(second.document_id, { format: "json" })).filename).toBe("cafe-2.circuit.json");
+    expect((await backend.get(second.document_id)).document.label).toBe("Cafe");
   });
 
   it("expires and reacquires whole-document leases", async () => {

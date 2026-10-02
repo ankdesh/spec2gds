@@ -35,6 +35,13 @@ from spec2gds.agent_spec.spec_format.models import (
     NarrativeBlock,
     new_entity_id,
 )
+from spec2gds.agent_spec.spec_format.naming import (
+    clean_name,
+    entity_name,
+    hardware_name,
+    require_unique_name,
+    validate_package_names,
+)
 from spec2gds.agent_spec.spec_format.sections import (
     SECTION_TYPES,
     delete_entity_section,
@@ -406,6 +413,7 @@ class SpecEditTransaction:
         try:
             for operation in self.operations:
                 _apply_operation(package, operation)
+            validate_package_names(package)
             next_revision = SpecRevision.from_package(package)
         except (KeyError, ValueError, SpecValidationError, etree.LxmlError) as exc:
             diagnostics = exc.diagnostics if isinstance(exc, SpecValidationError) else (str(exc),)
@@ -416,10 +424,7 @@ class SpecEditTransaction:
             if isinstance(operation, UpsertEntitySection) and operation.section_type == "sv"
         }
         updated_owners.update(
-            next_revision.by_vlnv(
-                operation.kind,
-                f"spec2gds.local:work:{operation.name.strip()}:1.0",
-            ).ref
+            next(item.ref for item in next_revision.components if entity_name(item) == clean_name(operation.name))
             for operation in self.operations
             if isinstance(operation, CreateEntity) and operation.systemverilog is not None
         )
@@ -470,15 +475,15 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
     elif isinstance(operation, CreateEntity):
         _create_entity(package, operation)
     elif isinstance(operation, SetDocumentTitle):
-        title = operation.title.strip()
-        if not title:
+        if not operation.title.strip():
             raise ValueError("Specification name is required.")
+        title = clean_name(operation.title)
         package.narrative = package.narrative.model_copy(update={"title": title})
     elif isinstance(operation, SetEntityMetadata):
         root = _editable_entity_root(package, operation.entity)
         set_entity_metadata(
             root,
-            display_name=operation.display_name,
+            display_name=clean_name(operation.display_name) if operation.display_name is not None else None,
             short_description=operation.short_description,
             description=operation.description,
         )
@@ -640,9 +645,10 @@ def _delete_document(package: SpecPackage, ref: EntityRef) -> None:
 
 def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
     """Create one valid IP-XACT document with optional atomic initial content."""
-    name = operation.name.strip()
-    if not name or not ID_PATTERN.fullmatch(name):
-        raise ValueError("Entity name must be a non-empty XML-compatible identifier.")
+    display_name = clean_name(operation.name)
+    existing_revision = SpecRevision.from_package(package)
+    require_unique_name(display_name, (entity_name(item) for item in (*existing_revision.components, *existing_revision.designs, *existing_revision.bus_definitions, *existing_revision.abstraction_definitions)))
+    name = hardware_name(display_name, (item.vlnv.split(":")[2] for item in (*existing_revision.components, *existing_revision.designs) if item.ref.entity_kind == operation.kind))
     vlnv = f"spec2gds.local:work:{name}:1.0"
     if any(item.kind == operation.kind and item.vlnv == vlnv for item in package.manifest.documents):
         raise ValueError(f"A {operation.kind.replace('_', ' ')} named {name} already exists.")
@@ -668,6 +674,7 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
         ("library", "work"),
         ("name", name),
         ("version", "1.0"),
+        ("displayName", display_name),
     ):
         etree.SubElement(root, _q(field)).text = value
     for instance in operation.instances:
@@ -1121,6 +1128,8 @@ def _find_block_list(blocks: list[NarrativeBlock], block_id: str) -> tuple[list[
 
 def _upsert_narrative_block(package: SpecPackage, operation: UpsertNarrativeBlock) -> None:
     """Replace a block by id or insert it at a validated tree location."""
+    if operation.block.type == "section":
+        operation = dataclasses.replace(operation, block=operation.block.model_copy(update={"text": clean_name(operation.block.text)}))
     blocks = _blocks_copy(package)
     existing = _find_block_list(blocks, operation.block.block_id)
     if existing is not None:

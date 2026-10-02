@@ -17,6 +17,7 @@ from spec2gds.agent_spec.activities.rtl import register_extensions
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 from spec2gds.agent_spec.spec_format.models import EntityRef
+from spec2gds.agent_spec.spec_format.naming import generated_path
 from spec2gds.agent_spec.spec_format.sections import (
     SECTION_NAMESPACE,
     SECTION_ROOT,
@@ -87,23 +88,25 @@ def _local_ref(reference: EntityRef, document_id: str) -> EntityRef:
 
 
 def build_package(example: Example) -> SpecPackage:
-    """Derive one source-only example package from the tracked IP-XACT interface."""
-    package = SpecPackage.load(str(BASE_SPEC))
-    package.files = {
-        path: data
-        for path, data in package.files.items()
-        if not path.startswith("activity/") and not path.startswith(f"{SECTION_ROOT}/")
-    }
-    package.manifest = package.manifest.model_copy(
-        update={
-            "annotation_schemas": [
-                item
-                for item in package.manifest.annotation_schemas
-                if item.namespace != SECTION_NAMESPACE
-            ]
+    """Refresh example bodies while preserving existing identities and topology."""
+    existing = example.spec_path.exists()
+    package = SpecPackage.load(str(example.spec_path if existing else BASE_SPEC))
+    if not existing:
+        package.files = {
+            path: data
+            for path, data in package.files.items()
+            if not path.startswith("activity/") and not path.startswith(f"{SECTION_ROOT}/")
         }
-    )
-    if example.document_id is not None:
+        package.manifest = package.manifest.model_copy(
+            update={
+                "annotation_schemas": [
+                    item
+                    for item in package.manifest.annotation_schemas
+                    if item.namespace != SECTION_NAMESPACE
+                ]
+            }
+        )
+    if example.document_id is not None and not existing:
         document_id = example.document_id
         package.manifest = package.manifest.model_copy(
             update={
@@ -125,6 +128,8 @@ def build_package(example: Example) -> SpecPackage:
         )
         package.narrative = package.narrative.model_copy(update={"document_id": document_id})
 
+    if example.spec_path.exists():
+        package.narrative = package.narrative.model_copy(update={"title": SpecPackage.load(str(example.spec_path)).narrative.title})
     revision = SpecRevision.from_package(package)
     component = revision.components[0]
     upsert_systemverilog_section(package, component.ref, example.body)
@@ -168,7 +173,7 @@ def configured_project(package: SpecPackage, workspace_root: Path) -> Path:
     """Resolve the generator-owned location for one example package."""
     revision = SpecRevision.from_package(package)
     target = revision.entry_designs()[0]
-    return workspace_root / "rtl" / revision.document_id / target.ref.entity_id
+    return workspace_root / generated_path(revision, target.ref, "rtl")
 
 
 def update_examples() -> None:
@@ -176,6 +181,15 @@ def update_examples() -> None:
     workspace_root = load_service_registry().activities.workspace_root
     for example in EXAMPLES:
         package = build_package(example)
+        revision = SpecRevision.from_package(package)
+        target = revision.entry_designs()[0].ref
+        legacy = f"rtl/{revision.document_id}/{target.entity_id}"
+        current = generated_path(revision, target, "rtl")
+        if (workspace_root / legacy).exists() and not (workspace_root / current).exists():
+            LocalActivityWorkspace(workspace_root).move_owned_directory(
+                legacy, current, generator_id="rtl.generate",
+                document_id=revision.document_id, design_id=target.entity_id,
+            )
         package.save(str(example.spec_path))
         output = generate_project(package, workspace_root)
         print(f"updated {example.name}: {example.spec_path.relative_to(ROOT)}")

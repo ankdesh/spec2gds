@@ -13,7 +13,7 @@ import type { ProposalReview, SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit"): SessionBinding => ({
   sessionId: "session-1", status: "active", preset: "focused", domain, ownerUrl: "http://owner", documentId: "doc-1", scope: "document",
-  entityKind: null, entityId: null, title: "Test", archived: false, createdAt: "", updatedAt: "",
+  entityKind: null, entityId: null, title: "Test", sourceName: "Test design", archived: false, createdAt: "", updatedAt: "",
   workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
   workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",
 });
@@ -31,12 +31,12 @@ function review(domain: "spec" | "circuit", overrides: Partial<ProposalReview> =
 
 test("Spec summary is derived from operation counts and owner diff", () => {
   const summary = changeSummaryFor(review("spec", { preview: { status: "valid", diff: [
-    { change: "added", path: "$.components[timer]" },
-    { change: "changed", path: "$.components[alu].description" },
+    { change: "added", path: "$.components[timer]", label: "Timer" },
+    { change: "changed", path: "$.components[alu].description", label: "Arithmetic unit › Description" },
   ] } }));
-  assert.equal(summary.text, "Proposes 2 operations (2 create_entity). Owner preview reports 2 changed targets.");
+  assert.equal(summary.text, "Proposes 2 operations (2 create entity). Owner preview reports 2 changed targets.");
   assert.deepEqual(summary.operationCounts, [{ type: "create_entity", count: 2 }]);
-  assert.deepEqual(summary.changedTargets, ["added $.components[timer]", "changed $.components[alu].description"]);
+  assert.deepEqual(summary.changedTargets, ["added Timer", "changed Arithmetic unit › Description"]);
   assert.deepEqual(summary.assumptions, ["Clock is synchronous."]);
 });
 
@@ -45,7 +45,7 @@ test("Circuit summary sorts operation types and normalizes graph targets", () =>
     added: [{ kind: "instance", id: "u_timer" }], removed: [], changed: [{ kind: "net", id: "clock" }], connections_changed: ["clock"],
   } } }));
   assert.deepEqual(summary.operationCounts, [{ type: "add_instance", count: 1 }, { type: "create_net", count: 1 }]);
-  assert.deepEqual(summary.changedTargets, ["added:instance:u_timer", "changed:net:clock", "connections_changed:net:clock"]);
+  assert.deepEqual(summary.changedTargets, ["Updated connections · Unavailable net", "added Unavailable instance", "changed Unavailable net"]);
   assert.match(summary.text, /^Proposes 2 operations/);
 });
 
@@ -82,5 +82,5 @@ test("owner and exception classifications fail closed", () => {
   assert.equal(errorFromException(binding("spec"), "p", new OwnerError(503, "offline")).error_code, "OWNER_UNAVAILABLE");
   assert.equal(errorFromException(binding("spec"), "p", new OwnerError(502, "Owner returned non-JSON content.")).error_code, "OWNER_CONTRACT_ERROR");
   assert.equal(errorFromException(binding("spec"), "p", new Error("boom")).error_code, "INTERNAL_ERROR");
-  assert.equal(proposalError(binding("spec"), "call", "UNSUPPORTED_REQUEST", "Cannot rename identity.").target, "document:doc-1");
+  assert.equal(proposalError(binding("spec"), "call", "UNSUPPORTED_REQUEST", "Cannot rename identity.").target, "Test design");
 });

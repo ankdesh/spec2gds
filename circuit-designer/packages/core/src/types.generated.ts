@@ -32,7 +32,8 @@ export type CircuitOperation =
   | RemoveCycleEdgeOperation
   | SetClockDomainOperation
   | RemoveClockDomainOperation
-  | SetSubjectClockDomainOperation;
+  | SetSubjectClockDomainOperation
+  | SetDocumentLabelOperation;
 export type AddComponentOperation = OperationBase & {
   operation_id: NonEmptyString;
   type: "add_component";
@@ -477,6 +478,11 @@ export interface OperationBase {
   type: string;
   [k: string]: any;
 }
+export interface SetDocumentLabelOperation {
+  operation_id: string;
+  type: "set_document_label";
+  label: string;
+}
 export interface CircuitChangeResult {
   status: "accepted" | "rejected" | "conflict" | "locked" | "provider_failed";
   snapshot?: CircuitSnapshot;
@@ -502,7 +508,7 @@ export interface CircuitDiff {
   connections_changed: Slug[];
 }
 export interface ElementChange {
-  kind: "component" | "instance" | "boundary_terminal" | "net" | "layout" | "timing";
+  kind: "component" | "instance" | "boundary_terminal" | "net" | "layout" | "timing" | "document";
   id: NonEmptyString;
 }
 export interface EditLease {

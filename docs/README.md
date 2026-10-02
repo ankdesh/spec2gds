@@ -23,6 +23,7 @@ marked backlogs; completed plans and release diaries live in Git history.
 
 ## Assistant
 
+- [Document lifecycle rules, state machines and scenario checklist](assistant-document-lifecycle.md)
 - [Unified hierarchy, explanations and RTL integration](assistant-hierarchical-spec-integration.md)
   and [functional/generalization evaluation evidence](assistant-hierarchical-spec-evaluation.md)
 - [Setup and owner boundaries](ai-assistant.md), [UI composition](assistant-ui.md)
@@ -64,3 +65,5 @@ Update the smallest relevant current reference and run instructions when behavio
 changes. Move useful decisions from completed plans into those pages, then remove
 the superseded plan. Keep proposed capabilities separate from supported APIs.
 Generated samples and dependencies are not authoritative documentation.
+
+- [Names and identifiers](naming-and-identifiers.md): naming policy, exposure inventory, normalization, and acceptance checks.

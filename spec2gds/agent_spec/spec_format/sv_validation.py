@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 from spec2gds.agent_spec.spec_format.ir import ComponentIR, DesignIR, SpecRevision
+from spec2gds.agent_spec.spec_format.naming import qualified_reference_name
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 _CACHE: dict[tuple[str, str, str, str], "SectionValidation"] = {}
@@ -55,6 +56,8 @@ class SectionValidation:
         self.section_id = section_id
         self.status = status
         self.diagnostics = diagnostics
+        self.target_name = ""
+        self.section_name = "SystemVerilog"
 
     @property
     def blocking(self) -> bool:
@@ -65,12 +68,24 @@ class SectionValidation:
         """Serialize aggregate validation status and ordered diagnostics."""
         return {
             "section_id": self.section_id,
+            "target_name": self.target_name,
+            "section_name": self.section_name,
             "status": self.status,
             "diagnostics": [item.as_json() for item in self.diagnostics],
         }
 
 
 def validate_revision_sections(
+    revision: SpecRevision, section_ids: set[str] | None = None
+) -> tuple[SectionValidation, ...]:
+    results = _validate_revision_sections(revision, section_ids)
+    owners = {section.section_id: section.owner for section in revision.entity_sections}
+    for result in results:
+        result.target_name = qualified_reference_name(revision, owners[result.section_id])
+    return results
+
+
+def _validate_revision_sections(
     revision: SpecRevision, section_ids: set[str] | None = None
 ) -> tuple[SectionValidation, ...]:
     """Validate selected SV sections in generated context when Verilator exists."""

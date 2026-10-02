@@ -67,7 +67,7 @@ The editor's launch dialog reports a missing compiler before starting a job.
 
 Select a design in Spec Editor, choose **Options → More actions… → Launch
 activity…**, then **Generate cycle-accurate SystemC**. The managed output is
-`systemc-rtl/<document-id>/<design-id>/` beside the active `.spec` package. It
+`systemc-rtl/<document-name>/<entity-name>/` beside the active `.spec` package. It
 contains `include/design.h`, the assembled inputs in `source/`,
 `src/main.cpp`, `CMakeLists.txt`, and `generation-manifest.json`. A typed Activity
 report and JSON artifact contain source revision, source-section hashes, tool

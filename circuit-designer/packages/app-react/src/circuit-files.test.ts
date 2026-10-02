@@ -14,7 +14,7 @@ describe("portable circuit files", () => {
 
     expect(parsed.valid).toBe(true);
     expect(parsed.valid && parsed.document).toEqual(document);
-    expect(circuitDocumentFilename(document)).toBe("fixture_simple.circuit.json");
+    expect(circuitDocumentFilename(document)).toBe("simple.circuit.json");
   });
 
   test("reports malformed JSON without throwing", () => {

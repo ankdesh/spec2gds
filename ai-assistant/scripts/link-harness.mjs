@@ -1,5 +1,5 @@
 /** Link compile-time dependencies to the same Harness workspaces used by product-runtime. */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, statSync, symlinkSync, unlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { updateHarnessSource } from "./harness-env.mjs";
@@ -56,7 +56,7 @@ function replaceLink(local, target, backupName, type) {
   let previous;
   try { previous = lstatSync(local); }
   catch (error) { if (error.code !== "ENOENT") throw error; }
-  if (previous?.isSymbolicLink()) rmSync(local);
+  if (previous?.isSymbolicLink()) unlinkSync(local);
   else if (previous) renameSync(local, join(generated, backupName));
   symlinkSync(target, local, type);
 }

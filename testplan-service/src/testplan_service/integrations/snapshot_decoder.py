@@ -12,7 +12,7 @@ from typing import Any
 
 from spec2gds.agent_spec.activities import ActivitySnapshot
 from spec2gds.agent_spec.spec_format.models import NarrativeDocument
-
+from spec2gds.agent_spec.spec_format.naming import document_name, entity_name
 from testplan_service.domain.hash import sha256_digest
 from testplan_service.exceptions import SnapshotError
 from testplan_service.integrations.models import (
@@ -66,7 +66,8 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
                     "entity_kind": comp.ref.entity_kind,
                     "entity_id": comp.ref.entity_id,
                 },
-                name=comp.ref.entity_id,
+                name=entity_name(comp),
+                qualified_name=f"{document_name(revision)} › {entity_name(comp)}",
                 kind="component",
                 vlnv=comp.vlnv,
                 ports=ports_list,
@@ -82,7 +83,8 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
                     "entity_kind": des.ref.entity_kind,
                     "entity_id": des.ref.entity_id,
                 },
-                name=des.ref.entity_id,
+                name=entity_name(des),
+                qualified_name=f"{document_name(revision)} › {entity_name(des)}",
                 kind="design",
                 vlnv=des.vlnv,
             )
@@ -100,11 +102,12 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
         occurrences.append(
             OccurrenceSummary(
                 occurrence_id=target.entity_id,
-                name=target.entity_id,
+                name=entity_name(comp) if comp else "Component",
+                qualified_name=f"{document_name(revision)} › {entity_name(comp) if comp else 'Component'}",
                 kind="component",
                 component_ref=target_ref_dict,
-                component_name=target.entity_id,
-                path=target.entity_id,
+                component_name=entity_name(comp) if comp else "Component",
+                path=entity_name(comp) if comp else "Component",
                 instance_chain=[target.entity_id],
                 ports=ports,
             )
@@ -115,21 +118,23 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
         occurrences.append(
             OccurrenceSummary(
                 occurrence_id=target.entity_id,
-                name=target.entity_id,
+                name=entity_name(des) if des else "Design",
+                qualified_name=f"{document_name(revision)} › {entity_name(des) if des else 'Design'}",
                 kind="design",
-                path=target.entity_id,
+                path=entity_name(des) if des else "Design",
                 instance_chain=[target.entity_id],
             )
         )
-        inst_meta: dict[str, dict[str, str]] = {}
+        inst_meta: dict[tuple[str, str], dict[str, str]] = {}
         if hasattr(snapshot, "source_package") and snapshot.source_package:
             try:
                 from lxml import etree
+
                 from spec2gds.agent_spec.spec_format.archive import SpecPackage
                 pkg = SpecPackage.from_bytes(snapshot.source_package)
-                for fpath, fcontent in pkg.files.items():
-                    if "designs/" in fpath:
-                        root_elem = etree.fromstring(fcontent)
+                for entry in pkg.manifest.documents:
+                    if entry.kind == "design":
+                        root_elem = etree.fromstring(pkg.files[entry.path])
                         for inst_node in root_elem.xpath("./*[local-name()='componentInstances']/*[local-name()='componentInstance']"):
                             iname_node = inst_node.xpath("./*[local-name()='instanceName']")
                             iname = iname_node[0].text.strip() if iname_node and iname_node[0].text else ""
@@ -141,50 +146,54 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
                             dname_node = inst_node.xpath("./*[local-name()='displayName']")
                             dname = dname_node[0].text.strip() if dname_node and dname_node[0].text else iname
                             if iname:
-                                inst_meta[iname] = {"stable_id": stable_id, "display_name": dname}
+                                inst_meta[(entry.entity_id, iname)] = {"stable_id": stable_id, "display_name": dname}
             except Exception:
                 pass
 
-        if des:
-            for inst in des.instances:
-                meta = inst_meta.get(inst.name, {})
+        def append_instances(design, names, chain, stable_chain, ancestors):
+            if design.ref.entity_id in ancestors:
+                diagnostics.append(f"Recursive composition at {' / '.join(names)}.")
+                return
+            for inst in design.instances:
+                meta = inst_meta.get((design.ref.entity_id, inst.name), {})
                 stable_id = meta.get("stable_id", inst.name)
-                display_name = meta.get("display_name", inst.name)
+                display = meta.get("display_name", inst.name)
+                component = next((c for c in revision.components if c.vlnv == inst.component_vlnv), None)
+                path = "/".join((*names, display))
+                occurrence_chain = [*chain, inst.name]
+                identity_chain = [*stable_chain, stable_id]
+                # Keep legacy top-level references; qualify deeper occurrences so
+                # repeated instances of a composite never collapse into one scope.
+                occurrence_id = stable_id if len(identity_chain) == 1 else sha256_digest(identity_chain)
+                occurrences.append(OccurrenceSummary(
+                    occurrence_id=occurrence_id, name=display, kind="component",
+                    qualified_name=f"{document_name(revision)} › {path}", path=path,
+                    instance_chain=occurrence_chain,
+                    component_ref=component.ref.model_dump(mode="json") if component else None,
+                    component_name=entity_name(component) if component else "Unavailable component",
+                    ports=[{"name": p.name, "direction": p.direction, "width": p.width or 1}
+                           for p in component.ports] if component else [],
+                ))
+                internal = revision.internal_design(component) if component else None
+                if internal:
+                    append_instances(internal, [*names, display], occurrence_chain,
+                                     identity_chain, {*ancestors, design.ref.entity_id})
 
-                # Find matching component
-                c_match = next((c for c in revision.components if c.vlnv == inst.component_vlnv or c.ref.entity_id == inst.name), None)
-                c_name = c_match.ref.entity_id if c_match else inst.name
-                c_ref = (
-                    {
-                        "document_id": c_match.ref.document_id,
-                        "entity_kind": c_match.ref.entity_kind,
-                        "entity_id": c_match.ref.entity_id,
-                    }
-                    if c_match
-                    else None
-                )
-                ports = [
-                    {"name": p.name, "direction": p.direction, "width": p.width or 1}
-                    for p in c_match.ports
-                ] if c_match else []
-                occurrences.append(
-                    OccurrenceSummary(
-                        occurrence_id=stable_id,
-                        name=display_name,
-                        kind="component",
-                        component_ref=c_ref,
-                        component_name=c_name,
-                        path=f"{target.entity_id}/{display_name}" if display_name else f"{target.entity_id}/{inst.name}",
-                        instance_chain=[target.entity_id, inst.name],
-                        ports=ports,
-                    )
-                )
+        if des:
+            append_instances(des, [entity_name(des)], [target.entity_id], [], set())
 
     # 4. Project Narrative Sections
     if revision._narrative_json:
         try:
             narrative = NarrativeDocument.model_validate_json(revision._narrative_json)
-            for block in narrative.blocks:
+            def sections(blocks, parents=()):
+                for block in blocks:
+                    heading = (block.text or "Section").splitlines()[0][:200]
+                    qualified = (*parents, heading) if block.type == "section" else parents
+                    if not parents or block.type == "section":
+                        yield block, qualified
+                    yield from sections(block.children, qualified or parents)
+            for block, headings in sections(narrative.blocks):
                 text = block.text or ""
                 # Also include children text if present
                 if block.children:
@@ -192,7 +201,7 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
                     if child_texts:
                         text = f"{text}\n" + "\n".join(child_texts) if text else "\n".join(child_texts)
                 digest = sha256_digest(text)
-                title = block.text[:100] if block.text else f"Section {block.block_id}"
+                title = block.text.splitlines()[0][:200] if block.text else "Section"
                 ref = target_ref_dict or {
                     "document_id": manifest.source.document_id,
                     "entity_kind": "document",
@@ -202,6 +211,7 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
                     SourceSectionSummary(
                         section_id=block.block_id,
                         title=title,
+                        qualified_name=" › ".join((document_name(revision), *headings)) or title,
                         entity_ref=ref,
                         locator={
                             "snapshot_id": manifest.snapshot_id,
@@ -221,6 +231,7 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
     return SourceSnapshotView(
         snapshot_id=manifest.snapshot_id,
         source_document_id=manifest.source.document_id,
+        source_name=document_name(revision),
         source_revision_hash=manifest.source.source_revision_hash,
         root_ref=target_ref_dict,
         entities=entities,

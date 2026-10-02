@@ -8,8 +8,19 @@ import pytest
 
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
-from spec2gds.agent_spec.spec_format.proposal_service import ProposalApplyError, apply_assistant_proposal
-from spec2gds.agent_spec.spec_format.v1_api import AssistantDocumentLaunchRequest, AssistantLaunchRequest, CreateDocumentRequest, OpenDocumentRequest, TransactionRequest, V1Session, create_app
+from spec2gds.agent_spec.spec_format.proposal_service import (
+    ProposalApplyError,
+    apply_assistant_proposal,
+)
+from spec2gds.agent_spec.spec_format.v1_api import (
+    AssistantDocumentLaunchRequest,
+    AssistantLaunchRequest,
+    CreateDocumentRequest,
+    OpenDocumentRequest,
+    TransactionRequest,
+    V1Session,
+    create_app,
+)
 
 
 def endpoints(review=False):
@@ -252,13 +263,14 @@ def test_creation_receipt_replays_exact_input_without_overwriting(tmp_path):
 
 def test_cli_history_recovers_saved_decision_without_assistant_database(tmp_path, capsys):
     import json
+
     from scripts.spec2gds_spec import main as spec_main
     e = endpoints()
     path = tmp_path / "cli-history.spec"
     s = create(e, path)
     apply_assistant_proposal(V1Session(str(path)), proposal(s), application_mode="automatic", session_id="offline-chat")
     saved = path.read_bytes()
-    assert spec_main(["history", str(path), "--limit", "1"]) == 0
+    assert spec_main(["history", str(path), "--limit", "1", "--json"]) == 0
     history = json.loads(capsys.readouterr().out)
     assert history["items"][0]["state"] == "applied"
     assert history["items"][0]["session_id"] == "offline-chat"

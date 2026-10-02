@@ -91,6 +91,10 @@ export class ProductState {
       .map(row => String(row.name)));
     if (!bindingColumns.has("preset")) this.database.exec("ALTER TABLE bindings ADD COLUMN preset TEXT NOT NULL DEFAULT 'focused'");
     if (!bindingColumns.has("owner_document_key")) this.database.exec("ALTER TABLE bindings ADD COLUMN owner_document_key TEXT");
+    if (!bindingColumns.has("source_name")) this.database.exec("ALTER TABLE bindings ADD COLUMN source_name TEXT");
+    for (const review of this.listArchitectureReviews()) {
+      if (!review.reviewNumber) this.storeArchitecture(review);
+    }
   }
 
   close(): void { this.database.close(); }
@@ -113,6 +117,11 @@ export class ProductState {
   }
 
   storeArchitecture(record: Record<string, any>): void {
+    if (!record.reviewNumber) {
+      const scope = record.ownerDocumentKey || `new:${record.sessionId}`;
+      const previous = this.listArchitectureReviews().filter(item => (item.ownerDocumentKey || `new:${item.sessionId}`) === scope);
+      record.reviewNumber = Math.max(0, ...previous.map(item => Number(item.reviewNumber) || 0)) + 1;
+    }
     this.database.prepare(`INSERT INTO architecture_reviews VALUES(?,?,?,?,?)
       ON CONFLICT(review_id) DO UPDATE SET status=excluded.status, record_json=excluded.record_json`)
       .run(record.reviewId, record.sessionId, record.callId, record.status, JSON.stringify(record));
@@ -247,10 +256,17 @@ export class ProductState {
       VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(sessionId, input.preset ?? "focused", input.domain, input.ownerUrl, input.documentId, scope,
       input.entityKind ?? null, input.entityId ?? null,
-      input.title?.trim() || `${input.domain === "spec" ? "Spec" : "Circuit"}: ${input.documentId}`,
+      input.title?.trim() || input.sourceName || (input.domain === "spec" ? "Specification" : "Circuit"),
       input.workspaceKey, input.workspaceTitle, input.workspacePath,
       input.workspaceDomain, input.workspaceOwnerUrl, input.workspaceDocumentId,
       timestamp, timestamp, input.ownerDocumentKey ?? null);
+    if (input.sourceName) this.refreshSourceName(sessionId, input.sourceName);
+    return this.getBinding(sessionId)!;
+  }
+
+  refreshSourceName(sessionId: string, sourceName: string, workspaceTitle?: string): SessionBinding {
+    this.database.prepare("UPDATE bindings SET source_name=? WHERE session_id=?").run(sourceName, sessionId);
+    if (workspaceTitle) this.database.prepare("UPDATE bindings SET workspace_title=? WHERE workspace_key=(SELECT workspace_key FROM bindings WHERE session_id=?)").run(workspaceTitle, sessionId);
     return this.getBinding(sessionId)!;
   }
 
@@ -403,6 +419,7 @@ export class ProductState {
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),
       entityId: row.entity_id === null ? null : String(row.entity_id), title: String(row.title),
+      sourceName: typeof row.source_name === "string" ? row.source_name : (row.domain === "spec" ? "Specification" : "Circuit"),
       workspaceKey: String(row.workspace_key), workspaceTitle: String(row.workspace_title),
       workspacePath: String(row.workspace_path),
       workspaceDomain: row.workspace_domain as SessionBinding["workspaceDomain"],

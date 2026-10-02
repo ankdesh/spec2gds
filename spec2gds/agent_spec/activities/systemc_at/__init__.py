@@ -40,6 +40,8 @@ class SystemCGenerationReport(pydantic.BaseModel):
     source_revision_hash: str
     design: EntityRef
     design_vlnv: str
+    target_name: str = ""
+    document_name: str = ""
     output_path: str
     top_class: str
     component_definition_count: int
@@ -86,10 +88,7 @@ def generate_systemc_at_skeleton(context: ActivityContext) -> ActivityResult:
     source_entities = tuple(provenance_by_key[key] for key in sorted(provenance_by_key))
 
     project = generate_project(context.spec, context.target)
-    relative_path = (
-        f"systemc-at/{_path_segment(context.target.document_id)}/"
-        f"{_path_segment(context.target.entity_id)}"
-    )
+    relative_path = context.spec.high.project_path(context.target, "systemc-at")
     published = context.workspace.replace_directory(
         relative_path=relative_path,
         files=project.files,
@@ -104,6 +103,8 @@ def generate_systemc_at_skeleton(context: ActivityContext) -> ActivityResult:
         source_revision_hash=context.snapshot.source.source_revision_hash,
         design=context.target,
         design_vlnv=target.vlnv,
+        target_name=target.display_name,
+        document_name=context.spec.high.document["title"],
         output_path=published.relative_path,
         top_class=project.top_class,
         component_definition_count=project.component_definition_count,

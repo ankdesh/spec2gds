@@ -842,12 +842,12 @@
 
         <div style="display: flex; gap: 12px;">
           <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="rcpFormIntents">Covered Intent IDs (comma-separated)</label>
-            <input type="text" id="rcpFormIntents" class="form-input" placeholder="int-full-1, int-full-2" />
+            <label class="form-label" for="rcpFormIntents">Covered intents</label>
+            <input type="search" class="form-input" aria-label="Search covered intents" oninput="searchNamedChoices(this, 'rcpFormIntents')" placeholder="Search by name" /><select multiple id="rcpFormIntents" class="form-select" size="4"></select>
           </div>
           <div class="form-group" style="flex: 1;">
-            <label class="form-label" for="rcpFormObjectives">Satisfied Objective IDs (comma-separated)</label>
-            <input type="text" id="rcpFormObjectives" class="form-input" placeholder="obj-scen-full, obj-corr-occ" />
+            <label class="form-label" for="rcpFormObjectives">Satisfied objectives</label>
+            <input type="search" class="form-input" aria-label="Search satisfied objectives" oninput="searchNamedChoices(this, 'rcpFormObjectives')" placeholder="Search by name" /><select multiple id="rcpFormObjectives" class="form-select" size="4"></select>
           </div>
           <div class="form-group" style="flex: 1;">
             <label class="form-label" for="rcpFormState">Authoring State</label>

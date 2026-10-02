@@ -28,12 +28,18 @@ async function sessionLogs(root) {
 }
 
 test("one-off profile reads bound context and persists a previewed proposal", { timeout: 90_000 }, async () => {
+  let nameResolutions = 0;
   let ownerReads = 0;
   let previews = 0;
   const operationContract = JSON.parse(await readFile(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
   const owner = createServer((request, response) => {
     const url = new URL(request.url, "http://localhost");
     if (url.pathname === "/health") return send(response, { status: "ok" });
+    if (url.pathname === "/documents/resolve") {
+      assert.equal(url.searchParams.get("name"), "Timer controller");
+      nameResolutions += 1;
+      return send(response, { document_id: "doc-test", name: "Timer controller" });
+    }
     if (url.pathname === "/assistant/operation-schema") return send(response, operationContract);
     if (url.pathname === "/assistant/context/document") {
       ownerReads += 1;
@@ -121,7 +127,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       "--json",
       "--domain", "spec",
       "--service-url", `http://127.0.0.1:${ownerPort}`,
-      "--document-id", "doc-test",
+      "--document-name", "Timer controller",
       "--",
       "Inspect the specification and propose a timer component.",
     ], {
@@ -145,6 +151,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     assert.equal(signal, null, output);
     assert.equal(code, 0, output);
     assert.match(output, /one ALU/);
+    assert.equal(nameResolutions, 1);
     assert.ok(ownerReads >= 3, `Expected validation, context, and proposal reads; got ${ownerReads}.\n${output}`);
     assert.equal(previews, 1);
     const agentRequests = modelRequests.filter(request => Array.isArray(request.tools));

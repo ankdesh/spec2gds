@@ -23,6 +23,10 @@ trace, so its actions remain available after the response finishes.
 See [DSH UI migration and extension map](assistant-ui.md) for the plugin
 architecture and the retained/extended/dropped feature table.
 
+Use [document lifecycle rules and state machines](assistant-document-lifecycle.md)
+for launch, target selection, creation, editing, closing and recovery decisions.
+It distinguishes current guards from required routing and lifecycle improvements.
+
 Use Node 24.2+ or 22.19+ in the 22.x line. The pinned Harness CLI uses
 [`import.meta.main`](https://nodejs.org/api/esm.html#importmetamain), added in
 Node 24.2 and backported to Node 22.18. Node 24.0/24.1 cannot launch the CLI;
@@ -98,7 +102,7 @@ browser automatically. The browser new-session button opens a
 design-source chooser for configured Spec and Circuit services. It can connect
 another service for the current process or create a new Spec or empty Circuit.
 Alternatively, request a new Spec document directly in any browser root chat.
-Automatic owners create `SPEC_DOCUMENT_ROOT/<documentId>.spec` and continue
+Automatic owners derive a safe filename from **Name** under `SPEC_DOCUMENT_ROOT` and continue
 in a separate document chat with the original request. Restricted owners show
 the editable creation card. Package creation activates the new Spec document;
 existing conversations remain bound to their exact package. See
@@ -182,13 +186,19 @@ cd ai-assistant
 npm run request -- \
   --domain circuit \
   --service-url http://127.0.0.1:6011/api/circuit-designer/v1 \
-  --document-id my-circuit \
+  --document-name "My circuit" \
   -- "Explain the clock and reset topology."
 ```
 
 This starts `spec2gds-headless`, submits one prompt, prints the answer, and
 exits. Add `--json` for event output. Use `--session-id <id>` instead of binding
-arguments to continue an existing conversation. Native releases expose the
+arguments to continue an existing conversation. For Spec requests, use
+`--document-name "Timer controller" --entity-name "Cycle timing"` to select
+an entity or authored section within that document. Ambiguous section names
+require a qualified name such as `Operation › Cycle timing`. Names resolve
+through the selected owner; unknown names return choices without changing
+the package binding. Technical `--document-id`, `--owner-document-key`, and
+`--entity-id` options remain available for automation. Native releases expose the
 same interface as `node deployment/request.mjs`.
 
 ## Configuration and trust

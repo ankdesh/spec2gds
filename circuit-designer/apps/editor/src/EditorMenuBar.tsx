@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentSnapshot, FilesystemDirectoryListing } from "@spec2gds/document-core";
+import { publicFilenameStem } from "@spec2gds/circuit-core";
 
 export type EditorView = "document" | "activity" | "diagnostics";
 
@@ -50,13 +51,7 @@ function packageDirectory(path: string): string | undefined {
 function portablePackageFilename(path: string, title: string): string {
   const existing = path.trim().split(/[\\/]/).at(-1) ?? "";
   if (existing.toLowerCase().endsWith(".spec")) return existing;
-  let safeTitle = title.trim()
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-")
-    .replace(/[. ]+$/g, "") || "specification";
-  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(safeTitle)) {
-    safeTitle = `_${safeTitle}`;
-  }
-  return `${safeTitle}.spec`;
+  return `${publicFilenameStem(title, "specification")}.spec`;
 }
 
 function packagePathInDirectory(
@@ -726,7 +721,7 @@ export default function EditorMenuBar({
                   onActivate={activate(() => { void onOpenCircuit("design", design.ref.entity_id); })}
                   status={entryIds.has(design.ref.entity_id) ? "Entry" : undefined}
                 >
-                  {displayEntityName(design.vlnv)}
+                  {design.display_name || displayEntityName(design.vlnv)}
                 </MenuAction>
               ))}
               {components.length > 0 && <div className="editor-menu__group" role="presentation">Components</div>}
@@ -736,7 +731,7 @@ export default function EditorMenuBar({
                   key={`component-${component.ref.entity_id}`}
                   onActivate={activate(() => { void onOpenCircuit("component", component.ref.entity_id); })}
                 >
-                  {displayEntityName(component.vlnv)}
+                  {component.display_name || displayEntityName(component.vlnv)}
                 </MenuAction>
               ))}
               {!designs.length && !components.length && (

@@ -80,7 +80,6 @@ function TopologyDialog({
 
 export function DesignTopologyLiveView({
   block,
-  documentId,
   onOpenCircuit,
 }: {
   block: NarrativeBlock;
@@ -94,7 +93,8 @@ export function DesignTopologyLiveView({
   const [expanded, setExpanded] = useState(false);
   const expandRef = useRef<HTMLButtonElement>(null);
   const label = block.text || "Circuit topology";
-  const entityId = block.entity_refs[0]?.entity_id ?? "design";
+  const ref = block.entity_refs[0];
+  const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
 
   useEffect(() => {
     let active = true;
@@ -156,7 +156,7 @@ export function DesignTopologyLiveView({
           <button disabled={!imageUrl} onClick={() => setExpanded(true)} ref={expandRef} type="button">Expand</button>
           <a
             aria-disabled={!imageUrl}
-            download={circuitSvgFilename(documentId, entityId)}
+            download={circuitSvgFilename(String(block.options.document_name || "Specification"), entityName)}
             href={imageUrl || undefined}
             onClick={(event) => { if (!imageUrl) event.preventDefault(); }}
           >

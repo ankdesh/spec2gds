@@ -37,6 +37,24 @@ class LocalActivityWorkspace:
         """Return the host-selected root for diagnostics and direct callers."""
         return self._root
 
+    def move_owned_directory(
+        self, source: str, destination: str, *, generator_id: str,
+        document_id: str, design_id: str,
+    ) -> None:
+        """Move a known public example without replacing any existing output."""
+        old = self._root / validate_safe_path(source)
+        new = self._root / validate_safe_path(destination)
+        for path in (old, new):
+            self._assert_contained(path)
+            self._assert_safe_existing_ancestors(path)
+        if not old.is_dir():
+            raise ValueError("Generated migration source does not exist.")
+        self._validate_existing_target(old, generator_id, document_id, design_id)
+        if new.exists():
+            raise ValueError("Generated migration destination already exists.")
+        new.parent.mkdir(parents=True, exist_ok=True)
+        os.rename(old, new)
+
     def replace_directory(
         self,
         *,
@@ -60,7 +78,22 @@ class LocalActivityWorkspace:
         self._assert_contained(target)
         self._assert_safe_existing_ancestors(target)
         target.parent.mkdir(parents=True, exist_ok=True)
-        self._validate_existing_target(target, generator_id, document_id, design_id)
+        base, number = target, 2
+        while True:
+            try:
+                self._validate_existing_target(target, generator_id, document_id, design_id)
+                break
+            except ValueError as exc:
+                # Only a valid manifest owned by another source qualifies as a
+                # naming collision. Unmanaged/invalid/symlink targets still fail.
+                if str(exc) not in {"Refusing to replace a directory owned by another generation target.",
+                                    "Generated manifest target does not match its document."}:
+                    raise
+                target = base.with_name(f"{base.name}-{number}")
+                self._assert_contained(target)
+                self._assert_safe_existing_ancestors(target)
+                number += 1
+        relative_path = target.relative_to(self._root).as_posix()
 
         stage = Path(tempfile.mkdtemp(prefix=f".{target.name}.stage-", dir=target.parent))
         backup: Path | None = None
@@ -117,7 +150,7 @@ class LocalActivityWorkspace:
     def _assert_safe_existing_ancestors(self, target: Path) -> None:
         current = target
         while current != self._root:
-            if current.exists() and current.is_symlink():
+            if current.is_symlink():
                 raise ValueError("Generated directory path contains a symbolic link.")
             current = current.parent
 
@@ -173,11 +206,19 @@ class LocalActivityWorkspace:
             raise ValueError("Refusing to replace a directory with an invalid ownership manifest.") from exc
         if not isinstance(manifest, dict):
             raise ValueError("Refusing to replace a directory with an invalid ownership manifest.")
+        if not all(isinstance(manifest.get(key), str) and manifest[key]
+                   for key in ("generator_id", "document_id")):
+            raise ValueError("Refusing to replace a directory with an invalid ownership manifest.")
         if manifest.get("schema_version") == "spec2gds.rtl-generation.v3":
             target_ref = manifest.get("target", {})
-            if not isinstance(target_ref, dict) or target_ref.get("document_id") != document_id:
-                raise ValueError("Generated manifest target does not match its document.")
+            if (not isinstance(target_ref, dict)
+                    or not isinstance(target_ref.get("entity_id"), str)
+                    or not target_ref["entity_id"]
+                    or target_ref.get("document_id") != manifest["document_id"]):
+                raise ValueError("Refusing to replace a directory with an invalid ownership manifest.")
             manifest = {**manifest, "design_id": target_ref.get("entity_id")}
+        if not isinstance(manifest.get("design_id"), str) or not manifest["design_id"]:
+            raise ValueError("Refusing to replace a directory with an invalid ownership manifest.")
         expected = {
             "generator_id": generator_id,
             "document_id": document_id,

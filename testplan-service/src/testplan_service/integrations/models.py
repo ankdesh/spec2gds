@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -13,6 +14,7 @@ class EntitySummary(BaseModel):
 
     entity_ref: dict[str, str]
     name: str
+    qualified_name: str = ""
     kind: str
     vlnv: str = ""
     parameters: dict[str, Any] = Field(default_factory=dict)
@@ -26,6 +28,7 @@ class OccurrenceSummary(BaseModel):
 
     occurrence_id: str
     name: str
+    qualified_name: str = ""
     kind: str  # "design" or "component"
     component_ref: dict[str, str] | None = None
     component_name: str = ""
@@ -42,6 +45,7 @@ class SourceSectionSummary(BaseModel):
 
     section_id: str
     title: str
+    qualified_name: str = ""
     entity_ref: dict[str, str]
     locator: dict[str, Any]
     text: str
@@ -55,6 +59,7 @@ class SourceSnapshotView(BaseModel):
 
     snapshot_id: str
     source_document_id: str
+    source_name: str = "Specification"
     source_revision_hash: str
     root_ref: dict[str, str] | None = None
     entities: list[EntitySummary] = Field(default_factory=list)

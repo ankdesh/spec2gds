@@ -117,7 +117,7 @@ test("browser root presets create from an unbound chat and attach execution syst
       assert.equal(f.executions.has(origin.id), false);
       const review = (await origin.tools.get("prepare_architecture_review").execute(architecturePlan, { callId: `arch-${preset}` })).architecture_review;
       assert.equal((await f.api(`/architecture-reviews/${review.reviewId}/approve`, {})).status, 200);
-      const prepared = await origin.tools.get("prepare_spec_document_creation").execute({ architecture_review_id: review.reviewId, title: "Comparator", document_id: `comparator_${preset}` }, { callId: `call-${preset}` });
+      const prepared = await origin.tools.get("prepare_spec_document_creation").execute({ architecture_review_id: review.reviewId, title: `Comparator ${preset}` }, { callId: `call-${preset}` });
       const request = prepared.source_creation;
       assert.equal(request.originalRequest, original);
       assert.equal(f.executions.has(origin.id), false);

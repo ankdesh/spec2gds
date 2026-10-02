@@ -31,7 +31,7 @@ describe("design topology live views", () => {
   });
 
   it("creates portable, bounded SVG filenames", () => {
-    expect(circuitSvgFilename("Editor Test", "Top / Main")).toBe("Editor-Test-Top-Main-circuit.svg");
+    expect(circuitSvgFilename("Editor Test", "Top / Main")).toBe("editor-test-top-main-circuit.svg");
     expect(circuitSvgFilename("x".repeat(200), "design").length).toBeLessThanOrEqual(124);
   });
 });

@@ -254,7 +254,7 @@ def test_round_trip_creates_a_real_local_component_and_instance() -> None:
     candidate = copy.deepcopy(projection.document)
     candidate["components"].append({
         "id": "alu",
-        "label": "alu",
+        "label": "Arithmetic unit",
         "origin": "local",
         "editable": True,
         "terminals": [
@@ -274,5 +274,9 @@ def test_round_trip_creates_a_real_local_component_and_instance() -> None:
 
     assert result.succeeded, result.diagnostics
     assert result.revision is not None
-    assert result.revision.by_vlnv("component", "spec2gds.local:work:alu:1.0")
+    component = result.revision.by_vlnv("component", "spec2gds.local:work:arithmetic_unit:1.0")
+    assert component.display_name == "Arithmetic unit"
+    refreshed = project_design_to_circuit(result.revision, "design_direct", include_catalog=True)
+    assert next(item for item in refreshed.document["components"] if item["id"] == component.ref.entity_id)["label"] == "Arithmetic unit"
+    assert refreshed.document["design"]["nets"] == projection.document["design"]["nets"]
     assert any(item.name == "alu0" for item in result.revision.designs[0].instances)

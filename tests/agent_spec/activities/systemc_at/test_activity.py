@@ -180,7 +180,8 @@ def test_new_source_revision_replaces_the_same_managed_folder(tmp_path: Path) ->
         workspace,
     )
 
-    assert second.report["output_path"] == first.report["output_path"]
+    assert second.report["output_path"] == "systemc-at/updated-title/top-a"
+    assert (tmp_path / first.report["output_path"]).is_dir()
     assert second.report["source_revision_hash"] != first.report["source_revision_hash"]
     assert second.report["tree_sha256"] != first.report["tree_sha256"]
     manifest = json.loads(
