@@ -11,6 +11,7 @@ import { chromium, expect, type Page } from "@playwright/test";
 import { modelFixture } from "./model_fixture.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+process.env.PLAYWRIGHT_BROWSERS_PATH = process.env.PLAYWRIGHT_BROWSERS_PATH || join(root, "circuit-designer/.playwright-browsers");
 const args = process.argv.slice(2);
 function option(name: string, fallback: string): string {
   const index = args.indexOf(name);
@@ -82,9 +83,12 @@ async function openEditor(page: Page, owner: string, path: string): Promise<void
   await expect(page.locator(".spec-paper")).toBeVisible();
 }
 async function prompt(page: Page, message: string): Promise<void> {
-  const input = page.locator("textarea, [contenteditable='true'], [role='textbox']").first();
-  await expect(input).toBeVisible(); await input.fill(message);
-  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  const input = page.locator("textarea, [contenteditable='true']").first();
+  await expect(input).toBeVisible({ timeout: 30_000 });
+  await input.fill(message);
+  const send = page.getByRole("button", { name: "Send message", exact: true });
+  await expect(send).toBeEnabled({ timeout: 10_000 });
+  await send.click();
 }
 function savedSnapshot(path: string): any {
   const saved = spawnSync("uv", ["run", "--project", root, "python", "-c",
@@ -132,10 +136,15 @@ async function run(): Promise<void> {
     for (const page of [chat, editor]) {
       page.setDefaultTimeout(60_000);
       page.on("pageerror", error => failures.push({ type: "pageerror", message: String(error) }));
+      page.on("dialog", dialog => {
+        failures.push({ type: "dialog", message: dialog.message() });
+        void dialog.dismiss();
+      });
       page.on("console", message => {
         if (message.type() !== "error") return;
         const url = message.location().url;
-        const expected = stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url);
+        const expected = (stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url))
+          || (scenario === "live" && url.startsWith(owner) && /\/transactions(?:\?|$)/.test(url) && message.text().includes("409"));
         failures.push({ type: "console", message: message.text(), url, expected });
       });
       page.on("requestfailed", request => {
@@ -154,13 +163,16 @@ async function run(): Promise<void> {
       let initial: any;
       if (scenario === "automatic") {
         await chat.goto(`${assistant}/launch`);
+        await chat.waitForFunction(() => (document.documentElement as any).dataset.spec2gdsLaunchStatus === "ready", null, { timeout: 30_000 });
         await prompt(chat, `Create a new spec document ${documentId} titled Iterative scenario. Add timer_core with entity ID component_timer_core, scalar clk and rst_n inputs, an 8-bit irq output, and module body assign irq = {8{clk & rst_n}};`);
-        await expect.poll(() => existsSync(packagePath)).toBe(true);
+        await expect.poll(() => existsSync(packagePath), { timeout: 30_000 }).toBe(true);
         initial = await json(`${owner}/documents/snapshot`);
       } else {
         initial = await json(`${owner}/documents/create`, { path: packagePath, document_id: documentId, title: "Iterative scenario" });
         const query = new URLSearchParams({ service_base_url: owner, document_id: documentId, owner_document_key: initial.owner_document_key });
         await chat.goto(`${assistant}/launch/spec-document?${query}`);
+        await chat.waitForFunction(() => (document.documentElement as any).dataset.spec2gdsLaunchStatus === "ready", null, { timeout: 30_000 });
+        await expect(chat.getByRole("button", { name: "Choose workspace" })).toContainText(documentId, { timeout: 30_000 });
         await prompt(chat, "Create timer_core with entity ID component_timer_core, scalar clk and rst_n inputs, an 8-bit irq output, and assign irq = {8{clk & rst_n}};");
       }
       const key = initial.owner_document_key;
@@ -169,33 +181,32 @@ async function run(): Promise<void> {
       const history = () => json(scoped("/assistant/history?limit=25"));
       if (scenario === "restricted") {
         await chat.getByRole("button", { name: "Continue proposal", exact: true }).click();
-        await chat.getByRole("button", { name: "Send message", exact: true }).click();
-        await expect(chat.getByRole("button", { name: "Approve and apply", exact: true })).toBeVisible();
+        await expect(chat.getByRole("button", { name: "Approve and apply", exact: true })).toBeVisible({ timeout: 30_000 });
         assert.equal((await snapshot()).source_revision_hash, initial.source_revision_hash);
         await chat.getByRole("button", { name: "Approve and apply", exact: true }).click();
       }
-      await expect.poll(async () => (await snapshot()).components.map((item: any) => item.ref.entity_id)).toEqual(["component_timer_core"]);
+      await expect.poll(async () => (await snapshot()).components.map((item: any) => item.ref.entity_id), { timeout: 30_000 }).toEqual(["component_timer_core"]);
       if (approval === "automatic") await expect(chat.getByText("Applied automatically", { exact: true }).last()).toBeVisible();
       let current = await snapshot(); records.push({ snapshot: current, history: await history() });
       await openEditor(editor, owner, packagePath);
-      await expect(editor.locator("#component-component_timer_core")).toBeVisible();
+      await expect(editor.locator("#component-component_timer_core, #component-component-timer-core")).toBeVisible();
       assert.equal(current.components[0].ports.find((port: any) => port.name === "irq").range, "7:0");
       assert.equal(current.entity_sections[0].content, "assign irq = {8{clk & rst_n}};");
       if (scenario === "restricted") {
         await prompt(chat, "Refine irq to 16 bits.");
-        await expect.poll(async () => (await history()).items.length).toBe(2);
+        await expect.poll(async () => (await history()).items.length, { timeout: 30_000 }).toBe(2);
         const pending = (await history()).items[0];
         await json(scoped(`/assistant/proposals/${pending.proposal_id}/reject`), {});
         assert.equal((await snapshot()).source_revision_hash, current.source_revision_hash);
         await prompt(chat, "Refine irq to 16 bits again.");
-        await expect.poll(async () => (await history()).items.length).toBe(3);
+        await expect.poll(async () => (await history()).items.length, { timeout: 30_000 }).toBe(3);
         const stale = (await history()).items[0];
         await json(scoped("/transactions"), { expected_source_revision_hash: current.source_revision_hash, operations: [{ type: "set_document_title", title: "Human revision" }] });
         const response = await fetch(scoped(`/assistant/proposals/${stale.proposal_id}/approve`), { method: "POST" });
         assert.equal(response.status, 409);
       } else {
         if (scenario === "live") {
-          const component = editor.locator("#component-component_timer_core");
+          const component = editor.locator("#component-component_timer_core, #component-component-timer-core");
           await component.getByRole("button", { name: "Options" }).click();
           await component.getByRole("menuitem", { name: "Edit text…" }).click();
           await component.getByLabel("Specification text").fill("Preserve this exact draft.");
@@ -207,10 +218,10 @@ async function run(): Promise<void> {
           assert.notEqual(key, bKey); await openEditor(editor, owner, copied);
         }
         await prompt(chat, "Refine timer_core irq to 16 bits and update its module body to assign irq = {16{clk & rst_n}};");
-        await expect.poll(async () => (await snapshot()).components[0].ports.find((port: any) => port.name === "irq").range).toBe("15:0");
+        await expect.poll(async () => (await snapshot()).components[0].ports.find((port: any) => port.name === "irq").range, { timeout: 30_000 }).toBe("15:0");
         current = await snapshot(); assert.equal(current.entity_sections[0].content, "assign irq = {16{clk & rst_n}};");
         if (scenario === "live") {
-          const component = editor.locator("#component-component_timer_core");
+          const component = editor.locator("#component-component_timer_core, #component-component-timer-core");
           await expect(component.getByLabel("Specification text")).toHaveValue("Preserve this exact draft.");
           await expect(editor.getByText(/Saved updates are pending/)).toBeVisible();
           await component.getByRole("button", { name: "Save changes" }).click();

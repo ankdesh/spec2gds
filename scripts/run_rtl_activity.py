@@ -22,10 +22,21 @@ workspace = Path(sys.argv[2]).resolve()
 
 revision = SpecRevision.load(str(spec_path))
 
-if not revision.entry_designs():
-    raise SystemExit("The package has no entry design.")
+requested_target = sys.argv[3] if len(sys.argv) > 3 else None
+target = None
 
-target = revision.entry_designs()[0]
+if requested_target:
+    target = next((c for c in revision.components if c.ref.entity_id == requested_target or requested_target in c.vlnv or requested_target in c.ref.entity_id), None)
+    if target is None and revision.designs:
+        target = next((d for d in revision.designs if d.ref.entity_id == requested_target or requested_target in d.vlnv or requested_target in d.ref.entity_id), None)
+
+if target is None:
+    if revision.entry_designs():
+        target = revision.entry_designs()[0]
+    elif revision.components:
+        target = revision.components[-1]
+    else:
+        raise SystemExit("The package has no entry designs or components.")
 
 registry = SpecExtensionRegistry()
 register_extensions(registry)

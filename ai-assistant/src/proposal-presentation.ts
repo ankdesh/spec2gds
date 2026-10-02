@@ -202,6 +202,8 @@ export function logProposalFailure(binding: SessionBinding, error: ProposalError
     document_id: binding.documentId,
     proposal_id: proposalId ?? null,
     error_code: error.error_code,
+    details: error.details,
+    issues: error.issues,
     retryable: error.retryable,
   }));
 }

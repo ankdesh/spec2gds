@@ -360,7 +360,7 @@ class _DesignAnalysis:
 @dataclass(frozen=True)
 class _Analysis:
     """Validated source graph consumed by the rendering-only normalization pass."""
-    target: DesignIR
+    target: DesignIR | ComponentIR
     root_owner: ComponentIR | None
     components: tuple[ComponentIR, ...]
     designs: tuple[_DesignAnalysis, ...]
@@ -451,18 +451,17 @@ class _Analyzer:
     def analyze(self, target: EntityRef) -> _Analysis:
         """Analyze the complete reachable hierarchy before any file is rendered."""
         entity = self.spec.low.resolve(target)
-        if not isinstance(entity, DesignIR):
+        if not isinstance(entity, (DesignIR, ComponentIR)):
             return _Analysis(
                 target=DesignIR(target, "", (), ()),
                 root_owner=None,
                 components=(),
                 designs=(),
-                errors=("RTL generation requires a selected design.",),
+                errors=("RTL generation requires a selected design or component.",),
                 warnings=(),
                 sections_by_owner={},
             )
 
-        root_owner = self.owner_by_design_id.get(entity.ref.entity_id)
         seen_components: set[str] = set()
         design_pairs: dict[str, tuple[DesignIR, ComponentIR | None]] = {}
 
@@ -479,10 +478,17 @@ class _Analyzer:
             for instance in design.instances:
                 visit_component(self.components_by_vlnv[instance.component_vlnv])
 
-        if root_owner is None:
-            visit_design(entity, None)
+        if isinstance(entity, ComponentIR):
+            root_owner = entity
+            visit_component(entity)
+            for other_comp in self.spec.low.components:
+                visit_component(other_comp)
         else:
-            visit_component(root_owner)
+            root_owner = self.owner_by_design_id.get(entity.ref.entity_id)
+            if root_owner is None:
+                visit_design(entity, None)
+            else:
+                visit_component(root_owner)
 
         components = [
             component

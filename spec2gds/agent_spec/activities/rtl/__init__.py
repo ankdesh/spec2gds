@@ -78,10 +78,10 @@ class RtlGenerationReport(pydantic.BaseModel):
 
 
 def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
-    if context.target is None or context.target.entity_kind != "design":
+    if context.target is None or context.target.entity_kind not in {"design", "component"}:
         return ActivityAvailability(
             available=False,
-            diagnostics=("Error: RTL generation requires a selected design.",),
+            diagnostics=("Error: RTL generation requires a selected design or component.",),
         )
     diagnostics = validate_project(context.spec, context.target)
     return ActivityAvailability(
@@ -95,7 +95,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
     version=GENERATOR_VERSION,
     title="Generate RTL",
     description="Generate deterministic SystemVerilog from IP-XACT structure and stored module bodies.",
-    scopes=ActivityScopes(entity_kinds=("design",)),
+    scopes=ActivityScopes(entity_kinds=("design", "component")),
     report_model=RtlGenerationReport,
     artifact_roles=(REPORT_ROLE,),
     requires_workspace_output=True,
@@ -105,7 +105,7 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
     """Generate and publish one deterministic RTL project."""
     context.cancellation.raise_if_cancelled()
     if context.target is None or context.workspace is None:
-        raise RuntimeError("RTL generation requires a design target and workspace.")
+        raise RuntimeError("RTL generation requires a design or component target and workspace.")
 
     target = context.spec.high.entity(context.target)
     dependencies = context.spec.high.related(context.target, "dependencies").all()

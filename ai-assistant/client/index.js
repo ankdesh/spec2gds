@@ -194,20 +194,30 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     });
   }
 
+  const workspacePromises = new Map();
   async function ensureWorkspace(ctx, descriptor) {
-    const existing = ctx.workspaces.list.getSnapshot().items.find(item => item.path === descriptor.path);
-    const workspace = existing || await ctx.workspaces.create({ path: descriptor.path });
-    if (workspace.title !== descriptor.title) {
-      try { return await ctx.workspaces.rename(workspace.workspaceId, descriptor.title); }
-      catch (error) {
-        if (!String(error instanceof Error ? error.message : error).includes("workspace/name-conflict")) throw error;
-        let owner = "design source";
-        try { owner = new URL(descriptor.ownerUrl).host; } catch { /* Use the stable fallback below. */ }
-        const disambiguated = `${descriptor.title} · ${owner} · ${String(descriptor.key).slice(0, 8)}`;
-        return ctx.workspaces.rename(workspace.workspaceId, disambiguated);
+    if (workspacePromises.has(descriptor.path)) return workspacePromises.get(descriptor.path);
+    const promise = (async () => {
+      try {
+        const existing = ctx.workspaces.list.getSnapshot().items.find(item => item.path === descriptor.path);
+        const workspace = existing || await ctx.workspaces.create({ path: descriptor.path });
+        if (workspace.title !== descriptor.title) {
+          try { return await ctx.workspaces.rename(workspace.workspaceId, descriptor.title); }
+          catch (error) {
+            if (!String(error instanceof Error ? error.message : error).includes("workspace/name-conflict")) throw error;
+            let owner = "design source";
+            try { owner = new URL(descriptor.ownerUrl).host; } catch { /* Use the stable fallback below. */ }
+            const disambiguated = `${descriptor.title} · ${owner} · ${String(descriptor.key).slice(0, 8)}`;
+            return await ctx.workspaces.rename(workspace.workspaceId, disambiguated);
+          }
+        }
+        return workspace;
+      } finally {
+        workspacePromises.delete(descriptor.path);
       }
-    }
-    return workspace;
+    })();
+    workspacePromises.set(descriptor.path, promise);
+    return promise;
   }
 
   async function createBoundSession(ctx, reserved, workspaceContext, options = {}) {
@@ -256,8 +266,15 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   }
 
   async function createUnboundSession(ctx) {
-    const sessionId = await ctx.sessions.create({ agentPreset: "focused" });
+    const workspaces = (await api("/workspaces")).workspaces || [];
+    const descriptor = workspaces[0];
+    const workspace = descriptor ? await ensureWorkspace(ctx, descriptor) : ctx.workspaces.list?.getSnapshot().items[0];
+    const sessionId = await ctx.sessions.create({
+      workspaceId: workspace ? workspace.workspaceId : undefined,
+      agentPreset: "focused",
+    });
     ctx.sessions.open(sessionId);
+    return sessionId;
   }
 
   function resultContentValue(content) {
@@ -591,16 +608,33 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const launch = new URLSearchParams(location.hash.replace(/^#/, ""));
     const sessionId = params.get("spec2gds_session") || launch.get("spec2gds_session");
     const unbound = launch.get("spec2gds_unbound") === "1";
+    const setStatus = (status, session) => {
+      if (typeof document !== "undefined" && document.documentElement && document.documentElement.dataset) {
+        document.documentElement.dataset.spec2gdsLaunchStatus = status;
+        if (session) document.documentElement.dataset.spec2gdsLaunchSession = session;
+      }
+    };
     if (sessionId || unbound) {
+      setStatus("pending");
       params.delete("spec2gds_session");
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
       queueMicrotask(async () => {
         try {
-          if (sessionId) await createBoundSession(ctx, await api(`/bindings/${encodeURIComponent(sessionId)}`));
-          else await createUnboundSession(ctx);
+          if (sessionId) {
+            const binding = await api(`/bindings/${encodeURIComponent(sessionId)}`);
+            const created = await createBoundSession(ctx, binding);
+            setStatus("ready", created || sessionId);
+          } else {
+            const created = await createUnboundSession(ctx);
+            setStatus("ready", created || "unbound");
+          }
+        } catch (error) {
+          setStatus("error");
+          window.alert(error instanceof Error ? error.message : String(error));
         }
-        catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
       });
+    } else {
+      setStatus("ready");
     }
   };
   return module.exports;

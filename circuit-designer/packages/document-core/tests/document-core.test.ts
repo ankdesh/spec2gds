@@ -164,7 +164,7 @@ describe("SpecEditorHttpClient", () => {
 
     const client = new SpecEditorHttpClient("/api");
     await expect(client.launchAssistant(target)).resolves.toEqual(launch);
-    expect(client.eventsUrl()).toBe("/api/events");
+    expect(client.eventsUrl()).toBe("/api/events?cursor=0");
     expect(fetchMock).toHaveBeenCalledWith("/api/assistant/launch", {
       method: "POST",
       headers: { "content-type": "application/json" },

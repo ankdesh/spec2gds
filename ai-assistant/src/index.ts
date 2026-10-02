@@ -198,6 +198,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
+    await mkdir(resolve(config.scratchRoot, "scratch"), { recursive: true, mode: 0o700 });
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
     state.recoverInterruptedReviews();
@@ -665,11 +666,20 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           return writeJson(response, 201, await createSource(body));
         }
         if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
-          const workspaces = [...new Map(state.listBindings().map(binding => [binding.workspaceKey, {
-            key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
-            domain: binding.workspaceDomain, ownerUrl: binding.workspaceOwnerUrl, documentId: binding.workspaceDocumentId,
-          }])).values()];
-          return writeJson(response, 200, { workspaces });
+          const map = new Map<string, { key: string; title: string; path: string; domain: string; ownerUrl: string; documentId: string }>();
+          const scratchPath = resolve(config.scratchRoot, "scratch");
+          await mkdir(scratchPath, { recursive: true, mode: 0o700 });
+          map.set("scratch", {
+            key: "scratch", title: "Hardware design workspace", path: scratchPath,
+            domain: "spec", ownerUrl: "", documentId: "",
+          });
+          for (const binding of state.listBindings()) {
+            map.set(binding.workspaceKey, {
+              key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
+              domain: binding.workspaceDomain, ownerUrl: binding.workspaceOwnerUrl, documentId: binding.workspaceDocumentId,
+            });
+          }
+          return writeJson(response, 200, { workspaces: [...map.values()] });
         }
         if (path === "/spec2gds-api/bindings/reserve" && request.method === "POST") {
           const body = await readBody(request);

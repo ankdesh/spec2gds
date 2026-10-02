@@ -46,3 +46,30 @@ test("normalizes Circuit list-form maps and rejects duplicate keys", () => {
     instance: { parameter_values: [{ name: "WIDTH", value: 8 }, { name: "WIDTH", value: 16 }] },
   }]), /Duplicate map entry/);
 });
+
+test("cleans SystemVerilog code blocks and unwraps module declarations", () => {
+  const [withFences] = normalizeSpecOperations([{
+    type: "create_entity",
+    kind: "component",
+    name: "adder",
+    systemverilog: "```verilog\nassign {cout, sum} = a + b + cin;\n```",
+  }]);
+  assert.equal(withFences?.systemverilog, "assign {cout, sum} = a + b + cin;");
+
+  const [wrapped] = normalizeSpecOperations([{
+    type: "create_entity",
+    kind: "component",
+    name: "adder",
+    systemverilog: "module adder_8bit(input [7:0] a, b, input cin, output [7:0] sum, output cout);\n  assign {cout, sum} = a + b + cin;\nendmodule",
+  }]);
+  assert.equal(wrapped?.systemverilog, "assign {cout, sum} = a + b + cin;");
+
+  const [sectionOp] = normalizeSpecOperations([{
+    type: "upsert_entity_section",
+    owner: { document_id: "doc", entity_id: "c1", entity_kind: "component" },
+    section_type: "sv",
+    payload: { content: "```systemverilog\n`include \"unused.vh\"\nalways_comb sum = a + b;\n```" },
+  }]);
+  assert.equal((sectionOp?.payload as Record<string, unknown>).content, "always_comb sum = a + b;");
+});
+

@@ -398,12 +398,14 @@ the generated project against SystemC 2.3.3 or later. The
 the source profile, setup, invocation, and build instructions.
 
 The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
-project for any selected design. It emits one reusable module per
+project for any selected design or component. It emits one reusable module per
 reachable component, preserves component-owned hierarchy, connects supported
 ad-hoc physical wire nets, and publishes a managed project under
-`<spec-folder>/rtl/<document-id>/<design-id>/`. Leaf outputs use explicit
-compile-safe defaults unless explicit component/design SV bodies provide
-behavior; no clocks, resets, parameters, or testbench are inferred. Bus
+`<spec-folder>/rtl/<document-id>/<design-or-component-id>/`. When launched directly
+on a component, it compiles the component's ports, vector ranges, and SystemVerilog
+module body into `rtl/components/<name>.sv` without requiring an enclosing design wrapper.
+Leaf outputs use explicit compile-safe defaults unless explicit component/design SV bodies
+provide behavior; no clocks, resets, parameters, or testbench are inferred. Bus
 interfaces, non-wire ports, symbolic ranges, and
 unsupported net shapes are rejected during preflight. See the
 [RTL Generation Activity guide](docs/rtl-generation-activity.md) for the exact
@@ -417,6 +419,31 @@ Activity workspace with:
 uv run python scripts/generate_rtl_examples.py --check
 uv run python scripts/generate_rtl_examples.py --update
 ```
+
+### End-to-End RTLLM Benchmark UI Scenarios
+
+The repository includes automated Playwright integration tests that validate the end-to-end
+flow from natural language prompt -> AI Assistant -> `.spec` package proposal -> Spec Editor
+component view -> Launch Activity dialog -> RTL generation -> functional verification.
+
+Three benchmark tasks from the RTLLM corpus are supported:
+1. `adder_8bit`: Hierarchical 8-bit ripple-carry adder (`/home/ankdesh/explore/RTLLM/Arithmetic/Adder/adder_8bit`). The AI assistant first creates a 1-bit full adder sub-component (`full_adder`), then builds `adder_8bit` instantiating 8 `full_adder` sub-components.
+2. `up_down_counter`: Unitary 16-bit bidirectional synchronous counter (`/home/ankdesh/explore/RTLLM/Control/Counter/up_down_counter`) with clk, reset, up_down controls.
+3. `asyn_fifo`: Hierarchical dual-clock asynchronous FIFO (`/home/ankdesh/explore/RTLLM/Memory/FIFO/asyn_fifo`). The AI assistant first creates a 16x8 dual-port synchronous RAM sub-component (`dual_port_RAM`), then builds `asyn_fifo` instantiating the RAM sub-component with gray-code pointer synchronization.
+
+Run the deterministic test suite across all 3 tasks:
+```bash
+bash tests/ui-scenarios/run-test.sh --rtllm --task all
+```
+
+Or run with a live OpenAI model (requires `OPENAI_API_KEY`):
+```bash
+bash tests/ui-scenarios/run-test.sh --rtllm --task adder_8bit --live-model
+bash tests/ui-scenarios/run-test.sh --rtllm --task up_down_counter --live-model
+bash tests/ui-scenarios/run-test.sh --rtllm --task asyn_fifo --live-model
+```
+
+Each run captures 5 milestone UI screenshots and generates verified SystemVerilog RTL files (`rtl/components/<top>.sv` along with all child sub-components like `full_adder.sv` and `dual_port_RAM.sv`) under `tests/ui-scenarios/results/`.
 
 For frontend work:
 
