@@ -3,6 +3,10 @@
 The module is deliberately the only HTTP composition root.  It translates
 JSON requests into immutable SpecIR reads, validated source transactions, and
 activity-store operations; the browser never receives mutable package objects.
+
+Reviewer path: V1Session owns package/journal identity and guarded saves;
+create_app mounts reads, transactions and event projections. The editor's visible
+session is distinct from packages reopened by immutable Assistant owner keys.
 """
 
 from __future__ import annotations
@@ -56,6 +60,7 @@ from spec2gds.agent_spec.spec_format.assistant import (
     build_document_assistant_context,
     preview_assistant_proposal,
 )
+from spec2gds.agent_spec.spec_format.assistant_context_pages import build_context_page
 from spec2gds.agent_spec.spec_format.assistant_operation_contract import operation_contract
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
@@ -1045,12 +1050,16 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         entity_kind: str,
         entity_id: str,
         owner_document_key: str | None = None,
+        paged: bool = False,
+        entity_ids: str | None = None,
+        cursor: str | None = None,
     ) -> dict[str, typing.Any]:
         """Return entity-bound semantic context for the external Spec agent."""
         session = bound_session(owner_document_key, document_id)
         try:
             target = EntityRef(document_id=document_id, entity_kind=entity_kind, entity_id=entity_id)
-            return {**build_assistant_context(session.revision, target),
+            content = build_context_page(session.revision, target, entity_ids=_context_selection(entity_ids), cursor=cursor) if paged else build_assistant_context(session.revision, target)
+            return {**content,
                     "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1058,11 +1067,15 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/assistant/context/document")
-    def assistant_document_context(document_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+    def assistant_document_context(document_id: str, owner_document_key: str | None = None,
+                                   paged: bool = False, entity_ids: str | None = None, cursor: str | None = None) -> dict[str, typing.Any]:
         """Return document-wide context and supported refinement boundaries."""
         session = bound_session(owner_document_key, document_id)
-        return {**build_document_assistant_context(session.revision),
-                "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
+        try:
+            content = build_context_page(session.revision, entity_ids=_context_selection(entity_ids), cursor=cursor) if paged else build_document_assistant_context(session.revision)
+            return {**content, "owner_document_key": session.owner_document_key, "approval_policy": approval_policy}
+        except (TypeError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/assistant/operation-schema")
     def assistant_operation_schema(
@@ -1674,12 +1687,16 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             instances = raw.get("instances", [])
             if not isinstance(instances, list):
                 raise ValueError("create_entity instances must be a list.")
+            entry_design = raw.get("entry_design", True)
+            if type(entry_design) is not bool or ("entry_design" in raw and entity_kind != "design"):
+                raise ValueError("entry_design must be a boolean on a design creation.")
             operations.append(
                 CreateEntity(
                     typing.cast(typing.Any, entity_kind),
                     str(raw.get("name", "")),
                     str(raw["entity_id"]) if raw.get("entity_id") else None,
                     tuple(InstanceIR(**item) for item in instances),
+                    entry_design=entry_design,
                 )
             )
         elif kind == "set_document_title":
@@ -1924,3 +1941,12 @@ def _source_event(session: V1Session, origin: str, affected_entities: list[dict[
         "origin": origin,
         "affected_entities": affected_entities,
     }
+
+
+def _context_selection(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    selected = json.loads(value)
+    if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected):
+        raise ValueError("entity_ids must be a JSON list of strings.")
+    return selected

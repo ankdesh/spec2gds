@@ -109,7 +109,7 @@ sequenceDiagram
 
     User->>UI: Start empty or open file
     UI->>Service: Create or join session
-    User->>UI: Unlock
+    User->>UI: Begin editing
     UI->>Service: Acquire edit lease
     Service-->>UI: Base revision + lease
     User->>UI: Add, connect, move, or route
@@ -124,39 +124,45 @@ sequenceDiagram
     end
 ```
 
-Scenario: a designer starts from the blank canvas, unlocks it, creates two
+Scenario: a designer starts from the blank canvas, begins editing, creates two
 component definitions and connects their instances. Save validates the batch,
 updates the ephemeral session, and downloads a new file. The service never
 overwrites a local file in place.
 
-## Review an AI Assistant proposal
+## Submit or review an Assistant proposal
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Editor
-    participant Assistant as AI Assistant
-    participant API as Owning API
-    participant Source as Canonical source
-
-    User->>Editor: Explore selected entity
-    Editor->>Assistant: Launch entity-bound chat
-    Assistant->>API: Read current context
-    User->>Assistant: Request a change proposal
-    Assistant->>API: Preview typed operations at base revision
-    API-->>Editor: Candidate projection and diagnostics
-    User->>API: Accept or reject
-    alt accepted and current
-        API->>Source: Validate and commit
-        API-->>Editor: Source-changed event
-    else rejected or stale
-        API-->>Editor: No source change
+    participant Assistant
+    participant Owner
+    participant Source
+    User->>Editor: Open document/entity-bound chat
+    User->>Assistant: Request a supported edit
+    Assistant->>Owner: Read fresh context and authored revision
+    Assistant->>Owner: Preview typed candidate
+    alt Automatic Spec policy
+      Assistant->>Owner: Submit validated artifact
+      Owner->>Source: Guarded atomic save with decision
+      Owner-->>Assistant: Applied receipt and saved revision
+    else Restricted Spec policy
+      Owner-->>Assistant: Stored proposal awaiting review
+      User->>Assistant: Approve or discard exact proposal
+      Assistant->>Owner: Explicit stored-ID decision
+      Owner->>Source: Revalidate and save if approved/current
+    else Circuit handoff
+      User->>Assistant: Send reviewed proposal
+      Assistant->>Owner: Store pending Circuit proposal
+      User->>Editor: Accept into private draft
+      User->>Editor: Save to Specification or download independent file
     end
 ```
 
-Scenario: the AI Assistant proposes a description or circuit change. Discussion
-alone changes nothing. The user reviews the typed candidate. Acceptance still
-runs normal validation and revision checks; a stale proposal must be rebuilt.
+Discussion alone changes nothing. Spec application follows the owner's automatic
+or restricted policy and always validates the authored revision. Circuit send
+and acceptance are separate from saved source; source-bound changes require
+**Save to Specification**. A stale or rejected proposal leaves source unchanged.
 
 ## Import an existing document
 

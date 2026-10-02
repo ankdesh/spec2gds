@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "digest": "sha256:905fbd237934533e1db312b83b83479a9277b6f60afb28e008890a616e8c1582",
+  "digest": "sha256:80e385632f6937fcea0b15350e614b412494cf13dc6d7b6a4215a45905a809e2",
   "operation_schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "oneOf": [
@@ -232,6 +232,9 @@
           },
           "entity_id": {
             "type": "string"
+          },
+          "entry_design": {
+            "type": "boolean"
           }
         },
         "required": [
@@ -239,6 +242,88 @@
           "type",
           "kind",
           "name"
+        ],
+        "additionalProperties": false
+      },
+      {
+        "type": "object",
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "const": "set_entity_metadata"
+          },
+          "entity": {
+            "type": "object",
+            "properties": {
+              "document_id": {
+                "type": "string"
+              },
+              "entity_id": {
+                "type": "string"
+              },
+              "entity_kind": {
+                "type": "string",
+                "enum": [
+                  "component",
+                  "design",
+                  "bus_definition",
+                  "abstraction_definition",
+                  "narrative_block"
+                ]
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "display_name": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "short_description": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "description": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "clear_fields": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "display_name",
+                "short_description",
+                "description"
+              ]
+            }
+          }
+        },
+        "required": [
+          "operation_id",
+          "type",
+          "entity"
         ],
         "additionalProperties": false
       }

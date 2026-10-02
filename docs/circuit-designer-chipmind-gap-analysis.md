@@ -32,7 +32,7 @@ human-reviewed staging story, but not its broader autonomous agent platform.
 | EDA flow execution: lint, simulation, synthesis, P&R, regressions | Activities can generate/verify bounded artifacts; no general flow orchestrator | P1 | Separate execution service |
 | Waveform ingestion and debug correlation | No waveform model or viewer | P2 | Visualization/tool plugin |
 | VCS issues, PR/MR review, execution logs, and verification evidence | No native VCS workflow or task audit bundle | P2 | Host integration |
-| Background autonomous workers and webhook/CI triggers | Assistant is interactive and activities use a local single worker | P2 | Automation platform, not canvas core |
+| Background autonomous workers and webhook/CI triggers | Assistant has owner HTTP polling and persistent bounded event agents; webhook/CI ingestion is absent | P2 | Automation platform, not canvas core |
 | VS Code surface sharing the same session | Browser application only | P2 | Alternate host using app-react |
 | MCP/agent protocol surface and multi-agent orchestration | No Circuit-specific MCP/ACP task interface | P2 | External agent gateway |
 | Persistent team conventions and project learning | Preferences store input mappings only; no design-method memory | P3 | Governance-sensitive context service |

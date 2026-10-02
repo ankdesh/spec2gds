@@ -1,4 +1,9 @@
-"""Review checkpoint evaluation and creation engine for Layer 1 and Layer 2."""
+"""Review checkpoint evaluation and creation engine for Layer 1 and Layer 2.
+
+Reviewer path: evaluate candidate readiness separately from freezing a payload.
+P/C/I checkpoints identify reviewed authoring baselines; passing their checklist
+is not measured DUT coverage and must not mutate earlier frozen content.
+"""
 
 from __future__ import annotations
 

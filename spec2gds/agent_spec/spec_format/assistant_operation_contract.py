@@ -1,4 +1,9 @@
-"""Owner-published assistant operation schema and validation."""
+"""Owner-published assistant operation schema and validation.
+
+Reviewer path: this owner boundary publishes structural argument schemas to
+the Assistant. Schema admission does not establish semantic validity; candidate
+preview still resolves references, scope and authored source revision.
+"""
 
 from __future__ import annotations
 

@@ -1,3 +1,7 @@
+/** HTTP composition for Circuit operations, leases and source synchronization.
+ * Generic operation preview validates Circuit semantics; source preview/commit
+ * additionally call the authoritative owner. A source-bound proposal Accept
+ * must enter the client's private draft rather than bypass Save to Specification. */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
@@ -332,12 +336,16 @@ export class CircuitDesignerService {
     return stored;
   }
 
+  // Ordinary writes to accepted document state must cross this guard. Source
+  // projections have another owner and can change only via its save protocol.
   private requireIndependent(documentId: string): void {
     if (this.sourceBindings.has(documentId)) {
       throw new CircuitBackendError("validation_failed", "Source-bound documents must use Save to Specification.");
     }
   }
 
+  // A Circuit-valid candidate is only the first validation layer. Source
+  // preview/commit below can still reject its translation into owner semantics.
   private async sourceCandidate(documentId: string, body: SourceCommitBody) {
     const stored = this.sourceBinding(documentId);
     if (!stored.binding.writable) throw new CircuitBackendError("validation_failed", stored.binding.message ?? "Source projection is read-only.");
@@ -367,6 +375,8 @@ export class CircuitDesignerService {
   private async sourceCommit(response: ServerResponse, documentId: string, body: SourceCommitBody): Promise<void> {
     this.requireDefinition("CircuitOperationBatch", body.batch);
     const registered = this.sourceBinding(documentId);
+    // This receipt cache lasts only for this service process. Request IDs name
+    // retries of the same save; callers must not reuse one for different content.
     const replayKey = `${registered.binding.binding_id}:${body.batch.request_id}`;
     const replay = this.sourceResults.get(replayKey);
     if (replay) return this.jsonResponse(response, 200, replay);
@@ -391,6 +401,9 @@ export class CircuitDesignerService {
     if (result.document.document_id !== documentId) {
       throw new CircuitBackendError("provider_failed", "Source provider returned a mismatched document ID.");
     }
+    // The owner has saved before the ephemeral Circuit session is replaced.
+    // Refresh can fail after that save; this is not a transaction across stores.
+    // Reopen from the owner before treating a lost response as an unsaved source.
     const before = await this.backend.get(documentId);
     await this.backend.releaseLease(documentId, body.lease_id);
     const replaced = await this.backend.replace(documentId, result.document, before.revision, `source:${body.batch.request_id}`);
@@ -398,6 +411,8 @@ export class CircuitDesignerService {
       throw new CircuitBackendError("provider_failed", "Specification saved, but the Circuit session could not refresh.", replaced.diagnostics);
     }
     stored.binding = { ...stored.binding, base_source_revision_hash: result.source_revision_hash };
+    // Staging/preview never resolves an owner proposal. Resolve only after both
+    // source acceptance and the refreshed Circuit snapshot are confirmed.
     if (body.proposal_id) await this.backend.resolveProposal(documentId, body.proposal_id);
     this.emit(documentId, "document.changed", replaced.snapshot.revision);
     if (body.proposal_id) this.emit(documentId, "proposal.changed");
@@ -412,6 +427,8 @@ export class CircuitDesignerService {
     const result = await stored.provider.resolve(stored.binding);
     if (!result.accepted || !result.document) return this.jsonResponse(response, 200, result);
     const before = await this.backend.get(documentId);
+    // A no-op reload preserves pending proposal identity. Replacing an unchanged
+    // projection would advance its revision and needlessly invalidate staging.
     if (result.source_revision_hash === stored.binding.base_source_revision_hash
       && JSON.stringify(result.document) === JSON.stringify(before.document)) {
       return this.jsonResponse(response, 200, { ...result, binding: stored.binding, snapshot: before });
@@ -487,6 +504,8 @@ export class CircuitDesignerService {
     }
     if (request.method === "POST" && tail[1] && tail[2] === "decision") {
       const body = await this.json(request) as { decision: "accept" | "reject" };
+      // The source-bound UI stages Accept locally; this direct endpoint cannot
+      // accept it into the projection and bypass the authoritative source save.
       if (body.decision === "accept") this.requireIndependent(documentId);
       const result = await this.backend.decideProposal(documentId, tail[1], body.decision);
       this.emit(documentId, "proposal.changed");

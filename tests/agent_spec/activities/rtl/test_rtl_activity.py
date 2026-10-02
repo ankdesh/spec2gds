@@ -263,8 +263,8 @@ def test_activity_generates_hierarchy_report_warnings_and_name_map(tmp_path: Pat
     definition = registry.activity("rtl.generate").definition
     availability = activity_availability(registry, "rtl.generate", snapshot)
 
-    assert definition.version == "1.1.2"
-    assert definition.scopes.entity_kinds == ("design",)
+    assert definition.version == "1.2.0"
+    assert definition.scopes.entity_kinds == ("component", "design")
     assert definition.requires_workspace_output
     assert availability.available
     assert len(availability.diagnostics) == 6
@@ -389,7 +389,7 @@ def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
     assert cluster_source.index("logic component_marker") < cluster_source.index("logic design_marker")
     assert f'`line 1 "{component_body.source_path}" 0' in cluster_source
     assert f'`line 1 "{design_body.source_path}" 0' in cluster_source
-    assert manifest["schema_version"] == "spec2gds.rtl-generation.v2"
+    assert manifest["schema_version"] == "spec2gds.rtl-generation.v3"
     assert {item["section_id"] for item in manifest["source_sections"]} >= {
         component_body.section_id,
         design_body.section_id,

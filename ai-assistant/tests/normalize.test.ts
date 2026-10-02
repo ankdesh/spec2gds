@@ -46,3 +46,29 @@ test("normalizes Circuit list-form maps and rejects duplicate keys", () => {
     instance: { parameter_values: [{ name: "WIDTH", value: 8 }, { name: "WIDTH", value: 16 }] },
   }]), /Duplicate map entry/);
 });
+
+test("lossless formatting rejects structures or directives that cannot be normalized safely",()=>{
+  assert.throws(()=>normalizeSpecOperations([{type:"create_entity",kind:"component",name:"x",instances:[{name:"child",component_vlnv:"v:l:c:1"}]}]),/internal design/);
+  for(const body of ["module x; assign y=0; endmodule",'`include "external.sv"', '`line 1 "external.sv" 0', 'assign q=a; `include "external.sv"', 'assign q=a; `line 1 "external.sv" 0']) {
+    assert.throws(()=>normalizeSpecOperations([{type:"create_entity",kind:"component",name:"x",systemverilog:body}]),/module-body|directive/);
+  }
+  const [created]=normalizeSpecOperations([{type:"create_entity",kind:"component",name:"x",ports:[{name:"a",direction:"in",range:"[ 7 : 0 ]"}],systemverilog:"```sv\n// module is a comment\nassign q=a;\n```"}],"proposal");
+  assert.equal((created!.ports as any[])[0].family,"wire");
+  assert.equal((created!.ports as any[])[0].range,"7:0");
+  assert.equal(created!.systemverilog,"// module is a comment\nassign q=a;");
+  const literalBody='// `include "ignored.sv"\ninitial $display("`line 1 is text");';
+  assert.equal(normalizeSpecOperations([{type:"create_entity",kind:"component",name:"x",systemverilog:literalBody}])[0]!.systemverilog,literalBody);
+});
+
+test("creation aliases remap dependent and narrative references and retain independent proposal identities",()=>{
+  const ref={document_id:"doc",entity_id:"local",entity_kind:"component"};
+  const operations=[{type:"create_entity",kind:"component",name:"leaf",entity_id:"local"},
+    {type:"set_entity_metadata",entity:ref,description:"Purpose"},
+    {type:"upsert_narrative_block",block:{block_id:"r",entity_refs:[ref],children:[{entity_refs:[ref]}]}}];
+  const a=normalizeSpecOperations(operations,"first"), retry=normalizeSpecOperations(operations,"first"),b=normalizeSpecOperations(operations,"second");
+  assert.deepEqual(a,retry); assert.notEqual(a[0]!.entity_id,b[0]!.entity_id);
+  assert.equal((a[1]!.entity as any).entity_id,a[0]!.entity_id);
+  assert.equal((a[2]!.block as any).children[0].entity_refs[0].entity_id,a[0]!.entity_id);
+  assert.equal(ref.entity_id,"local");
+  assert.throws(()=>normalizeSpecOperations([...operations,{type:"create_entity",kind:"component",name:"other",entity_id:"local"}],"first"),/Duplicate creation alias/);
+});

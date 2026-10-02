@@ -1,3 +1,8 @@
+/** Product UI layered onto native Harness session/workspace/slot services.
+ * Follow configuration editor → reviewed save → pinned new-session selection
+ * for authoring, and execution inspector → revision-carrying action for controls.
+ * Native chat/tool history remains authoritative; DOM state cannot grant tools,
+ * change an owner binding or approve replacement artifact content. */
 /* Product-owned browser plugin loaded by the DSH module table. Keep this file plain
  * JavaScript so the distribution does not carry a second frontend toolchain. */
 window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) => {
@@ -222,7 +227,19 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     });
   }
 
-  async function ensureWorkspace(ctx, descriptor) {
+  // Workspace paths identify sources. Display names can collide or change and
+  // are disambiguated without changing the permanent source/binding identity.
+  const workspaceRequests = new WeakMap();
+  function ensureWorkspace(ctx, descriptor) {
+    let requests = workspaceRequests.get(ctx);
+    if (!requests) { requests = new Map(); workspaceRequests.set(ctx, requests); }
+    if (requests.has(descriptor.path)) return requests.get(descriptor.path);
+    const pending = createWorkspace(ctx, descriptor).finally(() => requests.delete(descriptor.path));
+    requests.set(descriptor.path, pending);
+    return pending;
+  }
+
+  async function createWorkspace(ctx, descriptor) {
     const existing = ctx.workspaces.list.getSnapshot().items.find(item => item.path === descriptor.path);
     const workspace = existing || await ctx.workspaces.create({ path: descriptor.path });
     if (workspace.title !== descriptor.title) {
@@ -238,6 +255,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return workspace;
   }
 
+  // The native session must use the exact host-reserved identity. Activating another
+  // ID would detach the displayed chat from its permanent owner/configuration pin.
   async function createBoundSession(ctx, reserved, workspaceContext, options = {}) {
     let reservation = reserved;
     if (!reservation) {
@@ -263,6 +282,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       });
       if (createdId !== id) throw new Error(`The Harness created session ${createdId} instead of reserved binding ${id}.`);
       await api(`/bindings/${encodeURIComponent(id)}/activate`, {});
+      if (ctx.workspaces.refresh) await ctx.workspaces.refresh();
+      else if (ctx.sessions.refresh) await ctx.workspaces.create({ path: descriptor.path });
+      await ctx.sessions.refresh?.();
       if (options.open !== false) ctx.sessions.open(createdId);
       return createdId;
     } catch (error) {
@@ -284,7 +306,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   }
 
   async function createUnboundSession(ctx) {
-    const sessionId = await ctx.sessions.create({ agentPreset: "focused" });
+    const descriptor = (await api("/workspaces")).unbound_workspace;
+    const workspace = descriptor ? await ensureWorkspace(ctx, descriptor) : null;
+    const sessionId = await ctx.sessions.create({ agentPreset: "focused", ...(workspace ? { workspaceId: workspace.workspaceId } : {}) });
+    if (ctx.workspaces.refresh) await ctx.workspaces.refresh();
+    else if (workspace && ctx.sessions.refresh) await ctx.workspaces.create({ path: descriptor.path });
+    await ctx.sessions.refresh?.();
     ctx.sessions.open(sessionId);
   }
 
@@ -339,6 +366,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
 
   function ReviewCard({ review: initial }) {
     const [review, setReview] = React.useState(initial);
+    React.useEffect(() => { setReview(initial); }, [initial.proposalId, initial.state]);
     const [busy, setBusy] = React.useState(false);
     const [error, setError] = React.useState("");
     const artifact = record(review.artifact), operations = artifact.operations || record(artifact.batch).operations;
@@ -414,6 +442,47 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
             }))),
           error ? h("p", { className: "s2g-error" }, error) : null,
           h("div", { className: "s2g-actions" }, h("button", { className: "primary", type: "submit" }, value.submit_label || "Continue proposal"))));
+  }
+
+  function ArchitectureReviewCard({ request, inputActions }) {
+    const [value, setValue] = React.useState(request);
+    const [feedback, setFeedback] = React.useState("");
+    const [busy, setBusy] = React.useState(false);
+    const [error, setError] = React.useState("");
+    React.useEffect(() => {
+      let mounted = true;
+      api(`/architecture-reviews/${encodeURIComponent(request.reviewId)}`)
+        .then(result => { if (mounted) setValue(result.architecture_review); })
+        .catch(caught => { if (mounted) setError(caught.message); });
+      return () => { mounted = false; };
+    }, [request.reviewId]);
+    async function decide(action) {
+      if (busy) return;
+      setBusy(true); setError("");
+      try {
+        const result = await api(`/architecture-reviews/${encodeURIComponent(value.reviewId)}/${action}`, { feedback });
+        setValue(result.architecture_review);
+        if (action !== "cancel") {
+          inputActions.setDraft(JSON.stringify({ kind: "architecture_decision", architecture_review_id: value.reviewId,
+            decision: result.architecture_review.status, feedback,
+            instruction: action === "approve" ? "Continue with the approved architecture. Use this review ID for creation and initial contents." : "Prepare a revised architecture incorporating this feedback. Await its approval." }));
+          queueMicrotask(() => inputActions.submit());
+        }
+      } catch (caught) { setError(caught.message); }
+      finally { setBusy(false); }
+    }
+    const plan = record(value.plan);
+    return h("article", { className: "s2g-review", "data-s2g-architecture-review": value.status },
+      h("header", null, h("h4", null, plan.title || "Architecture review"), h("span", { className: "s2g-state" }, value.status)),
+      ["components", "designs", "interfaces", "clocks_resets", "decomposition_rationale", "assumptions", "open_questions", "concrete_configuration"].map(key =>
+        h("details", { key, open: true }, h("summary", null, key.replaceAll("_", " ")), h("pre", null, typeof plan[key] === "string" ? plan[key] : pretty(plan[key])))),
+      value.status === "pending" ? h("div", null,
+        h("label", null, "Revision feedback", h("textarea", { value: feedback, onChange: event => setFeedback(event.target.value) })),
+        h("div", { className: "s2g-actions" },
+          h("button", { disabled: busy, onClick: () => decide("cancel") }, "Cancel"),
+          h("button", { disabled: busy, onClick: () => decide("revise") }, "Revise architecture"),
+          h("button", { className: "primary", disabled: busy || Boolean(plan.open_questions?.length), onClick: () => decide("approve") }, "Approve architecture"))) : null,
+      error ? h("p", { className: "s2g-error", role: "alert" }, error) : null);
   }
 
   function SourceCreationCard({ request, onContinue, onOpen }) {
@@ -495,7 +564,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       value.status === "continued" ? h("div", { className: "s2g-actions" }, h("button", { type: "button", onClick: () => onOpen(value.destinationSessionId) }, "Open specification chat")) : null);
   }
 
-  const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal", "prepare_spec_document_creation"]);
+  const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal", "prepare_spec_document_creation", "prepare_architecture_review"]);
 
   const proposalReviewsDefinition = {
     kind: "spec2gds-proposal-reviews",
@@ -519,9 +588,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const callId = String(match.event.data.message.source.callId);
       if (!context.state.calls.has(callId)) return context.state;
       const value = resultContentValue(match.event.data.message.content[0]?.content);
-      if (!value?.review && !value?.error && !value?.required_input && !value?.source_creation && !value?.creation_error) return context.state;
+      if (!value?.review && !value?.error && !value?.required_input && !value?.source_creation && !value?.creation_error && !value?.architecture_review) return context.state;
       const result = { callId, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null,
-        sourceCreation: value.source_creation || null, creationError: value.creation_error || null };
+        architectureReview: value.architecture_review || null, sourceCreation: value.source_creation || null, creationError: value.creation_error || null };
       return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
     },
     buildLocationData(context, scope, previous) {
@@ -538,6 +607,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   }
 
   function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation }) {
+    if (matched.architectureReview) return h(ArchitectureReviewCard, { key: matched.architectureReview.reviewId, request: matched.architectureReview, inputActions });
     if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
     if (matched.creationError) return h("article", { className: "s2g-review" }, h("h4", null, "Specification creation unavailable"), h("p", { className: "s2g-error" }, matched.creationError));
     if (matched.review) return h(ReviewCard, { review: matched.review });
@@ -545,6 +615,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h(ProposalErrorCard, { error: matched.error });
   }
 
+  // The visual form and text panel share one canonical configuration document.
+  // Saving needs the server-reviewed text/revision; changing fields invalidates
+  // that acknowledgement rather than approving edits via local DOM state.
   async function editEventTemplate(domain, preset, sources = []) {
     const catalog = await api("/event-templates");
     const templates = catalog.templates.filter(template => { const doc = JSON.parse(template.text); return doc.domain === domain && doc.preset === preset; });
@@ -570,6 +643,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const previousFocus = document.activeElement;
       const close = value => { document.removeEventListener("keydown", escape); mask.remove(); previousFocus?.focus(); resolve(value); };
       const escape = event => { if (event.key === "Escape" && [...document.querySelectorAll(".s2g-mask")].at(-1) === mask) close(null); };
+      // Every definition edit invalidates review. Generations also reject a
+      // delayed preview response arriving after another edit or template selection.
       const invalidate = () => { validationGeneration++; preview = null; field("[data-preview]").hidden = true; field("[data-save]").disabled = true; field("[data-error]").textContent = ""; };
       const syncText = () => { field("[data-text]").value = JSON.stringify(draft, null, 2) + "\n"; invalidate(); renderTopology(); };
       function renderTopology() {
@@ -635,6 +710,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const generation=++validationGeneration, text=field("[data-text]").value;
         try {
           const result=await api(`/event-templates/${encodeURIComponent(selected.key)}/preview`,{revision:selected.revision,text});
+          // Never enable Save for a result calculated from text the user replaced.
           if(generation!==validationGeneration||text!==field("[data-text]").value)return;
           preview=result;
           const before=preview.before.split("\n"), after=preview.after.split("\n"), lines=[];
@@ -645,6 +721,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       };
       field("[data-save]").onclick = async () => {
         if(!preview)return;field("[data-save]").disabled=true;
+        // Send the server-canonical reviewed text, not unvalidated form state.
         try { const result=await api(`/event-templates/${encodeURIComponent(selected.key)}/save`,{revision:selected.revision,text:preview.after,reviewDigest:preview.reviewDigest,name:field("[data-name]").value}); close(result.template); }
         catch(caught){field("[data-error]").textContent=caught.message;preview=null;}
       };
@@ -652,10 +729,15 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     });
   }
 
+  // Inspector rows reflect committed native ledger state. Delivery acceptance,
+  // activation completion, retry history and owner receipt remain distinct.
+  // Historic request charges lack per-agent attribution, so show aggregate facts.
   function ExecutionInspector({ execution, sources, goal }) {
     const [selected, setSelected] = React.useState("");
     const events = execution.events || [], deliveries = execution.deliveries || [];
     const event = events.find(item=>item.id===selected) || events.at(-1);
+    // Follow committed parent event IDs; timestamps/order alone do not establish
+    // which input caused a delivery or an owner proposal.
     const lineage = []; let current = event;
     while(current && !lineage.some(item=>item.id===current.id)) { lineage.unshift(current); current=events.find(item=>item.id===current.causation); }
     return h("details", { className:"s2g-inspector" }, h("summary",null,"Inspect configuration and execution"),
@@ -706,6 +788,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h("button", { type: "submit", disabled: busy }, "Start monitoring"), error ? h("p", { className: "s2g-error" }, error) : null));
   }
 
+  // Polling refreshes the displayed execution revision used by control actions.
+  // A stale answer/resume/retry must fail at the host instead of waking other work.
   function ExecutionDock({ sessionId }) {
     const [execution, setExecution] = React.useState(null);
     const [busy, setBusy] = React.useState(false);
@@ -742,6 +826,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         setExecution(data.execution);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : String(caught));
+        // Refresh after CAS rejection so another action uses the observed state.
+        // Do not replay an answer/retry automatically against a newer revision.
         const data = await api(`/bindings/${encodeURIComponent(sessionId)}/execution`).catch(() => null);
         if (data) setExecution(data.execution);
       } finally { setBusy(false); }
@@ -825,17 +911,23 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     });
     const params = new URLSearchParams(location.search);
     const launch = new URLSearchParams(location.hash.replace(/^#/, ""));
+    if (document.documentElement) document.documentElement.dataset.spec2gdsLaunch = "ready";
     const sessionId = params.get("spec2gds_session") || launch.get("spec2gds_session");
     const unbound = launch.get("spec2gds_unbound") === "1";
     if (sessionId || unbound) {
+      if (document.documentElement) document.documentElement.dataset.spec2gdsLaunch = "pending";
       params.delete("spec2gds_session");
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}`);
       queueMicrotask(async () => {
         try {
           if (sessionId) await createBoundSession(ctx, await api(`/bindings/${encodeURIComponent(sessionId)}`));
           else await createUnboundSession(ctx);
+          if (document.documentElement) document.documentElement.dataset.spec2gdsLaunch = "ready";
         }
-        catch (error) { window.alert(error instanceof Error ? error.message : String(error)); }
+        catch (error) {
+          if (document.documentElement) { document.documentElement.dataset.spec2gdsLaunch = "error"; document.documentElement.dataset.spec2gdsLaunchError = error instanceof Error ? error.message : String(error); }
+          window.alert(error instanceof Error ? error.message : String(error));
+        }
       });
     }
   };

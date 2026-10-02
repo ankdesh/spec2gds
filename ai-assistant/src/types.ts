@@ -132,6 +132,8 @@ export interface WorkspaceDescriptor {
 }
 
 export interface SourceCreationRequest {
+  architectureReviewId?: string;
+  acceptedArchitecture?: Record<string, unknown>;
   requestId: string;
   sourceSessionId: string;
   callId: string;

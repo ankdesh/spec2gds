@@ -18,7 +18,7 @@ discovery and `/services` returns 404.
 VPN, container, or multi-interface host needs a different value. Endpoint
 `host` values are bind addresses and default to `0.0.0.0`.
 
-Each application has a `service` endpoint and a `ui` endpoint. Spec Editor and
+Each application in the combined registry has a `service` endpoint and a `ui` endpoint. Spec Editor and
 AI Assistant serve their UI from the same listener as their API. Circuit
 Designer uses two listeners: its REST service defaults to port `6011` and its
 Vite UI defaults to port `6012`.
@@ -32,8 +32,11 @@ working-directory-relative path. See
 
 The default allocation is Spec Editor `6010`, Circuit API `6011`, Circuit UI
 `6012`, AI Assistant `6013`, and Log Viewer `6014`. The specification editor's
-development-only Vite UI uses `6015`. The schema also contains the unified
-logging policy.
+development-only Vite UI uses `6015`. Verification Planner runs separately on
+`6016` with `uv run testplan-service`; it is not in this registry or the combined
+launcher. Its CLI owns its bind address and state directories. See
+[Verification Planner operation](verification-service-overall.md).
+The registry schema also contains the unified logging policy.
 Logging has only two environment overrides:
 
 - `SPEC2GDS_LOGGING=ON|OFF`

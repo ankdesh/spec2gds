@@ -1,3 +1,7 @@
+/** Private Circuit draft construction and candidate edits.
+ * Keep accepted snapshots separate from unsaved client changes. Connectivity
+ * uses semantic element IDs while route geometry is independently editable;
+ * a draft becoming valid does not itself commit owner state. */
 import type {
   CircuitDocument,
   CircuitOperation,
@@ -12,6 +16,8 @@ interface DraftState {
   operations: CircuitOperation[];
 }
 
+// Only replacement-style layout/timing operations can supersede an earlier
+// operation. Structural creation/deletion stays ordered to preserve dependencies.
 function coalescingKey(operation: CircuitOperation): string | undefined {
   if (operation.type === "set_instance_geometry") return `${operation.type}:${operation.instance_id}`;
   if (operation.type === "set_terminal_placement") return `${operation.type}:${operation.terminal_key}`;
@@ -53,6 +59,8 @@ export class CircuitDraft {
     if (!batch.length) return [];
     const result = applyOperations(this.current.document, batch);
     if (!result.candidate) return result.diagnostics;
+    // Save the complete prior state before coalescing. Undo is one user command,
+    // even when its final persisted batch replaces many intermediate drag moves.
     this.undoStack.push(clone(this.current));
     this.redoStack = [];
     const operations = [...this.current.operations];
@@ -89,6 +97,8 @@ export class CircuitDraft {
     return this.document;
   }
 
+  // The authored base revision never follows a newer accepted snapshot. The
+  // owner must detect a stale draft rather than silently treating it as a rebase.
   toBatch(requestId: string): CircuitOperationBatch {
     if (!this.current.operations.length) throw new Error("The draft contains no changes.");
     return {

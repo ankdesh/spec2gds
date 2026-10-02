@@ -43,11 +43,13 @@ flowchart TB
 | Independent circuit | client | `.circuit.json` | private draft, then Save |
 | Circuit session | Circuit service | memory only | lease and revision checks |
 | Spec-derived circuit | specification source | `.spec` topology plus circuit-layout annotation | edit a private projection, then revision-checked Save to Specification |
-| AI Assistant suggestion | user review | proposal record | explicit accept or reject |
+| AI Assistant suggestion | bound owner approval policy | proposal/review record | automatic validated Spec save or restricted review; explicit Circuit send/save |
+| Verification plan/evidence | Verification Planner | SQLite plus content-addressed blobs | revision-checked commands and immutable checkpoints |
 
-The service processes bind to all interfaces by default so the editors can be
-used by multiple systems on the same intranet. Their service directory
-advertises one detected or configured LAN host.
+The combined editor/Assistant processes bind to all interfaces by default so
+the editors can be used by multiple systems on the same intranet. Their service
+directory advertises one detected or configured LAN host. The independent
+Verification Planner defaults to loopback (`127.0.0.1`).
 
 ## Activity extension boundary
 
@@ -132,7 +134,8 @@ clients; they do not mutate model objects directly.
 
 ## Deliberate limits
 
-- One active `.spec` document per Spec API process.
+- One visible `.spec` document per editor; persistent owner keys allow existing
+  bound chats to access other packages without changing their bindings.
 - Circuit service sessions disappear on restart.
 - The specification editor omits bus interfaces, interface connections, and
   bus/abstraction definitions while retaining them in the `.spec` source.
@@ -140,4 +143,7 @@ clients; they do not mutate model objects directly.
   bus interfaces remain in the specification source.
 - Imported PDF, Word, and ODT files become narrative source; optional model
   extraction requires explicit OpenAI configuration.
-- The AI Assistant is optional and all writes remain review-gated.
+- The AI Assistant is optional; writes follow the bound owner approval policy
+  and always cross owner validation and revision checks.
+- Verification Planner imports snapshots independently. Its reference backend
+  does not execute hardware tests or close coverage automatically.

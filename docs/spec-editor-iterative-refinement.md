@@ -100,12 +100,10 @@ IDs, and base/result revisions. Restricted proposals remain pending until an
 explicit decision; stale approval cannot change the source. There are no
 restore controls in this phase.
 
-## Verification status
+## Verification
 
-The deterministic owner, adapter, CLI, and scenario coverage is described in
-[the runnable test plan](spec-editor-iterative-refinement-test-plan.md). The
-implementation session could read and edit files, but its process launcher
-failed before starting `uv`, `npm`, or `git` with `No such file or directory`.
-Tests, type checks, and generated bundles therefore remain unverified and must
-be run in a functioning terminal. UI execution is explicitly deferred to a
-later pass; the scenario runner and browser fixtures are prepared for it.
+[Assistant acceptance tests](assistant-acceptance-tests.md) lists deterministic
+owner, CLI, native integration and isolated UI commands. Event-preset browser
+coverage is described separately in [the event tutorial](event-driven-assistant-tutorial.md).
+Run the relevant source/build checks for a change; a historical release result
+or existing generated bundle is not verification of the current worktree.

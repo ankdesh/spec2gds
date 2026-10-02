@@ -1,3 +1,7 @@
+/** Render the owner-produced specification projection and inline editing surfaces.
+ * Draft text retains the revision it was authored against. A newer live view
+ * must not overwrite it or restamp its save; the host must resolve a stale edit.
+ * Source paths and semantic IDs come from the projection, not DOM layout. */
 import React, {
   Fragment,
   createContext,
@@ -826,7 +830,7 @@ function EntityMetadataForm({ state }: { state: SectionEditState }) {
   return (
     <form className="spec-inline-editor spec-metadata-editor" onSubmit={submit}>
       <div className="spec-edit-field-wide">
-        <label htmlFor={`${state.editorId}-description`}>Specification text</label>
+        <label htmlFor={`${state.editorId}-description`}>{state.section.entity_ref?.entity_kind === "component" ? "Component explanation" : "Specification text"}</label>
         <textarea
           id={`${state.editorId}-description`}
           onChange={(event) => setDescription(event.target.value)}
@@ -834,7 +838,7 @@ function EntityMetadataForm({ state }: { state: SectionEditState }) {
           rows={4}
           value={description}
         />
-        <small>Shown as paragraph text directly below this section heading.</small>
+        <small>Explain behavior, timing, reset and implementation assumptions. Stored RTL defines implemented behavior; editing this text does not change RTL.</small>
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions spec-edit-field-wide">
@@ -969,6 +973,10 @@ const SpecSection = createComponentImplementation(
       && section.entity_ref
       && ["component", "design"].includes(section.entity_ref.entity_kind);
     const sectionText = factValue(section, "Description");
+    const missingLeafRtl = section.entity_ref?.entity_kind === "component"
+      && !factValue(section, "Internal design")
+      && !(section.content_sections ?? []).some((item) =>
+        item.section_type === "sv" && item.payload.content?.trim());
 
     return (
       <SectionEditContext.Provider value={editState}>
@@ -980,6 +988,9 @@ const SpecSection = createComponentImplementation(
             <div>
               {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
               <Heading>{section.title}</Heading>
+              {entityIsEditable && section.entity_ref?.entity_kind === "component" && mode !== "metadata" && (
+                <button className="spec-text-edit" onClick={() => begin("metadata")} type="button" title="Explain this component beside its interfaces and RTL">Edit text…</button>
+              )}
             </div>
             <SectionOptionsMenu
               instanceAvailability={instanceAvailability}
@@ -1001,13 +1012,16 @@ const SpecSection = createComponentImplementation(
               section={section}
             />
           </header>
+          {missingLeafRtl && (
+            <p className="spec-implementation-status">RTL implementation missing. Generation produces a compile-safe scaffold; functional behavior is unimplemented.</p>
+          )}
           {mode === "create-component" && <EntityCreationForm kind="component" state={editState} />}
           {mode === "create-design" && <EntityCreationForm kind="design" state={editState} />}
           {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
           {mode === "add-sv" && <NewSystemVerilogForm state={editState} />}
           {mode === "metadata"
             ? <EntityMetadataForm state={editState} />
-            : sectionText && <p className="spec-section-text">{sectionText}</p>}
+            : sectionText && <p className="spec-section-text" style={{ whiteSpace: "pre-wrap" }}>{sectionText}</p>}
           <FactList
             excludeLabels={mode === "metadata"
               ? ["Display name", "Short description", "Description"]

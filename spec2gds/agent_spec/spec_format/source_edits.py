@@ -119,6 +119,11 @@ def _normalize_component_port(
     *,
     require_name: bool,
 ) -> dict[str, typing.Any]:
+    """Normalize only the declared port family and reject unrelated field shapes.
+
+    Wire, transactional and structured ports have different direction/initiative
+    contracts. Keeping the discriminator explicit avoids silently converting ports.
+    """
     _reject_unknown_keys(value, _PORT_FIELDS, "component port")
     name = str(value.get("name", "")).strip()
     if require_name and not name:
@@ -277,7 +282,7 @@ def _set_optional(parent: etree._Element, name: str, value: typing.Any, order: l
         if existing is not None:
             parent.remove(existing)
         return
-    node = existing or _ensure_ordered(parent, name, order)
+    node = existing if existing is not None else _ensure_ordered(parent, name, order)
     node.text = str(value)
 
 

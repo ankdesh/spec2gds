@@ -94,6 +94,9 @@ class RecipeValidator:
         declared_vars: set[str] = {v.name for v in test_ir.variables}
         evaluated_checks: set[str] = set()
 
+        # This is selected preflight validation, not a recursive typed interpreter.
+        # Nested dictionaries and unhandled step kinds are not comprehensively checked;
+        # executable backends must not infer support merely from an empty diagnostic list.
         # Step lists
         all_step_containers = [
             ("setup", test_ir.setup),
@@ -134,6 +137,8 @@ class RecipeValidator:
                     if check_id:
                         evaluated_checks.add(check_id)
                     expr = raw_step.get("expr", {})
+                    # A syntactic guard only: different expressions may still encode
+                    # the same DUT-derived oracle. Human provenance review remains needed.
                     # Tautology guard: expression compares identical items
                     if expr.get("op") in {"eq", "==", "ne", "!="}:
                         left = expr.get("left")

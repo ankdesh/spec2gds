@@ -1,3 +1,7 @@
+/** Browser implementations of the Circuit shell's host capabilities.
+ * Downloads save independent files; source synchronization calls the registered
+ * owner path. Keep those save meanings distinct, and retain rejected draft data
+ * so a failed owner request does not look like a successful local download. */
 import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   validateContractDefinition,

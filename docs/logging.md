@@ -2,7 +2,7 @@
 
 Spec Editor, Circuit Designer, AI Assistant, their browser clients, and the
 Log Viewer share one newline-delimited JSON file. Logging is intentionally off
-by default so ordinary editor use performs no file writes.
+by default so ordinary editor use performs no log writes.
 
 ## Enable logging
 
@@ -18,7 +18,7 @@ Restart each service after changing these values. Every process must use the
 same `SPEC2GDS_SERVICE_CONFIG` registry so it resolves the same log path.
 
 Info mode records a concise line for lifecycle events, HTTP outcomes, document
-operations, assistant workflows, warnings, and errors. Debug mode enriches
+operations, assistant execution events, warnings, and errors. Debug mode enriches
 those records with validated parameters and results at system boundaries. The
 Assistant captures the redacted OpenAI request immediately before the owned SDK
 call and the returned object immediately afterward; it does not intercept SDK

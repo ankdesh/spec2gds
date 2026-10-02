@@ -11,6 +11,8 @@ import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { calculateMetrics, parseJsonLines } from "../lib/eval-metrics.js";
 
+import { approveTimer } from "./support/approved-timer.mjs";
+
 const root = fileURLToPath(new URL("..", import.meta.url));
 
 async function listen(server) {
@@ -80,6 +82,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       ? { tool_calls: [{ index: 0, id: "call_context", type: "function", function: { name: "get_bound_context", arguments: "{}" } }] }
       : toolResults === 1
         ? { tool_calls: [{ index: 0, id: "call_proposal", type: "function", function: { name: "prepare_spec_proposal", arguments: JSON.stringify({
+          architecture_review_id: "approved-timer",
           supported: true,
           base_source_revision_hash: "sha256:test",
           unsupported_reason: null,
@@ -87,7 +90,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
           summary: "Adds a timer component.",
           rationale: "The design needs timing control.",
           assumptions: [],
-          operations: [{ operation_id: "create_timer", type: "create_entity", kind: "component", name: "timer", instances: [] }],
+          operations: [{ operation_id: "create_timer", type: "create_entity", kind: "component", name: "timer", entity_id: "local-timer", instances: [] }, { operation_id: "explanation", type: "set_entity_metadata", entity: { document_id: "doc-test", entity_kind: "component", entity_id: "local-timer" }, description: "Timing control. Interface and functional RTL are not implemented yet." }],
         }) } }] }
         : { content: "The bound specification contains one ALU. The timer proposal is ready for review." };
     response.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -136,7 +139,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
-    child.stdout.on("data", value => { output += value; });
+    child.stdout.on("data", value => { output += value; for (const line of String(value).split("\n")) { try { const event=JSON.parse(line); if(event.type==="session") approveTimer(state,event.sessionId); } catch { /* Other stream lines are not session headers. */ } } });
     child.stderr.on("data", value => { output += value; });
     const [code, signal] = await once(child, "exit");
     assert.equal(signal, null, output);
@@ -225,7 +228,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     assert.equal(recordedMetrics.proposalCalls, 1);
     assert.equal(recordedMetrics.schemaValidProposalCalls, 1);
     assert.equal(recordedMetrics.firstPreviewReadyCases, 1);
-    assert.equal(recordedMetrics.proposedOperations, 1);
+    assert.equal(recordedMetrics.proposedOperations, 2);
     assert.ok(recordedMetrics.tokens.input > 0);
     assert.ok(recordedMetrics.tokens.output > 0);
     const providerRequestsBeforeReplay = modelRequests.length;
@@ -254,7 +257,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       stdio: ["ignore", "pipe", "pipe"],
     });
     let replayOutput = "";
-    replayChild.stdout.on("data", value => { replayOutput += value; });
+    replayChild.stdout.on("data", value => { replayOutput += value; for (const line of String(value).split("\n")) { try { const event=JSON.parse(line); if(event.type==="session") approveTimer(replayState,event.sessionId); } catch { /* Other stream lines are not session headers. */ } } });
     replayChild.stderr.on("data", value => { replayOutput += value; });
     const [replayCode, replaySignal] = await once(replayChild, "exit");
     assert.equal(replaySignal, null, replayOutput);

@@ -17,10 +17,7 @@ internal design receive a writable source binding.
 Install the Python and JavaScript workspaces, then start the combined stack:
 
 ```bash
-uv sync
-cd circuit-designer
-npm install
-cd ..
+scripts/setup-all.sh
 scripts/serve-all.sh start
 ```
 

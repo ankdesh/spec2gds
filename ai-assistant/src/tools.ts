@@ -1,3 +1,7 @@
+/** Model capabilities for bound owner context, typed proposals and clarification.
+ * Tool schemas admit structural arguments; fresh authored revisions and owner
+ * preview enforce meaning. Standing specialists stay read-only; primary tools
+ * cannot bypass immutable binding, review claims or native execution permission. */
 import { randomUUID } from "node:crypto";
 import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import { defineTool, type ToolRunContext } from "@deepseek-ai/dsh-tools";
@@ -5,8 +9,9 @@ import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values"
 import { OwnerError, type OwnerClients } from "./owner-clients.js";
 import { catalogPromptSectionsFor, promptSectionsFor, shapeBoundContext, type BoundPromptCatalog } from "./domain-context.js";
 import { validateProposalEnvelope } from "./operation-schemas.js";
-import { compactWireRange } from "./normalize.js";
-import { parseOwnerOperationContract, validateOwnerOperations, verifyOwnerOperationContract, type OwnerOperationContract } from "./owner-operation-schema.js";
+import { compactWireRange, normalizeSpecFormatting } from "./normalize.js";
+import { validateArchitectureOperations } from "./architecture-review.js";
+import { parseOwnerOperationContract, specFormattingAdmission, validateOwnerOperations, verifyOwnerOperationContract, type OwnerOperationContract } from "./owner-operation-schema.js";
 import { buildCircuitArtifact, buildSpecArtifact, reviewStateForPreview } from "./proposal-pipeline.js";
 import {
   errorFromException,
@@ -92,7 +97,7 @@ export function proposedComponentFields(operation: Record<string, unknown>): Pro
 }
 
 const SPEC_PROPOSAL_DESCRIPTION = `Prepare, owner-preview, and submit a typed Spec proposal after reading get_bound_context. Copy its exact source revision into base_source_revision_hash. The owner applies valid submissions automatically unless human approval is required.
-Use the operation types and field shapes in this binding's owner-published tool schema. Use exact entity IDs and references from context; stay within its writable boundary. Complete replacements must copy unchanged fields. SystemVerilog content is module-body text only. If a new component needs a details card, suggest defaults derived from the request and your proposed operation; after submission, use the confirmed values to author the typed operation, preserving each port's confirmed width. The owner performs semantic validation.`;
+Use the operation types and field shapes in this binding's owner-published tool schema. Reuse existing IDs from context and use local aliases for new entities and their dependent references. Stay within the writable boundary. Complete replacements must copy unchanged fields. SystemVerilog content is module-body text only. New entities or architectural changes require an approved architecture_review_id; every new component needs an explanation in the same atomic proposal. Generate the approved concrete interfaces. The owner performs semantic validation.`;
 
 const CIRCUIT_PROPOSAL_DESCRIPTION = `Prepare and owner-preview a typed Circuit operation batch after reading get_bound_context. This never commits or submits it.
 Use the operation types and field shapes in this binding's owner-published tool schema. Use exact IDs from context, order dependent operations, and copy unchanged fields in complete replacements. Do not author geometry, routes, labels, or layout. The owner performs semantic validation.`;
@@ -103,7 +108,7 @@ export function structuredQuestionPrompt(enabled: boolean): PromptSection | null
     name: "spec2gds:interactive-clarification",
     order: 250,
     text: `INTERACTIVE CLARIFICATION
-After reading bound context, if a concrete proposal needs user-supplied values, call its prepare_*_proposal tool with supported=false, an empty operations list, and every missing value in required_fields. Supply an LLM-suggested default_value for every field. When the details card is submitted, use the confirmed values as authoritative, pass its input_id as confirmed_input_id and its exact values as confirmed_values, and author the matching typed operations yourself. The client will show one editable details card and continue the proposal from its submission. Do not list missing proposal fields in an ordinary assistant response and end the turn. For a non-proposal question or choice, you MUST call ask_user_question. Ask only for information that cannot be derived from bound context, and do not ask about optional data that can safely retain its current or default value. For a goal or orchestrated request, use these same human input tools; durable event waiting is not available in this phase.`,
+After reading bound context, if a concrete proposal needs user-supplied values, call its prepare_*_proposal tool with supported=false, an empty operations list, and every missing value in required_fields. Supply an LLM-suggested default_value for every field. When the details card is submitted, use the confirmed values as authoritative, pass its input_id as confirmed_input_id and its exact values as confirmed_values, and author the matching typed operations yourself. The client will show one editable details card and continue the proposal from its submission. Do not list missing proposal fields in an ordinary assistant response and end the turn. For a non-proposal question or choice, you MUST call ask_user_question. Ask only for information that cannot be derived from bound context, and do not ask about optional data that can safely retain its current or default value. For immediate clarification in a goal or orchestrated request, use these same human input tools. When wait_for_event is available, use it for a durable correlated human answer or declared event that should suspend work across turns; do not burn continuation rounds polling for that response. Owner proposal review waits are correlated by the host.`,
   };
 }
 
@@ -185,13 +190,13 @@ export function registerDomainTools(
   agentContext.tools.register(defineTool({
     name: "get_bound_context",
     description: "Read the current authoritative semantic context and revision for this conversation's immutable Spec or Circuit binding. Call this before discussing concrete design facts or preparing a proposal. It never mutates owner data.",
-    parameters: {},
+    parameters: { cursor: { type: "string" }, entity_ids: { type: "array", items: { type: "string" } } },
     output: resultOutput,
     timeoutMs: 35_000,
-    async execute(_args, exec) {
+    async execute(args, exec) {
       await onDomainToolUse?.();
       const [context, svg] = await Promise.all([
-        owners.context(binding, exec.signal),
+        binding.domain === "spec" ? owners.contextPage(binding, args, exec.signal) : owners.context(binding, exec.signal),
         binding.domain === "circuit" ? owners.circuitSvg(binding, exec.signal).catch(() => undefined) : Promise.resolve(undefined),
       ]);
       if (binding.domain === "spec" && !readOnly) {
@@ -208,10 +213,22 @@ export function registerDomainTools(
           // proposal tool verifies the contract again before any submission.
         }
       }
-      const shaped = shapeBoundContext(binding, context, svg);
+      if (binding.domain === "spec" && (context.document_id !== binding.documentId || typeof context.source_revision_hash !== "string" || !context.source_revision_hash)) {
+        throw new Error("Spec context is missing its authoritative document identity or source revision.");
+      }
+      if (context.document_id !== undefined && context.document_id !== binding.documentId) throw new Error("Context belongs to a different document.");
+      if (context.schema_version === "spec2gds.assistant-context-page.v1" && (!Array.isArray(context.records)
+        || typeof context.incomplete !== "boolean" || (context.incomplete ? typeof context.next_cursor !== "string" || !context.next_cursor : context.next_cursor !== null))) {
+        throw new Error("Malformed context page: records, completeness and follow-up cursor are required. No truncated or spill-file context was accepted.");
+      }
+      if (context.schema_version === "spec2gds.assistant-context-page.v1" && (context.scope !== binding.scope
+        || (binding.scope === "entity" && (!isRecord(context.target) || context.target.entity_id !== binding.entityId || context.target.entity_kind !== binding.entityKind)))) throw new Error("Context does not match the immutable binding.");
+      const shaped = context.schema_version === "spec2gds.assistant-context-page.v1"
+        ? { text: "Authoritative semantic context follows once. JSON paths and string offsets preserve complete values; follow next_cursor before replacing incomplete fields.", warnings: context.incomplete ? ["Incomplete context; read next_cursor with the same entity selection."] : [] }
+        : shapeBoundContext(binding, context, svg);
       const revision = binding.domain === "spec" ? context.source_revision_hash : context.revision;
       if (typeof revision === "string") state.markRevisionStale(binding.sessionId, revision);
-      return json({
+      const response = {
         binding: {
           domain: binding.domain,
           document_id: binding.documentId,
@@ -219,7 +236,7 @@ export function registerDomainTools(
           entity_kind: binding.entityKind,
           entity_id: binding.entityId,
         },
-        model_context: shaped.text,
+        model_context: binding.domain === "spec" ? "Use authoritative_context below; stored RTL defines implemented behavior and component descriptions guide implementation." : shaped.text,
         warnings: shaped.warnings,
         authoritative_context: context,
         rules: [
@@ -234,7 +251,9 @@ export function registerDomainTools(
               : "Human approval is required before changes are saved.",
           ] : []),
         ],
-      });
+      };
+      if (binding.domain === "spec" && Buffer.byteLength(JSON.stringify(response)) >= 40 * 1024) throw new Error("Owner context exceeds 40 KiB. A paged context-capable Spec owner is required; no truncated or spill-file result was accepted.");
+      return json(response);
     },
   }));
 
@@ -279,10 +298,11 @@ function registerSpecProposalTool(
       summary: { type: "string", required: true },
       rationale: { type: "string", required: true },
       assumptions: { type: "array", items: { type: "string" }, required: true },
-      operations: { type: "array", items: contract.tool_schema, required: true },
+      operations: { type: "array", items: specFormattingAdmission(contract.tool_schema), required: true },
       required_fields: { type: "array", items: REQUIRED_FIELD_SCHEMA },
       confirmed_input_id: { type: "string" },
       confirmed_values: { type: "json" },
+      architecture_review_id: { type: "string" },
     },
     output: resultOutput,
     timeoutMs: 35_000,
@@ -293,7 +313,8 @@ function registerSpecProposalTool(
       catch (error) {
         return failureResult(errorFromException(binding, callId(exec), error), "The owner approval policy could not be read. No change was submitted.");
       }
-      try { validateProposalEnvelope(args.supported, args.unsupported_reason, args.operations);
+      try { args = { ...args, operations: snapshotJsonValue(normalizeSpecFormatting(args.operations)) as typeof args.operations };
+        validateProposalEnvelope(args.supported, args.unsupported_reason, args.operations);
         if (args.supported) validateOwnerOperations(contract, args.operations); }
       catch (error) {
         const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
@@ -342,7 +363,24 @@ function registerSpecProposalTool(
       const componentCreation = binding.scope === "document"
         ? args.operations.find(operation => isRecord(operation) && operation.type === "create_entity" && operation.kind === "component")
         : undefined;
-      if (policy.approval_policy === "review" && interactiveForms && componentCreation && !args.confirmed_input_id) {
+      try {
+        const structural = args.operations.some(operation => isRecord(operation) && (
+          ["create_entity", "delete_entity", "set_internal_design", "clear_internal_design", "upsert_instance", "delete_instance", "upsert_connection", "delete_connection", "upsert_component_port", "delete_component_port", "upsert_bus_interface", "delete_bus_interface", "upsert_channel", "delete_channel"].includes(String(operation.type))
+          || (["upsert_section", "delete_section"].includes(String(operation.type)) && ["instances", "connections", "ports"].includes(String(operation.section_type)))));
+        if (structural) {
+          const architecture = state.requireArchitecture(binding.sessionId, args.architecture_review_id, args.base_source_revision_hash);
+          validateArchitectureOperations(architecture.plan, args.operations);
+        }
+        for (const operation of args.operations) {
+          if (!isRecord(operation) || operation.type !== "create_entity" || operation.kind !== "component") continue;
+          const explanation = args.operations.find(edit => isRecord(edit) && edit.type === "set_entity_metadata"
+            && isRecord(edit.entity) && edit.entity.entity_id === operation.entity_id);
+          if (!isRecord(explanation) || typeof explanation.description !== "string" || !explanation.description.trim()) {
+            throw new Error(`New component ${String(operation.entity_id)} needs set_entity_metadata.description in the same proposal.`);
+          }
+        }
+      } catch (error) { return failureResult(proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error)), "Resolve the architecture review or missing component explanation and retry."); }
+      if (policy.approval_policy === "review" && interactiveForms && componentCreation && !args.confirmed_input_id && !args.architecture_review_id) {
         const fields = args.required_fields?.length ? args.required_fields : proposedComponentFields(componentCreation as Record<string, unknown>);
         const requiredInput = proposalInputRequest(binding, "Review the component details before the proposal is prepared.", fields);
         if (requiredInput) return json({

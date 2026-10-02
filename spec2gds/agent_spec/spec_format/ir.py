@@ -1,4 +1,9 @@
-"""Immutable semantic source graph for the V1 IP-XACT package profile."""
+"""Immutable semantic source graph for the V1 IP-XACT package profile.
+
+Reviewer path: source XML is parsed once into immutable semantic values.
+Queries resolve stable entity/VLNV references; writes must construct a new
+package/revision through transactions rather than modify these read projections.
+"""
 
 from __future__ import annotations
 
@@ -652,6 +657,14 @@ def _semantic_diagnostics(
                         diagnostics.append(f"Design {design.vlnv} connection {connection.name} references missing port endpoint {endpoint.instance_name}.{endpoint.port_name}.")
                     else:
                         directions.append(port.direction)
+                if owner_component is not None:
+                    for endpoint in connection.external_ports:
+                        boundary = next((item for item in owner_component.ports if item.name == endpoint.port_name), None)
+                        if boundary is not None:
+                            # A module input drives its children; a module output
+                            # receives a child driver. Include the boundary when
+                            # checking fanout of clocks, resets and data inputs.
+                            directions.append({"in": "out", "out": "in", "inout": "inout"}[boundary.direction])
                 if len(directions) >= 2 and (not any(direction in {"out", "inout"} for direction in directions) or not any(direction in {"in", "inout"} for direction in directions)):
                     diagnostics.append(f"Design {design.vlnv} connection {connection.name} has incompatible port directions.")
 

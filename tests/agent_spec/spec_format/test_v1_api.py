@@ -134,6 +134,10 @@ def test_v1_api_rejects_stale_edits_and_unsupported_packages() -> None:
 
 
 def test_v1_api_browses_server_local_directories(tmp_path: Path) -> None:
+    # App construction creates owner/Activity state under the fixture root. Browse
+    # a dedicated child so those unrelated directories do not change this listing.
+    tmp_path = tmp_path / "browse"
+    tmp_path.mkdir()
     endpoints = _endpoints()
     (tmp_path / "Alpha").mkdir()
     (tmp_path / "beta").mkdir()

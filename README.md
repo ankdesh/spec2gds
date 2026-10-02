@@ -44,21 +44,27 @@ conversation archive/rename support. It owns the canonical `ai-assistant/`
 workspace and port `6013`; see the [AI Assistant guide](docs/ai-assistant.md).
 
 In a browser chat, ask **“Create a new spec document”** and include the circuit
-description. In automatic mode the Assistant creates the package under
+description. First approve the architecture card after resolving essential
+questions. In automatic mode the Assistant creates the package under
 `SPEC_DOCUMENT_ROOT` and continues the request in a new document-bound chat.
 Restricted owners show a creation card for review. No existing package needs
 to be open. Circuit changes retain their existing approval and save workflow.
 See [specification creation from chat](docs/assistant-spec-creation.md) for
 configuration and recovery.
 
-For proposed fixed workflows and durable event-driven agents, read the
-[agentic systems architecture report](docs/agentic-systems-architecture-report.md).
-It records the broader design discussion. For implemented conversation agents
-and native goals with HTTP monitoring and waiting, use the [Phase 2 guide](docs/event-driven-assistant-phase2.md).
+Components support multiline explanations through **Edit text…** beside interfaces
+and RTL. Stored SV defines implemented behavior; structured designs define wiring,
+and text guides implementation. Generator `1.2.0` accepts component/design targets,
+reachable hierarchy and numeric slices. See the [unified integration guide](docs/assistant-hierarchical-spec-integration.md)
+and [evaluation commands and evidence](docs/assistant-hierarchical-spec-evaluation.md).
 
-The [three-phase event driven assistant plan](docs/event-driven-assistant-plan.md)
-updates `orchestrated` and `goal` first, then adds external triggers and
-durable waiting, then visual tooling. Workflow setup is deferred.
+The `orchestrated` preset uses persistent event agents; `goal` uses native
+single-agent continuation. Both support owner HTTP polling, correlated waits,
+bounded retries and human-reviewed visual templates. See [events and presets](docs/event-driven-assistant-system.md),
+[execution operations](docs/event-driven-assistant-operations.md) and
+[the tutorial](docs/event-driven-assistant-tutorial.md). Workflow execution remains
+future work; [design rationale](docs/agentic-systems-architecture-report.md)
+records the boundaries for a later policy.
 
 For a focused explanation of how the two editors cooperate, including launch,
 projection, save, refresh, conflict, and security diagrams, read
@@ -72,21 +78,28 @@ file, preference, source, telemetry, event, and tool adapters; see
 [Chipmind feature-gap inventory](docs/circuit-designer-chipmind-gap-analysis.md)
 document the current professionalization direction.
 
-The independent **Verification Planner** (`testplan-service`) implements the complete
-three-layer verification architecture specified in [Verification Planner Architecture](docs/testplan-service-architecture.md),
-[Layer 1 Test Plan](docs/verification-layer-1-test-plan.md),
-[Layer 2 Coverage & Evidence](docs/verification-layer-2-coverage.md), and
-[Layer 3 Implementation & Plugins](docs/verification-layer-3-implementation.md). It features
-content-addressed Activity Snapshot binding, manual requirement and intent authoring, multi-family coverage
-objectives and policies, campaigns, language-neutral Test IR ASTs, target bindings, pluggable backend generators,
-immutable P1, C1, and I1 review checkpoints, deterministic status evaluation, and a high-density Blueprint Slate UI on port `6016`.
+The independent **Verification Planner** (`testplan-service`, port `6016`)
+provides snapshot-bound Test Plan, Coverage & Evidence, and recipe authoring
+with immutable reviewed checkpoints. Its built-in generator emits reference
+artifacts and synthetic fixture templates; executable test generation and
+simulation remain future work. See [architecture](docs/testplan-service-architecture.md)
+and [remaining requirements](docs/verification-planner-backlog.md).
+
+Run it separately in the root uv environment:
+
+```bash
+uv sync
+uv run testplan-service --host 127.0.0.1 --port 6016 --storage-dir verification-data
+uv run python -m pytest testplan-service/tests -q
+```
 
 ## Prerequisites
 
 Install these tools before setting up the repository:
 
 - Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/);
-- Node.js 22.19+ or 24+ (including npm);
+- Node.js 24.2+ for the combined stack (Circuit alone requires 24+;
+  Assistant alone also supports 22.19+ in the 22.x line);
 - `setsid`, which the combined launcher uses to manage process groups;
 - `lsof`, which the launcher uses when stopping untracked default-port
   listeners; and
@@ -121,6 +134,9 @@ uv sync
 scripts/setup-all.sh
 export OPENAI_API_KEY="..."
 uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
+uv run spec2gds-spec architecture-reviews ./work/timer
+uv run spec2gds-spec approve-architecture ./work/timer REVIEW_ID
+uv run spec2gds-assistant ./work/timer --architecture-review-id REVIEW_ID -- "Author the approved timer specification."
 # For a restricted turn, leave the proposal pending for an explicit decision:
 uv run spec2gds-assistant ./work/timer --require-human-approval -- "Refine the timer."
 uv run spec2gds-spec reviews ./work/timer
@@ -231,8 +247,9 @@ specification is open. A document chat can create and refine supported entities
 throughout its package. An entity's **Options → More actions… → Explore with AI
 Assistant** creates a narrower entity-bound conversation.
 
-Unbound Assistant conversations fail closed with no design context or proposal
-tools; mutations require a binding to an exact editor document or entity. The
+Unbound Assistant conversations have no design context or proposal tools.
+They can discuss general questions and stage new Spec package creation;
+editing an existing source requires its exact document or entity binding. The
 browser offers focused, goal, and orchestrated presets;
 all preserve owner validation and revision checks. Spec owners save valid
 submissions automatically by default; restricted owners retain explicit review.
@@ -246,7 +263,7 @@ Use `uv run spec2gds-editor --require-human-approval` or
 Chats stay bound to their package when another specification opens. Idle views
 follow incoming changes, while inline drafts retain their text and original
 revision. See [iterative refinement](docs/spec-editor-iterative-refinement.md)
-and its [test plan](docs/spec-editor-iterative-refinement-test-plan.md).
+and its [test plan](docs/assistant-acceptance-tests.md).
 Focused turns are capped at three model steps, with one additional step only
 after a visible structured-question call, and every model response is capped
 at 1,200 output tokens. Goal and orchestrated work use separate bounded
@@ -453,7 +470,7 @@ draft and download a canonical file, or **File → Open circuit** to load an
 existing `.circuit.json`.
 
 The canvas has no separate interaction modes. Its compact menubar contains
-File, Edit, Components, Selection, Connect, Route, View, Tools, and Help; the
+File, Edit, Components, Selection, Connect, Route, Timing, View, Tools, and Help; the
 Inspector defaults closed so the canvas can span the window. Direct gestures
 include dragging between free ports, dragging a selected route, wheel zoom,
 left-drag pan on empty canvas, and target-aware right-click menus for canvas,
@@ -500,7 +517,7 @@ Install Verilator 5.x and GNU Make before running the Python suite; RTL Activity
 tests execute the generated `make lint` target without a skip.
 
 ```bash
-uv run python -m pytest -q
+uv run python -m pytest -q tests testplan-service/tests
 uv run ruff check spec2gds runtime/src
 uv run vulture spec2gds runtime/src --min-confidence 90
 
@@ -515,9 +532,11 @@ npm run typecheck
 npm test
 npm run build
 npm run test:harness
+# Browser dependency setup and screenshot capture: docs/event-driven-assistant-tutorial.md
+npm run test:ui
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 
-# Separately invoked UI pass; deferred for the iterative-refinement phase
+# Separately invoked owner/editor UI scenarios
 cd ..
 bash tests/ui-scenarios/run-test.sh --scenario automatic
 bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
@@ -525,7 +544,3 @@ bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
 
 Detailed source locations and focused commands are in
 [docs/development.md](docs/development.md).
-
-HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](docs/event-driven-assistant-phase2.md).
-
-For visual event setup, causal inspection, and hands-on examples of both presets, see [the event/plugin guide](docs/event-driven-assistant-system.md) and [the tutorial](docs/event-driven-assistant-tutorial.md).

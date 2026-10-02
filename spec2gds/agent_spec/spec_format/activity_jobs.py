@@ -117,6 +117,11 @@ class ActivityJobManager:
         sidecar_root: str,
         workspace_root: str | Path | None = None,
     ) -> ActivityExecutionRecord:
+        """Persist the immutable run input before making a queued job visible to the worker.
+
+        The content-addressed snapshot survives restart independently of the live package.
+        Workspace and package paths are host capabilities, not plugin-selected targets.
+        """
         definition = self.registry.activity(activity_id).definition
         execution_id = new_entity_id("activity_execution")
         snapshot_path = self.snapshot_root / f"{snapshot.manifest.snapshot_id.removeprefix('sha256:')}.activity-snapshot"
@@ -309,6 +314,11 @@ class ActivityJobManager:
         return None
 
     def _run(self, envelope: JobEnvelope) -> None:
+        """Execute one saved snapshot and publish its terminal result back through the host.
+
+        Check the installed Activity version and package identity before invocation.
+        Finalization records provenance; exceptions become durable failure records.
+        """
         record = envelope.record
         if record.cancel_requested:
             self.cancel(record.execution_id)

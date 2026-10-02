@@ -328,6 +328,11 @@ def _identity_facts(root: etree._Element, vlnv: str) -> list[DocumentFact]:
 
 
 def _configuration_tables(root: etree._Element, prefix: str) -> list[DocumentTable]:
+    """Project parameters, assertions and choices into renderer-neutral cells.
+
+    Source paths remain attached to values so presentation does not become a second
+    source model. Empty groups produce no table rather than fabricated defaults.
+    """
     tables: list[DocumentTable] = []
     parameters: list[dict[str, DocumentCell]] = []
     for parameter in _descendants(root, "parameters/parameter"):
@@ -423,6 +428,11 @@ def _component_tables(
     root: etree._Element,
     anchors_by_vlnv: dict[str, str],
 ) -> list[DocumentTable]:
+    """Build component tables from preserved IP-XACT source and semantic references.
+
+    The full projection may include protocol information hidden by the normal UI.
+    Links use stable entity anchors; renderers never mutate the source XML here.
+    """
     prefix = _anchor("component", component.ref.entity_id)
     tables = _configuration_tables(root, prefix)
     port_rows: list[dict[str, DocumentCell]] = []
@@ -584,6 +594,11 @@ def _design_tables(
     root: etree._Element,
     anchors_by_vlnv: dict[str, str],
 ) -> list[DocumentTable]:
+    """Project instances and connection rows while keeping source reference paths.
+
+    The document tables remain authoritative when a visual Circuit projection
+    cannot represent an otherwise preserved source connection.
+    """
     prefix = _anchor("design", design.ref.entity_id)
     tables = _configuration_tables(root, prefix)
     instances = [{
@@ -690,6 +705,11 @@ def _bus_tables(
 
 
 def _abstraction_tables(abstraction: AbstractionDefinitionIR, root: etree._Element) -> list[DocumentTable]:
+    """Expose protocol abstraction constraints without inferring physical connections.
+
+    Initiative-specific source fields are carried as cells; missing data remains
+    absent rather than choosing an implementation for the user.
+    """
     prefix = _anchor("abstraction-definition", abstraction.ref.entity_id)
     rows: list[dict[str, DocumentCell]] = []
     for port in _descendants(root, "ports/port"):

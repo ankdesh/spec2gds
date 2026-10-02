@@ -1,0 +1,1005 @@
+{
+  "schema_version": "spec2gds.hierarchical-spec-evidence.v1",
+  "recorded_date": "2026-10-02",
+  "reviewed_branch_commit": "45e95921130b45a4fe21207cb639997c52aa87f5",
+  "runtime": {
+    "python": "3.12.3",
+    "python_environment": "uv-managed project .venv",
+    "node": "22.23.1",
+    "circuit_declared_node_requirement": ">=24",
+    "verilator": "5.020"
+  },
+  "checks": {
+    "spec_format": {
+      "status": "passed",
+      "passed": 105,
+      "skipped": 0,
+      "log_sha256": "7c853195afbf8b9a3051c546f8848df375cbf4360ee44d945942e2ec7be456a2",
+      "log_summary": [
+        "........................................................................ [ 68%]",
+        ".................................                                        [100%]",
+        "=============================== warnings summary ===============================",
+        "tests/agent_spec/spec_format/test_iterative_refinement.py::test_default_policy_applies_once_and_returns_saved_revision",
+        "  /home/ankdesh/explore/spec2gds/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:",
+        "    PydanticSerializationUnexpectedValue(Expected `EntityRef` - serialized value may not be as expected [field_name='target', input_value={'document_id': 'iterativ...tity_kind': 'component'}, input_type=dict])",
+        "    return self.__pydantic_serializer__.to_python(",
+        "",
+        "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html",
+        "105 passed, 1 warning in 59.42s"
+      ]
+    },
+    "rtl": {
+      "status": "passed",
+      "passed": 35,
+      "skipped": 0,
+      "log_sha256": "a0156a74a186a957bef6bf99dbd35c5b59411468325ea42a7e1b899ddca0fcb4",
+      "log_summary": [
+        "........................................................................ [ 52%]",
+        "..................................................................       [100%]",
+        "=============================== warnings summary ===============================",
+        "tests/agent_spec/spec_format/test_iterative_refinement.py::test_default_policy_applies_once_and_returns_saved_revision",
+        "  /home/ankdesh/explore/spec2gds/.venv/lib/python3.12/site-packages/pydantic/main.py:475: UserWarning: Pydantic serializer warnings:",
+        "    PydanticSerializationUnexpectedValue(Expected `EntityRef` - serialized value may not be as expected [field_name='target', input_value={'document_id': 'iterativ...tity_kind': 'component'}, input_type=dict])",
+        "    return self.__pydantic_serializer__.to_python(",
+        "",
+        "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html",
+        "138 passed, 1 warning in 214.50s (0:03:34)"
+      ],
+      "note": "RTL portion of the 138-test combined gate; unchanged RTL suite collected 35 cases. Final spec-format suite separately passed 105 cases."
+    },
+    "shared_python": {
+      "status": "passed",
+      "passed": 31,
+      "skipped": 9,
+      "log_sha256": "6d34023901220d242f8efb56fd12a92c9385a184a3230c47db4b5f04fd49d2a1",
+      "log_summary": [
+        "........s......ssssssss.................                                 [100%]",
+        "31 passed, 9 skipped in 0.80s"
+      ]
+    },
+    "assistant_unit": {
+      "status": "passed",
+      "passed": 110,
+      "skipped": 0,
+      "log_sha256": "b1c8f2a5fb34a249be87dcffac9885841ccb73f6e84569894edc00191da4c3d3",
+      "log_summary": [
+        "  ...",
+        "1..110",
+        "# tests 110",
+        "# suites 0",
+        "# pass 110",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 2395.600202"
+      ]
+    },
+    "native_harness": {
+      "status": "passed",
+      "passed": 3,
+      "skipped": 0,
+      "log_sha256": "94da988a9e1fd3415ef0b0792416d9cff4cbfca2ae4938cba70c2445c3022d9f",
+      "log_summary": [
+        "  ...",
+        "1..3",
+        "# tests 3",
+        "# suites 0",
+        "# pass 3",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 6722.462561"
+      ]
+    },
+    "native_preset_browser": {
+      "status": "passed",
+      "passed": 3,
+      "skipped": 0,
+      "log_sha256": "6c9f27393ae4d6fdde7ab0b1de060b149a8c395cbcf3131769eae3b46a3ccaff",
+      "log_summary": [
+        "  ...",
+        "1..3",
+        "# tests 3",
+        "# suites 0",
+        "# pass 3",
+        "# fail 0",
+        "# cancelled 0",
+        "# skipped 0",
+        "# todo 0",
+        "# duration_ms 20780.780397"
+      ]
+    },
+    "circuit_editor": {
+      "status": "passed",
+      "passed": 117,
+      "skipped": 0,
+      "log_sha256": "00ff14c5ffedb43dd5f0d540644042335ac42d1b1dde000fea348a2ff1d324f0",
+      "log_summary": [
+        "",
+        " RUN  v3.2.7 /home/ankdesh/explore/spec2gds/circuit-designer/apps/standalone",
+        "",
+        " \u2713 tests/assistant-links.test.ts (2 tests) 7ms",
+        "",
+        " Test Files  1 passed (1)",
+        "      Tests  2 passed (2)",
+        "   Start at  06:32:15",
+        "   Duration  582ms (transform 104ms, setup 0ms, collect 68ms, tests 7ms, environment 0ms, prepare 194ms)",
+        ""
+      ]
+    },
+    "assistant_typecheck": {
+      "status": "passed",
+      "log_sha256": "ce3062a1b5fac47924bee78edc439c0abd0c2e8cd4ab3549464573d62ef599b7",
+      "log_summary": [
+        "",
+        "> @spec2gds/harness-assistant@0.1.0 typecheck",
+        "> tsc -p tsconfig.json --noEmit",
+        ""
+      ]
+    },
+    "python_lint": {
+      "status": "passed",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "log_summary": [
+        "All checks passed!"
+      ]
+    },
+    "editor_source_build": {
+      "status": "passed",
+      "log_sha256": "44c8d484988da0ade5dba26d883828c471bc1b82212eb92d77a3f9d2fe82413c"
+    },
+    "assistant_source_build": {
+      "status": "passed",
+      "log_sha256": "2ae6a0aa5db89c86839599153e20390eafeb06e3b853e0ee0225fa5cff834840",
+      "log_summary": [
+        "> npm run build:server && npm run build:client",
+        "",
+        "",
+        "> @spec2gds/harness-assistant@0.1.0 build:server",
+        "> tsc -p tsconfig.json",
+        "",
+        "",
+        "> @spec2gds/harness-assistant@0.1.0 build:client",
+        "> node scripts/build-client.mjs",
+        ""
+      ]
+    }
+  },
+  "functional": {
+    "generation": "passed",
+    "simulation": "passed",
+    "implementations": "Test-only reference bodies emitted through the production generator; never supplied to a model or used in production prompts.",
+    "cases": [
+      {
+        "id": "adder_8",
+        "family": "adder",
+        "configuration": {
+          "width": 8
+        },
+        "request": "Create a specification for an unsigned 8-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+        "bench": "benches/adder.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "adder_4",
+        "family": "adder",
+        "configuration": {
+          "width": 4
+        },
+        "request": "Create a specification for an unsigned 4-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+        "bench": "benches/adder.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "adder_13",
+        "family": "adder",
+        "configuration": {
+          "width": 13
+        },
+        "request": "Create a specification for an unsigned 13-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+        "bench": "benches/adder.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "counter_16",
+        "family": "counter",
+        "configuration": {
+          "width": 16
+        },
+        "request": "Create a specification for a 16-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+        "bench": "benches/counter.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "counter_5",
+        "family": "counter",
+        "configuration": {
+          "width": 5
+        },
+        "request": "Create a specification for a 5-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+        "bench": "benches/counter.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "counter_9",
+        "family": "counter",
+        "configuration": {
+          "width": 9
+        },
+        "request": "Create a specification for a 9-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+        "bench": "benches/counter.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "fifo_8_16",
+        "family": "fifo",
+        "configuration": {
+          "width": 8,
+          "depth": 16
+        },
+        "request": "Create a specification for an asynchronous FIFO with 8-bit words and 16 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+        "bench": "benches/fifo.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "fifo_12_4",
+        "family": "fifo",
+        "configuration": {
+          "width": 12,
+          "depth": 4
+        },
+        "request": "Create a specification for an asynchronous FIFO with 12-bit words and 4 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+        "bench": "benches/fifo.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "fifo_16_8",
+        "family": "fifo",
+        "configuration": {
+          "width": 16,
+          "depth": 8
+        },
+        "request": "Create a specification for an asynchronous FIFO with 16-bit words and 8 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+        "bench": "benches/fifo.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "priority_encoder",
+        "family": "priority",
+        "configuration": {
+          "width": 8
+        },
+        "request": "Create a specification for an 8-input combinational priority encoder. Highest numbered asserted request wins. Return a 3-bit index and valid; when no requests are asserted, valid=0 and index=0.",
+        "bench": "benches/priority.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      },
+      {
+        "id": "registered_pipeline",
+        "family": "pipeline",
+        "configuration": {
+          "width": 8
+        },
+        "request": "Create a specification for an 8-bit two-stage registered pipeline with clk, active-high synchronous reset, din and dout. Reset clears both stages; otherwise each stage advances every rising edge. Reuse a register component for both stages.",
+        "bench": "benches/pipeline.sv",
+        "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+        "quality_criteria": [
+          "Linked requirements, behavior, assumptions and verification criteria",
+          "Useful explanations for all components; implemented and proposed behavior distinguished",
+          "Cohesive or reusable structured hierarchy with no hidden composition",
+          "Concrete approved configuration and functional RTL",
+          "Refinement preserves existing user text and ownership"
+        ],
+        "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      }
+    ],
+    "negative_controls": [
+      {
+        "family": "adder_xor_without_carry",
+        "compilation": "passed",
+        "simulation": "failed_as_expected"
+      },
+      {
+        "family": "counter_constant_zero",
+        "compilation": "passed",
+        "simulation": "failed_as_expected"
+      },
+      {
+        "family": "fifo_previous_gray_pointer_single_write",
+        "compilation": "passed",
+        "simulation": "failed_as_expected"
+      }
+    ],
+    "numeric_slice_simulation": "Passed exhaustive 256-input bench.",
+    "parameterized_benchmark_compatibility": "unverified; concrete specialization and bench adaptations are recorded in case fixtures."
+  },
+  "ui_scenarios": [
+    {
+      "scenario": "automatic",
+      "status": "passed",
+      "owner_policy": "automatic",
+      "ui_queued_activity_verified": true,
+      "cli_substitute_used": false,
+      "scope": "editor/refinement and actual UI RTL activity",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 0,
+      "confirmations": [
+        "Approve architecture",
+        "Approve architecture"
+      ],
+      "architecture_decisions": [],
+      "activities": [
+        {
+          "execution_status": "succeeded",
+          "activity_id": "rtl.generate",
+          "source_revision_hash": "sha256:bd5eecf369697b35df77f604be7f6498b164a2a5ce20e80ac9de71e3d6e049c7",
+          "artifact_ids": [
+            "artifact_a005f1aff3b7427b9b41082185e217d7"
+          ],
+          "report": {
+            "component_module_count": 1,
+            "document_id": "scenario_1790922775383",
+            "files": [
+              {
+                "path": "Makefile",
+                "sha256": "sha256:53174c2cbed8dbf7f04f95ddb6a9da41d7f23d520053cff64a91e525fad3a799",
+                "size": 428
+              },
+              {
+                "path": "README.md",
+                "sha256": "sha256:590c183e4ba532f1330baa126d036746866024362ec55ab4478e4cd1388a7f5a",
+                "size": 575
+              },
+              {
+                "path": "generation-manifest.json",
+                "sha256": "sha256:c4e005f1ad31a53edbecfe895c8ebb43ea617c927151844bed057d253b5b51ea",
+                "size": 2017
+              },
+              {
+                "path": "rtl/components/timer_core.sv",
+                "sha256": "sha256:721e0ed9ca3a87df29a5489f11098a8dd753cb8c1ea72a530495468b065a4000",
+                "size": 515
+              },
+              {
+                "path": "rtl/files.f",
+                "sha256": "sha256:b4abfc3480b1c147487396ef3a7e53b53b069b36653768300666b32ebf5ae22d",
+                "size": 25
+              }
+            ],
+            "generator_id": "rtl.generate",
+            "generator_version": "1.2.0",
+            "implementation_status": {
+              "component_timer_core_9c8e87a669636be109d3e5ee25b87dc4": "stored_rtl"
+            },
+            "instance_count": 0,
+            "module_count": 1,
+            "name_mappings": [
+              {
+                "kind": "module",
+                "rtl_name": "timer_core",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "timer_core"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "clk",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "clk"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "rst_n",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "rst_n"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "irq",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "irq"
+              }
+            ],
+            "net_count": 0,
+            "output_path": "rtl/scenario_1790922775383/component_timer_core_9c8e87a669636be109d3e5ee25b87dc4",
+            "schema_version": "spec2gds.rtl-generation-report.v3",
+            "source_revision_hash": "sha256:bd5eecf369697b35df77f604be7f6498b164a2a5ce20e80ac9de71e3d6e049c7",
+            "source_sections": [
+              {
+                "output_path": "rtl/components/timer_core.sv",
+                "section_id": "section_sv_component_timer_core_9c8e87a669636be109d3e5ee25b87dc4",
+                "sha256": "sha256:efa667d7d36f77c2b4e7078e40604ab3f1683e465322e0fb56a105b100776ea6",
+                "source_path": "annotations/entity-sections/sv/section_sv_component_timer_core_9c8e87a669636be109d3e5ee25b87dc4.sv"
+              }
+            ],
+            "target": {
+              "document_id": "scenario_1790922775383",
+              "entity_id": "component_timer_core_9c8e87a669636be109d3e5ee25b87dc4",
+              "entity_kind": "component"
+            },
+            "target_vlnv": "spec2gds.local:work:timer_core:1.0",
+            "top_module": "timer_core",
+            "tree_sha256": "sha256:655b1c548c3b0fb32423ff24d5b44d7cb46ff0f1633e8d587405044bcc33a509",
+            "unconnected_port_count": 0,
+            "warnings": [],
+            "wrapper_generated": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "restricted",
+      "status": "passed",
+      "owner_policy": "review",
+      "ui_queued_activity_verified": true,
+      "cli_substitute_used": false,
+      "scope": "editor/refinement and actual UI RTL activity",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 0,
+      "confirmations": [
+        "Approve architecture",
+        "Approve and apply",
+        "Approve architecture",
+        "Approve architecture"
+      ],
+      "architecture_decisions": [],
+      "activities": [
+        {
+          "execution_status": "succeeded",
+          "activity_id": "rtl.generate",
+          "source_revision_hash": "sha256:419df7991cd0b3e432f3488c1dde692d4ccc9a8edd2210efec163d7f806382b5",
+          "artifact_ids": [
+            "artifact_d203953bac034606b7c564c2f9510c48"
+          ],
+          "report": {
+            "component_module_count": 1,
+            "document_id": "scenario_1790921456187",
+            "files": [
+              {
+                "path": "Makefile",
+                "sha256": "sha256:53174c2cbed8dbf7f04f95ddb6a9da41d7f23d520053cff64a91e525fad3a799",
+                "size": 428
+              },
+              {
+                "path": "README.md",
+                "sha256": "sha256:590c183e4ba532f1330baa126d036746866024362ec55ab4478e4cd1388a7f5a",
+                "size": 575
+              },
+              {
+                "path": "generation-manifest.json",
+                "sha256": "sha256:93613bd171bb30300609b57fe0f65369349a634f45a1a2dc8a3cc0ad31f91ced",
+                "size": 2017
+              },
+              {
+                "path": "rtl/components/timer_core.sv",
+                "sha256": "sha256:3bd1cec8db86ea4ef457324586b8e77ea2e42329d1747688a4dac8f455e26b09",
+                "size": 513
+              },
+              {
+                "path": "rtl/files.f",
+                "sha256": "sha256:b4abfc3480b1c147487396ef3a7e53b53b069b36653768300666b32ebf5ae22d",
+                "size": 25
+              }
+            ],
+            "generator_id": "rtl.generate",
+            "generator_version": "1.2.0",
+            "implementation_status": {
+              "component_timer_core_bae98b9af62e19f38013432db1cb759c": "stored_rtl"
+            },
+            "instance_count": 0,
+            "module_count": 1,
+            "name_mappings": [
+              {
+                "kind": "module",
+                "rtl_name": "timer_core",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "timer_core"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "clk",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "clk"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "rst_n",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "rst_n"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "irq",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "irq"
+              }
+            ],
+            "net_count": 0,
+            "output_path": "rtl/scenario_1790921456187/component_timer_core_bae98b9af62e19f38013432db1cb759c",
+            "schema_version": "spec2gds.rtl-generation-report.v3",
+            "source_revision_hash": "sha256:419df7991cd0b3e432f3488c1dde692d4ccc9a8edd2210efec163d7f806382b5",
+            "source_sections": [
+              {
+                "output_path": "rtl/components/timer_core.sv",
+                "section_id": "section_sv_component_timer_core_bae98b9af62e19f38013432db1cb759c",
+                "sha256": "sha256:2abe33f40b625d39d3d5e385531fe63135c5b12bab5c2ce26bbe434268efd79c",
+                "source_path": "annotations/entity-sections/sv/section_sv_component_timer_core_bae98b9af62e19f38013432db1cb759c.sv"
+              }
+            ],
+            "target": {
+              "document_id": "scenario_1790921456187",
+              "entity_id": "component_timer_core_bae98b9af62e19f38013432db1cb759c",
+              "entity_kind": "component"
+            },
+            "target_vlnv": "spec2gds.local:work:timer_core:1.0",
+            "top_module": "timer_core",
+            "tree_sha256": "sha256:c57661288ed4df095baaa75f96709aa95455729e2d36207921ceac3c4487001e",
+            "unconnected_port_count": 0,
+            "warnings": [],
+            "wrapper_generated": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "draft",
+      "status": "passed",
+      "owner_policy": "automatic",
+      "ui_queued_activity_verified": true,
+      "cli_substitute_used": false,
+      "scope": "editor/refinement and actual UI RTL activity",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 1,
+      "confirmations": [
+        "Approve architecture",
+        "Approve architecture"
+      ],
+      "architecture_decisions": [],
+      "activities": [
+        {
+          "execution_status": "succeeded",
+          "activity_id": "rtl.generate",
+          "source_revision_hash": "sha256:1148bfd1b077d334b345291fab0ec78184119659decb970d4c21dc040c171d76",
+          "artifact_ids": [
+            "artifact_4cf12828e41541c6bf414873f3bed709"
+          ],
+          "report": {
+            "component_module_count": 1,
+            "document_id": "scenario_1790919422852",
+            "files": [
+              {
+                "path": "Makefile",
+                "sha256": "sha256:53174c2cbed8dbf7f04f95ddb6a9da41d7f23d520053cff64a91e525fad3a799",
+                "size": 428
+              },
+              {
+                "path": "README.md",
+                "sha256": "sha256:590c183e4ba532f1330baa126d036746866024362ec55ab4478e4cd1388a7f5a",
+                "size": 575
+              },
+              {
+                "path": "generation-manifest.json",
+                "sha256": "sha256:c42fee406e123578ec4dd41cd42b2771190488dddf4ee5fd81220638e888754d",
+                "size": 2017
+              },
+              {
+                "path": "rtl/components/timer_core.sv",
+                "sha256": "sha256:3f6dc8541cfec14f9d58b60f4092fbd2934e0afba86ddffb27f259fa9c7df57a",
+                "size": 515
+              },
+              {
+                "path": "rtl/files.f",
+                "sha256": "sha256:b4abfc3480b1c147487396ef3a7e53b53b069b36653768300666b32ebf5ae22d",
+                "size": 25
+              }
+            ],
+            "generator_id": "rtl.generate",
+            "generator_version": "1.2.0",
+            "implementation_status": {
+              "component_timer_core_31c3e8bb5700cfe2b7658ba3d512f4da": "stored_rtl"
+            },
+            "instance_count": 0,
+            "module_count": 1,
+            "name_mappings": [
+              {
+                "kind": "module",
+                "rtl_name": "timer_core",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "timer_core"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "clk",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "clk"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "rst_n",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "rst_n"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "irq",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "irq"
+              }
+            ],
+            "net_count": 0,
+            "output_path": "rtl/scenario_1790919422852/component_timer_core_31c3e8bb5700cfe2b7658ba3d512f4da",
+            "schema_version": "spec2gds.rtl-generation-report.v3",
+            "source_revision_hash": "sha256:1148bfd1b077d334b345291fab0ec78184119659decb970d4c21dc040c171d76",
+            "source_sections": [
+              {
+                "output_path": "rtl/components/timer_core.sv",
+                "section_id": "section_sv_component_timer_core_31c3e8bb5700cfe2b7658ba3d512f4da",
+                "sha256": "sha256:efa667d7d36f77c2b4e7078e40604ab3f1683e465322e0fb56a105b100776ea6",
+                "source_path": "annotations/entity-sections/sv/section_sv_component_timer_core_31c3e8bb5700cfe2b7658ba3d512f4da.sv"
+              }
+            ],
+            "target": {
+              "document_id": "scenario_1790919422852",
+              "entity_id": "component_timer_core_31c3e8bb5700cfe2b7658ba3d512f4da",
+              "entity_kind": "component"
+            },
+            "target_vlnv": "spec2gds.local:work:timer_core:1.0",
+            "top_module": "timer_core",
+            "tree_sha256": "sha256:8301760ee94ffdc0f96210545ca1878a14bca350a52ac76d203f6f7d042214d0",
+            "unconnected_port_count": 0,
+            "warnings": [],
+            "wrapper_generated": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "binding",
+      "status": "passed",
+      "owner_policy": "automatic",
+      "ui_queued_activity_verified": true,
+      "cli_substitute_used": false,
+      "scope": "editor/refinement and actual UI RTL activity",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 8,
+      "confirmations": [
+        "Approve architecture",
+        "Approve architecture"
+      ],
+      "architecture_decisions": [],
+      "activities": [
+        {
+          "execution_status": "succeeded",
+          "activity_id": "rtl.generate",
+          "source_revision_hash": "sha256:1ff2f47fcebf7591d4144bdd1b06b2d08b536fbd90e2088fcf1f1e56bac6ae3f",
+          "artifact_ids": [
+            "artifact_555355f3c99f43988c2969e91eac095c"
+          ],
+          "report": {
+            "component_module_count": 1,
+            "document_id": "scenario_1790919303581",
+            "files": [
+              {
+                "path": "Makefile",
+                "sha256": "sha256:53174c2cbed8dbf7f04f95ddb6a9da41d7f23d520053cff64a91e525fad3a799",
+                "size": 428
+              },
+              {
+                "path": "README.md",
+                "sha256": "sha256:590c183e4ba532f1330baa126d036746866024362ec55ab4478e4cd1388a7f5a",
+                "size": 575
+              },
+              {
+                "path": "generation-manifest.json",
+                "sha256": "sha256:24793be1acb1bd4a41f2d3415a7a1928bf7a79ed4c8456b5b138e92570bae7c4",
+                "size": 2017
+              },
+              {
+                "path": "rtl/components/timer_core.sv",
+                "sha256": "sha256:6f3a90bee5b71807c4ce67f32fad2f27444a80ad2b03cf3cbdf83a8449369ec5",
+                "size": 515
+              },
+              {
+                "path": "rtl/files.f",
+                "sha256": "sha256:b4abfc3480b1c147487396ef3a7e53b53b069b36653768300666b32ebf5ae22d",
+                "size": 25
+              }
+            ],
+            "generator_id": "rtl.generate",
+            "generator_version": "1.2.0",
+            "implementation_status": {
+              "component_timer_core_09486c80a7abca14650bc538da49e5af": "stored_rtl"
+            },
+            "instance_count": 0,
+            "module_count": 1,
+            "name_mappings": [
+              {
+                "kind": "module",
+                "rtl_name": "timer_core",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "timer_core"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "clk",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "clk"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "rst_n",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "rst_n"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "irq",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "irq"
+              }
+            ],
+            "net_count": 0,
+            "output_path": "rtl/scenario_1790919303581/component_timer_core_09486c80a7abca14650bc538da49e5af",
+            "schema_version": "spec2gds.rtl-generation-report.v3",
+            "source_revision_hash": "sha256:1ff2f47fcebf7591d4144bdd1b06b2d08b536fbd90e2088fcf1f1e56bac6ae3f",
+            "source_sections": [
+              {
+                "output_path": "rtl/components/timer_core.sv",
+                "section_id": "section_sv_component_timer_core_09486c80a7abca14650bc538da49e5af",
+                "sha256": "sha256:efa667d7d36f77c2b4e7078e40604ab3f1683e465322e0fb56a105b100776ea6",
+                "source_path": "annotations/entity-sections/sv/section_sv_component_timer_core_09486c80a7abca14650bc538da49e5af.sv"
+              }
+            ],
+            "target": {
+              "document_id": "scenario_1790919303581",
+              "entity_id": "component_timer_core_09486c80a7abca14650bc538da49e5af",
+              "entity_kind": "component"
+            },
+            "target_vlnv": "spec2gds.local:work:timer_core:1.0",
+            "top_module": "timer_core",
+            "tree_sha256": "sha256:5afcfc82af9862858dac6fcea683381041b2781fbfc93412a4b47bd6ad63ee7a",
+            "unconnected_port_count": 0,
+            "warnings": [],
+            "wrapper_generated": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "repeated",
+      "status": "passed",
+      "owner_policy": "automatic",
+      "ui_queued_activity_verified": true,
+      "cli_substitute_used": false,
+      "scope": "editor/refinement and actual UI RTL activity",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 0,
+      "confirmations": [
+        "Approve architecture",
+        "Approve architecture"
+      ],
+      "architecture_decisions": [],
+      "activities": [
+        {
+          "execution_status": "succeeded",
+          "activity_id": "rtl.generate",
+          "source_revision_hash": "sha256:5c0046cb4f7b41d545f5c1adb32aa1aa140546f48636706767460e1cc153ca52",
+          "artifact_ids": [
+            "artifact_6c572f7ead7f456abac4c96f2bf664b5"
+          ],
+          "report": {
+            "component_module_count": 1,
+            "document_id": "scenario_1790919428021",
+            "files": [
+              {
+                "path": "Makefile",
+                "sha256": "sha256:53174c2cbed8dbf7f04f95ddb6a9da41d7f23d520053cff64a91e525fad3a799",
+                "size": 428
+              },
+              {
+                "path": "README.md",
+                "sha256": "sha256:590c183e4ba532f1330baa126d036746866024362ec55ab4478e4cd1388a7f5a",
+                "size": 575
+              },
+              {
+                "path": "generation-manifest.json",
+                "sha256": "sha256:c70eeb42a3250331e051103df1efabdf5f20045aaf0a560ab2a7a78da69626c5",
+                "size": 2017
+              },
+              {
+                "path": "rtl/components/timer_core.sv",
+                "sha256": "sha256:07a63c5d7fc6b82aa222f8ce2238e33152e52561d6fb69371aa21d377e22e1c3",
+                "size": 515
+              },
+              {
+                "path": "rtl/files.f",
+                "sha256": "sha256:b4abfc3480b1c147487396ef3a7e53b53b069b36653768300666b32ebf5ae22d",
+                "size": 25
+              }
+            ],
+            "generator_id": "rtl.generate",
+            "generator_version": "1.2.0",
+            "implementation_status": {
+              "component_timer_core_8c36c44a17e9f131d804a064f2d248fc": "stored_rtl"
+            },
+            "instance_count": 0,
+            "module_count": 1,
+            "name_mappings": [
+              {
+                "kind": "module",
+                "rtl_name": "timer_core",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "timer_core"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "clk",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "clk"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "rst_n",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "rst_n"
+              },
+              {
+                "kind": "port",
+                "rtl_name": "irq",
+                "scope": "spec2gds.local:work:timer_core:1.0",
+                "source_name": "irq"
+              }
+            ],
+            "net_count": 0,
+            "output_path": "rtl/scenario_1790919428021/component_timer_core_8c36c44a17e9f131d804a064f2d248fc",
+            "schema_version": "spec2gds.rtl-generation-report.v3",
+            "source_revision_hash": "sha256:5c0046cb4f7b41d545f5c1adb32aa1aa140546f48636706767460e1cc153ca52",
+            "source_sections": [
+              {
+                "output_path": "rtl/components/timer_core.sv",
+                "section_id": "section_sv_component_timer_core_8c36c44a17e9f131d804a064f2d248fc",
+                "sha256": "sha256:efa667d7d36f77c2b4e7078e40604ab3f1683e465322e0fb56a105b100776ea6",
+                "source_path": "annotations/entity-sections/sv/section_sv_component_timer_core_8c36c44a17e9f131d804a064f2d248fc.sv"
+              }
+            ],
+            "target": {
+              "document_id": "scenario_1790919428021",
+              "entity_id": "component_timer_core_8c36c44a17e9f131d804a064f2d248fc",
+              "entity_kind": "component"
+            },
+            "target_vlnv": "spec2gds.local:work:timer_core:1.0",
+            "top_module": "timer_core",
+            "tree_sha256": "sha256:543833d820081b33447b2c3484fe32dc80099e20369f45ca253f9b610eed420e",
+            "unconnected_port_count": 0,
+            "warnings": [],
+            "wrapper_generated": false
+          }
+        }
+      ]
+    },
+    {
+      "scenario": "architecture",
+      "status": "passed",
+      "owner_policy": "automatic",
+      "ui_queued_activity_verified": false,
+      "cli_substitute_used": false,
+      "scope": "architecture review lifecycle",
+      "unexpected_browser_failures": [],
+      "expected_browser_failure_count": 1,
+      "confirmations": [
+        "Approve architecture"
+      ],
+      "architecture_decisions": [
+        "revised",
+        "cancelled",
+        "approved"
+      ],
+      "activities": []
+    }
+  ],
+  "live_generalization": {
+    "status": "unverified",
+    "reason": "OPENAI_API_KEY unavailable; no live inference runs performed.",
+    "cases": [
+      "adder_8",
+      "adder_4",
+      "adder_13",
+      "counter_16",
+      "counter_5",
+      "counter_9",
+      "fifo_8_16",
+      "fifo_12_4",
+      "fifo_16_8",
+      "priority_encoder",
+      "registered_pipeline"
+    ],
+    "recorded_date": "2026-10-02",
+    "planned_repeats_per_case": 3,
+    "document_quality": "unverified; repeated inference and rubric review were not performed"
+  },
+  "contract_regressions": [
+    "External include/user line directives rejected anywhere in SV code; literals/comments retained.",
+    "Atomic creation and dependent edits; alias remapping and description metadata.",
+    "Architecture decision durability, freshness, ownership and creation retry receipts."
+  ]
+}

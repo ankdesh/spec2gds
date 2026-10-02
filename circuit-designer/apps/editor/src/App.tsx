@@ -1,3 +1,7 @@
+/** Spec Editor host: coherent owner views, drafts, menus and service launches.
+ * The visible document and a permanently bound Assistant package are distinct.
+ * Owner events invalidate projections; request ordering prevents a late response
+ * for an older selection/revision from replacing the current view. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {

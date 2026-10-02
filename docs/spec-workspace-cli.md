@@ -1,6 +1,6 @@
 # Focused Spec workspace commands
 
-The Python commands in `scripts/spec2gds_assistant.py` and `scripts/spec2gds_spec.py` run focused assistant turns and manage package decisions/history. They work on a workspace directory or an exact `.spec` file. This phase does not run the RTLLM benchmark.
+The Python commands in `scripts/spec2gds_assistant.py` and `scripts/spec2gds_spec.py` run focused assistant turns and manage package decisions/history. They work on a workspace directory or an exact `.spec` file. These commands do not run the RTLLM benchmark.
 
 ## Setup
 
@@ -12,12 +12,20 @@ scripts/setup-all.sh
 export OPENAI_API_KEY="..."
 ```
 
-`spec2gds-assistant` needs Node.js 22.19+ or 24+, the built `ai-assistant` product, and its DeepSeek Harness checkout. `scripts/setup-all.sh` prepares those dependencies. A compatible endpoint can be selected with `OPENAI_BASE_URL` and `OPENAI_MODEL`. The installed Python commands run from the root `.venv` through `uv run`; the same files can be invoked directly with `uv run python scripts/spec2gds_assistant.py` and `uv run python scripts/spec2gds_spec.py`. The internal Node review bridge is `scripts/spec2gds_review_bridge.mjs`.
+`spec2gds-assistant` needs Node.js 22.19+ in the 22.x line or 24.2+, the built `ai-assistant` product, and its DeepSeek Harness checkout. `scripts/setup-all.sh` prepares those dependencies. A compatible endpoint can be selected with `OPENAI_BASE_URL` and `OPENAI_MODEL`. The installed Python commands run from the root `.venv` through `uv run`; the same files can be invoked directly with `uv run python scripts/spec2gds_assistant.py` and `uv run python scripts/spec2gds_spec.py`. The internal Node review bridge is `scripts/spec2gds_review_bridge.mjs`.
 
 ## Automatic turns and restricted decisions
 
+New architecture requires explicit approval even for automatic owners. Use
+`approve-architecture`, `revise-architecture` or `cancel-architecture` on a durable
+review. Reuse its ID only for the exact owner document and source revision.
+Ordinary explanation/RTL refinements use the existing final owner policy.
+
 ```bash
 uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer component."
+uv run spec2gds-spec architecture-reviews ./work/timer
+uv run spec2gds-spec approve-architecture ./work/timer REVIEW_ID
+uv run spec2gds-assistant ./work/timer --architecture-review-id REVIEW_ID -- "Author the approved architecture."
 # A restricted turn leaves its proposal pending:
 uv run spec2gds-assistant ./work/timer --require-human-approval -- "Refine the timer."
 uv run spec2gds-spec reviews ./work/timer
@@ -27,7 +35,7 @@ uv run spec2gds-spec reject ./work/timer proposal_...
 uv run spec2gds-spec history ./work/timer --limit 25
 ```
 
-The assistant command accepts only the `focused` preset in this phase. It starts a private loopback Spec owner, binds one headless turn to the exact package, prints the answer and proposal IDs, and exits. Valid submissions save automatically; `--require-human-approval` makes them pending. The Spec command never prompts a model. `reviews` emits proposal IDs, session IDs, state, complete artifacts, previews, diagnostics, and receipts. `approve` reopens the package and revalidates the stored artifact against its current revision. `reject` records a discarded decision without changing source. When multiple proposals remain pending, pass an ID. `history --limit N --before CURSOR` paginates durable submissions.
+The assistant command currently accepts only the `focused` preset. It starts a private loopback Spec owner, binds one headless turn to the exact package, prints the answer and proposal IDs, and exits. Valid submissions save automatically; `--require-human-approval` makes them pending. The Spec command never prompts a model. `reviews` emits proposal IDs, session IDs, state, complete artifacts, previews, diagnostics, and receipts. `approve` reopens the package and revalidates the stored artifact against its current revision. `reject` records a discarded decision without changing source. When multiple proposals remain pending, pass an ID. `history --limit N --before CURSOR` paginates durable submissions.
 
 For a directory, the command uses its sole direct-child `.spec` file. It creates `<directory-name>.spec` if there is none, and reports all candidates if there are several. An explicit path such as `./work/timer/custom.spec` always selects that file; the assistant creates it if absent. `spec2gds-spec reviews`, `approve`, and `reject` require an existing package.
 
@@ -41,4 +49,4 @@ Each package has its own state directory at `<workspace>/.spec2gds/assistant/<pa
 - `runs/<session-id>.json` and `runs/<session-id>.jsonl`: metadata and the raw JSON event stream for each completed assistant invocation.
 - `uv run spec2gds-spec reviews <target>`: versioned JSON proposal and decision records for the selected package.
 
-The Harness transcript, review database, and owner submission/event journal remain under that state directory. Use command output and run JSON for evaluation scripts. A future `BaseAgentAdapter.solve()` can capture automatic saved receipts, or request restricted mode and decide with the Spec CLI, then map those records into trajectory/token fields. Backend execution such as RTL generation belongs in separate scripts. See the [iterative refinement test plan](spec-editor-iterative-refinement-test-plan.md) for deterministic acceptance commands and deferred UI coverage.
+The Harness transcript, review database, and owner submission/event journal remain under that state directory. Use command output and run JSON for evaluation scripts. A future `BaseAgentAdapter.solve()` can capture automatic saved receipts, or request restricted mode and decide with the Spec CLI, then map those records into trajectory/token fields. Backend execution such as RTL generation belongs in separate scripts. See the [iterative refinement test plan](assistant-acceptance-tests.md) for deterministic acceptance commands and isolated UI coverage.

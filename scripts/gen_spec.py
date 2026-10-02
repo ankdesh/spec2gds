@@ -1,3 +1,9 @@
+"""Assemble a test .spec from supplied IP-XACT design/component XML files.
+
+Run with uv in the repository environment. This helper preserves explicit source;
+it does not infer RTL behavior or overwrite an active editor session.
+"""
+
 from __future__ import annotations
 
 import sys

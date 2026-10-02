@@ -1,3 +1,7 @@
+/** Recoverable Spec package creation and separate continuation-chat reservation.
+ * Persist exact request inputs/progress before owner calls. Package creation and
+ * native chat creation are separate side effects; uncertainty needs receipt
+ * reconciliation using stable identities rather than a second package request. */
 import { randomUUID } from "node:crypto";
 import { dirname, resolve, sep } from "node:path";
 import { defineTool } from "@deepseek-ai/dsh-tools";
@@ -26,6 +30,7 @@ export function creationContinuation(request: SourceCreationRequest): string {
   return `The specification package has already been created and this chat is bound to it.\n`
     + `Document: ${request.documentId}\nTitle: ${request.title}\nSaved at: ${request.destination}\n\n`
     + `Original user request:\n${request.originalRequest}\n\n`
+    + (request.architectureReviewId ? `Approved architecture_review_id: ${request.architectureReviewId}\nAccepted architecture:\n${JSON.stringify(request.acceptedArchitecture)}\nUse this review ID in the initial content proposal.\n\n` : "")
     + `Continue by fulfilling the requested contents in the already-created bound document. Do not create another package or call prepare_spec_document_creation for this request. Read get_bound_context and submit contents according to the owner approval policy. If the request only asked for an empty specification, confirm that it is ready without preparing a content proposal.`;
 }
 
@@ -52,9 +57,20 @@ export class SourceCreations {
   }
 
   async prepare(input: { sourceSessionId: string; callId: string; originalRequest: string; preset: AssistantPreset;
-    title?: string; documentId?: string; preferredOwner?: string }): Promise<Record<string, unknown>> {
+    title?: string; documentId?: string; preferredOwner?: string; architectureReviewId?: string; empty?: boolean }): Promise<Record<string, unknown>> {
     const existing = this.state.sourceCreationForCall(input.sourceSessionId, input.callId);
     if (existing) return this.present(existing);
+    const architecture = input.empty === true ? null : this.state.requireArchitecture(input.sourceSessionId, input.architectureReviewId);
+    if (architecture) {
+      const associated = this.state.sourceCreationForArchitecture(architecture.reviewId);
+      if (associated) return this.present(associated);
+      const binding = this.state.getBinding(input.sourceSessionId);
+      if (binding) {
+        const context = await this.owners.context(binding);
+        if (typeof context.source_revision_hash !== "string" || context.document_id !== binding.documentId) throw new SourceCreationError(409, "Reread the source specification before architecture-based creation.");
+        this.state.requireArchitecture(input.sourceSessionId, input.architectureReviewId, context.source_revision_hash);
+      }
+    }
     if (!input.originalRequest.trim()) throw new SourceCreationError(400, "The original user request is unavailable. Submit the request again in this chat.");
     const capabilities = await this.owners.capabilities();
     const services = capabilities.spec as Array<{ url: string; available: boolean }>;
@@ -66,13 +82,18 @@ export class SourceCreations {
       ? suggested : `spec_${randomUUID().replaceAll("-", "").slice(0, 12)}`;
     const request: SourceCreationRequest = {
       requestId: randomUUID(), sourceSessionId: input.sourceSessionId, callId: input.callId,
-      originalRequest: input.originalRequest, preset: input.preset, status: "pending",
+      originalRequest: architecture?.originalRequest || input.originalRequest, preset: input.preset, status: "pending",
+      ...(architecture ? { architectureReviewId: architecture.reviewId, acceptedArchitecture: architecture.plan } : {}),
       documentId, title: input.title?.trim() || "Untitled specification", serviceBaseUrl: selected?.url ?? "",
       destination: specDestination(this.root, documentId), destinationSessionId: randomUUID(),
       continuationRequestId: randomUUID(), sourceRevisionHash: null, error: null, reservation: null,
       automatic: policy.approval_policy === "automatic",
       creationReceipts: policy.creationReceipts === true,
     };
+    // Capabilities/policy reads can overlap retries with a new native tool-call ID.
+    // One approved architecture continues its existing package creation receipt.
+    const associated = architecture ? this.state.sourceCreationForArchitecture(architecture.reviewId) : null;
+    if (associated) return this.present(associated);
     this.state.storeSourceCreation(request);
     return { ...request, specDocumentRoot: this.root, pathSeparator: sep, services };
   }
@@ -98,6 +119,15 @@ export class SourceCreations {
 
   async create(requestId: string, values: { documentId: string; title: string; serviceBaseUrl: string }): Promise<Record<string, unknown>> {
     let request = this.get(requestId);
+    if (request.architectureReviewId) {
+      this.state.requireArchitecture(request.sourceSessionId, request.architectureReviewId);
+      const source = this.state.getBinding(request.sourceSessionId);
+      if (request.status === "pending" && source) {
+        const context = await this.owners.context(source);
+        if (context.document_id !== source.documentId || typeof context.source_revision_hash !== "string") throw new SourceCreationError(409, "The architecture's source context is unavailable or incomplete.");
+        this.state.requireArchitecture(request.sourceSessionId, request.architectureReviewId, context.source_revision_hash);
+      }
+    }
     if (request.status === "uncertain" && request.creationReceipts) {
       if (values.documentId.trim() !== request.documentId || values.title.trim() !== request.title
           || values.serviceBaseUrl.replace(/\/$/, "") !== request.serviceBaseUrl) {
@@ -169,6 +199,12 @@ export class SourceCreations {
             documentId: request.documentId, ownerDocumentKey: request.ownerDocumentKey, title: request.title, scope: "document", preset: request.preset }, request.destinationSessionId);
           reservation = { session: result.binding, workspace: result.workspace };
         }
+        if (request.architectureReviewId) {
+          const architecture = this.state.requireArchitecture(request.sourceSessionId, request.architectureReviewId);
+          this.state.storeArchitecture({ ...architecture, destinationSessionId: request.destinationSessionId,
+            destinationSourceRevision: request.sourceRevisionHash, destinationOwnerDocumentKey: request.ownerDocumentKey ?? null,
+            destinationDocumentId: request.documentId });
+        }
         request = { ...request, status: "reserved", reservation, error: null };
         this.state.storeSourceCreation(request);
       } catch (error) {
@@ -182,7 +218,7 @@ export class SourceCreations {
 }
 
 export const SOURCE_CREATION_PROMPT = `NEW SPECIFICATION PACKAGES
-When the user explicitly asks for a new specification document/package, call prepare_spec_document_creation. The tool creates it automatically when the selected owner allows automatic submission; restricted owners show an editable creation card. This applies even when no package is open or current context is unavailable. Do not read get_bound_context first for a new-package request. Suggest a title and document ID derived from the request. A saved receipt creates a separate document chat carrying the original request there. Do not claim contents are complete before owner application. Creating a component or design inside the current document uses get_bound_context and prepare_spec_proposal. A creation receipt in a new chat means the package already exists: populate it, do not create another package.`;
+When the user explicitly asks for a new specification document/package, obtain an approved architecture review first, then call prepare_spec_document_creation with architecture_review_id. For an explicitly empty specification use empty=true. The tool creates it automatically when the selected owner allows automatic submission; restricted owners show an editable creation card. This applies even when no package is open or current context is unavailable. Do not read get_bound_context first for a new-package request. Suggest a title and document ID derived from the request. A saved receipt creates a separate document chat carrying the original request there. Do not claim contents are complete before owner application. Creating a component or design inside the current document uses get_bound_context and prepare_spec_proposal. A creation receipt in a new chat means the package already exists: populate it, do not create another package.`;
 
 export function registerSourceCreationTool(
   agent: { ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } } },
@@ -193,12 +229,13 @@ export function registerSourceCreationTool(
   agent.ctx.tools.register(defineTool({
     name: "prepare_spec_document_creation",
     description: "Create a NEW specification with available defaults under the owner's automatic policy, or prepare a confirmation card when human approval is required. Preserve the original request for a separate document-bound chat. Use before a bound-context read for a new-package request.",
-    parameters: { title: { type: "string" }, document_id: { type: "string" } },
+    parameters: { title: { type: "string" }, document_id: { type: "string" }, architecture_review_id: { type: "string" }, empty: { type: "boolean" } },
     output: { schema: { type: "json" }, render: (_args: unknown, value: unknown) => [{ type: "text", text: JSON.stringify(value) }] },
     timeoutMs: 35_000,
     async execute(args, exec) {
       try {
-        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title, documentId: args.document_id });
+        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title, documentId: args.document_id,
+          architectureReviewId: args.architecture_review_id, empty: args.empty });
         if (creation.automatic === true) {
           const policy = await creations.owners.specPolicy(String(creation.serviceBaseUrl), exec.signal);
           if (policy.approval_policy !== "automatic") throw new SourceCreationError(409, "The owner now requires human approval. Prepare a new creation request.");

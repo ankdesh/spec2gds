@@ -1,3 +1,7 @@
+/** Renderer-neutral specification document contracts and local projection helpers.
+ * The Spec owner supplies source identity, cells and edit capabilities. Views
+ * consume this projection without reinterpreting package XML or acquiring a
+ * second mutation boundary; source edits return through host callbacks. */
 import type { CircuitDocument, CircuitSourceBindingV1 } from "@spec2gds/circuit-core";
 
 export type EntityKind =

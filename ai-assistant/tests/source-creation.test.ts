@@ -1,3 +1,4 @@
+import { approvedArchitecture } from "./support/architecture.js";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -68,9 +69,12 @@ async function fixture() {
       workspaceDomain: workspace.domain, workspaceOwnerUrl: url, workspaceDocumentId: input.documentId });
     return { binding, workspace };
   };
+  approvedArchitecture(state, "unbound-chat", comparatorRequest);
+  approvedArchitecture(state, "chat", comparatorRequest);
+  approvedArchitecture(state, "bound-chat", comparatorRequest);
   let creations = new SourceCreations(state, owners, root, reserve);
   const prepare = async (callId = "create-call", originalRequest = comparatorRequest) =>
-    await creations.prepare({ sourceSessionId: "unbound-chat", callId, originalRequest, preset: "focused", title: "3-bit comparator", documentId: "comparator_3bit" }) as unknown as SourceCreationRequest;
+    await creations.prepare({ sourceSessionId: "unbound-chat", callId, originalRequest, preset: "focused", title: "3-bit comparator", documentId: "comparator_3bit", architectureReviewId: "architecture-unbound-chat" }) as unknown as SourceCreationRequest;
   const values = { documentId: "comparator_3bit", title: "3-bit comparator", serviceBaseUrl: url };
   return { root, url, owners, paths, values, prepare,
     get state() { return state; }, get creations() { return creations; }, get creates() { return creates; },
@@ -139,6 +143,38 @@ test("simultaneous card submissions create one package and preserve one chat ide
     release(); await first;
     assert.equal(f.creates, 1);
   } finally { release?.(); await f.close(); }
+});
+
+test("new tool-call IDs sharing an approved architecture retain one creation receipt", async () => {
+  const f = await fixture();
+  try {
+    const [first, retry] = await Promise.all([f.prepare("first-call"), f.prepare("retry-call")]);
+    assert.equal(first.requestId, retry.requestId);
+    await f.creations.create(first.requestId, f.values);
+    const destination = f.creations.get(first.requestId).destinationSessionId;
+    f.reopen();
+    const replay = await f.prepare("another-call");
+    assert.equal(replay.requestId, first.requestId);
+    assert.equal(replay.destinationSessionId, destination);
+    assert.equal(f.creates, 1);
+  } finally { await f.close(); }
+});
+
+test("a source revision change while a creation card is pending requires renewed architecture approval", async () => {
+  const f = await fixture();
+  try {
+    f.state.createBinding("source", { domain: "spec", serviceBaseUrl: f.url, ownerUrl: f.url, documentId: "source-doc", scope: "document",
+      ownerDocumentKey: "source-package", workspaceKey: "source", workspaceTitle: "Source", workspacePath: f.root,
+      workspaceDomain: "spec", workspaceOwnerUrl: f.url, workspaceDocumentId: "source-doc" });
+    const reviewId = approvedArchitecture(f.state, "source", comparatorRequest, "sha256:old");
+    let revision = "sha256:old";
+    f.owners.context = async () => ({ document_id: "source-doc", source_revision_hash: revision });
+    const request = await f.creations.prepare({ sourceSessionId: "source", callId: "new-package", originalRequest: comparatorRequest,
+      preset: "focused", title: "Comparator", documentId: "comparator_3bit", architectureReviewId: reviewId });
+    revision = "sha256:new";
+    await assert.rejects(f.creations.create(String(request.requestId), f.values), /stale/);
+    assert.equal(f.creates, 0);
+  } finally { await f.close(); }
 });
 
 test("cancelled and invalid requests never write packages", async () => {
@@ -227,7 +263,7 @@ test("available owner selection supports a preferred Spec owner and multiple con
     const defaulted = await f.prepare() as any;
     assert.equal(defaulted.serviceBaseUrl, f.url); assert.equal(defaulted.services.length, 3);
     const preferred = await f.creations.prepare({ sourceSessionId: "bound-chat", callId: "second", originalRequest: comparatorRequest,
-      preset: "orchestrated", preferredOwner: second.url });
+      preset: "orchestrated", preferredOwner: second.url, architectureReviewId: "architecture-bound-chat" });
     assert.equal(preferred.serviceBaseUrl, second.url); assert.equal(preferred.preset, "orchestrated");
   } finally { await f.close(); await second.close(); }
 });
@@ -239,7 +275,7 @@ test("model tool captures the host request and supplies safe empty-spec defaults
     const sections: any[] = [];
     registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } }, systemPrompt: { section: value => { sections.push(value); return () => {}; } } } }, f.creations,
       () => ({ sourceSessionId: "chat", originalRequest: "Create an empty specification", preset: "focused" }));
-    const result = await tool.execute({}, { callId: "empty-call" });
+    const result = await tool.execute({ empty: true }, { callId: "empty-call" });
     assert.equal(tool.name, "prepare_spec_document_creation");
     assert.match(result.source_creation.documentId, /^spec_[a-f0-9]{12}$/);
     assert.equal(f.creates, 0);
@@ -256,7 +292,7 @@ test("automatic creation returns a saved receipt and continuation with no confir
     let tool: any;
     registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } } } }, f.creations,
       () => ({ sourceSessionId: "chat", originalRequest: comparatorRequest, preset: "focused" }));
-    const result = await tool.execute({ document_id: "comparator_3bit", title: "Comparator" }, { callId: "automatic-call" });
+    const result = await tool.execute({ document_id: "comparator_3bit", title: "Comparator", architecture_review_id: "architecture-chat" }, { callId: "automatic-call" });
     assert.equal(result.source_creation.status, "reserved");
     assert.equal(result.source_creation.automatic, true);
     assert.equal(f.creates, 1);

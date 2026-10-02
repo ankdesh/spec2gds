@@ -1,3 +1,7 @@
+/** Source-binding wire contract and callback admission checks.
+ * A binding identifies the owner revision and writable projection capabilities;
+ * it is not permission for an arbitrary client URL to mutate source. Keep token
+ * exchange and callback policy in host/service adapters. */
 import type { CircuitDocument, CircuitSnapshot, Diagnostic } from "./types.generated";
 
 /** Public metadata for an ephemeral Circuit session backed by a `.spec` design. */

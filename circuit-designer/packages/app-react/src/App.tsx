@@ -1,3 +1,7 @@
+/** Reusable Circuit application orchestration over host-provided adapters.
+ * Accepted snapshots, leased drafts, visual layout work and source-save receipts
+ * have separate lifecycles. Follow draftRef for in-flight gesture state and the
+ * source adapter for durable package writes; React rendering owns neither. */
 /* Reusable Circuit Designer application shell. */
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type WheelEvent as ReactWheelEvent } from "react";
 import {
@@ -427,6 +431,8 @@ export function App({
         setMessage("Wait for the visible circuit layout before saving to the source.");
         return;
       }
+      // Persist the actual visible geometry alongside semantic edits. Generated
+      // layout is not source state until it joins this revision-guarded save batch.
       const materialize: CircuitOperation[] = [
         ...Object.entries(layout.layout.node_geometry).map(([instanceId, geometry]) => ({
           operation_id: operationId("save_geometry"),
@@ -476,6 +482,8 @@ export function App({
         setMessage(result.diagnostics.map((item) => item.message).join(" · ") || "Source save was rejected.");
         return;
       }
+      // Close the private draft only after the adapter returns its authoritative
+      // snapshot. Rejected or uncertain saves above preserve the complete draft.
       draftRef.current = undefined;
       setLease(undefined);
       setStagedProposalId(undefined);
@@ -872,6 +880,8 @@ export function App({
 
   async function decideProposal(proposalId: string, decision: "accept" | "reject"): Promise<void> {
     if (!document || !backend || !snapshot) return;
+    // Source-bound Accept stages a leased private draft. Only Save to Specification
+    // runs owner preview/commit; accepting a proposal is not a durable source save.
     if (decision === "accept" && sourceBinding) {
       if (!sourceBinding.writable || lease || draftRef.current) {
         setMessage("Save or Cancel the current draft before accepting a proposal.");

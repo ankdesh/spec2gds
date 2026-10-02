@@ -216,6 +216,11 @@ class _Generator:
         instance_name: str,
         top: bool,
     ) -> _Module:
+        """Construct the reachable design hierarchy and accepted socket bindings.
+
+        Component-owned interfaces determine boundary bindings. Reusable definitions
+        and per-occurrence member names are kept separate during recursive descent.
+        """
         context = "/".join(path)
         external_by_name = {
             item.name: item
@@ -448,6 +453,11 @@ def _walk_modules(root: _Module):
 
 
 def _render_module(module: _Module) -> str:
+    """Format a validated module/socket model through packaged templates.
+
+    Topology decisions are already complete. Generated callbacks are structural
+    stubs and must not be read as inferred timing or performance behavior.
+    """
     guard = _identifier(module.header_path.upper().replace("/", "_").replace(".", "_"))
     includes = ["#include <systemc>"]
     roles = {item.role for item in module.external_interfaces}

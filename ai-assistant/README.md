@@ -12,9 +12,15 @@ custom UI. The only product HTTP routes are the small `/spec2gds-api` extension
 used for bindings, explicit review actions, monitoring, and reviewed event-template configuration, plus the stable
 editor launch URLs.
 
+Use Node 24.2+ or 22.19+ in the 22.x line. The pinned Harness CLI uses
+[`import.meta.main`](https://nodejs.org/api/esm.html#importmetamain), added in
+Node 24.2 and backported to Node 22.18. Node 24.0/24.1 cannot launch the CLI;
+the product launcher reports that incompatibility before creating runtime state.
+For the combined stack, use Node 24.2+ to meet both workspace requirements.
+
 ## Requirements
 
-- Node.js `^22.19.0` or Node.js 24+
+- Node.js `^22.19.0` or Node.js 24.2+
 - network access when preparing DSH or installing dependencies
 - `OPENAI_API_KEY` for model turns
 - a running Spec Editor or Circuit Designer owner for a new bound conversation
@@ -141,15 +147,14 @@ Markdown prompts pinned to each conversation. Both updated presets have
 aggregate host-owned budgets and pause/resume/stop controls. A process restart
 requires human Resume; uncertain deliveries require acknowledged manual retry.
 The owner review boundary remains in force. See the
-[Phase 2 usage and recovery guide](../docs/event-driven-assistant-phase2.md).
+[execution operations](../docs/event-driven-assistant-operations.md).
 
 For a guided explanation of the DSH components and how these layers compose,
 read the [current assistant architecture](../docs/configurable-assistant-architecture.md).
 
 The [agentic systems architecture report](../docs/agentic-systems-architecture-report.md)
-assesses fixed tool/LLM workflows and durable event-driven teams against the
-pinned DSH implementation. It includes a proposed architecture and adoption
-roadmap; its example configuration is not accepted by current loaders.
+explains the delivered event/goal execution boundary and the requirements for
+a future workflow policy. It does not introduce a workflow loader format.
 
 ## Verify and package
 
@@ -172,10 +177,11 @@ provider. The evaluation command validates the versioned corpus and writes raw
 results and metrics; see `docs/ai-assistant-evaluation.md` in the repository.
 
 Harness JSONL is the transcript source of truth. `assistant.sqlite3` stores
-bindings, creation requests, and review metadata. Creation requests retain
+bindings, creation requests, review metadata, event template revisions and
+conversation configuration pins. Creation requests retain
 their original prompt and package/chat progress across reloads and restarts.
 The native event-system domain stores members, deliveries, and spending. Back up the complete state root together. Old Python
 assistant data is preserved under `generated/legacy-ai-assistant-state/` for
 manual inspection and is never loaded by this product.
 
-HTTP condition monitoring, durable waiting, and controlled retries are implemented in [the Phase 2 guide](../docs/event-driven-assistant-phase2.md).
+HTTP condition monitoring, durable waiting, and controlled retries are documented in [operations](../docs/event-driven-assistant-operations.md).

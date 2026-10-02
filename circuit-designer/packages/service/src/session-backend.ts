@@ -1,3 +1,7 @@
+/** Process-local Circuit snapshots, leases, proposals and replay receipts.
+ * This store does not save .spec packages or independent files. Read previews
+ * as candidate validation, commits as local accepted-state changes, and source
+ * synchronization as a separate owner-mediated boundary in the HTTP service. */
 import {
   applyOperations,
   commitProviderDocument,

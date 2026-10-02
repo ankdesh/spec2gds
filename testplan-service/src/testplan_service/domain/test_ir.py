@@ -87,6 +87,9 @@ class PropertyTemplate(str, Enum):
     REACHABILITY_COVER = "reachability_cover"
 
 
+# These declarations describe portable intent; they do not schedule a simulator.
+# Several AST fields below remain dictionaries. RecipeValidator checks selected
+# cases, so Pydantic admission must not be described as complete recursive typing.
 # --- Declarations ---
 
 class ClockDecl(BaseModel):

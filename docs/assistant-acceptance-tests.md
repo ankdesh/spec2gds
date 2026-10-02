@@ -1,9 +1,8 @@
-# Iterative refinement test plan
+# Assistant and Spec refinement acceptance tests
 
 Use scripted proposals and a deterministic model fixture. No external model key
-is required for correctness coverage. The implementation does not add a
-long-running agent. UI execution is deferred; all non-UI correctness checks are
-required before accepting this phase.
+is required for correctness coverage. These owner-refinement scenarios are distinct from the event-preset browser
+tests; run the suites relevant to the changed boundary.
 
 ## Non-UI acceptance commands
 
@@ -23,8 +22,8 @@ The owner directory includes `test_workspace_clis.py` for private-owner CLI
 coverage.
 The workspace CLI fixtures use the compiled assistant, so build it before the
 Python acceptance suite.
-`scripts/setup-all.sh` prepares the pinned Harness and Node dependencies when
-needed. Do not treat existing generated bundles as verification of source
+`scripts/setup-all.sh` prepares the local Harness source checkout and Node
+dependencies when needed; it does not verify the packaging pin or a clean checkout. Do not treat existing generated bundles as verification of source
 changes.
 
 | Coverage | Fixtures and required result |
@@ -44,7 +43,7 @@ the workspace CLI tests, `ai-assistant/tests/iterative-refinement.test.ts`, and
 owner-client/source-creation tests. Harness integration exercises the real
 assistant transport against local owner/model fixtures.
 
-## Deferred UI pass
+## Isolated owner/editor UI scenarios
 
 Build the assistant and editor first. Install the scenario workspace's
 dependencies and use the cached Circuit Designer Playwright browser:
@@ -79,7 +78,7 @@ scenario.
 
 Also run `npm --prefix circuit-designer run test:e2e:editor`. Its fixtures
 exercise coherent views, scoped requests, document switching, and explicit
-review before stale-draft retries. Extend the later UI pass with delayed view
+review before stale-draft retries. Extend these scenarios with delayed view
 responses, CLI updates during subscriptions, connection gaps, and focused
 scroll/expanded-section assertions; these remain runtime acceptance work.
 
@@ -94,6 +93,4 @@ The live-model smoke is separate and explicitly invoked:
 OPENAI_API_KEY=... bash tests/ui-scenarios/run-test.sh --scenario automatic --live-model
 ```
 
-It is supplementary and must never replace deterministic coverage. This
-session could not execute checks because the tool process launcher failed
-before starting commands; no passing results or built artifacts are claimed.
+It is supplementary and must never replace deterministic coverage.

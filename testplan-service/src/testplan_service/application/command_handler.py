@@ -104,7 +104,9 @@ class CommandHandler:
         # Canonical payload hash for idempotency checking
         payload_hash = sha256_digest(canonical_json(operations))
 
-        # Check idempotency first if committing
+        # Replay before checking a stale draft revision: an exact successful retry
+        # must return its prior receipt after that command already advanced the plan.
+        # The current replay hash covers operations, not the complete HTTP envelope.
         if not preview_only:
             cached_resp = self.repo.check_command_idempotency(plan_id, request_id, payload_hash)
             if cached_resp is not None:
@@ -124,7 +126,9 @@ class CommandHandler:
                 request_id=request_id,
             )
 
-        # Load existing working state in memory for atomic staging
+        # Candidate maps let later operations refer to earlier creates in this batch.
+        # Intermediate drafts need not be review-ready; final structural invariants
+        # must pass before the repository transaction publishes any record changes.
         raw_records = self.repo.get_records(plan_id, include_archived=True)
         requirements: dict[str, Requirement] = {}
         sections: dict[str, Section] = {}
@@ -1231,7 +1235,9 @@ class CommandHandler:
         if preview_only:
             return response_data
 
-        # Commit transaction atomically
+        # The repository rechecks base_edit_revision at the actual write boundary.
+        # Records, draft revision, replay response and event must advance together.
+        # Human-readable key allocation happens earlier and may leave gaps on failure.
         event_data = {
             "event_id": str(uuid.uuid4()),
             "kind": "plan.changed",

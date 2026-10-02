@@ -2,15 +2,18 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { once } from "node:events";
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from "node:fs";
+import { createWriteStream, existsSync, readdirSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, expect, type Page } from "@playwright/test";
+import { DatabaseSync } from "node:sqlite";
+import type { Page } from "@playwright/test";
 import { modelFixture } from "./model_fixture.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
+if (!process.env.PLAYWRIGHT_BROWSERS_PATH) process.env.PLAYWRIGHT_BROWSERS_PATH = join(root, "circuit-designer/.playwright-browsers");
+const { chromium, expect } = await import("@playwright/test");
 const args = process.argv.slice(2);
 function option(name: string, fallback: string): string {
   const index = args.indexOf(name);
@@ -20,10 +23,14 @@ function option(name: string, fallback: string): string {
   return value;
 }
 const scenario = option("--scenario", "automatic");
-assert.ok(["automatic", "restricted", "live", "binding", "repeated"].includes(scenario), "Unknown named scenario");
+assert.ok(["automatic", "restricted", "live", "binding", "repeated", "architecture", "generalization"].includes(scenario), "Unknown named scenario");
 const approval = option("--approval-mode", scenario === "restricted" ? "review" : "automatic");
 assert.equal(approval, scenario === "restricted" ? "review" : "automatic", "Scenario requires its matching approval mode");
 const liveModel = args.includes("--live-model");
+if (scenario === "generalization" && !liveModel) throw new Error("Generalization requires --live-model; fixture responses cannot measure inference quality.");
+const evalCases = JSON.parse(readFileSync(join(root, "tests/evaluation/rtl/cases.json"), "utf8")).cases;
+const evalCase = scenario === "generalization" ? evalCases.find((item: any) => item.id === option("--eval-case", "")) : null;
+if (scenario === "generalization" && !evalCase) throw new Error("Choose --eval-case from the portable evaluation manifest.");
 if (liveModel && !process.env.OPENAI_API_KEY) throw new Error("Live smoke requires OPENAI_API_KEY; deterministic runs do not.");
 const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const output = resolve(option("--output", join(root, "tests/ui-scenarios/results", `${scenario}-${runId}`)));
@@ -82,7 +89,8 @@ async function openEditor(page: Page, owner: string, path: string): Promise<void
   await expect(page.locator(".spec-paper")).toBeVisible();
 }
 async function prompt(page: Page, message: string): Promise<void> {
-  const input = page.locator("textarea, [contenteditable='true'], [role='textbox']").first();
+  await expect(page.locator("html")).toHaveAttribute("data-spec2gds-launch", "ready", { timeout: 30_000 });
+  const input = page.locator("[data-composer-input][contenteditable='true']");
   await expect(input).toBeVisible(); await input.fill(message);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
 }
@@ -114,7 +122,8 @@ async function run(): Promise<void> {
     SPEC2GDS_SCRATCH_ROOT: join(isolated, "workspaces"), SPEC_DOCUMENT_ROOT: dirname(packagePath),
     ASSISTANT_HOST: "127.0.0.1", ASSISTANT_PORT: String(assistantPort), ASSISTANT_PROFILE: "spec2gds-web",
     SPEC_SERVICE_ALLOWLIST: owner, CIRCUIT_SERVICE_ALLOWLIST: `http://127.0.0.1:${circuitPort}/api/circuit-designer/v1`,
-    SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: "5",
+    SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
+    ASSISTANT_MAX_OUTPUT_TOKENS: process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
     ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini" } : {}) };
   const ownerArgs = ["run", "spec2gds-server", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
   let ownerProcess = start("owner", "uv", ownerArgs, root, env);
@@ -135,7 +144,8 @@ async function run(): Promise<void> {
       page.on("console", message => {
         if (message.type() !== "error") return;
         const url = message.location().url;
-        const expected = stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url);
+        const expected = (stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url))
+          || (scenario === "live" && url.startsWith(owner) && /\/transactions(?:\?|$)/.test(url) && /409/.test(message.text()));
         failures.push({ type: "console", message: message.text(), url, expected });
       });
       page.on("requestfailed", request => {
@@ -148,46 +158,159 @@ async function run(): Promise<void> {
     await chat.exposeFunction("recordConfirmation", (text: string) => confirmations.push(text));
     await chat.addInitScript(() => document.addEventListener("click", event => {
       const target = (event.target as Element).closest("button");
-      if (target && /Approve and apply|Continue proposal|Create specification and continue/.test(target.textContent ?? "")) void (window as any).recordConfirmation(target.textContent);
+      if (target && /Approve architecture|Approve and apply|Continue proposal|Create specification and continue/.test(target.textContent ?? "")) void (window as any).recordConfirmation(target.textContent);
     }));
     try {
+      if (scenario === "architecture") {
+        await chat.goto(`${assistant}/launch`);
+        const request = `Create a new spec document ${documentId} titled Architecture lifecycle. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n.`;
+        await prompt(chat, request);
+        await expect(chat.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
+        assert.equal(existsSync(packagePath), false, "No package before architecture approval.");
+        await chat.reload();
+        const pending = chat.locator('[data-s2g-architecture-review="pending"]').last();
+        await expect(pending).toBeVisible();
+        await pending.getByRole("textbox").fill("Keep the cohesive component and clarify its purpose.");
+        await pending.getByRole("button", { name: "Revise architecture", exact: true }).click();
+        await expect(chat.locator('[data-s2g-architecture-review="revised"]')).toBeVisible();
+        await expect(chat.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
+        assert.equal(existsSync(packagePath), false);
+        await chat.locator('[data-s2g-architecture-review="pending"]').getByRole("button", { name: "Cancel", exact: true }).click();
+        await expect(chat.locator('[data-s2g-architecture-review="cancelled"]')).toBeVisible();
+        assert.equal(existsSync(packagePath), false, "Cancellation creates no content.");
+        await prompt(chat, request);
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
+        await expect.poll(async () => {
+          try { return (await json(`${owner}/documents/snapshot`)).components.length; }
+          catch { return 0; }
+        }).toBe(1);
+        const snapshot = savedSnapshot(packagePath);
+        const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
+        try {
+          const reviews = database.prepare("SELECT record_json FROM architecture_reviews ORDER BY rowid").all().map((row: any) => JSON.parse(row.record_json));
+          assert.deepEqual(reviews.map((item: any) => item.status), ["revised", "cancelled", "approved"]);
+          assert.equal(reviews[1].originalRequest, reviews[0].originalRequest);
+          records.push({ architecture_reviews: reviews, snapshot });
+        } finally { database.close(); }
+        await chat.screenshot({ path: join(output, "assistant.png"), fullPage: true });
+        assert.deepEqual(failures.filter(failure => !failure.expected), []);
+        return;
+      }
+      if (evalCase) {
+        records.push({ runtime: { model: env.OPENAI_MODEL || "gpt-4o-mini", base_url: env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+          output_token_limit: Number(env.ASSISTANT_MAX_OUTPUT_TOKENS), step_limit: Number(env.ASSISTANT_MAX_STEPS_PER_TURN) } });
+        await chat.goto(`${assistant}/launch`);
+        await prompt(chat, evalCase.request);
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
+        let generatedPackage = "";
+        await expect.poll(() => {
+          const packages = readdirSync(dirname(packagePath)).filter(name => name.endsWith(".spec"));
+          if (packages.length === 1) generatedPackage = join(dirname(packagePath), packages[0]);
+          return Boolean(generatedPackage);
+        }).toBe(true);
+        let generated: any;
+        await expect.poll(async () => {
+          try { generated = await json(`${owner}/documents/snapshot`); return generated.components.length; }
+          catch { return 0; }
+        }, { timeout: 120_000 }).toBeGreaterThan(0);
+        const generatedKey = generated.owner_document_key;
+        const generatedSnapshot = () => json(`${owner}/documents/snapshot?owner_document_key=${encodeURIComponent(generatedKey)}`);
+        await expect.poll(async () => {
+          const snap = await generatedSnapshot();
+          return snap.components.every((item: any) => snap.entity_sections.some((section: any) => section.owner.entity_id === item.ref.entity_id)
+            || snap.component_compositions?.some((composition: any) => composition.component.entity_id === item.ref.entity_id));
+        }, { timeout: 120_000 }).toBe(true);
+        generated = await generatedSnapshot();
+        const used = new Set(generated.designs.flatMap((design: any) => design.instances.map((instance: any) => instance.component_vlnv)));
+        const roots = generated.components.filter((component: any) => !used.has(component.vlnv));
+        assert.equal(roots.length, 1, "Evaluation needs one uninstantiated public component target; ambiguous roots require review.");
+        const targetId = roots[0].ref.entity_id;
+        await openEditor(editor, owner, generatedPackage);
+        const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
+        await section.getByRole("button", { name: "Options" }).click();
+        await section.getByRole("menuitem", { name: "Launch activity…", exact: true }).click();
+        await editor.locator(".action-option").filter({ hasText: "rtl.generate" }).getByRole("button", { name: "Run", exact: true }).click();
+        let execution: any;
+        await expect.poll(async () => {
+          execution = (await json(`${owner}/executions`)).executions.filter((item: any) => item.activity_id === "rtl.generate").at(-1);
+          return execution?.status;
+        }).toBe("succeeded");
+        generated = await generatedSnapshot();
+        assert.equal(execution.source_revision_hash, generated.source_revision_hash);
+        const activityReport = await json(`${owner}/artifacts/${execution.artifact_ids[0]}/content`);
+        assert.equal(activityReport.source_revision_hash, generated.source_revision_hash);
+        assert.equal(activityReport.target.entity_id, targetId);
+        const evalArgs = ["run", "--no-sync", "python", "scripts/rtl_evaluation.py", "--project", execution.workspace_output_path,
+          "--case", evalCase.id, "--source-revision", generated.source_revision_hash, "--output", join(output, "functional")];
+        const benchmarkRoot = option("--benchmark-root", "");
+        if (benchmarkRoot) evalArgs.push("--benchmark-root", benchmarkRoot);
+        const evaluated = spawnSync("uv", evalArgs, { cwd: root, encoding: "utf8", timeout: 180_000 });
+        writeFileSync(join(output,"functional-command.log"), evaluated.stdout + evaluated.stderr);
+        const functional = JSON.parse(readFileSync(join(output,"functional/evaluation-report.json"),"utf8"));
+        records.push({ case: evalCase, snapshot: generated, ui_activity_execution: execution, ui_activity_report: activityReport, functional,
+          inference_quality: { functional_behavior: functional.simulation.status, document_quality: "requires rubric review", criteria: evalCase.quality_criteria } });
+        assert.equal(functional.simulation.status,"passed",JSON.stringify(functional));
+        const bodiesBefore = generated.entity_sections.filter((section: any) => section.section_type === "sv");
+        await prompt(chat, evalCase.refinement);
+        await expect.poll(async () => (await generatedSnapshot()).source_revision_hash, { timeout: 120_000 }).not.toBe(generated.source_revision_hash);
+        const refined = await generatedSnapshot();
+        assert.deepEqual(refined.entity_sections.filter((section: any) => section.section_type === "sv"), bodiesBefore,
+          "Explanation refinement must preserve stored SV.");
+        assert.deepEqual(refined.components, generated.components, "Explanation refinement must preserve interfaces.");
+        assert.deepEqual(refined.designs, generated.designs, "Explanation refinement must preserve wiring.");
+        const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
+        try { records.push({ architecture_reviews: database.prepare("SELECT record_json FROM architecture_reviews ORDER BY rowid").all()
+          .map((row: any) => JSON.parse(row.record_json)), refinement: refined, narrative: refined.narrative }); }
+        finally { database.close(); }
+        await chat.screenshot({ path: join(output,"assistant.png"),fullPage:true });
+        await editor.screenshot({ path: join(output,"editor.png"),fullPage:true });
+        assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected browser failures must fail generalization.");
+        return;
+      }
       let initial: any;
       if (scenario === "automatic") {
         await chat.goto(`${assistant}/launch`);
-        await prompt(chat, `Create a new spec document ${documentId} titled Iterative scenario. Add timer_core with entity ID component_timer_core, scalar clk and rst_n inputs, an 8-bit irq output, and module body assign irq = {8{clk & rst_n}};`);
+        await prompt(chat, `Create a new spec document ${documentId} titled Iterative scenario. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n combinationally.`);
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(() => existsSync(packagePath)).toBe(true);
-        initial = await json(`${owner}/documents/snapshot`);
+        await expect.poll(async () => {
+          try { initial = await json(`${owner}/documents/snapshot`); return true; }
+          catch { return false; }
+        }).toBe(true);
       } else {
         initial = await json(`${owner}/documents/create`, { path: packagePath, document_id: documentId, title: "Iterative scenario" });
         const query = new URLSearchParams({ service_base_url: owner, document_id: documentId, owner_document_key: initial.owner_document_key });
         await chat.goto(`${assistant}/launch/spec-document?${query}`);
-        await prompt(chat, "Create timer_core with entity ID component_timer_core, scalar clk and rst_n inputs, an 8-bit irq output, and assign irq = {8{clk & rst_n}};");
+        await prompt(chat, "Create timer_core with scalar clk and rst_n inputs and an 8-bit irq output that replicates clk & rst_n combinationally.");
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
       }
       const key = initial.owner_document_key;
       const scoped = (path: string) => `${owner}${path}${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(key)}`;
       const snapshot = () => json(scoped("/documents/snapshot"));
       const history = () => json(scoped("/assistant/history?limit=25"));
       if (scenario === "restricted") {
-        await chat.getByRole("button", { name: "Continue proposal", exact: true }).click();
-        await chat.getByRole("button", { name: "Send message", exact: true }).click();
         await expect(chat.getByRole("button", { name: "Approve and apply", exact: true })).toBeVisible();
         assert.equal((await snapshot()).source_revision_hash, initial.source_revision_hash);
         await chat.getByRole("button", { name: "Approve and apply", exact: true }).click();
       }
-      await expect.poll(async () => (await snapshot()).components.map((item: any) => item.ref.entity_id)).toEqual(["component_timer_core"]);
+      await expect.poll(async () => (await snapshot()).components.length).toBe(1);
+      const componentId = (await snapshot()).components[0].ref.entity_id;
+      assert.match(componentId, /^component_timer_core_/);
       if (approval === "automatic") await expect(chat.getByText("Applied automatically", { exact: true }).last()).toBeVisible();
       let current = await snapshot(); records.push({ snapshot: current, history: await history() });
       await openEditor(editor, owner, packagePath);
-      await expect(editor.locator("#component-component_timer_core")).toBeVisible();
+      await expect(editor.locator(`#component-${componentId.replaceAll("_", "-")}`)).toBeVisible();
       assert.equal(current.components[0].ports.find((port: any) => port.name === "irq").range, "7:0");
       assert.equal(current.entity_sections[0].content, "assign irq = {8{clk & rst_n}};");
       if (scenario === "restricted") {
         await prompt(chat, "Refine irq to 16 bits.");
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => (await history()).items.length).toBe(2);
         const pending = (await history()).items[0];
         await json(scoped(`/assistant/proposals/${pending.proposal_id}/reject`), {});
         assert.equal((await snapshot()).source_revision_hash, current.source_revision_hash);
         await prompt(chat, "Refine irq to 16 bits again.");
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => (await history()).items.length).toBe(3);
         const stale = (await history()).items[0];
         await json(scoped("/transactions"), { expected_source_revision_hash: current.source_revision_hash, operations: [{ type: "set_document_title", title: "Human revision" }] });
@@ -195,10 +318,10 @@ async function run(): Promise<void> {
         assert.equal(response.status, 409);
       } else {
         if (scenario === "live") {
-          const component = editor.locator("#component-component_timer_core");
+          const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
           await component.getByRole("button", { name: "Options" }).click();
           await component.getByRole("menuitem", { name: "Edit text…" }).click();
-          await component.getByLabel("Specification text").fill("Preserve this exact draft.");
+          await component.getByLabel("Component explanation").fill("Preserve this exact draft.");
         }
         let bKey: string | undefined;
         if (scenario === "binding") {
@@ -207,11 +330,12 @@ async function run(): Promise<void> {
           assert.notEqual(key, bKey); await openEditor(editor, owner, copied);
         }
         await prompt(chat, "Refine timer_core irq to 16 bits and update its module body to assign irq = {16{clk & rst_n}};");
+        await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => (await snapshot()).components[0].ports.find((port: any) => port.name === "irq").range).toBe("15:0");
         current = await snapshot(); assert.equal(current.entity_sections[0].content, "assign irq = {16{clk & rst_n}};");
         if (scenario === "live") {
-          const component = editor.locator("#component-component_timer_core");
-          await expect(component.getByLabel("Specification text")).toHaveValue("Preserve this exact draft.");
+          const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
+          await expect(component.getByLabel("Component explanation")).toHaveValue("Preserve this exact draft.");
           await expect(editor.getByText(/Saved updates are pending/)).toBeVisible();
           await component.getByRole("button", { name: "Save changes" }).click();
           await expect(component.getByRole("alert")).toContainText("preserved draft");
@@ -244,11 +368,34 @@ async function run(): Promise<void> {
           assert.ok(await editor.locator(".activity-item").count() <= 75);
         }
       }
+      // Capture the execution queued by the UI; never substitute a CLI run.
+      await openEditor(editor, owner, packagePath);
+      const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
+      await component.getByRole("button", { name: "Options" }).click();
+      await component.getByRole("menuitem", { name: "Launch activity…", exact: true }).click();
+      const activity = editor.locator(".action-option").filter({ hasText: "rtl.generate" });
+      await activity.getByRole("button", { name: "Run", exact: true }).click();
+      let launched: any;
+      await expect.poll(async () => {
+        const executions = (await json(`${owner}/executions`)).executions;
+        launched = executions.filter((item: any) => item.activity_id === "rtl.generate").at(-1);
+        return launched?.status;
+      }).toBe("succeeded");
+      current = await snapshot();
+      assert.equal(launched.source_revision_hash, current.source_revision_hash);
+      assert.ok(launched.artifact_ids.length);
+      const report = await json(`${owner}/artifacts/${launched.artifact_ids[0]}/content`);
+      assert.equal(report.source_revision_hash, current.source_revision_hash);
+      assert.equal(report.target.entity_id, componentId);
+      assert.equal(report.generator_version, "1.2.0");
+      assert.ok(existsSync(join(launched.workspace_output_path, "generation-manifest.json")));
+      assert.ok(existsSync(join(launched.workspace_output_path, "rtl/components/timer_core.sv")));
+      records.push({ ui_activity_execution: launched, ui_activity_report: report });
       current = await snapshot(); const disk = savedSnapshot(packagePath);
       assert.equal(disk.source_revision_hash, current.source_revision_hash);
       assert.deepEqual(disk.components, current.components); assert.deepEqual(disk.entity_sections, current.entity_sections);
       records.push({ snapshot: current, history: await history(), disk });
-      if (approval === "automatic") assert.deepEqual(confirmations, [], "Automatic workflow must require zero confirmation interactions");
+      if (approval === "automatic") assert.ok(confirmations.every(label => label === "Approve architecture"), "Automatic owner must require only architecture decisions, with no final save confirmation");
       await chat.screenshot({ path: join(output, "assistant.png"), fullPage: true });
       await editor.screenshot({ path: join(output, "editor.png"), fullPage: true });
       assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected console, page, process, and network failures must fail the scenario");

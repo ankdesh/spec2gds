@@ -27,6 +27,11 @@ def build_hierarchy_tree(
 
     def build_section_node(sec: Section) -> dict[str, Any]:
         # Children are ordered by sec.child_ids
+        """Project active children in explicit order, with a fallback for omitted IDs.
+
+        The fallback prevents a valid parent-linked record from vanishing from the UI.
+        Cycle rejection belongs to command validation before this recursive projection.
+        """
         children: list[dict[str, Any]] = []
         visited_child_ids = set()
 

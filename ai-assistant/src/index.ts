@@ -1,3 +1,7 @@
+/** Product host composition over native Harness execution.
+ * Startup reconciles reservations/reviews, validates catalogs and awaits native
+ * storage before routes become ready. Agent membership determines immutable
+ * binding/capability scope; model arguments never choose a different owner. */
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type EventSystemService from "@deepseek-ai/dsh-event-system";
 import type { EventSystemSnapshot } from "@deepseek-ai/dsh-event-system";
@@ -19,6 +23,7 @@ import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, Works
 import { parseOwnerOperationContract } from "./owner-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
+import { registerArchitectureTool } from "./architecture-review.js";
 import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
@@ -73,6 +78,8 @@ function splitAllowlist(value: string): string[] {
   return value.split(",").map(item => item.trim()).filter(Boolean);
 }
 
+// Browser origin checking is CSRF protection for this local product extension,
+// not authentication or a public multi-user authorization system.
 function sameOrigin(request: any): boolean {
   const origin = request.headers.origin;
   if (!origin) return true;
@@ -183,9 +190,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   const latestUserRequests = new Map<string, string>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
+    await mkdir(resolve(config.scratchRoot, "unbound"), { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
+    // Reservation and native session creation can be interrupted between stores.
+    // A persisted transcript proves creation; an orphan reservation grants no tools.
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
+    // An interrupted owner call may already have saved. Recovery marks that
+    // result uncertain for reconciliation instead of assuming it is safe to apply.
     state.recoverInterruptedReviews();
     state.recoverInterruptedSourceCreations();
     for (const domain of ["spec", "circuit"] as const) {
@@ -200,6 +212,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     for (const binding of state.listBindings(true)) {
       if (binding.preset !== "focused" && stored.has(binding.sessionId) && !ctx.eventSystems.get(SessionId(binding.sessionId))) legacyExecutions.add(binding.sessionId);
     }
+    // Load persisted executions before sealing deployment definitions. Legacy
+    // transcripts lacking a ledger remain history and cannot gain fresh budgets.
     ctx.eventSystems.seal();
   })();
 
@@ -214,6 +228,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
+    // Binding validity alone grants no proposal vocabulary. A failed owner
+    // contract/policy fetch is retained as a preparation error; reads can continue.
     let operationContract;
     let schemaError;
     try {
@@ -235,6 +251,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     } catch (error) {
       schemaError = error instanceof Error ? error.message : String(error);
     }
+    // Standing specialist membership, not fork lineage or user/model arguments,
+    // selects the primary conversation binding and read-only capability boundary.
     const membership = ctx.eventSystems.membership(SessionId(agent.id));
     const specialist = membership !== undefined && !membership.primary;
     registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog,
@@ -352,6 +370,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         ? "Bind this conversation to a design before using goal controls." : undefined);
     if (binding) await attach(agent, binding);
     else guardUnbound(agent);
+    if (!parentSession && (!binding || binding.domain === "spec")) registerArchitectureTool(agent, state, owners, () => latestUserRequests.get(String(agent.id)) ?? "", async review => {
+      if (!binding || binding.preset === "focused" || review.status !== "pending") return;
+      const id = SessionId(binding.sessionId);
+      const execution = ctx.eventSystems.get(id);
+      if (!execution?.definition?.events?.["architecture.prepared"]) return;
+      await ctx.eventSystems.publishHost(id, { type: "architecture.prepared", payload: { review_id: review.reviewId },
+        producer: "owner", dedupeKey: `architecture:${review.reviewId}` });
+      if (!ctx.eventSystems.get(id)?.waits?.some(wait => wait.state === "waiting" && wait.matchValue === review.reviewId)) {
+        await ctx.eventSystems.wait(agent as unknown as Agent, { kind: "review", reason: "Architecture approval pending",
+          eventType: "architecture.decided", matchKey: "review_id", matchValue: review.reviewId });
+      }
+    });
     if (config.interactiveForms && !parentSession) {
       registerSourceCreationTool(agent, creations, () => ({
         sourceSessionId: String(agent.id), originalRequest: latestUserRequests.get(String(agent.id)) ?? "",
@@ -403,6 +433,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
       workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
     };
+    // Source-derived Circuits share their Spec workspace, but the conversation
+    // keeps its exact domain/document/owner key independently of visible UI state.
     const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
       await owners.circuitSourceBinding(temporary));
     await mkdir(workspace.path, { recursive: true, mode: 0o700 });
@@ -411,6 +443,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
       workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
     if (binding.preset !== "focused") {
+      // Do not leave a usable reservation when its selected configuration fails
+      // to pin. Native session creation happens only after this reservation returns.
       try { configurations.pin(sessionId, binding.domain, binding.preset, input.eventTemplateKey, input.eventTemplateRevision); }
       catch (error) { state.deleteBinding(sessionId); throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
     }
@@ -452,6 +486,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     return { session: result.binding, workspace: result.workspace };
   }
 
+  // Decision actions use the persisted artifact, not new browser/model content.
+  // Claim the review before calling its owner; an uncertain response must retain
+  // the same proposal identity until an owner receipt proves the outcome.
   async function reviewAction(binding: SessionBinding, review: ProposalReview, action: string): Promise<ProposalReview> {
     if (artifactDigest(review.artifact) !== review.artifactDigest) throw new HttpError(409, "Stored proposal content failed its integrity check.");
     if (action === "discard") {
@@ -537,6 +574,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     throw new HttpError(400, "Action does not match this review domain.");
   }
 
+  // Publish durable owner-preview identity, then correlate a goal wait to that exact
+  // proposal. A matching receipt resolves the wait; it does not finish the goal.
   async function publishPreparedReview(binding: SessionBinding, review: ProposalReview): Promise<void> {
     if (binding.preset === "focused") return;
     const id = SessionId(binding.sessionId);
@@ -560,6 +599,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     if (review.state === "applied") await settleReviewedExecution(binding, review);
   }
 
+  // Circuit sent means handed to its review UI, not accepted or saved Spec source.
+  // This event resumes the matching goal wait; native completion remains separate.
   async function settleReviewedExecution(binding: SessionBinding, review: ProposalReview): Promise<void> {
     if (binding.preset === "focused" || !["applied", "sent", "discarded"].includes(review.state)) return;
     const prepared = ctx.eventSystems.get(SessionId(binding.sessionId))?.events.findLast(event => event.type === "review.prepared"
@@ -589,6 +630,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const templateMatch = path.match(/^\/spec2gds-api\/event-templates\/([^/]+)\/(preview|save)$/);
         if (templateMatch && request.method === "POST") {
           const body = await readBody(request, 262144);
+          // Preview acknowledgements cover canonical content and its revision.
+          // Saving after another edit requires a new review, not a freshened token.
           if (!Number.isSafeInteger(body.revision)) throw new HttpError(400, "Template revision is required.");
           try {
             const key = decodeURIComponent(templateMatch[1]!);
@@ -598,6 +641,26 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           } catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
         }
         const sourceRequestMatch = path.match(/^\/spec2gds-api\/source-requests\/([^/]+)(?:\/(cancel|continued))?$/);
+        const architectureMatch = path.match(/^\/spec2gds-api\/architecture-reviews\/([^/]+)(?:\/(approve|revise|cancel))?$/);
+        if (architectureMatch) {
+          const id = decodeURIComponent(architectureMatch[1]!);
+          if (request.method === "GET" && !architectureMatch[2]) {
+            const review = state.architectureReview(id);
+            if (!review) throw new HttpError(404, "Unknown architecture review.");
+            return writeJson(response, 200, { architecture_review: review });
+          }
+          if (request.method === "POST" && architectureMatch[2]) {
+            const body = await readBody(request);
+            try {
+              const decision = architectureMatch[2] === "approve" ? "approved" : architectureMatch[2] === "revise" ? "revised" : "cancelled";
+              const review = state.decideArchitecture(id, decision, typeof body.feedback === "string" ? body.feedback : "");
+              const execution = ctx.eventSystems.get(SessionId(review.sessionId));
+              if (execution?.definition?.events?.["architecture.decided"]) await ctx.eventSystems.publishHost(SessionId(review.sessionId), {
+                type: "architecture.decided", payload: { review_id: id, decision }, producer: "owner", dedupeKey: `architecture:${id}:${decision}` });
+              return writeJson(response, 200, { architecture_review: review });
+            } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
+          }
+        }
         if (sourceRequestMatch) {
           const requestId = decodeURIComponent(sourceRequestMatch[1]!);
           if (!sourceRequestMatch[2] && request.method === "GET") return writeJson(response, 200, { creation_request: await creations.present(creations.get(requestId)) });
@@ -636,7 +699,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
             domain: binding.workspaceDomain, ownerUrl: binding.workspaceOwnerUrl, documentId: binding.workspaceDocumentId,
           }])).values()];
-          return writeJson(response, 200, { workspaces });
+          return writeJson(response, 200, { workspaces, unbound_workspace: { key: "assistant-unbound", title: "AI Assistant", path: resolve(config.scratchRoot, "unbound") } });
         }
         if (path === "/spec2gds-api/bindings/reserve" && request.method === "POST") {
           const body = await readBody(request);
@@ -675,7 +738,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           }
           if (resource === "execution" && request.method === "GET") {
             const binding = state.getBinding(sessionId);
-            if (!binding) throw new HttpError(404, "Unknown binding.");
+            if (!binding) return writeJson(response, 200, { execution: null, configuration: null, legacy: false, monitorSuggestion: null });
             return writeJson(response, 200, { execution: ctx.eventSystems.get(SessionId(sessionId)) ?? null,
               configuration: configurations.pinned(sessionId) ?? null, legacy: legacyExecutions.has(sessionId), monitorSuggestion: {
                 url: binding.domain === "spec" ? `${binding.ownerUrl}/assistant/context/document?${new URLSearchParams({ document_id: binding.documentId, ...(binding.ownerDocumentKey ? { owner_document_key: binding.ownerDocumentKey } : {}) })}` : `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}`,

@@ -19,7 +19,7 @@
     }
   },
   "engines": {
-    "node": "^22.19.0 || >=24.0.0"
+    "node": "^22.19.0 || >=24.2.0"
   },
   "scripts": {
     "build": "npm run build:server && npm run build:client",

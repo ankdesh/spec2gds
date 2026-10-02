@@ -1,3 +1,7 @@
+/** Circuit canvas presentation and input gestures over public document/layout types.
+ * Selection and transient drag previews are UI state. Emit requested edits to
+ * the host instead of treating screen coordinates as authoritative connectivity.
+ * Stable terminal/net IDs connect rendered geometry back to logical elements. */
 import {
   Fragment,
   forwardRef,

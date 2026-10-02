@@ -1,4 +1,9 @@
-"""Host-neutral Python contracts for Activities and Context Renderers."""
+"""Host-neutral Python contracts for Activities and Context Renderers.
+
+Reviewer path: plugin inputs are immutable reads and constrained capabilities.
+The execution host owns queue/storage/process choices. Results carry reports,
+artifacts and optional proposals; a plugin result never self-approves source edits.
+"""
 
 from __future__ import annotations
 

@@ -1,3 +1,7 @@
+/** Bound owner HTTP capabilities and immutable document context.
+ * Recheck stored owner URLs against current deployment approval before reads or
+ * submissions. Transport uncertainty and domain rejection have different retry
+ * meanings; only the owner can prove that its source was saved. */
 import type { BindingInput, SessionBinding } from "./types.js";
 import { isRecord } from "./types.js";
 
@@ -186,6 +190,17 @@ export class OwnerClients {
       if (error instanceof OwnerError && error.status === 404) return null;
       throw error;
     }
+  }
+
+  async contextPage(binding: SessionBinding, options: { cursor?: string; entity_ids?: string[] }, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    this.assertStoredBinding(binding);
+    if (binding.domain !== "spec") return this.context(binding, signal);
+    return this.request("GET", this.specUrl(binding, binding.scope === "document" ? "/assistant/context/document" : "/assistant/context", {
+      document_id: binding.documentId, paged: "true",
+      ...(binding.scope === "entity" ? { entity_kind: binding.entityKind ?? "", entity_id: binding.entityId ?? "" } : {}),
+      ...(options.cursor ? { cursor: options.cursor } : {}),
+      ...(options.entity_ids ? { entity_ids: JSON.stringify(options.entity_ids) } : {}),
+    }), undefined, signal);
   }
 
   async operationContract(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {

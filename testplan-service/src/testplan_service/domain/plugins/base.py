@@ -33,6 +33,9 @@ class OutputWriter:
         media_type: str = "text/plain",
     ) -> ArtifactDescriptor:
         """Safely stage an artifact, validating paths and enforcing byte quotas."""
+        # This capability stages bytes, never opens plugin-selected filesystem paths.
+        # It limits output admission; installed Python plugins still run in-process
+        # and are trusted code, not isolated by an OS sandbox.
         # Normalize and validate path
         p = PurePosixPath(relative_path)
         if p.is_absolute() or ".." in p.parts:

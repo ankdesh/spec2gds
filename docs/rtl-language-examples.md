@@ -1,4 +1,17 @@
-# Basic RTL samples
+# SystemVerilog language examples
+
+These standalone modules illustrate language constructs; they are not bundled
+Activity output or evidence of generator feature support. Test each fenced block
+independently, except `two_bit_mux`, which also needs the first gate-based `mux`.
+The Spec editor stores interfaces separately and accepts only module bodies; do
+not paste a full module into an SV section. Symbolic ranges and parameterized
+topology remain outside the current [RTL Activity profile](rtl-generation-activity.md).
+See [maintained RTL semantics samples](rtl-semantics-examples.md) for source packages.
+
+The parameterized examples use their shown defaults. The shift register requires
+`N >= 2`; the register files require power-of-two `SIZE >= 2`. The dual-port RAM
+reads the previous contents on each edge and gives port 0 priority for simultaneous
+writes to one address.
 
 ## Simple mux using inbuilt gates
 
@@ -35,9 +48,9 @@ endmodule
 module n_bit_or #(
     parameter N = 32
 )(
-    input   [N - 1:0] a;
-    input   [N - 1:0] b;
-    output  [N - 1:0] res;
+    input   logic [N - 1:0] a,
+    input   logic [N - 1:0] b,
+    output  logic [N - 1:0] res
 );
 assign res = a | b;
 endmodule
@@ -82,7 +95,7 @@ module sign_ext(
     input   logic [15:0] in,
     output  logic [31:0] out
 );
-assign out = {{16{a[15]}} , in};
+assign out = {{16{in[15]}} , in};
 endmodule
 ```
 
@@ -112,7 +125,7 @@ module add_or_sub#(
 )(
     input   logic [N-1:0] x, y,
     input   logic add,
-    output  logic [N-1:0] z;
+    output  logic [N-1:0] z
 );
 always_comb begin
     if (add)
@@ -154,11 +167,11 @@ module wild#(
     output  logic [N-1:0] y
 );
 always_comb begin
-    case (sel)
-        2'b1???: y = a;
-        2'b01??: y = b;
-        2'b001?: y = c;
-        2'b0001: y = d;
+    casez (sel)
+        4'b1???: y = a;
+        4'b01??: y = b;
+        4'b001?: y = c;
+        4'b0001: y = d;
         default: y = 'b0;
     endcase
 end
@@ -173,8 +186,8 @@ module d_ff(
     input   logic clk,
     input   logic [0:0] d,
     output  logic [0:0] q
-)
-alway_ff @(posedge clk) begin
+);
+always_ff @(posedge clk) begin
     q <= d;
 end
 endmodule
@@ -198,9 +211,9 @@ end
 endmodule
 ```
 
-### Shift regsiter
+### Shift register
 
-```
+```verilog
 module shift_reg#(
     parameter N = 8
 )(
@@ -226,6 +239,7 @@ always_comb begin
         2'b00 : r_next = r_reg;
         2'b01 : r_next = {s_in, r_reg[N-1:1]};
         2'b10 : r_next = d;
+        default: r_next = r_reg;
     endcase
 end
 
@@ -270,6 +284,7 @@ always_comb begin
         s3 :
             if (~in)
                 state_next = s1;
+        default: state_next = s1;
     endcase
 end
 
@@ -287,7 +302,7 @@ module reg_file #(
     input   logic [$clog2(SIZE)-1:0] w_addr, r0_addr, r1_addr,
     input   logic [DATA_N-1:0] w_data,
     output  logic [DATA_N-1:0] r0_data, r1_data
-)
+);
 logic [DATA_N-1:0] regs [0:SIZE-1];
 always_ff @(posedge clk) begin
     if (wr_en)
@@ -302,7 +317,7 @@ endmodule
 ### Dual port RAM
 
 ```verilog
-module reg_file #(
+module dual_port_ram #(
     parameter DATA_N = 32,
     parameter SIZE = 128
 )(
@@ -311,18 +326,17 @@ module reg_file #(
     input   logic [$clog2(SIZE)-1:0] addr0, addr1,
     input   logic [DATA_N-1:0] w0_data, w1_data,
     output  logic [DATA_N-1:0] r0_data, r1_data
-)
-logic [DATA_N-1:0] ram [SIZE];
+);
+logic [DATA_N-1:0] ram [0:SIZE-1];
 always_ff @(posedge clk) begin
-    if (wr0)
-        ram[addr] <= w0_data;
-    r0_data <= ram[addr];
-end
-
-always_ff @(posedge clk) begin
-    if (wr1)
-        ram [addr] <= w1_data;
-    r1_data <= ram[addr];
+    if (we0)
+        ram[addr0] <= w0_data;
+    // Resolve same-address write collisions explicitly instead of relying on
+    // scheduling order between independent procedural blocks.
+    if (we1 && !(we0 && addr0 == addr1))
+        ram[addr1] <= w1_data;
+    r0_data <= ram[addr0];
+    r1_data <= ram[addr1];
 end
 
 endmodule

@@ -1,3 +1,4 @@
+import { architecturePlan } from "./support/architecture.js";
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -114,7 +115,9 @@ test("browser root presets create from an unbound chat and attach execution syst
         "The complete unbound prompt must retain the creation instructions");
       await f.message(origin.id, original);
       assert.equal(f.executions.has(origin.id), false);
-      const prepared = await origin.tools.get("prepare_spec_document_creation").execute({ title: "Comparator", document_id: `comparator_${preset}` }, { callId: `call-${preset}` });
+      const review = (await origin.tools.get("prepare_architecture_review").execute(architecturePlan, { callId: `arch-${preset}` })).architecture_review;
+      assert.equal((await f.api(`/architecture-reviews/${review.reviewId}/approve`, {})).status, 200);
+      const prepared = await origin.tools.get("prepare_spec_document_creation").execute({ architecture_review_id: review.reviewId, title: "Comparator", document_id: `comparator_${preset}` }, { callId: `call-${preset}` });
       const request = prepared.source_creation;
       assert.equal(request.originalRequest, original);
       assert.equal(f.executions.has(origin.id), false);
@@ -140,7 +143,7 @@ test("browser root presets create from an unbound chat and attach execution syst
   } finally { await f.close(); }
 });
 
-test("existing chooser creation works and a bound chat can create another package without reading or rebinding its owner", async () => {
+test("bound creation checks architecture freshness while preserving the original binding and execution", async () => {
   const f = await hostFixture();
   try {
     const existing = await f.api("/sources/create", { domain: "spec", serviceBaseUrl: f.url, documentId: "original", title: "Original", preset: "goal" });
@@ -148,10 +151,14 @@ test("existing chooser creation works and a bound chat can create another packag
     const origin = await f.makeAgent(existing.value.session.sessionId, "goal");
     await f.api(`/bindings/${origin.id}/activate`, {});
     f.executions.get(origin.id).status = "paused";
+    const reviewResult = await origin.tools.get("prepare_architecture_review").execute(architecturePlan, { callId: "arch-bound" });
+    assert.ok(reviewResult.architecture_review, JSON.stringify(reviewResult));
+    const review = reviewResult.architecture_review;
+    assert.equal((await f.api(`/architecture-reviews/${review.reviewId}/approve`, {})).status, 200);
     const reads = f.contextReads;
     await f.message(origin.id, "Create a new spec document for a comparator");
-    const request = (await origin.tools.get("prepare_spec_document_creation").execute({ document_id: "comparator", title: "Comparator" }, { callId: "bound-create" })).source_creation;
-    assert.equal(f.contextReads, reads);
+    const request = (await origin.tools.get("prepare_spec_document_creation").execute({ document_id: "comparator", title: "Comparator", architecture_review_id: review.reviewId }, { callId: "bound-create" })).source_creation;
+    assert.equal(f.contextReads, reads + 1, "Verify the approved architecture's source revision before package creation");
     assert.equal(f.executions.get(origin.id).status, "paused", "Creation must not rearm the source conversation");
     assert.equal((await f.api("/sources/create", { domain: "spec", creationRequestId: request.requestId,
       documentId: request.documentId, title: request.title, serviceBaseUrl: f.url })).status, 201);

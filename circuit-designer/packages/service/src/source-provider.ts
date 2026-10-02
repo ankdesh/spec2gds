@@ -1,3 +1,7 @@
+/** Authenticated callback bridge to the source owner for projected circuits.
+ * Circuit preview and source preview have different validation scopes. Only an
+ * explicit source commit may save the package; failed responses preserve the
+ * authored base revision so callers cannot treat uncertainty as a fresh save. */
 import type {
   CircuitDocument,
   CircuitOperationBatch,

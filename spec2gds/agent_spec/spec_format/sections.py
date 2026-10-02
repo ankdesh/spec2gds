@@ -1,4 +1,9 @@
-"""Typed, forward-compatible entity sections stored in ``.spec`` annotations."""
+"""Typed, forward-compatible entity sections stored in ``.spec`` annotations.
+
+Reviewer path: section registration, indexed annotation files and owner
+references form one package contract. SystemVerilog bodies remain explicit
+source content; rendering or generator templates must not invent their behavior.
+"""
 
 from __future__ import annotations
 
@@ -259,7 +264,7 @@ def validate_systemverilog_body(value: str) -> None:
     code = _code_without_comments_or_strings(value)
     if re.search(r"\b(?:module|endmodule)\b", code):
         raise ValueError("SystemVerilog sections are module bodies and cannot declare module/endmodule.")
-    if re.search(r"(?m)^\s*`(?:include|line)\b", code):
+    if re.search(r"`(?:include|line)\b", code):
         raise ValueError("SystemVerilog sections cannot use external `include or user `line directives.")
 
 

@@ -1,0 +1,212 @@
+{
+  "schema_version": "spec2gds.rtl-evaluation.v1",
+  "cases": [
+    {
+      "id": "adder_8",
+      "family": "adder",
+      "configuration": {
+        "width": 8
+      },
+      "request": "Create a specification for an unsigned 8-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "bench": "benches/adder.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "adder_4",
+      "family": "adder",
+      "configuration": {
+        "width": 4
+      },
+      "request": "Create a specification for an unsigned 4-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "bench": "benches/adder.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "adder_13",
+      "family": "adder",
+      "configuration": {
+        "width": 13
+      },
+      "request": "Create a specification for an unsigned 13-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "bench": "benches/adder.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "counter_16",
+      "family": "counter",
+      "configuration": {
+        "width": 16
+      },
+      "request": "Create a specification for a 16-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "bench": "benches/counter.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "counter_5",
+      "family": "counter",
+      "configuration": {
+        "width": 5
+      },
+      "request": "Create a specification for a 5-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "bench": "benches/counter.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "counter_9",
+      "family": "counter",
+      "configuration": {
+        "width": 9
+      },
+      "request": "Create a specification for a 9-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "bench": "benches/counter.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "fifo_8_16",
+      "family": "fifo",
+      "configuration": {
+        "width": 8,
+        "depth": 16
+      },
+      "request": "Create a specification for an asynchronous FIFO with 8-bit words and 16 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "bench": "benches/fifo.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "fifo_12_4",
+      "family": "fifo",
+      "configuration": {
+        "width": 12,
+        "depth": 4
+      },
+      "request": "Create a specification for an asynchronous FIFO with 12-bit words and 4 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "bench": "benches/fifo.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "fifo_16_8",
+      "family": "fifo",
+      "configuration": {
+        "width": 16,
+        "depth": 8
+      },
+      "request": "Create a specification for an asynchronous FIFO with 16-bit words and 8 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "bench": "benches/fifo.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "priority_encoder",
+      "family": "priority",
+      "configuration": {
+        "width": 8
+      },
+      "request": "Create a specification for an 8-input combinational priority encoder. Highest numbered asserted request wins. Return a 3-bit index and valid; when no requests are asserted, valid=0 and index=0.",
+      "bench": "benches/priority.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    },
+    {
+      "id": "registered_pipeline",
+      "family": "pipeline",
+      "configuration": {
+        "width": 8
+      },
+      "request": "Create a specification for an 8-bit two-stage registered pipeline with clk, active-high synchronous reset, din and dout. Reset clears both stages; otherwise each stage advances every rising edge. Reuse a register component for both stages.",
+      "bench": "benches/pipeline.sv",
+      "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
+      "quality_criteria": [
+        "Linked requirements, behavior, assumptions and verification criteria",
+        "Useful explanations for all components; implemented and proposed behavior distinguished",
+        "Cohesive or reusable structured hierarchy with no hidden composition",
+        "Concrete approved configuration and functional RTL",
+        "Refinement preserves existing user text and ownership"
+      ],
+      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+    }
+  ],
+  "live_repeats": 3,
+  "external_benchmark_references": {
+    "adder": "Arithmetic/Adder/adder_8bit",
+    "counter": "Control/Counter/up_down_counter",
+    "fifo": "Memory/FIFO/asyn_fifo"
+  }
+}

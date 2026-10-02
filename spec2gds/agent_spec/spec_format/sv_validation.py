@@ -1,4 +1,9 @@
-"""Derived, cached Verilator validation for persisted SystemVerilog bodies."""
+"""Derived, cached Verilator validation for persisted SystemVerilog bodies.
+
+Reviewer path: build validation context from declared ports and stored body,
+run the configured Verilator check when available, and distinguish unavailable
+validation from a successful lint. Diagnostics must preserve rejected drafts.
+"""
 
 from __future__ import annotations
 

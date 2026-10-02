@@ -229,6 +229,9 @@
         },
         "entity_id": {
           "type": "string"
+        },
+        "entry_design": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -1295,6 +1298,31 @@
                       },
                       "port_name": {
                         "type": "string"
+                      },
+                      "slice": {
+                        "oneOf": [
+                          {
+                            "type": "null"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "lsb": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "width": {
+                                "type": "integer",
+                                "minimum": 1
+                              }
+                            },
+                            "required": [
+                              "lsb",
+                              "width"
+                            ],
+                            "additionalProperties": false
+                          }
+                        ]
                       }
                     },
                     "required": [],
@@ -1304,7 +1332,48 @@
                 "external_ports": {
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "port_name": {
+                            "type": "string"
+                          },
+                          "slice": {
+                            "oneOf": [
+                              {
+                                "type": "null"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "lsb": {
+                                    "type": "integer",
+                                    "minimum": 0
+                                  },
+                                  "width": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  }
+                                },
+                                "required": [
+                                  "lsb",
+                                  "width"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "port_name"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
                   }
                 }
               },

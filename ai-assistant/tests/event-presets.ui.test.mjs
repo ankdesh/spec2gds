@@ -5,13 +5,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { boot, waitFor } from './support/event-runtime.mjs';
+import { approveTimer } from './support/approved-timer.mjs';
 
 const dependencies = createRequire(resolve(process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
 const { chromium, expect } = dependencies('@playwright/test');
@@ -61,7 +62,10 @@ async function fixture() {
       if(assets.has(request.url)){response.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});return response.end(assets.get(request.url));}
       if(request.url.startsWith('/test/')) {
         let data='';for await(const chunk of request)data+=chunk;const body=JSON.parse(data);
-        if(request.url==='/test/create-session')await runtime.ctx.agents.create({sessionId:SessionId(body.sessionId),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:body.agentPreset},setup:async(ctx)=>{if(body.agentPreset==='goal')await ctx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
+        if(request.url==='/test/create-session') {
+          await runtime.ctx.agents.create({sessionId:SessionId(body.sessionId),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:body.agentPreset},setup:async(ctx)=>{if(body.agentPreset==='goal')await ctx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
+          approveTimer(directory, body.sessionId);
+        }
         else if(request.url==='/test/send') {
           const agent=runtime.ctx.agents.get(SessionId(body.sessionId));
           if(agent.session.header.agentPreset==='goal'&&!runtime.ctx.goals.get(agent))runtime.ctx.goals.create(agent,{objective:body.text,maxGoalRounds:8});
@@ -76,8 +80,15 @@ async function fixture() {
   const browser=await chromium.launch({headless:true});const page=await browser.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(`http://127.0.0.1:${app.address().port}`);
+  await page.waitForFunction(() => typeof document.querySelector('#new')?.onclick === 'function');
   return {page,runtime,directory,get mutations(){return mutations;},get previews(){return previews;},change(){revision='sha256:changed';runtime.adapter.revision=revision;},
-    async close(){try{assert.deepEqual(errors,[]);}finally{await browser.close();await new Promise(resolve=>app.close(resolve));await runtime.ctx.fiber.dispose();await new Promise(resolve=>owner.close(resolve));await rm(directory,{recursive:true,force:true});}}};
+    async close(){try{await screenshot(page,'last-state');assert.deepEqual(errors,[]);}finally{await browser.close();await new Promise(resolve=>app.close(resolve));await runtime.ctx.fiber.dispose();await new Promise(resolve=>owner.close(resolve));await rm(directory,{recursive:true,force:true});}}};
+}
+async function screenshot(page,name) {
+  const directory=process.env.ASSISTANT_UI_SCREENSHOT_DIR;
+  if(!directory)return;
+  await mkdir(directory,{recursive:true});
+  await page.screenshot({path:join(directory,`${name}.png`),fullPage:true});
 }
 async function chooser(page,preset) {
   await page.getByRole('button',{name:'New conversation',exact:true}).click();
@@ -117,6 +128,7 @@ test('orchestrated UI saves text-backed reactions, runs analyst/reviewer, and ex
     await f.page.getByRole('button',{name:'Pause',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','paused');
     await f.page.getByRole('button',{name:'Resume',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','active');
     assert.deepEqual(f.runtime.ctx.eventSystems.get(SessionId(id)).definition,state.definition);
+    await screenshot(f.page,"01-orchestrated-final");
   }finally{await f.close();}
 });
 
@@ -136,6 +148,7 @@ test('goal UI retains one native primary, waits for owner review, and controls m
     await f.page.getByRole('button',{name:'Disable monitor',exact:true}).click();await expect(f.page.getByRole('button',{name:'Enable monitor',exact:true})).toBeVisible();
     await inspect(f.page);await expect(f.page.getByText('Pinned event configuration',{exact:true})).toBeVisible();
     await f.page.getByRole('button',{name:'Stop',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','stopped');
+    await screenshot(f.page,"02-goal-final");
   }finally{await f.close();}
 });
 
@@ -166,6 +179,15 @@ test('both preset UIs reject permission escalation and preserve pinned text when
       const configured=f.runtime.ctx.eventSystems.get(SessionId(next));
       assert.ok(configured.definition.agents[0].prompt.includes('later template revision'));
       if(preset==='orchestrated')assert.equal(configured.members.length,4);
+      await inspect(f.page);
+      await screenshot(f.page,`03-configuration-pinning-${preset}-final`);
+      if(preset==='orchestrated'&&process.env.ASSISTANT_UI_SCREENSHOT_DIR){
+        await f.page.getByRole('button',{name:'Configure event templates',exact:true}).click();
+        const editor=f.page.getByRole('dialog',{name:`Event setup · ${preset}`});
+        await editor.getByLabel('Template',{exact:true}).selectOption(template.key);
+        await screenshot(f.page,'04-orchestrated-topology-editor');
+        await editor.getByRole('button',{name:'Close',exact:true}).click();
+      }
     }
   }finally{await f.close();}
 });

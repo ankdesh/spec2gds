@@ -1,3 +1,7 @@
+/** Logical source grouping without changing conversation authority.
+ * A Spec package and its derived Circuits share a Workspace; independent
+ * Circuits have their own identity. Scratch directories are native session
+ * grouping paths, not permission for model filesystem access. */
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import type { BindingInput, WorkspaceDescriptor } from "./types.js";

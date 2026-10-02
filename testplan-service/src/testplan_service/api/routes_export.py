@@ -1,4 +1,8 @@
-"""FastAPI routes for exporting and importing testplan documents."""
+"""Legacy prototype export router; not mounted by the Verification Planner app.
+
+The current service uses routes_exports.py and application/export_service.py.
+Keep this distinction explicit when reading old JSON-node import behavior.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +19,7 @@ def create_export_router(
     manager_provider: Any,
     export_service_provider: Any,
 ) -> APIRouter:
+    """Compose the legacy JSON-node routes, independently of the current API."""
     router = APIRouter(prefix="/testplans", tags=["Export & Import"])
 
     @router.get("/{plan_id}/export/markdown")

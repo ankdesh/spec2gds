@@ -26,6 +26,15 @@ Slang-enabled CIRCT `circt-verilog` frontend to lower behavior to HW/Comb/Seq
 IR. A small CIRCT-linked emitter validates and translates the supported IR to
 SystemC. No PyCDE-generated shell or region stitching is needed.
 
+## Current emitter limitation
+
+The emitter accepts one-bit arithmetic IR but converts its results with C++
+`bool`, which tests for nonzero rather than truncating to one bit. For example,
+`bool(1 + 1)` is true while one-bit addition wraps to zero. This boundary needs
+correct width conversion and native regression coverage; acceptance by the
+emitter is not an equivalence proof for every one-bit arithmetic expression.
+The optional CIRCT/SystemC tests require the toolchain below.
+
 ## Toolchain
 
 Use `uv sync` to create/update the repository's `.venv`. Install a CIRCT build
@@ -56,8 +65,8 @@ The editor's launch dialog reports a missing compiler before starting a job.
 
 ## Output and use
 
-Select a design in Spec Editor, choose **Launch activity…**, then **Generate
-cycle-accurate SystemC**. The managed output is
+Select a design in Spec Editor, choose **Options → More actions… → Launch
+activity…**, then **Generate cycle-accurate SystemC**. The managed output is
 `systemc-rtl/<document-id>/<design-id>/` beside the active `.spec` package. It
 contains `include/design.h`, the assembled inputs in `source/`,
 `src/main.cpp`, `CMakeLists.txt`, and `generation-manifest.json`. A typed Activity

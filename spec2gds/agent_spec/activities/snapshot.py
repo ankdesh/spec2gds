@@ -1,4 +1,9 @@
-"""Deterministic, portable full-source snapshots for Activity execution."""
+"""Deterministic, portable full-source snapshots for Activity execution.
+
+Reviewer path: embed full source-only package bytes, pin scope and verify
+container/semantic digests on load. A snapshot is a reproducible input boundary,
+not a locator that later reads whichever live document is open.
+"""
 
 from __future__ import annotations
 

@@ -6,12 +6,14 @@ connects those modules into the main runtime and data flows.
 
 ## Start with the ownership boundaries
 
-There are two Python distributions:
+There are three Python distributions:
 
 1. The root `spec2gds` project owns `.spec` packages, immutable semantic reads,
    validated edits, imports, Activities, the Spec API, and the Log Viewer.
 2. `runtime/` is the deliberately small shared package for service-independent
    logging configuration and structured events.
+3. `testplan-service/` owns snapshot-bound verification planning, reviewed
+   checkpoints, evidence and reference generation with its own SQLite/blob store.
 
 The optional `ai-assistant/` is a TypeScript/Node DeepSeek Harness product, not
 a Python distribution. It owns chats and review records but never owns
@@ -44,7 +46,7 @@ it, checks the expected source hash, and only then replaces the package.
 
 ## Follow an Activity
 
-The Activity path separates portable plugin contracts from any future queue or
+The Activity path separates portable plugin contracts from the product queue and
 worker host:
 
 1. `activities/snapshot.py` captures one deterministic, source-only revision.
@@ -56,6 +58,8 @@ worker host:
    invocation.
 5. `activities/workspace.py` atomically publishes only generator-owned relative
    directories.
+6. `spec_format/activity_jobs.py` provides the implemented persisted single-worker
+   queue and immutable input recovery, outside the portable Activity contracts.
 
 The RTL and SystemC generators deliberately use two phases. Analysis traverses
 and validates the complete reachable source graph before output begins;
@@ -66,12 +70,21 @@ Assistant proposal execution is documented in [AI Assistant](ai-assistant.md).
 Its TypeScript source lives under `ai-assistant/src`; no Assistant Python,
 FastAPI, Pydantic, or A2A package remains.
 
+## Follow verification planning
+
+Start with `testplan-service/src/testplan_service/application/service.py`, then
+read `command_handler.py` for candidate authoring, `review_engine.py` for frozen
+checkpoints, `coverage_service.py` and `domain/coverage_evaluator.py` for evidence,
+and `generation_runner.py` for synchronous reference artifact generation.
+`storage/sqlite_repo.py` owns final transaction/revision checks. These boundaries
+do not import live Spec mutation APIs. See [the Planner architecture](testplan-service-architecture.md).
+
 ## Verify a Python change
 
 From the repository root:
 
 ```bash
-uv run python -m pytest -q
+uv run python -m pytest -q tests testplan-service/tests
 uv run ruff check spec2gds runtime/src
 uv run vulture spec2gds runtime/src --min-confidence 90
 ```

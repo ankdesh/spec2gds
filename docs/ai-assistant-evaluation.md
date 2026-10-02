@@ -13,17 +13,17 @@ outcomes. It contains no credentials or production transcripts.
 
 ## Run
 
-Use Node.js 24 or newer for the combined assistant and Circuit checks.
+Use Node.js 24.2 or newer for the combined Assistant and Circuit checks.
 
 ```bash
+scripts/setup-all.sh
 cd ai-assistant
-npm run setup:harness
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 ```
 
-The setup step prepares the pinned DSH checkout used by evaluation and replay.
-It can be omitted on later runs while that checkout remains clean, pinned, and
-built.
+The setup step builds and links the configured Harness branch. Confirm its
+commit matches `harness.lock.json` before evaluating the supported composition.
+It can be omitted while the matching source/build dependencies remain available.
 
 Pass `--session /path/to/session.jsonl` to calculate metrics from an
 uncompressed DSH Session snapshot. The command writes versioned `events.jsonl`,
@@ -49,3 +49,14 @@ provider fixture.
   `applied` or `sent`.
 
 These are raw measurements. Quality thresholds remain intentionally undefined.
+
+## Safety lessons retained from earlier browser evaluations
+
+Check that launch reservations and native session IDs agree before judging model
+quality. Missing authoritative context can look like reasoning failure. Record
+owner revision/package bytes before and after a scenario; model completion prose
+is not mutation evidence. Include unsupported requests, unanswered clarification,
+review/send versus saved-source state, bounded goal continuation and unchanged
+polling in regressions. Historical token totals from an older composition are
+not current release thresholds. Live-provider quality evaluation supplements
+keyless deterministic contract tests.

@@ -1,3 +1,7 @@
+/** Semantic stage/clock analysis independent of route geometry.
+ * Cycle edges annotate pipeline boundaries; do not infer clocks or electrical
+ * behavior from where a line happens to cross the canvas. Source adapters map
+ * these stable semantic references before saving package annotations. */
 import type {
   CircuitDocument,
   CircuitTimingV1,

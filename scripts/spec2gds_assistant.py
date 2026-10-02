@@ -24,6 +24,7 @@ from spec2gds.agent_spec.spec_format.review_store import (
     _REPO_ROOT,
     list_spec_reviews,
     node_executable,
+    review_bridge,
 )
 from spec2gds.agent_spec.spec_format.v1_api import create_app
 from spec2gds.agent_spec.spec_format.workspace_target import (
@@ -74,12 +75,18 @@ def _private_owner(require_human_approval: bool = False) -> Iterator[str]:
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2gds-assistant", description="Run one focused assistant turn against a workspace specification.")
     parser.add_argument("target", help="Workspace directory or exact .spec path")
+    parser.add_argument("--architecture-review-id", help="Previously approved architecture for this exact specification and revision")
     parser.add_argument("--preset", default="focused", help="Assistant preset (currently focused only)")
     parser.add_argument("--require-human-approval", action="store_true", help="leave valid submissions pending for an explicit Spec CLI decision")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run one focused request against a private owner for the selected package.
+
+    Persist native session/run output for later review and evaluation. Only the
+    focused preset is admitted; longer-lived browser execution has another lifecycle.
+    """
     raw = list(sys.argv[1:] if argv is None else argv)
     parser = _parser()
     if "--" not in raw:
@@ -117,6 +124,13 @@ def main(argv: list[str] | None = None) -> int:
             ).hexdigest()
             cwd = state_root / "workspaces" / "design-sources" / workspace_key
             cwd.mkdir(parents=True, exist_ok=True)
+            if args.architecture_review_id:
+                review = review_bridge(state_root, "architecture-require", args.architecture_review_id)["architecture_review"]
+                if review.get("documentId") != document_id or review.get("ownerDocumentKey") != snapshot["owner_document_key"]:
+                    raise ValueError("Approved architecture does not belong to this exact specification.")
+                if review.get("sourceRevision") != snapshot["source_revision_hash"]:
+                    raise ValueError("Approved architecture is stale. Prepare an updated review.")
+                prompt += f"\n\nApproved architecture_review_id: {args.architecture_review_id}\nAccepted architecture: {json.dumps(review['plan'])}\nUse the approved review ID in the content proposal."
             env = {
                 **os.environ,
                 "PATH": f"{Path(node).parent}:{os.environ.get('PATH', '')}",
@@ -150,12 +164,14 @@ def main(argv: list[str] | None = None) -> int:
         runs.mkdir(parents=True, exist_ok=True)
         event_path = runs / f"{session_id or 'failed-turn'}.jsonl"
         event_path.write_text(result.stdout, encoding="utf-8")
+        architecture_reviews = review_bridge(state_root, "architecture-list")["architecture_reviews"]
         run = {
             "schema_version": "spec2gds.assistant-workspace-run.v1",
             "spec_path": str(spec_path), "document_id": document_id,
             "session_id": session_id, "preset": "focused", "exit_code": result.returncode,
             "approval_policy": "review" if args.require_human_approval else "automatic",
             "answer": final, "events_path": str(event_path),
+            "architecture_reviews": [item for item in architecture_reviews if item["sessionId"] == session_id],
             "proposals": [{"proposal_id": item["proposalId"], "state": item["state"]} for item in reviews],
         }
         output = state_root / "last-run.json"

@@ -1,6 +1,6 @@
-# DSH UI migration and extension map
+# Assistant UI composition
 
-## Result
+## Current composition
 
 The former custom React assistant and its REST/SSE chat protocol have been
 removed. The assistant now uses the DSH web UI as its shell and extends it with
@@ -59,7 +59,7 @@ adoption and automatic recent-Workspace startup are disabled.
 | Chat composer and streaming transcript | Retain | DSH owns all model turns and cancellation |
 | Rename, archive/restore, export | Retain | Uses DSH session contracts directly |
 | Model status/selection | Retain | Defaults to `openai/gpt-4o-mini` |
-| `/goal` and goal bar | Retain for now | Generic DSH semantics; later replace with spec2gds milestone/design-goal semantics |
+| `/goal` and goal bar | Retain | Native goal continuation with product budgets and correlated owner-review waits |
 | Generic tool renderer | Retain as fallback | Product keyed views replace only proposal tools |
 | New-session behavior | Extend | Global service/target/create chooser and a Workspace-scoped design-source chooser |
 | Brand slots | Extend | spec2gds identity |
@@ -68,12 +68,12 @@ adoption and automatic recent-Workspace startup are disabled.
 | Coding agent presets | Drop | Prevents standard preset from restoring coding tools or persona |
 | Shell, filesystem, web, skills, subagents, workflows, jobs | Drop | Not part of an owner-bound design assistant |
 | Terminal/file/document sidebars and deliverables | Drop | Scratch workspace is an implementation detail |
-| Plan UI | Drop for this milestone | No compatible focused plan-mode composition yet |
+| Plan UI | Disabled | No supported plan-mode composition |
 | Attachments and file references | Drop | Owner context is the authoritative design input |
 | Schedules, plugin management, Cordis debug UI | Drop | Deployment/operator concerns, not end-user workflows |
 | Permission chooser | Drop | Product enforces fixed read-only/no-general-tool policy |
 | Official DSH branding and open-in-app | Drop | Replaced by product identity and editor launch links |
-| DSH testing and official-provider onboarding | Drop | Models settings remain; the product profile disables both generic first-run dialogs |
+| DSH testing and official-provider onboarding | Drop | The product configures model routes through environment variables and omits generic Models settings/onboarding |
 | Feedback controls | Drop | No product feedback backend or workflow |
 | Language picker | Drop | Deployment is English-only for now |
 
@@ -109,11 +109,10 @@ and test DSH changes on `spec2gds/integration`; package only from a clean pinned
 checkout. This prevents spec2gds-specific UI from becoming a permanent fork of
 the upstream DSH web application.
 
-## Follow-up work
+## Remaining UI work
 
-The next product layer should redefine `/goal` around design milestones and
-owner revisions instead of generic agent work. Other reasonable follow-ups are
-reusing the Circuit Designer's production renderer in the proposal card,
-adding browser-component tests for the binding dialog and tool cards, and
-deciding whether any owner-native reference/attachment workflow should be
-introduced. None requires reviving the old assistant API or custom transcript.
+The event-preset Chromium tests cover template authoring and execution controls
+inside a minimal Harness adapter shell. Full native-shell browser acceptance,
+production Circuit renderer reuse in proposal cards, and optional owner-native
+attachments remain separate work. The native goal driver and correlated waiting
+are already implemented; see [event execution](event-driven-assistant-system.md).

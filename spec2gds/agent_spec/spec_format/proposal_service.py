@@ -73,6 +73,11 @@ def _apply(
     session: ProposalSession, proposal: SpecChangeProposal,
     application_mode: typing.Literal["automatic", "review"], session_id: str | None,
 ) -> dict[str, typing.Any]:
+    """Revalidate or replay a proposal while the caller holds the package lock.
+
+    Check saved decisions before stale preview: a successful retry has an old base
+    revision but must return its original receipt. Source and decision save together.
+    """
     if proposal.document_id != session.revision.document_id:
         raise ProposalApplyError(409, "Proposal targets a different specification document.")
     digest = proposal.operations_digest()
@@ -84,6 +89,8 @@ def _apply(
         ),
         None,
     )
+    # Replay precedes preview: the old authored revision is expected after a prior
+    # successful save. Compare the complete mutation identity before returning it.
     if existing is not None:
         if (existing.operations_digest != digest or existing.scope != proposal.scope
                 or existing.target != proposal.target
@@ -125,6 +132,8 @@ def _apply(
         owner_document_key=getattr(session, "owner_document_key", None),
         diff=tuple(result["diff"]),
     )
+    # The decision is committed with source, allowing a later journal reconciliation
+    # after a crash between package replacement and external receipt persistence.
     session.commit_assistant_revision(revision, decision)
     return {
         "status": "applied",

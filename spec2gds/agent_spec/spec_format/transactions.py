@@ -140,6 +140,7 @@ class CreateEntity:
     instances: tuple[InstanceIR, ...] = ()
     ports: tuple[InitialComponentPort, ...] = ()
     systemverilog: str | None = None
+    entry_design: bool = True
 
 
 @dataclass(frozen=True)
@@ -399,6 +400,8 @@ class SpecEditTransaction:
                     f"Stale base revision: expected {revision.source_revision_hash}, got {self.base_source_revision_hash}.",
                 ),
             )
+        # Mutate a detached package. Validation failure returns no candidate revision,
+        # leaving the immutable input usable by readers and other guarded transactions.
         package = revision.to_package()
         try:
             for operation in self.operations:
@@ -424,6 +427,8 @@ class SpecEditTransaction:
             item.section_id for owner in updated_owners
             for item in next_revision.entity_sections_for(owner, "sv")
         }
+        # Validate changed bodies against the fully updated ports/hierarchy, so a batch
+        # can author an entity and its body atomically without validating an intermediate.
         section_validation = validate_revision_sections(next_revision, updated_ids)
         if any(item.blocking for item in section_validation):
             messages = tuple(
@@ -680,7 +685,7 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
     )
     if operation.systemverilog is not None:
         upsert_systemverilog_section(package, reference, operation.systemverilog)
-    if operation.kind == "design":
+    if operation.kind == "design" and operation.entry_design:
         package.manifest = package.manifest.model_copy(
             update={"entry_designs": [*package.manifest.entry_designs, reference]}
         )

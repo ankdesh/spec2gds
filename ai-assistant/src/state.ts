@@ -1,3 +1,7 @@
+/** Product persistence for owner bindings, review claims and recoverable creation.
+ * Native transcripts/event ledgers live in separate stores. A successful local
+ * claim precedes the owner HTTP call; uncertainty must be reconciled by identity
+ * rather than automatically repeating a possibly completed mutation. */
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
@@ -59,6 +63,10 @@ export class ProductState {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS reviews_session_created ON reviews(session_id, created_at);
+      CREATE TABLE IF NOT EXISTS architecture_reviews (
+        review_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, call_id TEXT NOT NULL,
+        status TEXT NOT NULL, record_json TEXT NOT NULL, UNIQUE(session_id, call_id)
+      );
       CREATE TABLE IF NOT EXISTS proposal_inputs (
         input_id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL REFERENCES bindings(session_id) ON DELETE CASCADE,
@@ -87,6 +95,60 @@ export class ProductState {
 
   close(): void { this.database.close(); }
 
+  architectureReview(id: string): Record<string, any> | null {
+    const row = this.database.prepare("SELECT record_json FROM architecture_reviews WHERE review_id=?")
+      .get(id) as { record_json: string } | undefined;
+    return row ? JSON.parse(row.record_json) : null;
+  }
+
+  architectureForCall(sessionId: string, callId: string): Record<string, any> | null {
+    const row = this.database.prepare("SELECT record_json FROM architecture_reviews WHERE session_id=? AND call_id=?")
+      .get(sessionId, callId) as { record_json: string } | undefined;
+    return row ? JSON.parse(row.record_json) : null;
+  }
+
+  listArchitectureReviews(): Record<string, any>[] {
+    return (this.database.prepare("SELECT record_json FROM architecture_reviews ORDER BY rowid").all() as Array<{record_json: string}>)
+      .map(row => JSON.parse(row.record_json));
+  }
+
+  storeArchitecture(record: Record<string, any>): void {
+    this.database.prepare(`INSERT INTO architecture_reviews VALUES(?,?,?,?,?)
+      ON CONFLICT(review_id) DO UPDATE SET status=excluded.status, record_json=excluded.record_json`)
+      .run(record.reviewId, record.sessionId, record.callId, record.status, JSON.stringify(record));
+  }
+
+  decideArchitecture(id: string, decision: "approved" | "revised" | "cancelled", feedback: string): Record<string, any> {
+    const record = this.architectureReview(id);
+    if (!record) throw new Error("Unknown architecture review.");
+    if (record.status === decision) return record;
+    if (record.status !== "pending") throw new Error("This review has already been decided. Prepare a new review to change its architecture.");
+    if (decision === "approved" && record.plan.open_questions.length) throw new Error("Resolve essential open questions in a revised architecture before approval.");
+    const updated = { ...record, status: decision, feedback, decidedAt: now() };
+    const result = this.database.prepare(`UPDATE architecture_reviews SET status=?,record_json=? WHERE review_id=? AND status='pending'`)
+      .run(decision, JSON.stringify(updated), id);
+    if (Number(result.changes) !== 1) throw new Error("Architecture decision changed concurrently; reload the card.");
+    return updated;
+  }
+
+  requireArchitecture(sessionId: string, id: string | undefined, revision?: string): Record<string, any> {
+    const record = id ? this.architectureReview(id) : null;
+    const binding = this.getBinding(sessionId);
+    const sameSource = Boolean(binding?.ownerDocumentKey && binding.ownerDocumentKey === record?.ownerDocumentKey
+      && binding.documentId === record?.documentId && binding.scope === record?.scope
+      && binding.entityId === (record?.entityId ?? null));
+    const sameDestination = Boolean(binding?.ownerDocumentKey && binding.ownerDocumentKey === record?.destinationOwnerDocumentKey
+      && binding.documentId === record?.destinationDocumentId && binding.scope === "document");
+    if (!record || record.status !== "approved" || (![record.sessionId, record.destinationSessionId].includes(sessionId) && !sameSource && !sameDestination)) {
+      throw new Error("Prepare an architecture review and obtain its approval before creating content or changing architecture. Supply architecture_review_id.");
+    }
+    const expected = sessionId === record.sessionId || sameSource ? record.sourceRevision : record.destinationSourceRevision;
+    if (revision && expected && expected !== revision) {
+      throw new Error("Architecture review is stale. Reread the stored specification and obtain approval of an updated architecture.");
+    }
+    return record;
+  }
+
   getSourceCreation(requestId: string): SourceCreationRequest | null {
     const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE request_id=?")
       .get(requestId) as { request_json: string } | undefined;
@@ -96,6 +158,12 @@ export class ProductState {
   sourceCreationForCall(sessionId: string, callId: string): SourceCreationRequest | null {
     const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE source_session_id=? AND call_id=?")
       .get(sessionId, callId) as { request_json: string } | undefined;
+    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+  }
+
+  sourceCreationForArchitecture(reviewId: string): SourceCreationRequest | null {
+    const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE json_extract(request_json,'$.architectureReviewId')=? AND status<>'cancelled' ORDER BY rowid DESC LIMIT 1")
+      .get(reviewId) as { request_json: string } | undefined;
     return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
   }
 
@@ -124,6 +192,8 @@ export class ProductState {
     return Number(result.changes) === 1;
   }
 
+  // A local creating flag cannot tell whether the remote package save happened.
+  // Recover as uncertain and reconcile the owner receipt before any retry.
   recoverInterruptedSourceCreations(): void {
     const rows = this.database.prepare("SELECT request_id FROM source_creation_requests WHERE status='creating'")
       .all() as Array<{ request_id: string }>;
@@ -184,6 +254,8 @@ export class ProductState {
     return this.getBinding(sessionId)!;
   }
 
+  // Reservation is durable before native session creation. Activation is the
+  // second phase; startup can reconcile a transcript created before a crash.
   activateBinding(sessionId: string): SessionBinding {
     this.database.prepare("UPDATE bindings SET status='active', updated_at=? WHERE session_id=? AND status='creating'")
       .run(now(), sessionId);
@@ -306,6 +378,8 @@ export class ProductState {
     const current = this.getReview(sessionId, proposalId);
     if (!current) throw new Error("Unknown proposal review.");
     if (!expected.includes(current.state)) throw new Error(`Review is ${current.state}; expected ${expected.join(" or ")}.`);
+    // Reloaded state and its version form a compare-and-swap claim. Concurrent
+    // buttons cannot both own an apply/send transition for the same artifact.
     const result = this.database.prepare(`
       UPDATE reviews SET state=?, preview_json=?, diagnostics_json=?, error_json=?, owner_result_json=?, version=version+1, updated_at=?
       WHERE session_id=? AND proposal_id=? AND version=?

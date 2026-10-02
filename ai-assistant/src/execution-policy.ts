@@ -1,4 +1,7 @@
-/** Product resource ceilings and proposal ownership for native event/goal execution. */
+/** Product admission ceilings and causal proposal permission.
+ * The native runtime measures spending; this adapter restricts deployment input
+ * and requires the latest orchestrated observation to have a reviewed ancestor.
+ * A review event from an older request cannot authorize a newer proposal. */
 import type { EventSystemSnapshot, ExecutionLimits } from "@deepseek-ai/dsh-event-system";
 import { isRecord } from "./types.js";
 
@@ -29,6 +32,8 @@ export function proposalExecutionDenial(state: EventSystemSnapshot, member: stri
   if (state.status !== "active") return `Execution is ${state.status}; resume it before preparing a proposal.`;
   if (member !== state.definition.primary) return "Only the primary agent may prepare owner proposals.";
   if (state.mode === "goal") return undefined;
+  // Any newer human input or source observation invalidates an earlier review
+  // for proposal permission. Follow causation, not just event type or timestamp.
   const request = state.events.findLast(event => ["user.requested", "source.changed"].includes(event.type));
   if (!request) return "An orchestrated proposal requires a recorded user request or approved source change.";
   const reviewed = state.events.filter(event => event.type === "review.ready").some(event => {

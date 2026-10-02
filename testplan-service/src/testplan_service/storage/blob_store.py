@@ -1,4 +1,9 @@
-"""Immutable content-addressed SHA-256 blob storage."""
+"""Immutable content-addressed SHA-256 blob storage.
+
+Reviewer path: hash bytes, stage locally and replace the content-addressed
+file before recording references. Paths use one hash-prefix level; content
+identity does not by itself authenticate an external producer or prove evidence.
+"""
 
 from __future__ import annotations
 

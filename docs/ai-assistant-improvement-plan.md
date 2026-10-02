@@ -4,7 +4,7 @@ Status: remaining-work backlog and decision tracker
 
 Created: 2026-09-21
 
-Reconciled: 2026-09-23
+Reconciled against current event/goal execution: 2026-10-01
 
 Design source: `design_plan.md` supplied by the project owner
 
@@ -21,7 +21,7 @@ as the future task backlog.
 Implemented behavior and its extension procedure are documented in
 [AI Assistant](ai-assistant.md),
 [Configurable Assistant Architecture](configurable-assistant-architecture.md),
-and the [DSH configurable assistant tutorial](dsh-configurable-assistant-tutorial.md).
+and the [DSH configurable assistant tutorial](event-driven-assistant-tutorial.md).
 The [evaluation guide](ai-assistant-evaluation.md) documents the existing
 corpus, replay, and metric facilities.
 
@@ -90,7 +90,7 @@ evidence or scale before investment.
 - **Delivery state:** not-started
 - **Priority:** P1
 - The browser root agent already has structured, same-turn questions, while a
-  workflow can durably await input. The remaining work is the domain policy for
+  goal/event execution can durably await input. The remaining work is the domain policy for
   deciding which mechanism to use and when a default is safe.
 - Candidate blocking classes are missing entity identity, ambiguous endpoints,
   clock-domain crossings, consequential width adaptation, and protocol choice.
@@ -98,7 +98,7 @@ evidence or scale before investment.
   - What is the exact allowlist of blocking ambiguity classes per service?
   - Which choices require recommended options, and how are those options
     derived from authoritative context?
-  - When should a goal/orchestrated run use durable workflow input instead of
+  - When should a goal/orchestrated run use durable correlated waits instead of
     an immediate structured question?
   - What should happen when the same ambiguity remains after an answer?
 - **Safety rule:** no automatic correction may alter architecture or meaning.
@@ -127,10 +127,10 @@ evidence or scale before investment.
 - **Definition maturity:** deferred
 - **Delivery state:** not-started
 - **Priority:** P3
-- The generic orchestrated preset and read-only child boundary already exist.
+- The standing analyst/reviewer roster and read-only observer boundary already exist.
   Remaining work is evidence-based routing to specialists such as entity
   lifecycle, interfaces, wiring, and constraints/timing.
-- Children must remain unable to prepare proposals, mutate workflow state,
+- Children must remain unable to prepare proposals, edit execution configuration,
   question the user directly, or bypass owner preview and human approval.
 - **Trigger:** AA-05 has an accepted routing contract and evaluation shows that
   specialist routing improves outcomes enough to justify latency and cost.
@@ -318,13 +318,14 @@ evidence or scale before investment.
   AA-04 question.
 - Depends on PA-04 and UX-03.
 
-#### VE-04 — Retry policy compatible with turn and workflow budgets
+#### VE-04 — Owner validation retry policy within execution budgets
 
 - **Definition maturity:** needs-refinement
 - **Delivery state:** not-started
 - **Priority:** P0
-- The source's proposed three automated retries conflicts with bounded model
-  steps and can also duplicate workflow work. Do not adopt it as written.
+- Replay-safe analyst/reviewer delivery retries are implemented with bounded
+  backoff and aggregate accounting. The remaining scope is owner validation
+  correction/retry policy; mutation preparation is not automatically retried.
 - **Questions to resolve:** retryable codes, fresh-context requirements,
   maximum attempts/requests/tokens/time, idempotency, visible progress, metric
   events, and the transition from retry to clarification or failure.
@@ -402,7 +403,7 @@ evidence or scale before investment.
 ## 8. Recommended sequencing
 
 1. Resolve VE-04 so retry behavior cannot undermine the existing turn and
-   workflow budgets.
+   execution budgets.
 2. Resolve AA-04, PA-04, VE-03, and UX-03 as one clarification/default/
    correction policy.
 3. Establish TQ-04 quality gates, then evaluate PA-03 examples against them.
@@ -461,7 +462,7 @@ documentation agree.
 | --- | --- | --- |
 | 2026-09-21 | Keep inline few-shot examples unresolved | The source places examples both inline and in skills. Measured failures and accepted quality gates must determine placement and quantity. |
 | 2026-09-21 | Treat automatic fixes as visible | “Silent auto-fix” conflicts with notification. UX-03 and VE-03 require traceable corrections. |
-| 2026-09-21 | Do not accept a three-retry cap yet | It conflicts with bounded turn and workflow resources. VE-04 owns the combined policy. |
+| 2026-10-01 | Limit the remaining retry item to owner validation/correction | Replay-safe specialist delivery retries already enforce bounded attempts and aggregate resources; primary mutation preparation is not automatically retried. |
 | 2026-09-21 | Treat claimed benchmark effects as hypotheses | Tool-count accuracy, masking improvement, context reduction, and quality targets require project-specific measurement. |
 | 2026-09-22 | Keep service specialization separate from execution shape | Future routing must preserve the distinction between domain adapters and focused, goal, or orchestrated execution. |
 | 2026-09-23 | Keep only remaining work in this plan | Implemented behavior belongs in current-behavior, architecture, tutorial, and evaluation documents; partially completed ideas retain only unresolved scope here. |

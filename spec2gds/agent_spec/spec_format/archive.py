@@ -1,4 +1,9 @@
-"""Deterministic custom ZIP package support for the V1 `.spec` format."""
+"""Deterministic custom ZIP package support for the V1 `.spec` format.
+
+Reviewer path: validate container paths and manifest references before use,
+compute source-only identity, then publish deterministic bytes atomically.
+Activity history is preserved but must not change the semantic source hash.
+"""
 
 import copy
 import io

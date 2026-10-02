@@ -1,4 +1,4 @@
-"""Design-scoped deterministic SystemVerilog generation Activity."""
+"""Component/design-scoped deterministic SystemVerilog generation Activity."""
 
 from __future__ import annotations
 
@@ -53,15 +53,14 @@ class RtlGenerationReport(pydantic.BaseModel):
 
     model_config = pydantic.ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: typing.Literal["spec2gds.rtl-generation-report.v2"] = (
-        "spec2gds.rtl-generation-report.v2"
-    )
+    schema_version: typing.Literal["spec2gds.rtl-generation-report.v2", "spec2gds.rtl-generation-report.v3"] = "spec2gds.rtl-generation-report.v3"
     generator_id: str
     generator_version: str
     document_id: str
     source_revision_hash: str
-    design: EntityRef
-    design_vlnv: str
+    target: EntityRef
+    target_vlnv: str
+    implementation_status: dict[str, str] = pydantic.Field(default_factory=dict)
     output_path: str
     top_module: str
     wrapper_generated: bool
@@ -76,12 +75,21 @@ class RtlGenerationReport(pydantic.BaseModel):
     tree_sha256: str
     files: tuple[WorkspaceFile, ...]
 
+    @pydantic.model_validator(mode="before")
+    @classmethod
+    def read_legacy_report(cls, value: typing.Any) -> typing.Any:
+        if isinstance(value, dict) and value.get("schema_version") == "spec2gds.rtl-generation-report.v2":
+            value = dict(value)
+            value["target"] = value.pop("design")
+            value["target_vlnv"] = value.pop("design_vlnv")
+        return value
+
 
 def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
-    if context.target is None or context.target.entity_kind != "design":
+    if context.target is None or context.target.entity_kind not in {"component", "design"}:
         return ActivityAvailability(
             available=False,
-            diagnostics=("Error: RTL generation requires a selected design.",),
+            diagnostics=("Error: RTL generation requires a selected component or design.",),
         )
     diagnostics = validate_project(context.spec, context.target)
     return ActivityAvailability(
@@ -95,7 +103,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
     version=GENERATOR_VERSION,
     title="Generate RTL",
     description="Generate deterministic SystemVerilog from IP-XACT structure and stored module bodies.",
-    scopes=ActivityScopes(entity_kinds=("design",)),
+    scopes=ActivityScopes(entity_kinds=("component", "design")),
     report_model=RtlGenerationReport,
     artifact_roles=(REPORT_ROLE,),
     requires_workspace_output=True,
@@ -105,17 +113,11 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
     """Generate and publish one deterministic RTL project."""
     context.cancellation.raise_if_cancelled()
     if context.target is None or context.workspace is None:
-        raise RuntimeError("RTL generation requires a design target and workspace.")
+        raise RuntimeError("RTL generation requires a component or design target and workspace.")
 
     target = context.spec.high.entity(context.target)
-    dependencies = context.spec.high.related(context.target, "dependencies").all()
-    provenance = {
-        (item.ref.entity_kind, item.ref.entity_id): item.ref
-        for item in (target, *dependencies)
-    }
-    source_entities = tuple(provenance[key] for key in sorted(provenance))
-
     project = generate_project(context.spec, context.target)
+    source_entities = tuple(sorted(project.source_entities, key=lambda ref: (ref.entity_kind, ref.entity_id)))
     relative_path = f"rtl/{context.target.document_id}/{context.target.entity_id}"
     published = context.workspace.replace_directory(
         relative_path=relative_path,
@@ -129,8 +131,9 @@ def generate_rtl(context: ActivityContext) -> ActivityResult:
         generator_version=GENERATOR_VERSION,
         document_id=context.snapshot.source.document_id,
         source_revision_hash=context.snapshot.source.source_revision_hash,
-        design=context.target,
-        design_vlnv=target.vlnv,
+        target=context.target,
+        target_vlnv=target.vlnv,
+        implementation_status=project.implementation_status,
         output_path=published.relative_path,
         top_module=project.top_module,
         wrapper_generated=project.wrapper_generated,

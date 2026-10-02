@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/ankdesh/deepseek-harness.git",
   "commit": "3c98c5108b672280e862a4c85914f5808878aa09",
-  "node": "^22.19.0 || >=24.0.0",
+  "node": "^22.19.0 || >=24.2.0",
   "packageManager": "pnpm@11.7.0"
 }

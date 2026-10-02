@@ -14,14 +14,15 @@ from spec2gds.agent_spec.spec_format.ir import (
     ComponentIR,
     ConnectionIR,
     DesignIR,
+    EndpointSliceIR,
     PortIR,
 )
 from spec2gds.agent_spec.spec_format.models import EntityRef, sha256_digest
 from spec2gds.agent_spec.spec_format.sections import EntitySectionIR
 
 GENERATOR_ID = "rtl.generate"
-GENERATOR_VERSION = "1.1.2"
-GENERATION_SCHEMA = "spec2gds.rtl-generation.v2"
+GENERATOR_VERSION = "1.2.0"
+GENERATION_SCHEMA = "spec2gds.rtl-generation.v3"
 
 _TEMPLATES = Environment(
     loader=PackageLoader("spec2gds.agent_spec.activities.rtl", "templates"),
@@ -328,6 +329,8 @@ class GeneratedProject:
     warnings: tuple[str, ...]
     name_mappings: tuple[NameMapping, ...]
     source_sections: tuple[dict[str, str], ...]
+    source_entities: tuple[EntityRef, ...]
+    implementation_status: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -341,6 +344,7 @@ class _Endpoint:
     kind: str
     port: PortIR
     instance_name: str = ""
+    slice: EndpointSliceIR | None = None
 
 
 @dataclass(frozen=True)
@@ -360,7 +364,7 @@ class _DesignAnalysis:
 @dataclass(frozen=True)
 class _Analysis:
     """Validated source graph consumed by the rendering-only normalization pass."""
-    target: DesignIR
+    target: ComponentIR | DesignIR
     root_owner: ComponentIR | None
     components: tuple[ComponentIR, ...]
     designs: tuple[_DesignAnalysis, ...]
@@ -408,6 +412,7 @@ class _RtlModule:
     leaf: bool
     component_sv: EntitySectionIR | None = None
     design_sv: EntitySectionIR | None = None
+    assignments: tuple[str, ...] = ()
 
 
 class _IdentifierPool:
@@ -451,18 +456,18 @@ class _Analyzer:
     def analyze(self, target: EntityRef) -> _Analysis:
         """Analyze the complete reachable hierarchy before any file is rendered."""
         entity = self.spec.low.resolve(target)
-        if not isinstance(entity, DesignIR):
+        if not isinstance(entity, (ComponentIR, DesignIR)):
             return _Analysis(
                 target=DesignIR(target, "", (), ()),
                 root_owner=None,
                 components=(),
                 designs=(),
-                errors=("RTL generation requires a selected design.",),
+                errors=("RTL generation requires a selected component or design.",),
                 warnings=(),
                 sections_by_owner={},
             )
 
-        root_owner = self.owner_by_design_id.get(entity.ref.entity_id)
+        root_owner = entity if isinstance(entity, ComponentIR) else self.owner_by_design_id.get(entity.ref.entity_id)
         seen_components: set[str] = set()
         design_pairs: dict[str, tuple[DesignIR, ComponentIR | None]] = {}
 
@@ -557,14 +562,12 @@ class _Analyzer:
                 continue
             self.shapes[(component.ref.entity_id, port.name)] = shape
 
-    def _analyze_design(
-        self, design: DesignIR, owner: ComponentIR | None
-    ) -> _DesignAnalysis:
+    def _analyze_design(self, design: DesignIR, owner: ComponentIR | None) -> _DesignAnalysis:
+        """Validate effective widths, slice bounds, overlap and ordinary drivers."""
         instances = {item.name: item for item in design.instances}
         referenced: set[tuple[str, str]] = set()
-        first_connection: dict[tuple[str, str, str], str] = {}
+        occupied: dict[tuple[str, str, str], list[tuple[int, int, str]]] = {}
         connections: list[_Connection] = []
-
         for connection in design.connections:
             label = f"Design {design.vlnv} connection {connection.name}"
             if connection.kind != "ad_hoc":
@@ -575,107 +578,61 @@ class _Analyzer:
                 self.errors.append(f"{label} has multiple external boundary ports.")
             if connection.external_ports and owner is None:
                 self.errors.append(f"{label} exposes a boundary port from an unowned design.")
-
             endpoints: list[_Endpoint] = []
             for endpoint in connection.port_endpoints:
-                if endpoint.symbolic_slice is not None:
-                    self.errors.append(
-                        f"{label} uses symbolic part-select {endpoint.symbolic_slice} on "
-                        f"{endpoint.instance_name}.{endpoint.port_name}; RTL generation "
-                        "does not support sliced endpoints."
-                    )
-                if endpoint.slice is not None:
-                    self.errors.append(
-                        f"{label} uses a numeric part-select on "
-                        f"{endpoint.instance_name}.{endpoint.port_name}; RTL generation "
-                        "does not yet support sliced endpoints."
-                    )
-                key = ("instance", endpoint.instance_name, endpoint.port_name)
-                previous = first_connection.get(key)
-                if previous == connection.name:
-                    self.errors.append(
-                        f"{label} duplicates endpoint {endpoint.instance_name}.{endpoint.port_name}."
-                    )
-                elif previous is not None:
-                    self.errors.append(
-                        f"{label} reuses endpoint {endpoint.instance_name}.{endpoint.port_name} from connection {previous}."
-                    )
-                else:
-                    first_connection[key] = connection.name
-                referenced.add((endpoint.instance_name, endpoint.port_name))
-                instance = instances[endpoint.instance_name]
-                component = self.components_by_vlnv[instance.component_vlnv]
+                component = self.components_by_vlnv[instances[endpoint.instance_name].component_vlnv]
                 port = next(item for item in component.ports if item.name == endpoint.port_name)
-                endpoints.append(_Endpoint("instance", port, endpoint.instance_name))
-
-            for external_endpoint in connection.external_ports:
-                external_name = external_endpoint.port_name
-                if external_endpoint.symbolic_slice is not None:
-                    self.errors.append(
-                        f"{label} uses symbolic part-select {external_endpoint.symbolic_slice} on "
-                        f"boundary port {external_name}; RTL generation does not support sliced endpoints."
-                    )
-                if external_endpoint.slice is not None:
-                    self.errors.append(
-                        f"{label} uses a numeric part-select on boundary port "
-                        f"{external_name}; RTL generation does not yet support sliced endpoints."
-                    )
-                key = ("boundary", "", external_name)
-                previous = first_connection.get(key)
-                if previous == connection.name:
-                    self.errors.append(
-                        f"{label} duplicates boundary port {external_name}."
-                    )
-                elif previous is not None:
-                    self.errors.append(
-                        f"{label} reuses boundary port {external_name} from connection {previous}."
-                    )
-                else:
-                    first_connection[key] = connection.name
+                if endpoint.symbolic_slice is not None:
+                    self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
+                referenced.add((endpoint.instance_name, endpoint.port_name))
+                endpoints.append(_Endpoint("instance", port, endpoint.instance_name, endpoint.slice))
+            for endpoint in connection.external_ports:
+                if endpoint.symbolic_slice is not None:
+                    self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
                 if owner is not None:
-                    port = next(item for item in owner.ports if item.name == external_name)
-                    endpoints.append(_Endpoint("boundary", port))
-
-            shapes: list[_PortShape] = []
+                    port = next(item for item in owner.ports if item.name == endpoint.port_name)
+                    endpoints.append(_Endpoint("boundary", port, slice=endpoint.slice))
+            widths: list[int] = []
             for endpoint in endpoints:
-                component = (
-                    owner
-                    if endpoint.kind == "boundary"
-                    else self.components_by_vlnv[instances[endpoint.instance_name].component_vlnv]
-                )
-                assert component is not None
-                shape = self.shapes.get((component.ref.entity_id, endpoint.port.name))
-                if shape is not None:
-                    shapes.append(shape)
-            if shapes and any(shape.key != shapes[0].key for shape in shapes[1:]):
-                rendered = ", ".join(shape.text or "scalar" for shape in shapes)
-                self.errors.append(f"{label} connects incompatible ranges: {rendered}.")
-
-            sources = [
-                endpoint
-                for endpoint in endpoints
-                if (endpoint.kind == "instance" and endpoint.port.direction == "out")
-                or (endpoint.kind == "boundary" and endpoint.port.direction == "in")
-            ]
-            bidirectional = [
-                endpoint for endpoint in endpoints if endpoint.port.direction == "inout"
-            ]
+                shape = _port_shape(endpoint.port)
+                if shape is None:
+                    continue
+                left, right = shape.key if shape.key is not None else (0, 0)
+                low, high = min(left, right), max(left, right)
+                if endpoint.slice is not None:
+                    low = endpoint.slice.lsb
+                    high = low + endpoint.slice.width - 1
+                    if left < right:
+                        self.errors.append(f"{label} uses an unsupported ascending sliced range on {endpoint.port.name}.")
+                    if low < min(left, right) or high > max(left, right):
+                        self.errors.append(f"{label} slice [{high}:{low}] exceeds bounds of {endpoint.port.name} {shape.text or 'scalar'}.")
+                    if endpoint.port.direction == "inout":
+                        self.errors.append(f"{label} sliced bidirectional ports are unsupported.")
+                widths.append(high - low + 1)
+                key = (endpoint.kind, endpoint.instance_name, endpoint.port.name)
+                for old_low, old_high, old_connection in occupied.get(key, []):
+                    if low <= old_high and old_low <= high:
+                        self.errors.append(f"{label} reuses endpoint {endpoint.instance_name}.{endpoint.port.name}: overlap with connection {old_connection}.")
+                occupied.setdefault(key, []).append((low, high, connection.name))
+            if widths and any(width != widths[0] for width in widths[1:]):
+                self.errors.append(f"{label} connects incompatible ranges (effective widths {widths}).")
+            sources = [endpoint for endpoint in endpoints
+                       if (endpoint.kind == "instance" and endpoint.port.direction == "out")
+                       or (endpoint.kind == "boundary" and endpoint.port.direction == "in")]
+            bidirectional = [endpoint for endpoint in endpoints if endpoint.port.direction == "inout"]
             if len(sources) > 1:
                 self.errors.append(f"{label} has multiple ordinary drivers.")
             elif not sources and not bidirectional:
                 self.errors.append(f"{label} has no driver or bidirectional endpoint.")
-
-            if len(self.errors) == start_errors and shapes:
-                connections.append(_Connection(connection, tuple(endpoints), shapes[0]))
-
+            if len(self.errors) == start_errors and widths:
+                width = widths[0]
+                shape = _PortShape(f"[{width-1}:0]" if width > 1 else "", (width-1, 0) if width > 1 else None)
+                connections.append(_Connection(connection, tuple(endpoints), shape))
         for instance in design.instances:
             component = self.components_by_vlnv[instance.component_vlnv]
             for port in component.ports:
                 if port.style == "wire" and (instance.name, port.name) not in referenced:
-                    self.warnings.append(
-                        f"Design {design.vlnv} instance {instance.name} port {port.name} is unconnected."
-                    )
-
+                    self.warnings.append(f"Design {design.vlnv} instance {instance.name} port {port.name} is unconnected.")
         return _DesignAnalysis(design, owner, tuple(connections))
 
 
@@ -764,6 +721,11 @@ class _Normalizer:
     def _structural_module(
         self, analysis: _DesignAnalysis, module_name: str, file_path: str
     ) -> _RtlModule:
+        """Allocate stable HDL names and normalize validated nets and instance hookups.
+
+        The identifier pool prevents source-name collisions. Unconnected-port policy
+        and explicit stored bodies remain visible in the normalized module.
+        """
         owner = analysis.owner
         ports = self._ports(owner) if owner is not None else ()
         local_pool = _IdentifierPool({port.name for port in ports})
@@ -790,23 +752,46 @@ class _Normalizer:
 
         expressions: dict[tuple[str, str], str] = {}
         nets: list[_RtlNet] = []
+        assignments: list[str] = []
+        sliced: dict[tuple[str, str], list[_Endpoint]] = {}
+        for connection in analysis.connections:
+            for endpoint in connection.endpoints:
+                if endpoint.kind == "instance" and endpoint.slice is not None:
+                    sliced.setdefault((endpoint.instance_name, endpoint.port.name), []).append(endpoint)
+        for key, endpoints in sorted(sliced.items()):
+            name = local_pool.allocate(f"{key[0]}_{key[1]}_bits", f"slice:{analysis.design.ref.entity_id}:{key}")
+            expressions[key] = name
+            port = endpoints[0].port
+            shape = _port_shape(port)
+            assert shape is not None
+            nets.append(_RtlNet(port.name, name, shape.text))
+            if port.direction == "in":
+                left, right = shape.key if shape.key is not None else (0, 0)
+                cursor = right
+                for low, high in sorted((item.slice.lsb, item.slice.lsb + item.slice.width - 1) for item in endpoints):
+                    if low > cursor:
+                        assignments.append(f"assign {name}[{low-1}:{cursor}] = '0;")
+                    cursor = high + 1
+                if cursor <= left:
+                    assignments.append(f"assign {name}[{left}:{cursor}] = '0;")
         for connection in analysis.connections:
             if connection.source.external_ports:
                 assert owner is not None
-                external = connection.source.external_ports[0].port_name
-                expression = self.port_names[(owner.ref.entity_id, external)]
+                external = next(endpoint for endpoint in connection.endpoints if endpoint.kind == "boundary")
+                expression = _slice_expression(self.port_names[(owner.ref.entity_id, external.port.name)], external.slice)
             else:
                 expression = connection_names[connection.source.name]
-                nets.append(
-                    _RtlNet(
-                        source_name=connection.source.name,
-                        name=expression,
-                        range_text=connection.shape.text,
-                    )
-                )
+                nets.append(_RtlNet(connection.source.name, expression, connection.shape.text))
             for endpoint in connection.endpoints:
-                if endpoint.kind == "instance":
-                    expressions[(endpoint.instance_name, endpoint.port.name)] = expression
+                if endpoint.kind != "instance":
+                    continue
+                key = (endpoint.instance_name, endpoint.port.name)
+                if endpoint.slice is None:
+                    expressions[key] = expression
+                else:
+                    bits = _slice_expression(expressions[key], endpoint.slice)
+                    lhs, rhs = (bits, expression) if endpoint.port.direction == "in" else (expression, bits)
+                    assignments.append(f"assign {lhs} = {rhs};")
 
         instances: list[_RtlInstance] = []
         for instance in analysis.design.instances:
@@ -840,6 +825,7 @@ class _Normalizer:
             file_path=file_path,
             ports=ports,
             nets=tuple(nets),
+            assignments=tuple(assignments),
             instances=tuple(instances),
             leaf=False,
             component_sv=(
@@ -876,7 +862,7 @@ class _Normalizer:
 
 
 def validate_project(spec: SpecAccess, target: EntityRef) -> ProjectDiagnostics:
-    """Return fatal and warning diagnostics for one selected design."""
+    """Return fatal and warning diagnostics for one selected component or design."""
     analysis = _Analyzer(spec).analyze(target)
     return ProjectDiagnostics(
         errors=tuple(f"Error: {item}" for item in analysis.errors),
@@ -885,7 +871,7 @@ def validate_project(spec: SpecAccess, target: EntityRef) -> ProjectDiagnostics:
 
 
 def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
-    """Render one validated design into a deterministic RTL project tree."""
+    """Render one validated component or design into a deterministic RTL tree."""
     analysis = _Analyzer(spec).analyze(target)
     if analysis.errors:
         raise ValueError(
@@ -918,8 +904,10 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
         "generator_version": GENERATOR_VERSION,
         "document_id": target.document_id,
         "source_revision_hash": spec.high.document["source_revision_hash"],
-        "design_id": target.entity_id,
-        "design_vlnv": analysis.target.vlnv,
+        "target": target.model_dump(mode="json"),
+        "target_vlnv": analysis.target.vlnv,
+        "source_entities": [entity.ref.model_dump(mode="json") for entity in (*analysis.components, *(item.design for item in analysis.designs))],
+        "implementation_status": {item.ref.entity_id: ("stored_rtl" if (section := analysis.sections_by_owner.get(item.ref.entity_id)) is not None and section.content.strip() else "structured_composition" if any(design.owner == item for design in analysis.designs) else "unimplemented_scaffold") for item in analysis.components},
         "top_module": top_module,
         "wrapper_generated": wrapper_generated,
         "warnings": list(warnings),
@@ -951,10 +939,17 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
         warnings=warnings,
         name_mappings=mappings,
         source_sections=tuple(manifest["source_sections"]),
+        source_entities=tuple(EntityRef.model_validate(item) for item in manifest["source_entities"]),
+        implementation_status=manifest["implementation_status"],
     )
 
 
 def _render_module(module: _RtlModule) -> str:
+    """Render normalized declarations, wiring and explicitly stored module bodies.
+
+    Defaults make body-less leaf outputs compile safely; they do not infer design
+    behavior. Jinja formats text after analysis has chosen topology and names.
+    """
     body_sections = tuple(
         item for item in (module.component_sv, module.design_sv)
         if item is not None and item.content.strip()
@@ -997,6 +992,8 @@ def _render_module(module: _RtlModule) -> str:
     sections: list[str] = []
     if net_lines:
         sections.append("\n".join(net_lines))
+    if module.assignments:
+        sections.append("\n".join(f"    {line}" for line in module.assignments))
     if instance_blocks:
         sections.append("\n\n".join(instance_blocks))
     for item in body_sections:
@@ -1058,3 +1055,10 @@ def _json_bytes(value: object) -> bytes:
     return (
         json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
     ).encode("utf-8")
+
+
+def _slice_expression(name: str, endpoint_slice: EndpointSliceIR | None) -> str:
+    if endpoint_slice is None:
+        return name
+    high = endpoint_slice.lsb + endpoint_slice.width - 1
+    return f"{name}[{high}:{endpoint_slice.lsb}]" if endpoint_slice.width > 1 else f"{name}[{endpoint_slice.lsb}]"

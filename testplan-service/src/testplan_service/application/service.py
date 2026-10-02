@@ -1,4 +1,9 @@
-"""Application service coordinator for Verification Planner."""
+"""Application service coordinator for Verification Planner.
+
+Reviewer path: compose imports, candidate commands, checkpoint review, evidence
+and synchronous reference generation. Source snapshots are immutable imports;
+this coordinator has no capability to mutate a live Spec or execute a simulator.
+"""
 
 from __future__ import annotations
 

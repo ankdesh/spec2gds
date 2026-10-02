@@ -161,6 +161,8 @@ class GenerationRunner:
         )
         manifest = plugin.describe()
 
+        # Reuse only completed matching inputs. This scan is a synchronous cache,
+        # not a durable queue claim or cross-process exactly-once execution guarantee.
         # Idempotency check: see if identical job already succeeded
         existing_jobs = self.repo.list_generation_jobs(plan_id)
         for job in existing_jobs:
@@ -218,6 +220,9 @@ class GenerationRunner:
             writer = OutputWriter()
             gen_result = plugin.generate(request, lowered, writer)
 
+            # Artifact/blob writes occur individually before the terminal job update.
+            # A crash can leave partial persisted output; readers should use the job
+            # outcome rather than artifact presence as proof of successful generation.
             # Persist artifacts into BlobStore and database
             all_staged = writer.get_all_artifacts()
             persisted_descriptors = []
@@ -275,7 +280,11 @@ class GenerationRunner:
             return self.repo.get_generation_job(plan_id, job_id) or job_record
 
     def cancel_generation(self, plan_id: str, job_id: str) -> dict[str, Any]:
-        """Cancel queued or running generation job."""
+        """Mark a queued/running job cancelled; this does not interrupt plugin code.
+
+        The current synchronous plugin interface has no cooperative cancellation
+        token. A running invocation can still publish its later terminal result.
+        """
         job = self.repo.get_generation_job(plan_id, job_id)
         if not job:
             raise RecordNotFoundError(plan_id, job_id)

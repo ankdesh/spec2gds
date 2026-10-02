@@ -1,3 +1,7 @@
+/** Translate the owner-published structural schema into native tool admission.
+ * Resolve supported local definitions under explicit limits; unsupported schema
+ * constructs must fail instead of widening accepted arguments. Semantic scope,
+ * references and source revision are still checked by owner preview/application. */
 import type { ValueSchemaSpec } from "@deepseek-ai/dsh-tools";
 
 type Node = Record<string, unknown>;
@@ -11,6 +15,21 @@ export interface OwnerOperationContract {
   digest: string;
   operation_schema: Node;
   tool_schema: ValueSchemaSpec;
+}
+
+/** Relax only fields that lossless formatting can supply before strict owner admission. */
+export function specFormattingAdmission(schema: ValueSchemaSpec): ValueSchemaSpec {
+  const copy = structuredClone(schema);
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (!object(value)) return;
+    for (const [key, child] of Object.entries(value)) {
+      if (["operation_id", "instances", "family"].includes(key) && object(child)) delete child.required;
+      visit(child);
+    }
+  };
+  visit(copy);
+  return copy;
 }
 
 function object(value: unknown): value is Node {

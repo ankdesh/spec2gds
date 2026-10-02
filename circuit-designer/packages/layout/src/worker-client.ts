@@ -1,3 +1,7 @@
+/** Correlate asynchronous layout jobs with the request that created them.
+ * Filter messages by this task's request ID and settle its promise once. The
+ * application owns whether a finished result still applies to its current draft;
+ * accepted circuit connectivity remains owned by the host operation engine. */
 import type { CircuitDocument } from "@spec2gds/circuit-core";
 import type { LayoutOptions } from "./index";
 import type { LayoutWorkerRequest, LayoutWorkerResponse } from "./worker-protocol";
@@ -56,6 +60,8 @@ export function createLayoutTask(
     cancel: () => {
       if (settled) return;
       const request: LayoutWorkerRequest = { type: "cancel", request_id: requestId };
+      // Cancellation is a protocol request; the promise settles only when the
+      // worker replies. Posting this message does not synchronously stop work.
       worker.postMessage(request);
     },
   };

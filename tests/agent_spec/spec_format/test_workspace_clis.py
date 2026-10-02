@@ -31,6 +31,8 @@ def model_fixture():
             length = int(self.headers.get("Content-Length", "0"))
             body = json.loads(self.rfile.read(length))
             calls = sum(message.get("role") == "tool" for message in body["messages"])
+            import re
+            approved = re.search(r"Approved architecture_review_id: ([^\n]+)", "\n".join(str(message.get("content", "")) for message in body["messages"] if message.get("role") == "user"))
             if calls == 0:
                 delta = {"tool_calls": [{"index": 0, "id": "call_context", "type": "function", "function": {
                     "name": "get_bound_context", "arguments": "{}"}}]}
@@ -40,14 +42,26 @@ def model_fixture():
                     content = "".join(part.get("text", "") for part in content)
                 context = json.loads(content)
                 revision = context["authoritative_context"]["source_revision_hash"]
-                delta = {"tool_calls": [{"index": 0, "id": "call_proposal", "type": "function", "function": {
+                if not approved:
+                    delta = {"tool_calls": [{"index": 0, "id": "call_architecture", "type": "function", "function": {
+                        "name": "prepare_architecture_review", "arguments": json.dumps({
+                            "title": "Timer architecture", "components": [{"name": "timer", "purpose": "Timing control"}],
+                            "designs": [], "interfaces": [{"component": "timer", "ports": [], "status": "unconfigured"}],
+                            "clocks_resets": [], "decomposition_rationale": "Keep a cohesive timer component.",
+                            "assumptions": ["Interface and implementation will be refined later."], "open_questions": [],
+                            "concrete_configuration": {"implemented": False},
+                        })}}]}
+                else:
+                    delta = {"tool_calls": [{"index": 0, "id": "call_proposal", "type": "function", "function": {
                     "name": "prepare_spec_proposal", "arguments": json.dumps({
-                        "supported": True, "unsupported_reason": None, "title": "Add timer",
+                        "architecture_review_id": approved[1], "supported": True, "unsupported_reason": None, "title": "Add timer",
                         "base_source_revision_hash": revision,
                         "summary": "Adds a timer component.", "rationale": "Timing control is required.",
                         "assumptions": [], "operations": [{"operation_id": "create_timer",
-                            "type": "create_entity", "kind": "component", "name": "timer",
-                            "instances": []}],
+                            "type": "create_entity", "kind": "component", "name": "timer", "entity_id": "local_timer",
+                            "instances": []}, {"operation_id": "explanation", "type": "set_entity_metadata",
+                            "entity": {"document_id": context["authoritative_context"]["document_id"], "entity_kind": "component", "entity_id": "local_timer"},
+                            "description": "Timing control component. Interface and functional RTL are not implemented yet."}],
                     })}}]}
             else:
                 delta = {"content": "The timer proposal is ready for review."}
@@ -72,6 +86,18 @@ def model_fixture():
         server.server_close()
 
 
+def reviewed_assistant_run(argv):
+    """Exercise both explicit architecture approval and the final owner policy."""
+    assert assistant_main(argv) == 0
+    path = resolve_spec_target(argv[0])
+    run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
+    review = run["architecture_reviews"][-1]
+    assert review["status"] == "pending"
+    assert spec_main(["approve-architecture", str(path), review["reviewId"]]) == 0
+    split = argv.index("--")
+    return assistant_main([*argv[:split], "--architecture-review-id", review["reviewId"], *argv[split:]])
+
+
 def test_workspace_discovery_and_explicit_target(tmp_path):
     workspace = tmp_path / "my design"
     assert resolve_spec_target(str(workspace), create=True) == workspace / "my_design.spec"
@@ -92,7 +118,7 @@ def test_focused_turn_review_and_approval(tmp_path, monkeypatch, capsys):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        assert assistant_main([str(workspace), "--require-human-approval", "--preset", "focused", "--", "Propose a timer"]) == 0
+        assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--preset", "focused", "--", "Propose a timer"]) == 0
     path = workspace / "timer-design.spec"
     run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
     assert run["session_id"]
@@ -137,7 +163,7 @@ def test_multiple_reviews_require_id_and_stale_after_apply(tmp_path, monkeypatch
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
         for _ in range(3):
-            assert assistant_main([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
+            assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
     path = workspace / "multi.spec"
     root = assistant_state_root(path)
     document_id = SpecPackage.load(str(path)).manifest.document_id
@@ -163,7 +189,7 @@ def test_interrupted_approval_reconciles_saved_proposal(tmp_path, monkeypatch):
     with model_fixture() as endpoint:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        assert assistant_main([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
+        assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
     path = workspace / "retry.spec"
     root = assistant_state_root(path)
     document_id = SpecPackage.load(str(path)).manifest.document_id
@@ -202,7 +228,7 @@ def test_focused_turn_saves_automatically_by_default(tmp_path, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        assert assistant_main([str(workspace), "--", "Add a timer"]) == 0
+        assert reviewed_assistant_run([str(workspace), "--", "Add a timer"]) == 0
     path = workspace / "automatic.spec"
     run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
     assert run["approval_policy"] == "automatic"
@@ -218,7 +244,7 @@ def test_assistant_creates_exact_spec_path(tmp_path, monkeypatch):
     with model_fixture() as endpoint:
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        assert assistant_main([str(path), "--", "Propose a timer"]) == 0
+        assert reviewed_assistant_run([str(path), "--", "Propose a timer"]) == 0
     assert path.is_file()
     assert sorted(path.parent.glob("*.spec")) == [path]
     assert len(json.loads((assistant_state_root(path) / "last-run.json").read_text())["proposals"]) == 1

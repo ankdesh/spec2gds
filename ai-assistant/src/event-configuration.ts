@@ -1,4 +1,7 @@
-/** Human-authored event templates; saved revisions never rewrite a live conversation. */
+/** Human template revisions and immutable conversation configuration pins.
+ * Read in order: validate native shape → restrict deployment authority → warn
+ * about reaction topology → preview canonical content → save with revision CAS.
+ * Template text is configuration data; prompt edits cannot create capabilities. */
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 import { validateDefinition } from "@deepseek-ai/dsh-event-system";
@@ -14,6 +17,8 @@ export interface EventConfiguration {
   limits: ExecutionLimits;
 }
 export interface EventTemplate { key: string; name: string; revision: number; text: string; builtin: boolean }
+// Canonicalize object keys while preserving array order: agent/subscription and
+// prompt order are authored content and must not be rearranged during review.
 function sorted(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sorted);
   if (isRecord(value)) return Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted(value[key])]));
@@ -47,6 +52,8 @@ export class EventConfigurations {
     if (Object.keys(input).some(key => !["schemaVersion", "domain", "preset", "definition", "limits"].includes(key))) throw new Error("Unknown configuration field.");
     const domain = input.domain as EventConfiguration["domain"], preset = input.preset as EventConfiguration["preset"];
     const definition = validateDefinition(input.definition);
+    // Native shape validation is necessary but insufficient: an otherwise valid
+    // roster may request capabilities this deployment never authorized.
     const base = JSON.parse(this.get(`${domain}.${preset}`).text) as EventConfiguration;
     if (definition.primary !== "primary" || definition.id !== base.definition.id || definition.version !== base.definition.version) throw new Error("Keep the trusted preset identity and primary member.");
     if (!isRecord(input.limits)) throw new Error("Explicit resource limits are required.");
@@ -73,11 +80,13 @@ export class EventConfigurations {
     } else if (!definition.subscriptions.some(edge => edge.event === "source.changed" && edge.target === "primary")) throw new Error("Goal requires source.changed → primary.");
     for (const event of Object.keys(definition.events)) if (!/^[a-z][a-z0-9_.-]{0,79}$/.test(event)) throw new Error("Event types must be short lowercase identifiers.");
     const warnings: string[] = [];
-    const host = new Set(["user.requested", "source.changed", "review.prepared", "review.applied", "review.discarded"]);
+    const host = new Set(["user.requested", "source.changed", "review.prepared", "review.applied", "review.discarded", "architecture.prepared", "architecture.decided"]);
     for (const event of Object.keys(definition.events)) {
       if (!definition.subscriptions.some(edge => edge.event === event)) warnings.push(`${event} has no subscription; it can still resolve a correlated wait or appear in inspection.`);
       if (!host.has(event) && !definition.agents.some(agent => agent.publishes.includes(event))) warnings.push(`${event} has no configured publisher.`);
     }
+    // Reaction cycles are a review warning, not a DAG validation error. The native
+    // runtime bounds causal depth, event growth, model requests and active time.
     const adjacency = new Map(definition.agents.map(agent => [agent.id, definition.subscriptions.filter(edge => agent.publishes.includes(edge.event)).map(edge => edge.target)]));
     const visited = new Set<string>(), visiting = new Set<string>();
     function cycle(id: string): boolean { if (visiting.has(id)) return true; if (visited.has(id)) return false; visiting.add(id); const found = (adjacency.get(id) ?? []).some(target => cycle(target)); visiting.delete(id); visited.add(id); return found; }
@@ -91,6 +100,8 @@ export class EventConfigurations {
     const valid = this.validate(text);
     const previous = JSON.parse(current.text) as EventConfiguration;
     if (valid.document.domain !== previous.domain || valid.document.preset !== previous.preset) throw new Error("Template domain and preset are immutable.");
+    // Bind acknowledgement to the exact canonical text and observed revision.
+    // A later UI edit cannot reuse the token for previously reviewed content.
     const reviewDigest = digest(JSON.stringify([key, revision, valid.text]));
     return { before: current.text, after: valid.text, warnings: valid.warnings, reviewDigest };
   }
@@ -117,6 +128,8 @@ export class EventConfigurations {
   }
   pin(sessionId: string, domain: EventConfiguration["domain"], preset: EventConfiguration["preset"], key?: string, revision?: number): void {
     const selected = this.selection(domain, preset, key, revision);
+    // Store resolved text, not a pointer to mutable catalog state. Existing chats
+    // keep their prompt, routing, permission and resource identity after edits.
     this.database.prepare("INSERT INTO binding_event_configuration VALUES(?,?,?,?)").run(sessionId, selected.template.key, selected.template.revision, selected.text);
   }
   pinned(sessionId: string): { key: string; revision: number; document: EventConfiguration } | undefined {

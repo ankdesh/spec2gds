@@ -1,8 +1,8 @@
-/**
- * Verification Planner Web UI Shell
- * Implements Layer 1 interactions: intent authoring, hierarchy navigation, review checklists, and exports.
- */
-
+/** Verification Planner browser projections and authoring forms.
+ * Keep draft edit revisions separate from campaign revisions and immutable
+ * checkpoint IDs. Commands go through server preview/commit; rendered status
+ * cells are evidence projections, not editable test outcomes. Generation here
+ * produces reference artifacts and does not execute the DUT. */
 const API_BASE = "/api/verification/v1";
 
 const state = {

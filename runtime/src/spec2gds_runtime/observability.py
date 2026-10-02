@@ -4,6 +4,10 @@ The three applications are intentionally separate processes.  This module uses a
 small lock-file protocol instead of a process-local logging handler so every
 runtime can safely append to the same file.  When the configured size is reached,
 the active file is compacted in place to keep only its newest complete records.
+
+Reviewer path: normalize/redact event data before appending to the shared
+log, serialize competing writers at retention boundaries, and keep disabled
+logging outside the product mutation path. Debug payloads remain owned data.
 """
 
 from __future__ import annotations

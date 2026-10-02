@@ -3,7 +3,9 @@
 `systemc.generate_at_skeleton` generates the first structural phase of a
 SystemC TLM 2.0 Approximately-Timed performance model. The Activity is entirely
 deterministic: it does not call an LLM, interpret narrative text, generate
-traffic, or infer performance behavior.
+traffic, or infer performance behavior. Proposed timing, arbitration and
+backpressure semantics are recorded separately in the
+[performance-model backlog](systemc-at-performance-backlog.md).
 
 ## Input and topology
 

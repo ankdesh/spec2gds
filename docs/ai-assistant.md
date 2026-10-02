@@ -20,8 +20,14 @@ its explicit review action. The latest proposal card is
 kept in the completed turn footer, independent of the collapsible tool-call
 trace, so its actions remain available after the response finishes.
 
-See [DSH UI migration and extension map](dsh-ui-migration.md) for the plugin
+See [DSH UI migration and extension map](assistant-ui.md) for the plugin
 architecture and the retained/extended/dropped feature table.
+
+Use Node 24.2+ or 22.19+ in the 22.x line. The pinned Harness CLI uses
+[`import.meta.main`](https://nodejs.org/api/esm.html#importmetamain), added in
+Node 24.2 and backported to Node 22.18. Node 24.0/24.1 cannot launch the CLI;
+the product launcher reports that incompatibility before creating runtime state.
+For the combined stack, use Node 24.2+ to meet both workspace requirements.
 
 ## Editor integration
 
@@ -55,27 +61,25 @@ endpoints; geometry, routes, labels, and layout remain outside AI operations.
 
 ## Run the browser profile
 
-Use Node.js 22.19+ or Node.js 24+. Prepare the pinned built Harness fork and
-the product with:
+Use Node.js 22.19+ in the 22.x line or 24.2+ for the Assistant (Circuit Designer alone declares Node 24+).
+Prepare the pinned Harness source checkout and product bundles from the repository
+root. The new native event packages are not published; use source linking:
 
 ```bash
+scripts/setup-all.sh
 cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
 export OPENAI_API_KEY="..."
 npm run dev
 ```
 
-`setup:harness` reads `harness.lock.json`, clones the default sibling
-`../deepseek-harness` checkout when absent, installs the exact pnpm version
-from the lock, and builds DSH. Clone, fetch, and dependency installation need
-network access. For an existing checkout, the command rejects local changes,
-a different origin, or a different HEAD. Run
-`npm run setup:harness -- --update` to explicitly fetch and detach a clean
-checkout at the pinned commit. `HARNESS_SOURCE=/path/to/deepseek-harness`
-selects another checkout for setup and all Assistant commands without weakening
-these checks.
+The setup script clones/builds `DSH_BRANCH` (default `spec2gds/integration`)
+and links local native packages. `HARNESS_SOURCE=/absolute/path` selects the
+checkout; `DSH_REPO` and `DSH_REPO_HTTPS` select clone origins. It currently
+follows a branch rather than enforcing `harness.lock.json` during setup. Check
+that the checkout matches the lock before native testing or packaging;
+packaging enforces a clean matching revision. There is no `setup:harness` npm
+script or `--update-harness` option. Do not use `npm ci` for the unpublished
+package baseline. Clone/fetch/install need network access.
 
 Open `http://127.0.0.1:6013`. The combined `scripts/serve-all.sh start`
 launcher uses the same profile and port, prints the URL, and does not open a
@@ -110,11 +114,12 @@ The new-conversation dialog offers three immutable execution presets:
 | `orchestrated` | Persistent event-driven analyst/reviewer reactions; primary owns proposals |
 
 Service instructions come from exact YAML prompt bundles. Event rosters, typed
-payload schemas, subscriptions, and Markdown prompts are fixed by trusted
-configuration and pinned to the conversation. The execution dock supplies
+payload schemas, subscriptions, and Markdown prompts are validated against trusted deployment capabilities
+and pinned to the conversation. The execution dock supplies
 pause/resume/stop, spending, failures, and acknowledged manual retry. Restart
 requires human Resume. Owner apply/send/discard records a review event without
-automatically completing a goal. See [Phase 1 usage and recovery](event-driven-assistant-phase1.md).
+automatically completing a goal. See [event configuration](event-driven-assistant-system.md) and
+[operations](event-driven-assistant-operations.md).
 
 Every browser root preset also exposes DSH's structured `ask_user_question`
 tool. Fully specified automatic Spec proposals skip confirmation cards and
@@ -126,8 +131,9 @@ using those values; the Assistant does not synthesize ports or SystemVerilog.
 Automatic Spec submissions await validation and save, then display **Applied
 automatically** with the saved revision. Restricted owners show the
 owner-previewed approve/apply card. Non-proposal questions use the Harness composer
-takeover. General durable waiting is deferred. Headless mode and specialist agents do
-not expose either interactive mechanism.
+takeover. The goal/orchestrated primary can also wait durably for a correlated
+human answer, declared event or owner review through `wait_for_event`. Headless
+mode and specialist agents do not expose browser question/details cards.
 
 The proposal tool's operation shape is fetched from the selected owner at
 agent attachment. The owner publishes a binding-specific JSON Schema and
@@ -199,7 +205,8 @@ multi-user application.
 ## State and recovery
 
 DSH JSONL is the transcript source of truth. `assistant.sqlite3` stores immutable
-bindings, Workspace identities, creation progress, and review metadata. Back up the complete state root together. DSH
+bindings, Workspace identities, creation progress, review metadata, event
+template revisions and exact conversation pins. Back up the complete state root together. DSH
 provides rename, archive/restore, and export. Permanent deletion is not exposed
 because the current persistence contract is append-only.
 
@@ -233,8 +240,8 @@ npm run package -- /tmp/spec2gds-assistant-release
 
 The unit suite protects Harness bootstrap safety, catalog prompt/domain rules,
 preset capability boundaries, execution controls, and complete operation
-vocabularies. Run only the bootstrap cases with
-`npm run test:setup-harness`. The integration test boots the real headless
+vocabularies. Native setup/bootstrap reproducibility remains a separate hardening task;
+there is no dedicated bootstrap test script in this checkout. The integration test boots the real headless
 profile against local owner/model fixtures and verifies context dispatch,
 proposal preview, and durable SQLite state. Packaging refuses a dirty Harness
 checkout or a commit different from `harness.lock.json`.

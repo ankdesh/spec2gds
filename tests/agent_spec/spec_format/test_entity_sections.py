@@ -69,6 +69,11 @@ def test_sv_boundaries_and_portability_checks() -> None:
         upsert_systemverilog_section(package, leaf.ref, "module nested; endmodule")
     with pytest.raises(ValueError, match="include"):
         upsert_systemverilog_section(package, leaf.ref, "`include \"external.svh\"")
+    for directive in ['`include "external.svh"', '`line 1 "external.sv" 0']:
+        with pytest.raises(ValueError, match="directives"):
+            upsert_systemverilog_section(package, leaf.ref, f"assign irq = irq_in; {directive}")
+    literal = '// `include "ignored.sv"\ninitial $display("`line 1 is text");'
+    assert upsert_systemverilog_section(package, leaf.ref, literal).content == literal
 
 
 def test_loading_rejects_digest_mismatch_but_old_packages_remain_valid() -> None:

@@ -208,6 +208,11 @@ class _Assembler:
         self._write_module(module_name, owner, structure, (component_body, design_body))
 
     def _structure(self, design: DesignIR, owner: ComponentIR | None) -> str:
+        """Emit structural wiring only for the supported direct-wire hierarchy.
+
+        Reject ambiguous endpoints, slices, widths and drivers before invoking CIRCT.
+        Behavior comes from stored SystemVerilog, not inferred SystemC callbacks.
+        """
         instances = {item.name: item for item in design.instances}
         for name in instances:
             _checked_identifier(name, "Instance")

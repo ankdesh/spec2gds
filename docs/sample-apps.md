@@ -6,8 +6,10 @@ Build one small, representative hardware application at a time through the
 whole system. A sample is a maintained product scenario, not a pile of static
 generated files.
 
-There is currently no bundled sample application. The next sample should be
-chosen deliberately and added as its own vertical slice.
+There is currently no maintained full editor/Circuit/Assistant user-journey
+sample. Small RTL semantics examples are available under `samples/rtl/` and
+in [the RTL examples guide](rtl-semantics-examples.md). Choose any broader
+application deliberately and add its reproducible vertical slice.
 
 ```mermaid
 flowchart LR

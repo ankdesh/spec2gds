@@ -1,3 +1,7 @@
+/** Host capabilities consumed by the reusable Circuit application.
+ * File ownership, preferences, source saves, events, telemetry and tools are
+ * injected so the shell need not assume browser storage or Spec API addresses.
+ * Adapter implementations must preserve revision/receipt semantics. */
 import type {
   CircuitDesignerBackend,
   CircuitDesignerPreferencesV1,

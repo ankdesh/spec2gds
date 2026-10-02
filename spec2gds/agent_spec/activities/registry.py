@@ -1,4 +1,9 @@
-"""Explicit registry, plugin loader, decorators, and direct contract harness."""
+"""Explicit registry, plugin loader, decorators, and direct contract harness.
+
+Reviewer path: registration validates extension contracts before invocation;
+preflight precedes generator work. Extension modules are deployment-installed
+Python code, not executable instructions supplied by imported source documents.
+"""
 
 from __future__ import annotations
 
@@ -19,6 +24,7 @@ from spec2gds.agent_spec.activities.contracts import (
     ActivitySelectionContext,
     ActivityWorkspaceWriter,
     BaseActivity,
+    CancellationToken,
     ContextRenderContext,
     ContextRenderer,
     NeverCancelled,

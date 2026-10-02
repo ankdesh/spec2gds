@@ -1,4 +1,9 @@
-"""Decoder projecting spec2gds Activity Snapshot v1 into SourceSnapshotView."""
+"""Decoder projecting spec2gds Activity Snapshot v1 into SourceSnapshotView.
+
+Reviewer path: validate container admission and source identity before deriving
+entity/occurrence views. Projection is read-only and intentionally avoids runtime
+imports from the live Spec owner; imported narrative remains untrusted content.
+"""
 
 from __future__ import annotations
 

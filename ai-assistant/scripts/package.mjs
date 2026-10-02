@@ -4,6 +4,8 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawnSync } from "node:child_process";
 
+// Resolve from the script location so packaging also works from another cwd.
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
 if (!existsSync(resolve(harness, "scripts/product-runtime.mjs")) && existsSync(resolve(harness, "deepseek-harness/scripts/product-runtime.mjs"))) {
   harness = resolve(harness, "deepseek-harness");

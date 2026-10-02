@@ -43,6 +43,11 @@ def _validate_semantic_terminal_key(value: str) -> None:
 
 
 def _validate_layout_shapes(layout: "DesignCircuitLayoutV1") -> None:
+    """Reject malformed geometry and route metadata before package admission.
+
+    This validates layout shapes, not electrical connectivity; semantic references
+    are checked by the surrounding annotation/package validation.
+    """
     for name, raw in layout.instance_geometry.items():
         value = _exact(raw, {"x", "y", "width", "height"}, {"pinned"}, f"instance geometry {name}")
         _number(value["x"], "x")

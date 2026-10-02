@@ -4,6 +4,12 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
+// The pinned Harness CLI enters through import.meta.main. Older Node 24
+// releases otherwise exit with success without starting the requested profile.
+if (typeof import.meta.main !== "boolean") {
+  throw new Error("The Harness CLI requires Node 22.19+ in the 22.x line or Node 24.2+. Node 24.0/24.1 cannot launch it.");
+}
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 if (existsSync(resolve(root, ".env"))) process.loadEnvFile(resolve(root, ".env"));
 let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));

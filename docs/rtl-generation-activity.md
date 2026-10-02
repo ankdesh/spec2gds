@@ -1,7 +1,7 @@
 # Deterministic RTL Generation Activity
 
-`rtl.generate` version `1.1.2` generates a SystemVerilog 2017
-project for one selected design. It preserves reachable component hierarchy,
+`rtl.generate` version `1.2.0` generates a SystemVerilog 2017
+project for one selected component or design. It preserves reachable component hierarchy,
 emits one reusable module per component definition, and translates direct
 physical wire connections. It does not call an LLM, inspect narrative intent,
 mutate the specification or infer clocks and resets. It incorporates explicit
@@ -9,13 +9,15 @@ component/design SystemVerilog body sections when present.
 
 ## Supported source profile
 
-The Activity accepts any selected design, including a component-owned internal
-design. Every reachable component must contain only physical wire ports with
-scalar or explicit decimal ranges. A connected range must match at every
-endpoint, including its left and right bounds.
+The Activity accepts leaf/composite components and designs, including owned
+internal designs. Only reachable definitions are emitted. Reachable ports must be
+physical wires with scalar/decimal ranges; connected effective widths must match.
+Numeric slices use `{lsb,width}` with bounds/overlap checks; unsliced boundary strings
+remain valid. Symbolic and ascending sliced ranges and sliced bidirectional ports
+are unsupported.
 
 Only IP-XACT ad-hoc connections are supported. Each endpoint can belong to one
-connection, one ordinary driver can feed multiple sinks, and nets containing
+connection per non-overlapping bit interval, one ordinary driver can feed multiple sinks, and nets containing
 `inout` endpoints are allowed. For a component-owned internal design, an
 external port is interpreted relative to the enclosing module: an external
 input drives the design and an external output is a sink. Multiple ordinary
@@ -47,7 +49,8 @@ body and then the owned/design body. Line mappings retain the stored section
 path in diagnostics. Missing or whitespace bodies keep the original scaffold
 behavior.
 
-Composite modules contain only child instances and structural nets. An
+Composite scaffolds contain child instances and structural nets; explicit SV
+bodies can add behavior. An
 unconnected child input is tied to `'0`; unconnected child outputs and inouts
 use explicit `.port()` no-connects. Internal-design targets use their owning
 component module as the top. Entry and otherwise unowned designs receive a
@@ -59,7 +62,7 @@ map is stored in both the report and ownership manifest.
 
 ## Invoke from Spec Editor
 
-Open the target design in Spec Editor and choose **Options → More actions… →
+Open the target component or design in Spec Editor and choose **Options → More actions… →
 Launch activity…**. Select **Generate SystemVerilog RTL** and press **Run**.
 Preflight diagnostics remain visible in the dialog; unsupported designs cannot
 be queued, while unconnected instance ports are warnings and do not block the
@@ -112,7 +115,7 @@ containing the active `.spec` package. With that folder as the root, output is
 published at:
 
 ```text
-rtl/<document-id>/<design-id>/
+rtl/<document-id>/<target-id>/
 ├── Makefile
 ├── README.md
 ├── generation-manifest.json
@@ -126,10 +129,12 @@ The `designs/` file is omitted when the selected internal design uses its
 owning component module as the top. The Activity also returns a typed report and
 the `rtl.generation_report` JSON artifact with provenance, counts, warnings,
 name mappings, consumed section IDs/digests/output locations, file hashes, and
-the generated tree digest. The generation manifest and report schemas are V2.
+the generated tree digest. V3 manifests/reports include generic targets, emitted
+entity provenance and implementation status. Saved V2 reports and ownership
+manifests remain readable. Text explanations do not alter generated logic.
 
 The directory is fully generator-owned. A rerun atomically replaces it only
-when its manifest matches the generator, document, and design. Do not add
+when its manifest matches the generator, document, and target. Do not add
 hand-written implementation code to this tree because regeneration discards
 manual edits.
 

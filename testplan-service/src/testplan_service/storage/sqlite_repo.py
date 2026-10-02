@@ -1,4 +1,9 @@
-"""SQLite metadata and record repository for Verification Planner."""
+"""SQLite metadata and record repository for Verification Planner.
+
+Reviewer path: final transactions own concurrency, draft/campaign revisions,
+replay responses and events. Individual blob writes and generation status updates
+are separate boundaries; SQLite durability is not cross-store atomic publication.
+"""
 
 from __future__ import annotations
 
@@ -72,6 +77,11 @@ class SqlitePlanRepository:
         return conn
 
     def _init_db(self) -> None:
+        """Create durable domains before any command, review or evidence service uses them.
+
+        Record JSON carries typed domain payloads; table keys/indexes provide ownership
+        and replay lookup. Creating tables is not a migration of the old JSON prototype.
+        """
         with self._lock, self._get_connection() as conn:
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS plans (
@@ -960,6 +970,11 @@ class SqlitePlanRepository:
         operations: list[dict[str, Any]],
         now_iso: str,
     ) -> dict[str, Any]:
+        """Stage campaign inclusion, failure dispositions and waivers under one lock.
+
+        Campaign revisions are separate from plan edit revisions. Frozen campaigns
+        reject further authoring operations; evidence history is not rewritten.
+        """
         with self._lock, self._get_connection() as conn:
             campaign = self.get_campaign(plan_id, campaign_id)
             if not campaign:

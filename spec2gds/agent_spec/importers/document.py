@@ -1,4 +1,9 @@
-"""Build validated V1 ``.spec`` packages from Docling-parsed documents."""
+"""Build validated V1 ``.spec`` packages from Docling-parsed documents.
+
+Reviewer path: imported text/media become narrative provenance. Optional
+structured extraction is a separate configured step; parser headings and lists
+do not by themselves establish validated IP-XACT hardware semantics.
+"""
 
 from __future__ import annotations
 
@@ -164,6 +169,11 @@ class _NarrativeBuilder:
             self._add_image(item)
 
     def _add_text(self, item: ParsedText) -> None:
+        """Project parser text into narrative blocks without inventing hardware semantics.
+
+        Section levels maintain a parent stack; adjacent compatible list items share
+        one list block. Titles are handled outside this body projection.
+        """
         if item.kind == "title":
             self._last_list = None
             return

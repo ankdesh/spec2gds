@@ -1,4 +1,9 @@
-"""Local sandbox for deterministic, managed Activity directory outputs."""
+"""Local sandbox for deterministic, managed Activity directory outputs.
+
+Reviewer path: validate safe relative output and prior generator ownership
+before staging a complete tree. Replacement/rollback protects other files;
+workspace publication grants no mutation capability over the source package.
+"""
 
 from __future__ import annotations
 
@@ -132,6 +137,11 @@ class LocalActivityWorkspace:
             raise ValueError("Generated ownership manifest is invalid JSON.") from exc
         if not isinstance(manifest, dict):
             raise ValueError("Generated ownership manifest must be a JSON object.")
+        if manifest.get("schema_version") == "spec2gds.rtl-generation.v3":
+            target_ref = manifest.get("target", {})
+            if not isinstance(target_ref, dict) or target_ref.get("document_id") != document_id:
+                raise ValueError("Generated manifest target does not match its document.")
+            manifest = {**manifest, "design_id": target_ref.get("entity_id")}
         expected = {
             "generator_id": generator_id,
             "document_id": document_id,
@@ -163,6 +173,11 @@ class LocalActivityWorkspace:
             raise ValueError("Refusing to replace a directory with an invalid ownership manifest.") from exc
         if not isinstance(manifest, dict):
             raise ValueError("Refusing to replace a directory with an invalid ownership manifest.")
+        if manifest.get("schema_version") == "spec2gds.rtl-generation.v3":
+            target_ref = manifest.get("target", {})
+            if not isinstance(target_ref, dict) or target_ref.get("document_id") != document_id:
+                raise ValueError("Generated manifest target does not match its document.")
+            manifest = {**manifest, "design_id": target_ref.get("entity_id")}
         expected = {
             "generator_id": generator_id,
             "document_id": document_id,

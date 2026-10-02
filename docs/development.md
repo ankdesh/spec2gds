@@ -15,6 +15,7 @@ circuit-designer/packages/app-react/ reusable application shell and host adapter
 circuit-designer/apps/editor/      specification editor frontend
 circuit-designer/apps/standalone/  independent Circuit Designer frontend
 ai-assistant/                      DeepSeek Harness assistant product and web client
+testplan-service/                   snapshot-bound planning, evidence, reference generation
 config/services.json               shared hosted-service IP/port registry
 tests/                             Python contract and integration tests
 docs/                              current architecture and workflows
@@ -36,7 +37,7 @@ on `PATH`. This is a required external toolchain check, not an optional test.
 
 ```bash
 uv sync
-uv run python -m pytest -q
+uv run python -m pytest -q tests testplan-service/tests
 ```
 
 For document import:
@@ -58,7 +59,9 @@ uv run python -m py_compile spec2gds/agent_spec/spec_format/*.py spec2gds/agent_
 
 ## TypeScript environment
 
-Use Node.js 24 or newer.
+Use Node.js 24.2 or newer for the combined workspaces. Circuit Designer alone
+declares Node 24+; the Assistant also accepts 22.19+ in the 22.x line. The
+pinned Harness CLI uses `import.meta.main`, which is absent in Node 24.0/24.1.
 
 ```bash
 cd circuit-designer
@@ -97,27 +100,37 @@ default startup.
 The AI Assistant is a separate DeepSeek Harness Node workspace.
 
 ```bash
-cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
-npm run typecheck
-npm test
-npm run test:harness
+scripts/setup-all.sh
+npm --prefix ai-assistant run typecheck
+npm --prefix ai-assistant test
+npm --prefix ai-assistant run build
+npm --prefix ai-assistant run test:harness
 ```
 
-Spec assistant submissions save automatically by default. Use
-`uv run spec2gds-editor --require-human-approval` or
-`bash scripts/serve-all.sh start --require-human-approval` for restricted review.
-The [iterative refinement test plan](spec-editor-iterative-refinement-test-plan.md)
-lists required non-UI checks, deterministic fixture coverage, and named isolated
-UI scenarios. UI execution for this phase is deferred to a separate pass.
+Native event packages are linked from the Harness source; they are not
+currently installed from published npm artifacts. `HARNESS_SOURCE` selects the
+checkout. The unified setup follows `DSH_BRANCH`; it does not enforce the
+`harness.lock.json` pin or offer `--update-harness`. Check the source revision
+against the lock before testing; packaging requires it to be clean and matching.
 
-`setup:harness` clones and builds the commit pinned by `harness.lock.json` in
-the sibling `../deepseek-harness` checkout. It refuses dirty, wrong-origin, or
-wrong-commit existing checkouts. Use `npm run setup:harness -- --update` to
-explicitly move a clean checkout to the pinned commit, or set
-`HARNESS_SOURCE=/absolute/path` to select another checkout.
+See [Assistant acceptance](assistant-acceptance-tests.md) for owner refinement
+and isolated browser scenarios. [The event tutorial](event-driven-assistant-tutorial.md)
+explains `test:ui` browser dependencies and optional screenshot capture. The
+three product browser tests use a minimal adapter shell with real React/native
+services and deterministic owner/model fixtures; full Harness-shell acceptance
+is a separate scope.
+
+## Verification Planner
+
+```bash
+uv sync
+uv run testplan-service --host 127.0.0.1 --port 6016 --storage-dir verification-data
+uv run python -m pytest testplan-service/tests -q
+```
+
+The service can also use its own `uv sync` environment from `testplan-service/`.
+Its UI is shipped static JavaScript; no Node build is needed. It is not part of
+the combined launcher's process list. See [service operation](verification-service-overall.md).
 
 ## Combined local launcher
 
@@ -125,17 +138,7 @@ For a first-time setup from the repository root, install every runtime and
 build the Harness Assistant:
 
 ```bash
-uv sync
-
-cd circuit-designer
-npm install
-cd ..
-
-cd ai-assistant
-npm run setup:harness
-npm install
-npm run build
-cd ..
+scripts/setup-all.sh
 ```
 
 Then run all three services with their default settings from the repository

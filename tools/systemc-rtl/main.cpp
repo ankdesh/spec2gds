@@ -42,6 +42,8 @@ std::string safeName(llvm::StringRef raw) {
   return result;
 }
 
+// This emitter accepts integer IR only within its declared two-state width
+// profile. Parsing registered dialects does not make every operation supported.
 unsigned width(Type type) {
   auto integer = llvm::dyn_cast<IntegerType>(type);
   if (!integer || integer.getWidth() < 1 || integer.getWidth() > 64)
@@ -53,6 +55,9 @@ std::string cppType(unsigned bits) {
   return bits == 1 ? "bool" : "sc_dt::sc_uint<" + std::to_string(bits) + ">";
 }
 
+// Each expanded IR value is converted to its destination representation. Note
+// that bool performs nonzero conversion, not modulo-two truncation: one-bit
+// arithmetic still needs a semantic correction and native regression coverage.
 std::string castValue(unsigned bits, const std::string &expression) {
   return cppType(bits) + "(" + expression + ")";
 }
@@ -88,6 +93,9 @@ struct Instance {
   std::vector<std::string> outputNames;
 };
 
+// Validate the module vocabulary before printing a header. Keep value maps for
+// ports, registers and child outputs: these are SystemC signal reads and terminate
+// expression expansion; remaining combinational IR is expanded recursively.
 class ModuleEmitter {
 public:
   explicit ModuleEmitter(circt::hw::HWModuleOp module) : module(module) {
@@ -182,6 +190,8 @@ private:
   llvm::DenseMap<Value, std::string> regSignals;
   llvm::DenseMap<Value, std::string> instanceValues;
 
+  // Child port names come from CIRCT attributes, while generated member/signal
+  // names use stable local indices. Keep those identities separate during binding.
   void addInstance(Operation *op) {
     auto child = op->getAttrOfType<FlatSymbolRefAttr>("moduleName");
     auto instanceName = op->getAttrOfType<StringAttr>("instanceName");
@@ -207,6 +217,9 @@ private:
     instances.push_back(std::move(instance));
   }
 
+  // Detect recursion on the current expansion path, not with a global visited
+  // set: shared DAG values may be reused, but a combinational feedback loop fails.
+  // Register signal reads above the recursive branch preserve legal state feedback.
   std::string expression(Value value, llvm::DenseSet<Value> &active) {
     if (auto it = portValues.find(value); it != portValues.end())
       return it->second;
@@ -310,6 +323,8 @@ private:
     out << "  }\n\n";
   }
 
+  // Register scheduling supports direct input clocks only. Accepting arbitrary
+  // computed clock expressions here would require a different sensitivity model.
   Value clockSource(Operation *reg) {
     auto *clockOp = reg->getOperand(1).getDefiningOp();
     if (!clockOp || opName(clockOp) != "seq.to_clock" ||
@@ -321,6 +336,8 @@ private:
     return source;
   }
 
+  // Recover the physical reset input and assertion edge from CIRCT's direct or
+  // XOR-inverted reset. Do not infer a sensitivity edge from an arbitrary cone.
   std::pair<Value, bool> resetSource(Operation *reg) {
     if (reg->getNumOperands() < 4)
       return {Value(), false};
@@ -344,6 +361,9 @@ private:
     throw std::runtime_error("Reset must be a direct input or its inversion");
   }
 
+  // sc_signal::write defers updates to SystemC's update phase. Separate register
+  // methods therefore read the old state on an edge rather than sequentially
+  // exposing a prior method's newly computed register value.
   void emitRegisterMethod(std::ostringstream &out, size_t index) {
     Operation *reg = regs[index];
     (void)clockSource(reg);
@@ -411,6 +431,8 @@ private:
         out << "    sensitive << " << resetName
             << (activeHigh ? ".pos();\n" : ".neg();\n");
       }
+      // State methods run on clock/reset events, not as a time-zero assignment.
+      // Initial signal values are outside the documented pre-reset equivalence scope.
       out << "    dont_initialize();\n";
     }
     out << "  }\n";
@@ -434,6 +456,8 @@ std::string emitAll(ModuleOp root, llvm::StringRef top) {
   std::ostringstream output;
   output << "#pragma once\n#include <systemc>\n\n";
   std::unordered_map<std::string, unsigned> state;
+  // Three-state DFS emits reachable children before parents, once per module.
+  // The active state detects instantiation cycles; completed modules are reused.
   std::function<void(const std::string &)> visit = [&](const std::string &name) {
     if (!modules.count(name))
       throw std::runtime_error("Instance references unknown module " + name);
@@ -482,6 +506,8 @@ int main(int argc, char **argv) {
   }
   try {
     MLIRContext context;
+    // Permit parsing unknown dialect syntax so our explicit vocabulary checks
+    // can report an unsupported operation instead of silently skipping it.
     context.allowUnregisteredDialects();
     context.getOrLoadDialect<circt::hw::HWDialect>();
     context.getOrLoadDialect<circt::comb::CombDialect>();
@@ -489,6 +515,8 @@ int main(int argc, char **argv) {
     auto module = parseSourceFile<ModuleOp>(input, &context);
     if (!module)
       return 1;
+    // Build the full header before opening output: unsupported semantics should
+    // not leave a partially emitted header. Filesystem write failure is separate.
     auto text = emitAll(*module, top);
     std::ofstream file(output, std::ios::binary);
     if (!file)

@@ -71,4 +71,41 @@ The execution inspector shows the pinned definition/digest and limits, native go
 
 Run one process per state root. Restart restores durable state with human Resume required before model work. Disabled HTTP sources are retained; source editing/deletion is not supported. Existing pre-template conversations use their already pinned native definition. Current source setup remains required until the new Harness packages are published. No workflow authoring or execution is added.
 
-Use [the hands-on tutorial](event-driven-assistant-tutorial.md) to try both presets. [Phase 2 operations](event-driven-assistant-phase2.md) explains monitoring, waiting and recovery bounds.
+Use [the hands-on tutorial](event-driven-assistant-tutorial.md) to try both presets. [Execution operations](event-driven-assistant-operations.md) explains monitoring, waiting and recovery bounds.
+
+## Shipped execution allocations
+
+`ai-assistant/profile/cordis.patch.yml` supplies these defaults; trusted deployment
+configuration can change them only within `src/execution-policy.ts` ceilings.
+A saved human template can lower its selected allocation, never exceed deployment.
+
+| Limit | goal | orchestrated |
+| --- | --- | --- |
+| Rounds / model requests | 8 / 32 | 8 / 48 |
+| Tokens / active time | 300,000 / 30 minutes | 500,000 / 45 minutes |
+| Members / concurrency | 1 / 1 | 7 / 3 |
+| Pending deliveries / ledger events | 100 / 256 | 1,000 / 1,000 |
+| Payload bytes / causal depth | 131,072 / 16 | 131,072 / 16 |
+
+Each model response is capped at the deployment output token limit (1,200 by
+default). Native request accounting includes continuation/retry/compaction work.
+Human waits and unchanged polling do not replenish or consume new model rounds.
+
+## State, cutover and verification
+
+The native `event_systems` domain stores roster, resolved definition, deliveries,
+waits, attempts and spending; native HTTP storage retains sources/cursors/outbox.
+Native JSONL retains model-visible messages. Product SQLite retains bindings,
+review/creation progress and event template revisions/pins. Back up the entire
+state root. No store by itself proves an exactly-once external mutation.
+
+Older goal/orchestrated chats without a native event record remain readable but
+refuse new model work; start a new bound chat. Existing pre-template event chats
+continue with their pinned native definition. Focused chats retain their existing
+behavior. Historical workflow decoding is available only for old transcripts.
+
+Run `npm run typecheck`, `npm test`, `npm run build` and `npm run test:harness`
+from `ai-assistant/`; use the tutorial's isolated setup for `npm run test:ui`.
+For native-package validation, use the sibling Harness checkout at the commit in
+`harness.lock.json`. Publication and regeneration of the npm registry lockfile
+remain separate release tasks; the delivered source setup links local packages.

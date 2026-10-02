@@ -4,6 +4,10 @@ The package remains authoritative for source and committed assistant decisions.
 This journal stores pending reviews and presentation data, never a second source
 document. A save interrupted before journal completion is reconciled from the
 decision saved atomically inside the package.
+
+Reviewer path: owner keys include canonical package path and document ID,
+so copied packages do not share authority merely because their IDs match.
+Journal receipts/events supplement package decisions; they never replace source.
 """
 
 from __future__ import annotations

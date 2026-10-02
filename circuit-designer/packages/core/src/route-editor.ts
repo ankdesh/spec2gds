@@ -1,3 +1,7 @@
+/** Geometry-only route editing over an already defined electrical net.
+ * Bends, segments and junctions describe a drawing, not new connectivity.
+ * Preserve terminal identity when normalizing a route so visual edits cannot
+ * silently retarget its logical endpoint. */
 import type { NetRoute, Point, RouteSegment, RouteVertex } from "./types.generated";
 
 const clone = <T>(value: T): T => structuredClone(value);

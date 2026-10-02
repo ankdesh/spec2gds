@@ -4,17 +4,29 @@ import { resolve } from "node:path";
 import { ProductState, artifactDigest } from "../ai-assistant/lib/state.js";
 
 const [command, root, proposalId] = process.argv.slice(2);
-if (!root || !["list", "recover", "begin", "complete", "stale", "rejected", "reconcile", "discard"].includes(command)) {
+if (!root || !["list", "recover", "begin", "complete", "stale", "rejected", "reconcile", "discard", "architecture-list", "architecture-approved", "architecture-revised", "architecture-cancelled", "architecture-require"].includes(command)) {
   throw new Error("Internal usage: workspace-reviews <action> <state-root> [proposal-id]");
 }
 const database = resolve(root, "assistant.sqlite3");
 if (!existsSync(database)) {
-  if (command === "list") { console.log(JSON.stringify({ reviews: [] })); process.exit(0); }
+  if (["list", "architecture-list"].includes(command)) { console.log(JSON.stringify({ reviews: [], architecture_reviews: [] })); process.exit(0); }
   throw new Error("No assistant review state exists for this specification.");
 }
 const state = new ProductState(database);
 try {
-  if (command === "list") {
+  if (command === "architecture-list") {
+    console.log(JSON.stringify({ architecture_reviews: state.listArchitectureReviews() }));
+  } else if (command.startsWith("architecture-")) {
+    if (!proposalId) throw new Error("An architecture review ID is required.");
+    const review = state.architectureReview(proposalId);
+    if (!review) throw new Error("Unknown architecture review.");
+    if (command === "architecture-require") {
+      if (review.status !== "approved") throw new Error("Architecture has not been approved.");
+      console.log(JSON.stringify({ architecture_review: review }));
+    } else {
+      console.log(JSON.stringify({ architecture_review: state.decideArchitecture(proposalId, command.slice("architecture-".length), "CLI decision") }));
+    }
+  } else if (command === "list") {
     const reviews = state.listBindings(true).flatMap(binding =>
       state.listReviews(binding.sessionId).map(review => ({
         ...review, documentId: binding.documentId, ownerUrl: binding.ownerUrl,

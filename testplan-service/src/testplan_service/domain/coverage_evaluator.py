@@ -1,4 +1,9 @@
-"""Coverage status computation, deterministic evaluation order, and gap analysis engine."""
+"""Coverage status computation, deterministic evaluation order, and gap analysis engine.
+
+Reviewer path: choose eligible campaign/profile observations before computing
+family/branch status. Failures outrank waivers and later passes; no-campaign or
+missing evidence stays unevaluated rather than becoming a fabricated success.
+"""
 
 from __future__ import annotations
 

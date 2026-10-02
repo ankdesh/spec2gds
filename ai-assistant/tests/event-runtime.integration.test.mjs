@@ -11,6 +11,7 @@ import { SessionId } from '@deepseek-ai/dsh-session';
 import { ProductState } from '../lib/state.js';
 
 import { boot, waitFor } from './support/event-runtime.mjs';
+import { approveTimer } from './support/approved-timer.mjs';
 
 for(const preset of ['goal','orchestrated']) test(`${preset} composes native execution with the owner proposal boundary`,{timeout:30000},async()=>{
   const directory=await mkdtemp(join(tmpdir(),'spec2gds-events-integration-'));
@@ -35,6 +36,7 @@ for(const preset of ['goal','orchestrated']) test(`${preset} composes native exe
     const runtime=await boot(directory,ownerUrl);ctx=runtime.ctx;
     process.env.SPEC2GDS_BINDING_JSON=JSON.stringify({domain:'spec',serviceBaseUrl:ownerUrl,documentId:'doc-test',scope:'document',preset});
     const primary=await ctx.agents.create({sessionId:SessionId(`native-${preset}`),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:preset},setup:async(agentCtx)=>{if(preset==='goal')await agentCtx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
+    approveTimer(directory, String(primary.agent.id));
     if(preset==='goal')ctx.goals.create(primary.agent,{objective:'Prepare a timer proposal.',maxGoalRounds:8});
     primary.agent.followup(createUserMessage({content:[{type:'text',text:'Propose a timer component.'}],source:{kind:'user'}}));
     await waitFor(()=>ctx.eventSystems.get(primary.agent.id)?.events.some(event=>event.type==='review.prepared'));
@@ -83,6 +85,8 @@ for(const preset of ['goal','orchestrated']) test(`${preset} composes native exe
         assert.equal(added.status,200,JSON.stringify(added));
         await waitFor(()=>ctx.eventHttpSources.list(primary.agent.id)[0].observed);
         await new Promise(resolve=>setTimeout(resolve,100));assert.equal(runtime.adapter.requests.length,before);
+        approveTimer(directory, String(primary.agent.id), 'sha256:changed', 'approved-timer-changed');
+        runtime.adapter.architectureReviewId='approved-timer-changed';
         revision='sha256:changed'; runtime.adapter.revision=revision;
         await waitFor(()=>ctx.eventSystems.get(primary.agent.id).events.some(item=>item.type==='source.changed'));
         await waitFor(()=>previews===2);assert.equal(mutations,0);

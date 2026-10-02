@@ -59,6 +59,11 @@ class CoverageService:
         realization_descriptors: list[dict[str, Any]] | None = None,
         profile_id: str | None = None,
     ) -> EvaluationProfile:
+        """Persist the declared DUT/configuration identity and its canonical content hash.
+
+        A profile describes imported evidence compatibility; creating it does not
+        execute hardware or establish that its declared hashes match a real tool run.
+        """
         plan = self.repo.get_plan(plan_id)
         if not plan:
             raise PlanNotFoundError(plan_id)
@@ -173,6 +178,11 @@ class CoverageService:
 
     # --- Result Import ---
     def stage_result_import(self, plan_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Validate a normalized result envelope and persist an inspectable staging record.
+
+        Staging does not enroll evidence in a campaign. Commit must refer to this
+        identity/digest rather than silently replacing the previewed payload.
+        """
         plan = self.repo.get_plan(plan_id)
         if not plan:
             raise PlanNotFoundError(plan_id)
@@ -231,6 +241,12 @@ class CoverageService:
         campaign_id: str | None = None,
         campaign_revision: int | None = None,
     ) -> dict[str, Any]:
+        """Construct immutable run/observations, then optionally enroll the saved run.
+
+        Run persistence and campaign enrollment are separate transactions. Enrollment
+        can conflict after a run is saved; callers must reconcile rather than fabricate
+        a second successful execution.
+        """
         staged = self.repo.get_result_import(plan_id, staging_id)
         if not staged:
             raise RecordNotFoundError(plan_id, staging_id)
@@ -338,6 +354,11 @@ class CoverageService:
         filtered_intent_ids: set[str] | None = None,
         status_filter: str | None = None,
     ) -> dict[str, Any]:
+        """Assemble the matrix from the selected baseline and campaign/profile evidence.
+
+        Draft authoring and reviewed checkpoint payloads have different meanings.
+        Rows are evaluator projections, not mutable achievement fields.
+        """
         plan = self.repo.get_plan(plan_id)
         if not plan:
             raise PlanNotFoundError(plan_id)
@@ -427,6 +448,11 @@ class CoverageService:
         checkpoint_id: str | None = None,
         campaign_id: str | None = None,
     ) -> list[CoverageGap]:
+        """Derive actionable gaps from the same selected coverage/evidence inputs.
+
+        Gap identity and explanation come from model/evidence state; a user cannot
+        close a computed failure by editing the projection alone.
+        """
         plan = self.repo.get_plan(plan_id)
         if not plan:
             raise PlanNotFoundError(plan_id)

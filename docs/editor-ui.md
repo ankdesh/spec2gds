@@ -4,15 +4,14 @@ The specification editor uses a sticky application bar so document operations
 remain available while the unified specification scrolls. The active package
 name appears in the bar; hover it to inspect the full server-local path.
 The upper-right **AI Assistant ↗** button uses the shared service registry. With
-an active specification it opens an Assistant chat bound to an immutable
-snapshot of the complete document. It may propose a new top-level component or
+an active specification it opens an Assistant chat with a permanent binding to the complete document. It may propose a new top-level component or
 design, including initial instances. A new component proposal can include its
 initial wire ports and module-body SystemVerilog behavior in the same atomic
-create. Existing entities remain read-only from this document scope. With no
+create. The same document scope can refine existing supported entities. With no
 specification open, the same button opens an
 unbound Assistant chat without attaching source context or mutation tools.
-Use an entity's **More actions → Explore with AI Assistant** command when a
-reviewed proposal should change that existing entity.
+Use an entity's **More actions → Explore with AI Assistant** command for a
+narrower entity-bound conversation. Each proposal reads fresh owner context.
 
 ## Application menus
 
@@ -86,13 +85,13 @@ heading. Narrative subheadings and table captions do not receive this control.
 - Components and designs provide **Add section → SystemVerilog** while their
   optional singleton is absent. Saved source appears inline with validation
   status, source diagnostics, CodeMirror editing, and confirmed deletion.
-- Every section shows disabled **Launch activity — Coming soon** so the planned
-  workflow has a stable location without implying that it already runs.
+- Eligible entity sections provide **Launch activity…** through **More actions**.
+  The dialog checks generator availability/preflight, then the Activity tab tracks
+  queued/running/terminal jobs and their server-side output.
 - Entity-backed sections provide **More actions**, which opens the existing
   action and assistant workflow.
 
-Overview contains narrative content when present plus the disabled Launch
-activity placeholder; internal document IDs, revision hashes, and entity counts
+Overview contains narrative content when present; internal document IDs, revision hashes, and entity counts
 are intentionally omitted. The Designs and Components groups add their
 respective creation command. Bus interfaces, their port maps and channels,
 interface connections, and bus/abstraction protocol definitions remain in the
@@ -108,8 +107,8 @@ Only one inline editor can be active at a time. Save submits a typed operation
 with the current source revision hash; the server constructs XML, validates the
 candidate package, and saves it atomically. Cancel discards the local draft.
 Validation failures leave the draft visible. If the source revision is stale,
-the editor refreshes the hash and preserves entered values for review and
-retry.
+the editor preserves entered values and their authored base revision. A retry
+requires explicit source review; incoming changes never restamp a stale draft.
 
 SystemVerilog drafts may be empty and are limited to 256 KiB. The server checks
 portable module-body rules and runs Verilator 5.x in generated context when
@@ -134,12 +133,11 @@ hierarchy references and semantic layout keys can be updated atomically.
 
 ## Deliberate boundaries
 
-The generated document remains read-only outside explicit inline editors. This
-phase does not add arbitrary IP-XACT import, VLNV editing, entity deletion,
+The generated document remains read-only outside explicit inline editors. The editor does not expose arbitrary IP-XACT import, VLNV editing, entity deletion,
 port rename/delete, port-family conversion, bus-interface creation,
 composite-boundary editing, detailed TLM modeling, structured subports, undo
-history, Find, Save As, recent-file persistence, session closing, or activity
-launching. Existing bus and protocol content is preserved when a package is
+history, Find, Save As, recent-file persistence, session closing. Generator Activity launching is available separately through
+the entity action dialog. Existing bus and protocol content is preserved when a package is
 opened or edited even though it is not rendered in the editor.
 
 Circuit Designer remains a physical-wire view. A launch reports and omits

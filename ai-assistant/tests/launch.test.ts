@@ -83,6 +83,36 @@ test("combined launcher starts the Assistant without opening a browser", () => {
   assert.match(launcher, /start_service "ai-assistant"[^\n]+npm run dev -- --no-open/);
 });
 
+test("concurrent workspace synchronization and launch create once and signal readiness", async () => {
+  let definition: any;
+  const tasks: Array<() => Promise<void>> = [];
+  const descriptor = { key: "assistant-unbound", title: "AI Assistant", path: "/workspace/unbound" };
+  const rows: any[] = [], sessions: any[] = [], opened: string[] = [], alerts: string[] = [];
+  let creates = 0;
+  const documentElement = { dataset: {} as Record<string, string> };
+  vm.runInNewContext(readFileSync(resolve(root, "client/index.js"), "utf8"), {
+    URL, URLSearchParams, location: { pathname: "/", search: "", hash: "#spec2gds_unbound=1" },
+    history: { replaceState() {} }, document: { documentElement, title: "", createElement: () => ({ dataset: {} }), head: { appendChild() {} } },
+    queueMicrotask: (task: () => Promise<void>) => tasks.push(task),
+    fetch: async () => ({ ok: true, json: async () => ({ workspaces: [descriptor], unbound_workspace: descriptor }) }),
+    window: { alert: (message: string) => alerts.push(message), __ModuleLoader__: { load: (value: any) => { definition = value; } } },
+  });
+  definition.factory(() => ({ createElement: () => null })).apply({
+    uiSession: { registerNewSessionHandler() {} }, uiConversation: { events: { register() {} } }, slots: { inject() {} },
+    workspaces: { list: { getSnapshot: () => ({ items: rows }) }, refresh: async () => {},
+      create: async (value: any) => { creates++; await new Promise(resolve => setImmediate(resolve)); const row = { ...value, workspaceId: "workspace" }; rows.push(row); return row; },
+      rename: async (_id: string, title: string) => { rows[0].title = title; return rows[0]; } },
+    sessions: { create: async (value: any) => { sessions.push(value); return "session"; }, refresh: async () => {}, open: (id: string) => opened.push(id) },
+  });
+  assert.equal(documentElement.dataset.spec2gdsLaunch, "pending");
+  await Promise.all(tasks.map(task => task()));
+  assert.equal(creates, 1);
+  assert.equal(sessions[0].workspaceId, "workspace");
+  assert.deepEqual(opened, ["session"]);
+  assert.deepEqual(alerts, []);
+  assert.equal(documentElement.dataset.spec2gdsLaunch, "ready");
+});
+
 test("focused web profile removes the generic DSH provider onboarding plugin", () => {
   const patch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
   assert.match(patch, /- id: ui-settings-models\n  disabled: true/);

@@ -27,8 +27,9 @@ behavior such as `logic` and `always_ff`, but it does not contain `module`,
 exactly once.
 
 Add or edit the section through **Options → Add section → SystemVerilog**. Run
-**Options → Launch activity… → Generate RTL** on the entry design to publish a
-fresh project below the configured Activity workspace.
+**Options → More actions… → Launch activity… → Generate RTL** on the entry design to publish a
+fresh project beside the active `.spec` package. The separate helper below uses
+the configured Activity workspace.
 
 ## Generate and verify output
 

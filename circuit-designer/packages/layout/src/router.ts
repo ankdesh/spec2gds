@@ -1,3 +1,7 @@
+/** Orthogonal drawing routes for known nets and placed terminal positions.
+ * Routing chooses geometry under obstacle constraints; it cannot invent or
+ * repair electrical connectivity. A failed search throws so the caller can
+ * report drawing failure without silently changing net endpoints. */
 import type { NetRoute, NodeGeometry, Point, RouteVertex } from "@spec2gds/circuit-core";
 
 export interface RouteAnchor {
@@ -124,6 +128,8 @@ function searchBounds(requests: RouteRequest[], obstacles: RouteObstacle[], fixe
   };
 }
 
+// Sampling large trees bounds scoring cost; this heuristic is a drawing aid,
+// not a guarantee that the returned path is the globally shortest route.
 function heuristic(point: Point, goals: Point[], grid: number): number {
   let best = Number.POSITIVE_INFINITY;
   const stride = Math.max(1, Math.floor(goals.length / 96));
@@ -134,6 +140,9 @@ function heuristic(point: Point, goals: Point[], grid: number): number {
   return best;
 }
 
+// Search states include the incoming orientation because reaching one point
+// horizontally and vertically has different future bend cost. Search attaches
+// an anchor to any point in this net's existing tree, rather than to one sink.
 function findPath(
   start: Point,
   tree: Set<string>,
@@ -165,6 +174,7 @@ function findPath(
   ];
   while (queue.length) {
     const current = queue.pop()!;
+    // Improved states leave older heap entries behind; ignore their stale cost.
     if (current.cost !== best.get(current.key)) continue;
     if (tree.has(pointKey(current.point))) {
       const path: Point[] = [];
@@ -206,6 +216,9 @@ function addPath(adjacency: Map<string, Set<string>>, path: Point[]) {
   for (let index = 1; index < path.length; index += 1) addGraphEdge(adjacency, path[index - 1], path[index]);
 }
 
+// Collapse straight degree-two grid samples while retaining terminal stubs,
+// turns and branches. The stable IDs come from net/terminal identity and points,
+// so route compaction changes drawing granularity without changing connectivity.
 function compactRoute(request: RouteRequest, adjacency: Map<string, Set<string>>): NetRoute {
   const pointByKey = new Map<string, Point>();
   for (const key of adjacency.keys()) {
@@ -264,7 +277,8 @@ function requestSpan(request: RouteRequest): number {
 
 /**
  * Route all requested nets together on a rectilinear grid. Blocks and fixed
- * routes are hard obstacles; crossings are used only as a last-resort fallback.
+ * block interiors are excluded. Occupied routes carry congestion penalties;
+ * small batches try avoiding crossings first, while large batches permit them.
  */
 export function routeOrthogonalNets(
   requests: RouteRequest[],
@@ -280,6 +294,8 @@ export function routeOrthogonalNets(
   const occupiedEdges = new Set<string>();
   for (const route of Object.values(fixedRoutes)) occupyRoute(route, occupiedPoints, occupiedEdges, grid);
   const result: Record<string, NetRoute> = {};
+  // Route high-fanout/wide nets first with an ID tie-breaker; later nets pay
+  // congestion against the accepted routes instead of rerouting earlier nets.
   const ordered = [...requests].sort((a, b) => b.anchors.length - a.anchors.length || requestSpan(b) - requestSpan(a) || a.netId.localeCompare(b.netId));
   const strictCongestion = requests.length <= 64;
   for (const request of ordered) {
@@ -293,6 +309,7 @@ export function routeOrthogonalNets(
       let path = strictCongestion
         ? findPath(anchor.stub, tree, bounds, blocked, occupiedPoints, occupiedEdges, grid, false, 250)
         : undefined;
+      // A crossing relaxes drawing congestion, never the obstacle or net model.
       path ??= findPath(anchor.stub, tree, bounds, blocked, occupiedPoints, occupiedEdges, grid, true, strictCongestion ? 250 : 12);
       if (!path) throw new Error(`Unable to find an orthogonal route for net ${request.netId}.`);
       addPath(adjacency, path);

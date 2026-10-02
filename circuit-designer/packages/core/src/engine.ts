@@ -1,3 +1,7 @@
+/** Deterministic logical operation engine for candidate Circuit documents.
+ * Resolve batch dependencies against the staged candidate, preserve accepted
+ * input on rejection, and return diagnostics/diff rather than owning persistence.
+ * Source-specific IP-XACT validity remains with the external source provider. */
 import type {
   CircuitChangeResult,
   CircuitConstruction,

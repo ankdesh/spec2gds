@@ -1,4 +1,9 @@
-"""Export and import service for .vplan bundles, Markdown reports, and CSV."""
+"""Export and import service for .vplan bundles, Markdown reports, and CSV.
+
+Reviewer path: export current records and their snapshot/checkpoint provenance
+without rewriting historical IDs. Bundle staging and commit are separate review
+steps; external archive content must never become executable plugin configuration.
+"""
 
 from __future__ import annotations
 

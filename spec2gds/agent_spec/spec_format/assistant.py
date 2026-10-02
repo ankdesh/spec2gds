@@ -22,10 +22,13 @@ from spec2gds.agent_spec.activities.registry import (
 )
 from spec2gds.agent_spec.activities.snapshot import ActivitySnapshot
 from spec2gds.agent_spec.spec_format import ipxact
-from spec2gds.agent_spec.spec_format.assistant_operation_contract import validate_assistant_operations
+from spec2gds.agent_spec.spec_format.assistant_operation_contract import (
+    validate_assistant_operations,
+)
 from spec2gds.agent_spec.spec_format.document import DocumentSection, build_document_projection
 from spec2gds.agent_spec.spec_format.ir import (
     ConnectionIR,
+    EndpointSliceIR,
     ExternalPortEndpointIR,
     InstanceIR,
     InterfaceEndpointIR,
@@ -52,14 +55,15 @@ from spec2gds.agent_spec.spec_format.transactions import (
     SetInternalDesign,
     SetNarrativeEntityLinks,
     SpecEditTransaction,
+    StructuredPortInput,
+    TransactionalPortInput,
     UpsertConnection,
     UpsertDocumentXml,
     UpsertEntitySection,
     UpsertInstance,
     UpsertNarrativeBlock,
     WirePortInput,
-    TransactionalPortInput,
-    StructuredPortInput,
+    _apply_operation,
 )
 
 SUPPORTED_TARGET_KINDS = {
@@ -301,6 +305,29 @@ def compile_assistant_operations(
     target: EntityRef | None,
     raw_operations: list[dict[str, typing.Any]],
 ) -> tuple[EditOperation, ...]:
+    """Resolve proposed definitions privately before compiling dependent edits.
+
+    Creating a definition does not publish an intermediate revision. The caller
+    still applies this entire batch through the ordinary atomic transaction.
+    """
+    creates = [raw for raw in raw_operations if isinstance(raw, dict) and raw.get("type") == "create_entity"]
+    if not creates:
+        return _compile_assistant_operations(revision, target, raw_operations)
+    creates.sort(key=lambda raw: raw.get("kind") == "design")
+    creation_operations = _compile_assistant_operations(revision, target, creates)
+    package = revision.to_package()
+    for operation in creation_operations:
+        _apply_operation(package, operation)
+    staged = SpecRevision.from_package(package)
+    remaining = [raw for raw in raw_operations if not isinstance(raw, dict) or raw.get("type") != "create_entity"]
+    return (*creation_operations, *_compile_assistant_operations(staged, target, remaining))
+
+
+def _compile_assistant_operations(
+    revision: SpecRevision,
+    target: EntityRef | None,
+    raw_operations: list[dict[str, typing.Any]],
+) -> tuple[EditOperation, ...]:
     """Validate ownership and compile typed JSON operations to transaction objects."""
     if target is not None:
         revision.resolve(target)
@@ -349,6 +376,8 @@ def compile_assistant_operations(
             entity_kind = str(raw.get("kind", ""))
             if entity_kind not in {"component", "design"}:
                 raise ValueError("create_entity kind must be component or design.")
+            if "entry_design" in raw and (entity_kind != "design" or not isinstance(raw["entry_design"], bool)):
+                raise ValueError("entry_design is a boolean supported only for designs.")
             instances_value = raw.get("instances", [])
             if not isinstance(instances_value, list):
                 raise ValueError("instances must be an array.")
@@ -373,6 +402,7 @@ def compile_assistant_operations(
                     instances,
                     tuple(_initial_component_port(item) for item in ports_value),
                     _optional_string(raw.get("systemverilog")),
+                    raw.get("entry_design", True),
                 )
             )
         elif operation_type == "set_entity_metadata":
@@ -475,7 +505,7 @@ def compile_assistant_operations(
 def _allowed_keys(kind: str) -> set[str]:
     common = {"type", "operation_id"}
     shapes = {
-        "create_entity": {"kind", "name", "entity_id", "instances", "ports", "systemverilog"},
+        "create_entity": {"kind", "name", "entity_id", "instances", "ports", "systemverilog", "entry_design"},
         "set_entity_metadata": {"entity", "display_name", "short_description", "description"},
         "upsert_parameter": {"entity", "parameter"},
         "delete_parameter": {"entity", "name"},
@@ -512,6 +542,11 @@ def _assert_operation_owned(
     target: EntityRef | None,
     operation: dict[str, typing.Any],
 ) -> None:
+    """Reject references outside the binding before constructing a candidate package.
+
+    Document bindings permit top-level creation; entity bindings stay within their
+    owned entity/composition. Nested narrative references need the same check.
+    """
     kind = str(operation["type"])
     if kind == "create_entity" and target is not None:
         raise ValueError("Top-level creation requires a document binding.")
@@ -894,10 +929,34 @@ def _connection(value: dict[str, typing.Any]) -> ConnectionIR:
         interface_endpoints=tuple(
             InterfaceEndpointIR(**item) for item in interface_endpoints
         ),
-        port_endpoints=tuple(PortEndpointIR(**item) for item in port_endpoints),
-        external_ports=tuple(ExternalPortEndpointIR(str(item)) for item in external_ports),
+        port_endpoints=tuple(_port_endpoint(item) for item in port_endpoints),
+        external_ports=tuple(_external_endpoint(item) for item in external_ports),
         hierarchy_interfaces=tuple(str(item) for item in hierarchy_interfaces),
     )
+
+
+def _endpoint_slice(value: typing.Any) -> EndpointSliceIR | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict) or set(value) != {"lsb", "width"}:
+        raise ValueError("Endpoint slice requires lsb and width.")
+    if any(type(value[key]) is not int for key in ("lsb", "width")) or value["lsb"] < 0 or value["width"] < 1:
+        raise ValueError("Endpoint slices require nonnegative lsb and positive width integers.")
+    return EndpointSliceIR(**value)
+
+
+def _port_endpoint(value: dict[str, typing.Any]) -> PortEndpointIR:
+    _reject_unknown_keys(value, {"instance_name", "port_name", "slice"}, "port endpoint")
+    return PortEndpointIR(value["instance_name"], value["port_name"], _endpoint_slice(value.get("slice")))
+
+
+def _external_endpoint(value: typing.Any) -> ExternalPortEndpointIR:
+    if isinstance(value, str):
+        return ExternalPortEndpointIR(value)
+    if not isinstance(value, dict):
+        raise ValueError("Boundary endpoint requires a port name or endpoint object.")
+    _reject_unknown_keys(value, {"port_name", "slice"}, "boundary endpoint")
+    return ExternalPortEndpointIR(value["port_name"], _endpoint_slice(value.get("slice")))
 
 
 def _q(name: str) -> str:
@@ -1033,6 +1092,11 @@ def _require_vlnv(revision: SpecRevision, kind: str, vlnv: str) -> None:
 
 
 def _upsert_bus_interface(revision: SpecRevision, root: etree._Element, value: dict[str, typing.Any]) -> None:
+    """Replace one interface after validating its declared protocol and port maps.
+
+    Protocol VLNVs resolve against this revision; physical/logical names must exist.
+    This supports owner operations even though the normal editor hides interfaces.
+    """
     allowed = {"name", "role", "bus_vlnv", "abstraction_vlnv", "connection_required", "bits_in_lau", "endianness", "description", "port_maps"}
     _reject_unknown_keys(value, allowed, "bus interface")
     name = str(value.get("name", "")).strip()

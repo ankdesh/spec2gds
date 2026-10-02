@@ -13,7 +13,8 @@
         "ask_user_question",
         "get_event_system",
         "prepare_spec_document_creation",
-        "wait_for_event"
+        "wait_for_event",
+        "prepare_architecture_review"
       ],
       "publishes": []
     },
@@ -140,6 +141,39 @@
         "value_json",
         "previous_digest",
         "current_digest"
+      ],
+      "additionalProperties": false
+    },
+    "architecture.prepared": {
+      "type": "object",
+      "properties": {
+        "review_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "review_id"
+      ],
+      "additionalProperties": false
+    },
+    "architecture.decided": {
+      "type": "object",
+      "properties": {
+        "review_id": {
+          "type": "string"
+        },
+        "decision": {
+          "type": "string",
+          "enum": [
+            "approved",
+            "revised",
+            "cancelled"
+          ]
+        }
+      },
+      "required": [
+        "review_id",
+        "decision"
       ],
       "additionalProperties": false
     }

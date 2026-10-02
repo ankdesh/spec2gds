@@ -97,6 +97,11 @@ def upsert_design_timing(package: typing.Any, timing: DesignCircuitTimingV1) -> 
 
 
 def validate_timing_annotations(manifest: typing.Any, files: typing.Mapping[str, bytes]) -> None:
+    """Validate registered timing files against actual design, net and clock references.
+
+    Annotations are semantic package data rather than arbitrary canvas coordinates.
+    Registration, canonical path and document identity must agree before saving.
+    """
     registered = any(item.namespace == TIMING_NAMESPACE for item in manifest.annotation_schemas)
     paths = sorted(path for path in files if path.startswith(f"{TIMING_ROOT}/"))
     if paths and not registered:

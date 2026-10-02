@@ -19,7 +19,7 @@ export async function waitFor(check) {
   assert.ok(check(),'Timed out waiting for native execution');
 }
 class Adapter extends LlmAdapter {
-  completeOnReview=false; requests=[]; revision='sha256:test';
+  completeOnReview=false; requests=[]; revision='sha256:test'; architectureReviewId='approved-timer';
   async *stream(options) {
     this.requests.push(options);
     const last=options.messages.at(-1);
@@ -36,7 +36,7 @@ class Adapter extends LlmAdapter {
     } else if(last?.source.kind==='tool' && options.messages.at(-2)?.content.some(block=>block.type==='tool-call'&&block.name==='get_bound_context')) {
       // The initial orchestrated primary may only acknowledge before the reviewer returns.
       if(options.system?.includes('event driven') && !options.messages.some(message=>message.content.some(block=>block.type==='text'&&block.text.includes('"type":"review.ready"')))) call=undefined;
-      else call={name:'prepare_spec_proposal',arguments:{supported:true,base_source_revision_hash:this.revision,unsupported_reason:null,title:'Add timer',summary:'Add a timer component.',rationale:'Requested and reviewed.',assumptions:[],operations:[{operation_id:'timer',type:'create_entity',kind:'component',name:'timer',instances:[]}]}};
+      else call={name:'prepare_spec_proposal',arguments:{architecture_review_id:this.architectureReviewId,supported:true,base_source_revision_hash:this.revision,unsupported_reason:null,title:'Add timer',summary:'Add a timer component.',rationale:'Requested and reviewed.',assumptions:[],operations:[{operation_id:'timer',type:'create_entity',kind:'component',name:'timer',entity_id:'local-timer',instances:[]},{operation_id:'description',type:'set_entity_metadata',entity:{document_id:'doc-test',entity_kind:'component',entity_id:'local-timer'},description:'Timing control. Interface and functional RTL are not implemented yet.'}]}};
     }
     if(this.completeOnReview && last?.source.kind==='goal') call={name:'get_goal',arguments:{}};
     if(this.completeOnReview && last?.source.kind==='tool' && options.messages.at(-2)?.content.some(block=>block.type==='tool-call'&&block.name==='get_goal')) {

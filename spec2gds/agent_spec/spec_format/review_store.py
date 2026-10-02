@@ -1,4 +1,9 @@
-"""Python access to the Harness-owned review store through its internal bridge."""
+"""Python access to the Harness-owned review store through its internal bridge.
+
+Reviewer path: review data belongs to the existing Assistant product state.
+CLI decisions bridge exact stored artifacts and receipts; they must not author
+replacement operations or silently advance a stale base revision.
+"""
 
 from __future__ import annotations
 

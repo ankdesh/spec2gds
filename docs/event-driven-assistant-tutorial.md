@@ -4,7 +4,7 @@ This tutorial uses a disposable Spec document to explore both presets, configure
 
 ## 1. Prepare the workspace and design source
 
-Use Node.js 22.19+ or 24+, the pinned Harness source checkout, and the normal workspace setup:
+Use Node.js 22.19+ in the 22.x line or 24.2+, the pinned Harness source checkout, and the normal workspace setup:
 
 ```bash
 scripts/setup-all.sh
@@ -69,3 +69,16 @@ ASSISTANT_UI_TEST_DEPS="$PWD/.ui-test-tools" PLAYWRIGHT_BROWSERS_PATH="$PWD/.ui-
 ```
 
 The three Chromium tests cover orchestrated configuration/causal routing, goal review waiting and HTTP controls, and both presets' permission rejection and configuration pinning. They render the shipped product browser plugin with real React and drive native Loader/event/goal services through product HTTP routes. A minimal test shell provides Harness session/workspace/slot adapters; the model and external owner are deterministic test doubles. These are product UI integration tests, not an end-to-end test of every native Harness shell panel or a live model provider.
+
+Set `ASSISTANT_UI_SCREENSHOT_DIR` to an absolute directory to save final browser
+states from the same tests, for example:
+
+```bash
+ASSISTANT_UI_SCREENSHOT_DIR="$PWD/../docs/images/event-presets-ui" \
+ASSISTANT_UI_TEST_DEPS="$PWD/.ui-test-tools" \
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.ui-test-tools/browsers" npm run test:ui
+```
+
+The captures show the product UI inside its test shell. They do not depict every
+native Harness shell panel. Screenshot capture is optional and does not replace
+the tests' state/behavior assertions.

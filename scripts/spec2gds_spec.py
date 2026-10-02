@@ -46,6 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     pack = commands.add_parser("pack", help="Pack an unpacked V1 .spec directory.")
     pack.add_argument("--input", required=True)
     pack.add_argument("--output", required=True)
+    for action in ("architecture-reviews", "approve-architecture", "revise-architecture", "cancel-architecture"):
+        review = commands.add_parser(action, help="Inspect or decide a stored architecture before content creation.")
+        review.add_argument("target", help="Workspace directory or exact .spec path")
+        if action != "architecture-reviews":
+            review.add_argument("review_id")
     for action in ("reviews", "history", "approve", "reject"):
         review = commands.add_parser(action, help=f"{action.capitalize()} assistant proposals for one specification.")
         review.add_argument("target", help="Workspace directory or exact .spec path")
@@ -86,6 +91,11 @@ def _review_lock(state_root: pathlib.Path):
 
 
 def _review_command(action: str, target: str, proposal_id: str | None = None) -> int:
+    """Bridge an explicit CLI decision to the same stored owner proposal and receipt.
+
+    Reconcile interrupted saves before approval/rejection and serialize mutating
+    review actions. Listing history does not claim or run an Assistant request.
+    """
     path = resolve_spec_target(target)
     document_id = SpecPackage.load(str(path)).manifest.document_id
     state_root = assistant_state_root(path)
@@ -175,6 +185,22 @@ def main(argv: list[str] | None = None) -> int:
     """Execute one V1 package command and return a shell-compatible status."""
     args = _parser().parse_args(argv)
     try:
+        if args.command in {"architecture-reviews", "approve-architecture", "revise-architecture", "cancel-architecture"}:
+            path = resolve_spec_target(args.target)
+            root = assistant_state_root(path)
+            listing = review_bridge(root, "architecture-list")["architecture_reviews"]
+            document_id = SpecPackage.load(str(path)).manifest.document_id
+            available = [item for item in listing if item.get("documentId") == document_id or item.get("destinationDocumentId") == document_id]
+            if args.command == "architecture-reviews":
+                print(json.dumps({"architecture_reviews": available}, indent=2))
+                return 0
+            if not any(item["reviewId"] == args.review_id for item in available):
+                raise ValueError("Architecture review belongs to a different specification.")
+            action = {"approve-architecture": "approved", "revise-architecture": "revised", "cancel-architecture": "cancelled"}[args.command]
+            with _review_lock(root):
+                result = review_bridge(root, f"architecture-{action}", args.review_id)
+            print(json.dumps(result, indent=2))
+            return 0
         if args.command in {"reviews", "approve", "reject"}:
             return _review_command(args.command, args.target, getattr(args, "proposal_id", None))
         if args.command == "history":

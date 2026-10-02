@@ -175,6 +175,11 @@ def _terminal_circuit_key(source_key: str, source_map: CircuitSourceMap) -> str 
 
 
 def _project_layout(revision: SpecRevision, design: EntityRef, source_map: CircuitSourceMap) -> dict[str, typing.Any]:
+    """Translate source-keyed saved geometry to this projection's transient Circuit IDs.
+
+    Unmapped entries are omitted so stale geometry cannot attach to a different
+    instance or terminal after topology changes.
+    """
     stored = load_design_layout(revision, design)
     if stored is None:
         return {
@@ -635,6 +640,11 @@ def _semantic_layout(
     design_id: str,
     candidate: dict[str, typing.Any],
 ) -> DesignCircuitLayoutV1:
+    """Translate candidate Circuit IDs back to stable source names for persistence.
+
+    Geometry and connectivity have different ownership. Save only recognized
+    instance/net/terminal mappings; do not persist ephemeral projection IDs.
+    """
     source_map = _candidate_source_map(candidate)
     layout = candidate["layout"]
     geometry = {

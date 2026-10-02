@@ -61,7 +61,10 @@ test("structured-question policy is conditional and requires the interactive too
   assert.match(section.text, /LLM-suggested default_value for every field/);
   assert.match(section.text, /Do not list missing proposal fields in an ordinary assistant response/);
   assert.match(section.text, /cannot be derived from bound context/);
-  assert.match(section.text, /durable event waiting is not available/);
+  assert.match(section.text, /When wait_for_event is available/);
+  assert.match(section.text, /durable correlated human answer/);
+  assert.match(section.text, /do not burn continuation rounds polling/);
+  assert.doesNotMatch(section.text, /durable event waiting is not available/);
 });
 
 test("missing details use model-suggested defaults in both domains", () => {
