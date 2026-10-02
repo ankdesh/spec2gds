@@ -27,6 +27,7 @@ marked backlogs; completed plans and release diaries live in Git history.
   and [functional/generalization evaluation evidence](assistant-hierarchical-spec-evaluation.md)
 - [Setup and owner boundaries](ai-assistant.md), [UI composition](assistant-ui.md)
   and [native/product architecture](configurable-assistant-architecture.md)
+- [Harness setup troubleshooting and regression checks](harness-setup-troubleshooting.md)
 - [Events, presets and configuration](event-driven-assistant-system.md),
   [monitoring/waiting/recovery](event-driven-assistant-operations.md) and
   [hands-on tutorial](event-driven-assistant-tutorial.md)

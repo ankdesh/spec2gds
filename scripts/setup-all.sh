@@ -20,6 +20,10 @@ DSH_REPO_HTTPS="${DSH_REPO_HTTPS:-https://github.com/ankdesh/deepseek-harness.gi
 DSH_BRANCH="${DSH_BRANCH:-spec2gds/integration}"
 DEFAULT_HARNESS_DIR="$(cd -- "${PROJECT_ROOT}/.." && pwd)/deepseek-harness"
 HARNESS_SOURCE="${HARNESS_SOURCE:-${DEFAULT_HARNESS_DIR}}"
+# Interpret relative destinations from the repository root, before changing cwd.
+if [[ "${HARNESS_SOURCE}" != /* ]]; then
+  HARNESS_SOURCE="${PROJECT_ROOT}/${HARNESS_SOURCE}"
+fi
 
 echo "================================================================="
 echo " spec2gds Full Development Setup"
@@ -113,6 +117,9 @@ else
   fi
 fi
 
+# Persist the physical checkout path, including after resolving a nested clone.
+RESOLVED_DSH="$(cd -- "${RESOLVED_DSH}" && pwd -P)"
+
 # Install dependencies and build DSH
 echo "Installing DSH dependencies and building in ${RESOLVED_DSH}..."
 cd "${RESOLVED_DSH}"
@@ -125,20 +132,11 @@ echo ""
 echo ">>> [4/4] Setting up AI Assistant..."
 cd "${PROJECT_ROOT}/ai-assistant"
 
-# Configure HARNESS_SOURCE pointer if non-standard
-if [[ "${RESOLVED_DSH}" != "${PROJECT_ROOT}/../deepseek-harness" ]]; then
-  echo "Configuring HARNESS_SOURCE=${RESOLVED_DSH} in ai-assistant/.env"
-  echo "HARNESS_SOURCE=${RESOLVED_DSH}" > "${PROJECT_ROOT}/ai-assistant/.env"
-fi
-
-# Link local DSH packages and TypeScript types for compilation
-mkdir -p node_modules
+# Refresh local packages/tooling and preserve other settings in ai-assistant/.env.
 node scripts/link-harness.mjs "${RESOLVED_DSH}"
-ln -sfn "${RESOLVED_DSH}/node_modules/@types" node_modules/@types
 
 # Compile server and client bundles
-"${PROJECT_ROOT}/circuit-designer/node_modules/.bin/tsc" -p tsconfig.json
-node scripts/build-client.mjs
+npm run build
 echo "AI Assistant setup completed."
 
 echo ""

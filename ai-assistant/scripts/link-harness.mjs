@@ -1,16 +1,32 @@
 /** Link compile-time dependencies to the same Harness workspaces used by product-runtime. */
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { updateHarnessSource } from "./harness-env.mjs";
 
 const product = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const harness = resolve(process.argv[2] || process.env.HARNESS_SOURCE || join(product, "../../deepseek-harness"));
-if (!existsSync(join(harness, "scripts/product-runtime.mjs"))) throw new Error(`Not a Harness checkout: ${harness}`);
-const modules = join(product, "node_modules");
-mkdirSync(modules, { recursive: true });
-const generated = mkdtempSync(join(modules, ".harness-links-"));
-const namespace = join(generated, "@deepseek-ai");
-mkdirSync(namespace);
+const requested = resolve(process.argv[2] || process.env.HARNESS_SOURCE || join(product, "../../deepseek-harness"));
+if (!existsSync(join(requested, "scripts/product-runtime.mjs"))) throw new Error(`Not a Harness checkout: ${requested}`);
+const harness = realpathSync(requested);
+
+// Validate before touching live links: a partial install must leave the previous
+// usable toolchain and .env intact, with a useful dependency-install diagnostic.
+function requiredPath(path, directory = false) {
+  if (!existsSync(path)) {
+    throw new Error(`Harness toolchain is incomplete: missing ${path}. Run pnpm install in ${harness} before linking Assistant dependencies.`);
+  }
+  const stat = statSync(path);
+  if (directory ? !stat.isDirectory() : !stat.isFile()) throw new Error(`Harness toolchain path is not a ${directory ? "directory" : "file"}: ${path}. Run pnpm install in ${harness}.`);
+  return realpathSync(path);
+}
+const toolchain = [["tsc", "typescript"], ["tsx", "tsx"]].map(([command, packageName]) => {
+  const packageRoot = requiredPath(join(harness, "node_modules", packageName), true);
+  const manifest = JSON.parse(readFileSync(requiredPath(join(packageRoot, "package.json")), "utf8"));
+  const entry = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.[command];
+  if (typeof entry !== "string" || !entry) throw new Error(`Harness ${packageName} package does not declare the ${command} executable. Run pnpm install in ${harness}.`);
+  return { command, packageName, packageRoot, executable: requiredPath(join(packageRoot, entry)) };
+});
+const types = requiredPath(join(harness, "node_modules", "@types"), true);
 const directories = [];
 for (const group of ["vendor", "packages"]) {
   for (const entry of readdirSync(join(harness, group), { withFileTypes: true })) {
@@ -22,28 +38,36 @@ for (const group of ["vendor", "packages"]) {
     }
   }
 }
+const packages = [];
 for (const directory of directories) {
   const manifest = join(directory, "package.json");
   if (!existsSync(manifest)) continue;
   const { name } = JSON.parse(readFileSync(manifest, "utf8"));
-  if (name?.startsWith("@deepseek-ai/")) symlinkSync(directory, join(namespace, name.slice("@deepseek-ai/".length)), "dir");
+  if (name?.startsWith("@deepseek-ai/")) packages.push([name.slice("@deepseek-ai/".length), directory]);
 }
-const scope = join(modules, "@deepseek-ai");
-if (existsSync(scope) || (() => { try { return lstatSync(scope).isSymbolicLink(); } catch { return false; } })()) {
-  if (lstatSync(scope).isSymbolicLink()) rmSync(scope);
-  else renameSync(scope, join(generated, "previous-installed-scope"));
+const modules = join(product, "node_modules");
+mkdirSync(modules, { recursive: true });
+const generated = mkdtempSync(join(modules, ".harness-links-"));
+const namespace = join(generated, "@deepseek-ai");
+mkdirSync(namespace);
+for (const [name, directory] of packages) symlinkSync(directory, join(namespace, name), "dir");
+
+function replaceLink(local, target, backupName, type) {
+  let previous;
+  try { previous = lstatSync(local); }
+  catch (error) { if (error.code !== "ENOENT") throw error; }
+  if (previous?.isSymbolicLink()) rmSync(local);
+  else if (previous) renameSync(local, join(generated, backupName));
+  symlinkSync(target, local, type);
 }
-symlinkSync(namespace, scope, "dir");
-// Source development uses the fork's toolchain; a fresh checkout needs no registry
-// installation of the unpublished event packages to run build/typecheck/tests.
+replaceLink(join(modules, "@deepseek-ai"), namespace, "previous-installed-scope", "dir");
+replaceLink(join(modules, "@types"), types, "previous-installed-types", "dir");
 mkdirSync(join(modules, ".bin"), { recursive: true });
-for (const [command, packageName] of [["tsc", "typescript"], ["tsx", "tsx"]]) {
-  const packageRoot = join(harness, "node_modules", packageName);
-  const manifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
-  const entry = typeof manifest.bin === "string" ? manifest.bin : manifest.bin[command];
-  const local = join(modules, ".bin", command);
-  // Link the actual executable: pnpm shell wrappers resolve relative to .bin.
-  if (!existsSync(local)) symlinkSync(realpathSync(join(packageRoot, entry)), local);
+for (const { command, packageName, packageRoot, executable } of toolchain) {
+  replaceLink(join(modules, packageName), packageRoot, `previous-installed-${packageName}`, "dir");
+  // pnpm's .bin wrappers resolve relative to their own directory; link the
+  // package executable instead, refreshing even valid links to an older clone.
+  replaceLink(join(modules, ".bin", command), executable, `previous-installed-bin-${command}`, "file");
 }
-if (!existsSync(join(modules, "@types"))) symlinkSync(join(harness, "node_modules", "@types"), join(modules, "@types"), "dir");
+updateHarnessSource(product, harness);
 console.log(`Assistant dependencies linked to ${harness}`);

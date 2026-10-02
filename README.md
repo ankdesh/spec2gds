@@ -124,6 +124,23 @@ scripts/setup-all.sh
 See [AI Assistant](docs/ai-assistant.md) for Harness checkout setup, owner
 allowlists, tests, state, and packaging constraints.
 
+Setup follows `DSH_BRANCH` (default `spec2gds/integration`) and uses the sibling
+`../deepseek-harness` checkout unless `HARNESS_SOURCE` selects another destination.
+It refreshes the Assistant's package and developer-tool links and saves the
+canonical checkout path in `ai-assistant/.env`, preserving other settings.
+Rerun setup after replacing or moving the Harness checkout. To verify or rebuild
+the Assistant afterward:
+
+```bash
+npm --prefix ai-assistant run typecheck
+npm --prefix ai-assistant run build
+npm --prefix ai-assistant test
+npm --prefix ai-assistant run test:harness
+```
+
+See [Harness setup troubleshooting](docs/harness-setup-troubleshooting.md) for
+the setup issue resolutions and Python verification commands.
+
 For a single focused Spec turn, the two Python CLIs live in
 [`scripts/spec2gds_assistant.py`](scripts/spec2gds_assistant.py) and
 [`scripts/spec2gds_spec.py`](scripts/spec2gds_spec.py). They use the root

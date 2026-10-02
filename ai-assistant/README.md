@@ -37,6 +37,23 @@ Set `HARNESS_SOURCE` to select another destination. Source development links
 native packages and the toolchain from that checkout; use this setup path
 instead of installing the unpublished event packages from npm.
 
+Setup follows `DSH_BRANCH` (default `spec2gds/integration`) and records the
+physical checkout path in `.env` without overwriting other settings. Rerun it
+after replacing or moving Harness; it refreshes `typescript`, `tsx`, `@types`,
+and the `tsc`/`tsx` executable links. Replaced installed package directories are
+preserved under `node_modules/.harness-links-*`.
+
+```bash
+# From workspace root, after setup
+npm --prefix ai-assistant run typecheck
+npm --prefix ai-assistant run build
+npm --prefix ai-assistant test
+npm --prefix ai-assistant run test:harness
+```
+
+See [Harness setup troubleshooting](../docs/harness-setup-troubleshooting.md)
+for path recovery and the regression checks.
+
 ## Browser development
 
 ```bash

@@ -4,7 +4,7 @@ This tutorial uses a disposable Spec document to explore both presets, configure
 
 ## 1. Prepare the workspace and design source
 
-Use Node.js 22.19+ in the 22.x line or 24.2+, the pinned Harness source checkout, and the normal workspace setup:
+Use Node.js 22.19+ in the 22.x line or 24.2+ and the normal workspace setup, which selects the configured Harness branch:
 
 ```bash
 scripts/setup-all.sh

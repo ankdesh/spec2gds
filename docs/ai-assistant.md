@@ -62,7 +62,7 @@ endpoints; geometry, routes, labels, and layout remain outside AI operations.
 ## Run the browser profile
 
 Use Node.js 22.19+ in the 22.x line or 24.2+ for the Assistant (Circuit Designer alone declares Node 24+).
-Prepare the pinned Harness source checkout and product bundles from the repository
+Prepare the selected Harness source checkout and product bundles from the repository
 root. The new native event packages are not published; use source linking:
 
 ```bash
@@ -81,6 +81,17 @@ packaging enforces a clean matching revision. There is no `setup:harness` npm
 script or `--update-harness` option. Do not use `npm ci` for the unpublished
 package baseline. Clone/fetch/install need network access.
 
+Rerunning setup repairs stale package and developer-tool links, including dangling
+links from a deleted checkout. The linker uses the Harness `typescript` and `tsx`
+packages and their actual executable files; pnpm's shell wrappers are not copied.
+Existing installed package directories and executable files are backed up under
+`ai-assistant/node_modules/.harness-links-*`. Setup always saves the canonical
+Harness path in `ai-assistant/.env` while retaining other settings, comments and
+permissions. Relative destinations resolve from the repository root, and nested
+checkouts and symlinked destinations persist their actual checkout path. See
+[Harness setup troubleshooting](harness-setup-troubleshooting.md) for verification
+and recovery commands.
+
 Open `http://127.0.0.1:6013`. The combined `scripts/serve-all.sh start`
 launcher uses the same profile and port, prints the URL, and does not open a
 browser automatically. The browser new-session button opens a
@@ -94,7 +105,7 @@ existing conversations remain bound to their exact package. See
 [specification creation from chat](assistant-spec-creation.md) for the flow,
 retry behavior and persistent package bindings.
 Editor launch links bypass the chooser with an already validated exact target.
-After rebuilding either the product bundle or the pinned Harness checkout, run
+After rebuilding either the product bundle or the Harness checkout, run
 `scripts/serve-all.sh restart`; `start` deliberately refuses a stale or partial
 stack already occupying the default ports.
 

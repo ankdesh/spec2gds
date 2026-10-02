@@ -113,6 +113,13 @@ checkout. The unified setup follows `DSH_BRANCH`; it does not enforce the
 `harness.lock.json` pin or offer `--update-harness`. Check the source revision
 against the lock before testing; packaging requires it to be clean and matching.
 
+Setup refreshes the local package, type and executable links and writes the
+canonical checkout path to `ai-assistant/.env`, preserving other developer
+settings. Relative `HARNESS_SOURCE` destinations are resolved from the repository
+root. Rerun setup after replacing or moving Harness. See
+[Harness setup troubleshooting](harness-setup-troubleshooting.md) for the five
+issue resolutions and isolated setup regressions.
+
 See [Assistant acceptance](assistant-acceptance-tests.md) for owner refinement
 and isolated browser scenarios. [The event tutorial](event-driven-assistant-tutorial.md)
 explains `test:ui` browser dependencies and optional screenshot capture. The
