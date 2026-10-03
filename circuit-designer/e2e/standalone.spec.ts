@@ -70,6 +70,7 @@ test("uses a compact menubar and the reclaimed full-width canvas", async ({ page
 
 test("supports keyboard navigation, nested submenus, dismissal, and focus restoration", async ({ page }) => {
   await page.goto("/");
+  await expect(page.locator(".notice")).toContainText("Untitled circuit");
   const file = page.getByRole("menuitem", { name: "File", exact: true });
   await file.focus();
   await page.keyboard.press("ArrowDown");
@@ -98,11 +99,31 @@ test("supports keyboard navigation, nested submenus, dismissal, and focus restor
   await page.keyboard.press("Space");
   await expect(page.getByRole("menu", { name: "Help" })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Help" })).toHaveCount(0);
+  await expect(help).toBeFocused();
   const tools = page.getByRole("menuitem", { name: "Tools", exact: true });
   await tools.focus();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menu", { name: "Tools" })).toBeVisible();
+  await tools.focus();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Tools" })).toHaveCount(0);
+  await expect(tools).toBeFocused();
+});
+
+test("menu dismissal does not reclaim focus from the next menu", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("menuitem", { name: "Help", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Help" })).toBeVisible();
+  await page.evaluate(async () => {
+    document.activeElement?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    document.getElementById("circuit-tools-menu-trigger")?.focus();
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+  });
+  const tools = page.getByRole("menuitem", { name: "Tools", exact: true });
+  await expect(tools).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("menu", { name: "Tools" })).toBeVisible();
 });
 
 test("launches former sidebar and action-strip workflows from menus", async ({ page }) => {
@@ -142,10 +163,11 @@ test("edits a writable specification binding and saves it through source preview
   sourceProviderCalls = [];
   const document = simpleDocumentFixture();
   document.document_id = `source_roundtrip_${Date.now()}`;
+  document.label = document.document_id;
   const created = await request.post(`${circuitApiUrl}/documents`, {
     data: { request_id: `create_${document.document_id}`, document },
   });
-  expect(created.ok()).toBe(true);
+  expect(created.ok(), await created.text()).toBe(true);
   const registered = await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, {
     data: {
       callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`,

@@ -977,8 +977,8 @@ const SpecSection = createComponentImplementation(
     const sectionText = factValue(section, "Description");
     const missingLeafRtl = section.entity_ref?.entity_kind === "component"
       && !factValue(section, "Internal design")
-      && !(section.content_sections ?? []).some((item) =>
-        item.section_type === "sv" && item.payload.content?.trim());
+      && !(section.has_systemverilog ?? (section.content_sections ?? []).some((item) =>
+        item.section_type === "sv" && item.payload.content?.trim()));
 
     return (
       <SectionEditContext.Provider value={editState}>

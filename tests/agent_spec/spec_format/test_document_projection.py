@@ -130,6 +130,28 @@ def test_a2ui_batch_is_adjacency_list_for_the_custom_catalog() -> None:
     )
 
 
+@pytest.mark.parametrize("body, expected", [(None, False), (" \n", False), ("assign out = 1'b0;", True)])
+def test_a2ui_retains_rtl_presence_after_content_moves_to_children(body, expected) -> None:
+    projection = _projection()
+    section = next(
+        section for section in projection.sections
+        if section.entity_ref and section.entity_ref.entity_kind == "component"
+    )
+    if body is not None:
+        section.content_sections.append(section.content_sections[0].model_copy(update={
+            "section_id": "test_sv", "section_type": "sv", "payload": {"content": body},
+        }))
+    batch = build_a2ui_batch(projection)
+    components = batch.messages[1]["updateComponents"]["components"]
+    parent = next(item for item in components if item.get("section", {}).get("section_id") == section.section_id)
+    assert parent["section"]["has_systemverilog"] is expected
+    assert parent["section"]["content_sections"] == []
+    if body is not None:
+        child = next(item for item in components if item.get("section", {}).get("section_id") == "test_sv")
+        assert child["section"]["payload"]["content"] == body
+        assert child["id"] in parent["children"]
+
+
 def test_every_design_has_a_revision_derived_topology_before_its_tables() -> None:
     revision = SpecRevision.from_package(build_test_package())
     narrative_before = revision.narrative.model_dump(mode="json")

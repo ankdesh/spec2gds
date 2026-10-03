@@ -120,6 +120,12 @@ available for configured models. The OpenAI route always adds `gpt-5.6-luna`
 to that selector while retaining `OPENAI_MODEL` as the default; the configured
 endpoint and API key must have access to the selected model.
 
+The default model is `gpt-5.4-mini` for browser, headless, and evaluation runs.
+Keep this selection until it is changed manually; do not switch models to
+recover from tool errors or rate limits. To change it manually, edit
+`OPENAI_MODEL` in `ai-assistant/.env` and restart the assistant. An explicit
+shell assignment takes precedence over `.env` for that launch.
+
 The new-conversation dialog offers three immutable execution presets:
 
 | Preset | Behavior |
@@ -211,7 +217,7 @@ same interface as `node deployment/request.mjs`.
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces` |
 | `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents` |
 | `SPEC2GDS_CATALOG_ROOT` | Product package's `profile/catalog` (set by launch scripts) |
-| `OPENAI_MODEL` | `gpt-4o-mini` |
+| `OPENAI_MODEL` | `gpt-5.4-mini` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
 | `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |
@@ -258,6 +264,19 @@ npm run test:harness
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 npm run package -- /tmp/spec2gds-assistant-release
 ```
+
+Browser tests reuse Circuit Designer's Playwright dependency and browser cache:
+
+```bash
+cd circuit-designer  # from the repository root
+npm ci
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright-browsers" npx playwright install chromium
+cd ../ai-assistant
+npm run test:ui
+```
+
+`ASSISTANT_UI_TEST_DEPS` and `PLAYWRIGHT_BROWSERS_PATH` can override those
+locations; no overrides are needed after the standard workspace setup.
 
 The unit suite protects Harness bootstrap safety, catalog prompt/domain rules,
 preset capability boundaries, execution controls, and complete operation

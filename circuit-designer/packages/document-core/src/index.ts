@@ -139,6 +139,8 @@ export interface DocumentSectionData {
   tables: DocumentTable[];
   narrative: NarrativeBlock[];
   content_sections: EntityContentSection[];
+  /** A2UI parent summary; content sections are rendered as separate children. */
+  has_systemverilog?: boolean;
   available_section_types: AvailableSectionType[];
 }
 

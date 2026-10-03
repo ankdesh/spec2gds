@@ -714,6 +714,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const resource = bindingMatch[2];
           if (!resource && request.method === "GET") {
             let binding = state.getBinding(sessionId);
+            if (!binding && requestUrl.searchParams.get("optional") === "true") return writeJson(response, 200, { session: null });
             if (!binding) throw new HttpError(404, "Unknown binding.");
             try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
             catch { /* Retain the last source name while the owner is unavailable. */ }

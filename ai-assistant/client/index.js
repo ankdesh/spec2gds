@@ -470,7 +470,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const result = await api(`/architecture-reviews/${encodeURIComponent(value.reviewId)}/${action}`, { feedback });
         setValue(result.architecture_review);
         if (action !== "cancel") {
-          inputActions.setDraft(`Architecture review ${value.reviewNumber || ""} · ${record(value.plan).title || "Architecture"}: ${result.architecture_review.status}. ${action === "approve" ? "Continue with the approved architecture. Read current context before creating its contents." : "Prepare a revised architecture incorporating this feedback and await approval."}${feedback ? ` Feedback: ${feedback}` : ""}`);
+          inputActions.setDraft(JSON.stringify({ kind: "architecture_decision",
+            architecture_review_id: result.architecture_review.reviewId,
+            decision: result.architecture_review.status, feedback,
+            instruction: action === "approve"
+              ? "Continue with the approved architecture. Read current context before creating its contents."
+              : "Prepare a revised architecture incorporating this feedback and await approval." }));
           queueMicrotask(() => inputActions.submit());
         }
       } catch (caught) { setError(caught.message); }
@@ -892,7 +897,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     React.useEffect(() => {
       let disposed = false;
       const refresh = async () => {
-        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
+        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}?optional=true`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
         catch { /* An unbound chat has no source label. */ }
       };
       void refresh(); const timer = setInterval(() => void refresh(), 15000);

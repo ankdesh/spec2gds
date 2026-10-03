@@ -3,14 +3,16 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 
-async function browserFixture(automatic = false) {
+async function browserFixture(automatic = false, architecture = false) {
   let plugin: any; let events: any; let tail: any;
   const calls: Array<{ path: string; body?: any }> = [];
   const created: any[] = []; const opened: string[] = []; const prompts: any[] = [];
+  const drafts: string[] = []; const submitted: string[] = [];
   const request: any = { requestId: "request-1", sourceSessionId: "origin", documentId: "comparator_3bit", title: "Comparator",
     serviceBaseUrl: "http://spec", status: "pending", destination: "/spec-documents/comparator_3bit.spec", specDocumentRoot: "/spec-documents",
     pathSeparator: "/", destinationSessionId: "destination", preset: "focused", error: null,
     services: [{ url: "http://spec", available: true }] };
+  if (architecture) Object.assign(request, { reviewId: "review-1", reviewNumber: 1, plan: { title: "Comparator", open_questions: [] } });
   const continuation = { requestId: "stable-prompt-id", message: "The package exists. Original user request: A[2:0], B[2:0], A_greater, A_equal, A_less.", sent: false };
   const reservation = { session: { sessionId: "destination", preset: "focused" },
     workspace: { key: "workspace-key", title: "Comparator", path: "/workspace/comparator", domain: "spec", ownerUrl: "http://spec", documentId: "comparator_3bit" },
@@ -49,7 +51,12 @@ async function browserFixture(automatic = false) {
     fetch: async (path: string, options: any) => {
       const body = options.body ? JSON.parse(options.body) : undefined; calls.push({ path, body });
       let value: any;
-      if (path.endsWith("/workspaces")) value = { workspaces: [] };
+      if (path.includes("/architecture-reviews/")) {
+        if (path.endsWith("/approve")) request.status = "approved";
+        else if (path.endsWith("/revise")) request.status = "revised";
+        else if (path.endsWith("/cancel")) request.status = "cancelled";
+        value = { architecture_review: request };
+      } else if (path.endsWith("/workspaces")) value = { workspaces: [] };
       else if (path.endsWith("/sources/create")) { request.status = "reserved"; value = reservation; }
       else if (path.endsWith("/activate")) value = { session: reservation.session };
       else if (path.endsWith("/continued")) { request.status = "continued"; continuation.sent = true; value = { creation_request: request }; }
@@ -62,21 +69,48 @@ async function browserFixture(automatic = false) {
   plugin.apply(ctx);
   for (const task of microtasks.splice(0)) await task();
   let tracking = events.start({}, { event: { type: "turn/start", data: { turn: 1 } } });
-  tracking = events.update({ state: tracking }, { event: { type: "tool/call", data: { callId: "call", name: "prepare_spec_document_creation" } } });
-  tracking = events.update({ state: tracking }, { event: { type: "tool/result", seq: 3, data: { message: { source: { callId: "call" }, content: [{ content: [{ type: "text", text: JSON.stringify({ source_creation: request }) }] }] } } } });
+  tracking = events.update({ state: tracking }, { event: { type: "tool/call", data: { callId: "call", name: architecture ? "prepare_architecture_review" : "prepare_spec_document_creation" } } });
+  tracking = events.update({ state: tracking }, { event: { type: "tool/result", seq: 3, data: { message: { source: { callId: "call" }, content: [{ content: [{ type: "text", text: JSON.stringify(architecture ? { architecture_review: request } : { source_creation: request }) }] }] } } } });
   const location = events.buildLocationData({ state: tracking }, "turn", null);
   const matched = tail.options.select({ seq: 4, turn: { data: { get: () => location.value } } });
-  assert.equal(matched.sourceCreation.requestId, "request-1", "Creation cards survive the collapsed tool trace");
-  const tailNode = tail.component({ matched }); const cardNode = tailNode.type(tailNode.props);
+  if (architecture) assert.equal(matched.architectureReview.reviewId, "review-1");
+  else assert.equal(matched.sourceCreation.requestId, "request-1", "Creation cards survive the collapsed tool trace");
+  const tailNode = tail.component({ matched, inputActions: {
+    setDraft: (text: string) => drafts.push(text), submit: () => submitted.push(drafts.at(-1)!),
+  } }); const cardNode = tailNode.type(tailNode.props);
   const render = () => { hookCursor = 0; return cardNode.type(cardNode.props); };
   const settle = async () => { for (const effect of effects.splice(0)) effect(); await new Promise(resolve => setImmediate(resolve)); for (const task of microtasks.splice(0)) await task(); };
   render(); await settle();
   const nodes = (tree: any): any[] => [tree, ...(tree.children ?? []).filter((child: any) => child && typeof child === "object").flatMap(nodes)];
-  return { render, settle, nodes, created, opened, prompts, calls, request, continuation, events, tracking, tail,
+  return { render, settle, nodes, created, opened, prompts, calls, request, continuation, events, tracking, tail, drafts, submitted,
     set failPrompt(value: boolean) { failPrompt = value; },
     submit: async () => { const form = nodes(render()).find(node => node.type === "form"); await form.props.onSubmit({ preventDefault() {} }); await settle(); },
   };
 }
+
+for (const [action, label, decision] of [
+  ["approve", "Approve architecture", "approved"],
+  ["revise", "Revise architecture", "revised"],
+  ["cancel", "Cancel", "cancelled"],
+]) test(`architecture ${action} resumes with the exact review identity or stops on cancellation`, async () => {
+  const f = await browserFixture(false, true);
+  f.nodes(f.render()).find(node => node.type === "textarea").props.onChange({ target: { value: "Keep the original interface." } });
+  await f.nodes(f.render()).find(node => node.type === "button" && node.children[0] === label).props.onClick();
+  await f.settle();
+  assert.equal(f.render().props["data-s2g-architecture-review"], decision);
+  assert.ok(f.calls.some(call => call.path.endsWith(`/architecture-reviews/review-1/${action}`)));
+  if (action === "cancel") {
+    assert.deepEqual(f.drafts, []);
+    assert.deepEqual(f.submitted, []);
+  } else {
+    assert.equal(f.submitted.length, 1);
+    const message = JSON.parse(f.submitted[0]);
+    assert.equal(message.kind, "architecture_decision");
+    assert.equal(message.architecture_review_id, "review-1");
+    assert.equal(message.decision, decision);
+    assert.equal(message.feedback, "Keep the original interface.");
+  }
+});
 
 test("creation footer creates the destination chat and submits the original description there", async () => {
   const f = await browserFixture();

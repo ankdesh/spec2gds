@@ -105,6 +105,16 @@ async function hostFixture(interactiveForms = true) {
   };
 }
 
+test("source label lookup can be absent for an unbound conversation while required binding reads still fail", async () => {
+  const f = await hostFixture();
+  try {
+    const optional = await f.api("/bindings/unbound-chat?optional=true");
+    assert.equal(optional.status, 200);
+    assert.equal(optional.value.session, null);
+    assert.equal((await f.api("/bindings/unbound-chat")).status, 404);
+  } finally { await f.close(); }
+});
+
 test("browser root presets create from an unbound chat and attach execution systems only to the bound destination", async () => {
   const f = await hostFixture();
   try {

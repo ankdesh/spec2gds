@@ -9,12 +9,15 @@ import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { boot, waitFor } from './support/event-runtime.mjs';
 import { approveTimer } from './support/approved-timer.mjs';
 
-const dependencies = createRequire(resolve(process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
+const circuitWorkspace = fileURLToPath(new URL('../../circuit-designer/', import.meta.url));
+process.env.PLAYWRIGHT_BROWSERS_PATH ||= resolve(circuitWorkspace, '.playwright-browsers');
+const dependencies = createRequire(resolve(process.env.ASSISTANT_UI_TEST_DEPS || circuitWorkspace, 'package.json'));
 const { chromium, expect } = dependencies('@playwright/test');
 const root = new URL('..',import.meta.url);
 const shell = `<!doctype html><html><head><meta charset="utf-8"><script src="/react.js"></script><script src="/react-dom.js"></script></head><body>

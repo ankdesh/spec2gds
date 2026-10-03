@@ -95,6 +95,8 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
               event.preventDefault();
               const target = event.key === "Home" ? effectiveMenus[0] : effectiveMenus.at(-1);
               if (target) document.getElementById(`circuit-${target.id}-menu-trigger`)?.focus();
+            } else if (event.key === "Escape") {
+              event.preventDefault(); close();
             }
           }}
           onPointerEnter={() => { if (openMenu) setOpen(menu.id); }}
@@ -108,7 +110,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
           onCommand={(commandId) => commandId.startsWith("tool:") ? onRunTool(commandId.slice(5)) : onAction(commandId as CircuitActionId)}
           onDismiss={() => {
             close();
-            requestAnimationFrame(() => document.getElementById(`circuit-${menu.id}-menu-trigger`)?.focus());
+            document.getElementById(`circuit-${menu.id}-menu-trigger`)?.focus();
           }}
           onMoveTop={(delta) => moveTop(menu.id, delta, true)}
           shortcutFor={(commandId) => commandId.startsWith("tool:") ? undefined : bindings[commandId as CircuitActionId].keyboard ? formatKeyboardShortcut(bindings[commandId as CircuitActionId].keyboard) : undefined}

@@ -140,7 +140,7 @@ integration entry point.
 | `ASSISTANT_PROFILE` | `spec2gds-web` |
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces` |
 | `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents` |
-| `OPENAI_MODEL` | `gpt-4o-mini` |
+| `OPENAI_MODEL` | `gpt-5.4-mini` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010` |
 | `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1` |

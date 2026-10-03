@@ -399,7 +399,7 @@ type ApiState = {
   staleNextTransaction: boolean;
 };
 
-async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean } = {}): Promise<ApiState> {
+async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean; componentRtl?: string } = {}): Promise<ApiState> {
   const state: ApiState = {
     activityExecutions: [],
     circuits: [],
@@ -471,6 +471,19 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     if (path === "/documents/a2ui" || path === "/documents/view") {
       const currentBatch = structuredClone(batch);
       const components = currentBatch.messages[1].updateComponents.components as Array<Record<string, any>>;
+      const timer = components.find(component => component.id === "section-component-component_timer");
+      timer.section.has_systemverilog = Boolean(options.componentRtl?.trim());
+      const subsystem = components.find(component => component.id === "section-component-component_subsystem");
+      subsystem.section.facts.push({ label: "Internal design", value: "acme:systems:Processor:1.0" });
+      if (options.componentRtl !== undefined) {
+        const rtl = structuredClone(components.find(component => component.id === "entity-section-design-top-sv"));
+        rtl.id = "entity-section-timer-sv";
+        rtl.section.section_id = "section_sv_timer";
+        rtl.section.owner = componentRef;
+        rtl.section.payload.content = options.componentRtl;
+        components.push(rtl);
+        timer.children.push(rtl.id);
+      }
       components.find(component => component.component === "SpecDocument").title = state.currentTitle;
       const liveView = components.find((component) => component.component === "LiveView");
       if (options.topologyUnavailable) {
@@ -710,6 +723,19 @@ test("supports keyboard menu navigation and restores trigger focus", async ({ pa
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu", { name: "Edit" })).toBeHidden();
   await expect(page.getByRole("menuitem", { name: "Edit", exact: true })).toBeFocused();
+});
+
+for (const [label, body, missing] of [
+  ["absent", undefined, true],
+  ["blank", " \n", true],
+  ["implemented", "assign irq = 1'b0;\n", false],
+] as const) test(`missing-RTL notice reflects ${label} leaf RTL and excludes composite components`, async ({ page }) => {
+  await mockEditorApi(page, { componentRtl: body });
+  await openSample(page);
+  const timer = page.locator("#component-component_timer");
+  await expect(timer.locator(".spec-implementation-status")).toHaveCount(missing ? 1 : 0);
+  await expect(page.locator("#component-component_subsystem .spec-implementation-status")).toHaveCount(0);
+  if (body?.trim()) await expect(timer.locator(".spec-sv-section")).toContainText(body.trim());
 });
 
 test("adds, edits, and deletes SystemVerilog sections with preserved typed operations", async ({ page }) => {

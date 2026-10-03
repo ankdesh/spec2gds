@@ -58,7 +58,7 @@ adoption and automatic recent-Workspace startup are disabled.
 | Session sidebar/workspace | Retain | Durable conversation navigation |
 | Chat composer and streaming transcript | Retain | DSH owns all model turns and cancellation |
 | Rename, archive/restore, export | Retain | Uses DSH session contracts directly |
-| Model status/selection | Retain | Defaults to `openai/gpt-4o-mini` |
+| Model status/selection | Retain | Defaults to `openai/gpt-5.4-mini` |
 | `/goal` and goal bar | Retain | Native goal continuation with product budgets and correlated owner-review waits |
 | Generic tool renderer | Retain as fallback | Product keyed views replace only proposal tools |
 | New-session behavior | Extend | Global service/target/create chooser and a Workspace-scoped design-source chooser |

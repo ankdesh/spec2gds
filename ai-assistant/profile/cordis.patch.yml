@@ -1,8 +1,10 @@
 # Shared spec2gds layer for both browser and one-shot profiles.
+# Keep GPT-5.4 mini selected until the user changes it manually; errors and
+# rate limits must not trigger an automatic switch to another model.
 - id: agent-default-model
   config:
     provider: openai
-    model: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
+    model: !!js process.env.OPENAI_MODEL || 'gpt-5.4-mini'
 
 - id: llm-pi-ai
   config:
@@ -11,7 +13,7 @@
         apiKeyEnv: OPENAI_API_KEY
         api: openai-completions
         baseURL: !!js process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-        models: !!js Array.from(new Set([process.env.OPENAI_MODEL || 'gpt-4o-mini', 'gpt-5.6-luna']), id => ({ id }))
+        models: !!js Array.from(new Set([process.env.OPENAI_MODEL || 'gpt-5.4-mini', 'gpt-5.6-luna']), id => ({ id }))
 
 - id: system-prompt
   config:
@@ -155,7 +157,7 @@
       name: '@spec2gds/harness-assistant'
       config:
         provider: openai
-        model: !!js process.env.OPENAI_MODEL || 'gpt-4o-mini'
+        model: !!js process.env.OPENAI_MODEL || 'gpt-5.4-mini'
         stateRoot: !!js process.env.ASSISTANT_STATE || dshHomePath('product')
         scratchRoot: !!js process.env.SPEC2GDS_SCRATCH_ROOT || dshHomePath('workspaces')
         specDocumentRoot: !!js process.env.SPEC_DOCUMENT_ROOT || dshHomePath('spec-documents')

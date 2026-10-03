@@ -1193,7 +1193,15 @@ def build_a2ui_batch(projection: DocumentProjection) -> A2UIDocumentBatch:
         components.append({
             "id": section_component_id,
             "component": "SpecSection",
-            "section": section.model_copy(update={"tables": [], "narrative": [], "content_sections": []}).model_dump(mode="json"),
+            "section": {
+                **section.model_copy(update={"tables": [], "narrative": [], "content_sections": []}).model_dump(mode="json"),
+                # Content is rendered by child nodes; retain its presence for the
+                # parent component's missing-RTL notice without duplicating it.
+                "has_systemverilog": any(
+                    item.section_type == "sv" and bool(str(item.payload.get("content") or "").strip())
+                    for item in section.content_sections
+                ),
+            },
             "children": child_ids,
         })
     components.append({

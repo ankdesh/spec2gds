@@ -196,8 +196,8 @@ test("product policy bounds model steps and output tokens", () => {
 
 test("OpenAI route offers GPT-5.6 Luna without changing the configured default", () => {
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
-  assert.match(patch, /provider: openai\n    model: !!js process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini'/);
-  assert.match(patch, /new Set\(\[process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini', 'gpt-5\.6-luna'\]\)/);
+  assert.match(patch, /provider: openai\n    model: !!js process\.env\.OPENAI_MODEL \|\| 'gpt-5.4-mini'/);
+  assert.match(patch, /new Set\(\[process\.env\.OPENAI_MODEL \|\| 'gpt-5.4-mini', 'gpt-5\.6-luna'\]\)/);
   assert.match(patch, /id => \(\{ id \}\)/);
 });
 

@@ -36,8 +36,8 @@ const runId = new Date().toISOString().replace(/[:.]/g, "-");
 const output = resolve(option("--output", join(root, "tests/ui-scenarios/results", `${scenario}-${runId}`)));
 mkdirSync(output, { recursive: true });
 const isolated = mkdtempSync(join(tmpdir(), "spec2gds-ui-"));
-const documentId = `scenario_${Date.now()}`;
-const packagePath = join(isolated, "packages", `${documentId}.spec`);
+let documentId = `scenario_${Date.now()}`;
+let packagePath = join(isolated, "packages", `${documentId}.spec`);
 mkdirSync(dirname(packagePath), { recursive: true });
 const children = new Set<ChildProcess>();
 const failures: any[] = [], records: any[] = [];
@@ -116,7 +116,7 @@ async function run(): Promise<void> {
   config.activities.workspace_root = join(isolated, "generated");
   config.circuit_designer.preferences_file = join(isolated, "circuit-preferences.json");
   const configPath = join(isolated, "services.json"); writeFileSync(configPath, JSON.stringify(config));
-  const fixture = liveModel ? null : await modelFixture(documentId);
+  const fixture = liveModel ? null : await modelFixture();
   const env = { ...process.env, SPEC2GDS_SERVICE_CONFIG: configPath, SPEC2GDS_PUBLIC_HOST: "127.0.0.1",
     SPEC_EDITOR_STATE_ROOT: join(isolated, "owner-state"), ASSISTANT_STATE: join(isolated, "assistant-state"),
     SPEC2GDS_SCRATCH_ROOT: join(isolated, "workspaces"), SPEC_DOCUMENT_ROOT: dirname(packagePath),
@@ -124,8 +124,24 @@ async function run(): Promise<void> {
     SPEC_SERVICE_ALLOWLIST: owner, CIRCUIT_SERVICE_ALLOWLIST: `http://127.0.0.1:${circuitPort}/api/circuit-designer/v1`,
     SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
     ASSISTANT_MAX_OUTPUT_TOKENS: process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
-    ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini" } : {}) };
+    ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: process.env.OPENAI_MODEL || "gpt-5.4-mini" } : {}) };
   const ownerArgs = ["run", "spec2gds-server", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
+  const packageDirectory = dirname(packagePath);
+  const savedPackages = () => readdirSync(packageDirectory).filter(name => name.endsWith(".spec"));
+  async function createdPackage(): Promise<any> {
+    let snapshot: any;
+    await expect.poll(async () => {
+      try {
+        snapshot = await json(`${owner}/documents/snapshot`);
+        return typeof snapshot.source_path === "string" && existsSync(snapshot.source_path);
+      } catch { return false; }
+    }, { timeout: 30_000 }).toBe(true);
+    assert.equal(dirname(snapshot.source_path), packageDirectory);
+    assert.equal(savedPackages().length, 1, "Creation must save exactly one specification.");
+    packagePath = snapshot.source_path;
+    documentId = snapshot.document_id;
+    return snapshot;
+  }
   let ownerProcess = start("owner", "uv", ownerArgs, root, env);
   const assistantProcess = start("assistant", process.execPath, ["scripts/dev.mjs", "--no-open"], join(root, "ai-assistant"), env);
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
@@ -145,6 +161,7 @@ async function run(): Promise<void> {
         if (message.type() !== "error") return;
         const url = message.location().url;
         const expected = (stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url))
+          || ([`${owner}/favicon.ico`, `${assistant}/favicon.ico`].includes(url) && /status of 404/.test(message.text()))
           || (scenario === "live" && url.startsWith(owner) && /\/transactions(?:\?|$)/.test(url) && /409/.test(message.text()));
         failures.push({ type: "console", message: message.text(), url, expected });
       });
@@ -166,7 +183,7 @@ async function run(): Promise<void> {
         const request = `Create a new spec document ${documentId} titled Architecture lifecycle. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n.`;
         await prompt(chat, request);
         await expect(chat.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false, "No package before architecture approval.");
+        assert.deepEqual(savedPackages(), [], "No package before architecture approval.");
         await chat.reload();
         const pending = chat.locator('[data-s2g-architecture-review="pending"]').last();
         await expect(pending).toBeVisible();
@@ -174,12 +191,13 @@ async function run(): Promise<void> {
         await pending.getByRole("button", { name: "Revise architecture", exact: true }).click();
         await expect(chat.locator('[data-s2g-architecture-review="revised"]')).toBeVisible();
         await expect(chat.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false);
+        assert.deepEqual(savedPackages(), []);
         await chat.locator('[data-s2g-architecture-review="pending"]').getByRole("button", { name: "Cancel", exact: true }).click();
         await expect(chat.locator('[data-s2g-architecture-review="cancelled"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false, "Cancellation creates no content.");
+        assert.deepEqual(savedPackages(), [], "Cancellation creates no content.");
         await prompt(chat, request);
         await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
+        await createdPackage();
         await expect.poll(async () => {
           try { return (await json(`${owner}/documents/snapshot`)).components.length; }
           catch { return 0; }
@@ -197,7 +215,7 @@ async function run(): Promise<void> {
         return;
       }
       if (evalCase) {
-        records.push({ runtime: { model: env.OPENAI_MODEL || "gpt-4o-mini", base_url: env.OPENAI_BASE_URL || "https://api.openai.com/v1",
+        records.push({ runtime: { model: env.OPENAI_MODEL || "gpt-5.4-mini", base_url: env.OPENAI_BASE_URL || "https://api.openai.com/v1",
           output_token_limit: Number(env.ASSISTANT_MAX_OUTPUT_TOKENS), step_limit: Number(env.ASSISTANT_MAX_STEPS_PER_TURN) } });
         await chat.goto(`${assistant}/launch`);
         await prompt(chat, evalCase.request);
@@ -272,11 +290,7 @@ async function run(): Promise<void> {
         await chat.goto(`${assistant}/launch`);
         await prompt(chat, `Create a new spec document ${documentId} titled Iterative scenario. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n combinationally.`);
         await chat.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
-        await expect.poll(() => existsSync(packagePath)).toBe(true);
-        await expect.poll(async () => {
-          try { initial = await json(`${owner}/documents/snapshot`); return true; }
-          catch { return false; }
-        }).toBe(true);
+        initial = await createdPackage();
       } else {
         initial = await json(`${owner}/documents/create`, { path: packagePath, document_id: documentId, title: "Iterative scenario" });
         const query = new URLSearchParams({ service_base_url: owner, document_id: documentId, owner_document_key: initial.owner_document_key });

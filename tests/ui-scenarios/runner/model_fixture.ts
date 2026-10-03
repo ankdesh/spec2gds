@@ -7,7 +7,7 @@ function content(message: any): string {
     : Array.isArray(message.content) ? message.content.map((part: any) => part.text ?? "").join("") : "";
 }
 
-export async function modelFixture(documentId: string) {
+export async function modelFixture() {
   const requests: any[] = [];
   const server = createServer(async (request, response) => {
     try {
@@ -50,7 +50,7 @@ export async function modelFixture(documentId: string) {
         if (outputs.some(output => output.architecture_review)) text = "Review the architecture card before creating contents.";
         else if (outputs.some(output => output.source_creation || output.creation_error)) text = "The specification package is saved and its document chat will continue.";
         else if (!architectureId) { name = "prepare_architecture_review"; args = architecture; }
-        else { name = "prepare_spec_document_creation"; args = { document_id: documentId, title: "Iterative scenario", architecture_review_id: architectureId }; }
+        else { name = "prepare_spec_document_creation"; args = { title: "Iterative scenario", architecture_review_id: architectureId }; }
       } else if (!context) name = "get_bound_context";
       else if (context.incomplete) { name = "get_bound_context"; args = { cursor: context.next_cursor }; }
       else if (outputs.some(output => output.architecture_review)) text = "Review the architecture card before creating contents.";
@@ -62,7 +62,7 @@ export async function modelFixture(documentId: string) {
         ] : [{ operation_id: "create", type: "create_entity", kind: "component", name: "timer_core", entity_id: "local_timer", instances: [],
           ports: [{ name: "clk", family: "wire", direction: "in" }, { name: "rst_n", family: "wire", direction: "in" }, { name: "irq", family: "wire", direction: "out", range: "7:0" }],
           systemverilog: "assign irq = {8{clk & rst_n}};" },
-          { operation_id: "explain", type: "set_entity_metadata", entity: { document_id: documentId, entity_id: "local_timer", entity_kind: "component" },
+          { operation_id: "explain", type: "set_entity_metadata", entity: { document_id: context.document_id, entity_id: "local_timer", entity_kind: "component" },
             description: "Combinational IRQ replicates clk & rst_n into eight bits.\nThere is no clocked state or reset sequence; inputs act as logical values." }];
         name = "prepare_spec_proposal";
         args = { supported: true, base_source_revision_hash: context.source_revision_hash, unsupported_reason: null,
@@ -72,7 +72,7 @@ export async function modelFixture(documentId: string) {
       const delta = name ? { tool_calls: [{ index: 0, id: `fixture_${requests.length}`, type: "function", function: { name, arguments: JSON.stringify(args) } }] } : { content: text };
       response.writeHead(200, { "Content-Type": "text/event-stream" });
       for (const [index, value] of [{ role: "assistant" }, delta, {}].entries()) {
-        response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 1, model: "gpt-4o-mini", choices: [{ index: 0, delta: value, finish_reason: index === 2 ? name ? "tool_calls" : "stop" : null }] })}\n\n`);
+        response.write(`data: ${JSON.stringify({ id: "fixture", object: "chat.completion.chunk", created: 1, model: body.model, choices: [{ index: 0, delta: value, finish_reason: index === 2 ? name ? "tool_calls" : "stop" : null }] })}\n\n`);
       }
       response.end("data: [DONE]\n\n");
     } catch (error) { response.writeHead(500); response.end(String(error)); }
