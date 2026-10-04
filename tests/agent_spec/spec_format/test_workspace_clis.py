@@ -112,6 +112,7 @@ def test_workspace_discovery_and_explicit_target(tmp_path):
     assert resolve_spec_target(str(workspace / "exact.spec"), create=True) == workspace / "exact.spec"
 
 
+@pytest.mark.extensive
 def test_focused_turn_review_and_approval(tmp_path, monkeypatch, capsys):
     workspace = tmp_path / "timer-design"
     with model_fixture() as endpoint:
@@ -156,6 +157,7 @@ def test_editor_save_rejects_changed_disk(tmp_path):
         editor.save()
 
 
+@pytest.mark.extensive
 def test_multiple_reviews_require_id_and_stale_after_apply(tmp_path, monkeypatch, capsys):
     workspace = tmp_path / "multi"
     with model_fixture() as endpoint:
@@ -180,6 +182,7 @@ def test_multiple_reviews_require_id_and_stale_after_apply(tmp_path, monkeypatch
     assert states == {ids[0]: "discarded", ids[1]: "applied", ids[2]: "stale"}
 
 
+@pytest.mark.extensive
 def test_interrupted_approval_reconciles_saved_proposal(tmp_path, monkeypatch):
     from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
     from spec2gds.agent_spec.spec_format.proposal_service import apply_assistant_proposal
@@ -222,6 +225,7 @@ def test_editor_http_save_conflict_requires_refresh(tmp_path):
         assert "stale" in conflict.value.read().decode().lower()
 
 
+@pytest.mark.extensive
 def test_focused_turn_saves_automatically_by_default(tmp_path, monkeypatch):
     workspace = tmp_path / "automatic"
     with model_fixture() as endpoint:
@@ -239,6 +243,7 @@ def test_focused_turn_saves_automatically_by_default(tmp_path, monkeypatch):
     assert session.journal.history()["items"][0]["owner_result"]["source_revision_hash"] == session.revision.source_revision_hash
 
 
+@pytest.mark.extensive
 def test_assistant_creates_exact_spec_path(tmp_path, monkeypatch):
     path = tmp_path / "workspace" / "chosen.spec"
     with model_fixture() as endpoint:

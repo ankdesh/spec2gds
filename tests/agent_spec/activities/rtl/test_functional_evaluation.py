@@ -18,9 +18,6 @@ from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal, previe
 from spec2gds.agent_spec.spec_format.ir import SpecRevision
 
 CASES = load_cases()
-pytestmark = pytest.mark.skipif(
-    shutil.which("verilator") is None, reason="Functional evaluation requires Verilator"
-)
 
 
 def reference_body(case, broken=False):
@@ -241,6 +238,10 @@ def build_reference(case, tmp_path, broken=False):
 
 
 @pytest.mark.parametrize("case", list(CASES.values()), ids=list(CASES))
+@pytest.mark.extensive
+@pytest.mark.skipif(
+    shutil.which("verilator") is None, reason="Functional evaluation requires Verilator"
+)
 def test_concrete_configurations_compile_and_simulate(case, tmp_path):
     project, result = build_reference(case, tmp_path)
     report = evaluate_project(
@@ -257,6 +258,10 @@ def test_concrete_configurations_compile_and_simulate(case, tmp_path):
 
 
 @pytest.mark.parametrize("case_id", ["adder_8", "counter_16", "fifo_8_16"])
+@pytest.mark.extensive
+@pytest.mark.skipif(
+    shutil.which("verilator") is None, reason="Functional evaluation requires Verilator"
+)
 def test_broken_implementations_fail_functional_checks(case_id, tmp_path):
     case = CASES[case_id]
     project, _ = build_reference(case, tmp_path, broken=True)

@@ -343,6 +343,7 @@ def test_codegen_renders_supported_hierarchy_socket_binding() -> None:
 
 
 @pytest.mark.skipif(not os.environ.get("SYSTEMC_PREFIX"), reason="SYSTEMC_PREFIX is not set")
+@pytest.mark.extensive
 def test_generated_project_optionally_compiles_and_runs(tmp_path: Path) -> None:
     source = revision()
     snapshot = ActivitySnapshot.create(source, source.entry_designs()[0].ref)

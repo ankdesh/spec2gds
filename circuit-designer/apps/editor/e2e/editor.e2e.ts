@@ -769,6 +769,29 @@ test("edits the persisted specification name without changing the stable identit
   expect(state.transactions[0]?.operations).toEqual([
     { type: "set_document_title", title: "Timer Platform Specification" },
   ]);
+
+  const component = page.locator("#component-component_timer");
+  const options = component.getByRole("button", { name: "Options" });
+  await options.click();
+  await expect(component.getByRole("menuitem", { name: "Edit text…" })).toBeVisible();
+  await component.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await expect(component.getByLabel("Name", { exact: true })).toBeFocused();
+  await component.getByLabel("Name", { exact: true }).fill("Programmable Timer");
+  await component.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => state.transactions.length).toBe(2);
+  expect(state.transactions[1]?.operations).toEqual([{
+    type: "set_entity_metadata", entity: componentRef,
+    display_name: "Programmable Timer", short_description: "", description: "Counts time",
+  }]);
+  await expect(options).toBeFocused();
+
+  const design = page.locator("#design-design_top");
+  const designOptions = design.getByRole("button", { name: "Options" });
+  await designOptions.click();
+  await design.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await design.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(designOptions).toBeFocused();
+  expect(state.transactions.length).toBe(2);
 });
 
 test("renders, expands, downloads, and refreshes the derived circuit SVG", async ({ page }) => {
@@ -946,6 +969,8 @@ test("creates entities and edits all three port families inline", async ({ page 
   ]);
 
   const component = page.locator("#component-component_timer");
+  await expect(component.getByRole("button", { name: "Rename", exact: true })).toHaveCount(0);
+  await expect(component.getByRole("button", { name: "Edit text…", exact: true })).toHaveCount(0);
   await expect(component.getByText("Counts time", { exact: true })).toHaveClass(/spec-section-text/);
   await expect(component.getByText("acme:blocks:Timer:1.0", { exact: true })).toHaveCount(0);
   await expect(component.locator(".spec-ports-table")).toHaveCount(1);

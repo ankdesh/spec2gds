@@ -55,6 +55,9 @@ package = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "extensive: toolchain compilation/simulation or complete Assistant CLI workflows",
+]
 
 [[tool.uv.index]]
 name = "pytorch-cpu"

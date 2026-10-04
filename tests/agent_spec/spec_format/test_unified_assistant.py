@@ -11,6 +11,7 @@ from spec2gds.agent_spec.activities.view import SpecAccess
 from spec2gds.agent_spec.spec_format.archive import SpecPackage
 from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal, preview_assistant_proposal
 from spec2gds.agent_spec.spec_format.assistant_context_pages import build_context_page
+from spec2gds.agent_spec.spec_format.circuit_adapter import project_design_to_circuit
 from spec2gds.agent_spec.spec_format.ir import EndpointSliceIR, SpecRevision
 
 
@@ -123,6 +124,9 @@ def access(revision, target):
 def test_compound_explanations_composition_and_narrative_are_atomic(tmp_path: Path):
     original, candidate, operations = hierarchy()
     assert not candidate.entry_designs()
+    circuit = project_design_to_circuit(candidate, candidate.designs[0].ref.entity_id).document
+    assert [terminal["width"] for terminal in circuit["design"]["boundary_terminals"]] == [8, 8]
+    assert all(terminal["width"] == 8 for component in circuit["components"] for terminal in component["terminals"])
     assert not original.components
     package = candidate.to_package()
     package.save(tmp_path / "roundtrip.spec")
@@ -345,6 +349,7 @@ def test_v3_generation_replaces_owned_legacy_manifest(tmp_path):
     ].endswith("v3")
 
 
+@pytest.mark.extensive
 def test_numeric_slice_hookups_simulate_without_bit_loss(tmp_path):
     import shutil
 

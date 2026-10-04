@@ -70,6 +70,7 @@ def _generate(
 
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda item: item.name)
+@pytest.mark.extensive
 def test_example_package_generates_a_complete_project(
     example: RtlExample,
     tmp_path: Path,
@@ -150,6 +151,7 @@ endmodule
 
 
 @pytest.mark.parametrize("example", EXAMPLES, ids=lambda item: item.name)
+@pytest.mark.extensive
 def test_example_pipeline_latency(example: RtlExample, tmp_path: Path) -> None:
     _, output, _ = _generate(example, tmp_path / "workspace")
     testbench = tmp_path / "tb.sv"

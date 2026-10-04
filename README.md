@@ -537,8 +537,27 @@ top-level creation or to one existing entity for focused edits. See
 
 ## Verify changes
 
-Install Verilator 5.x and GNU Make before running the Python suite; RTL Activity
-tests execute the generated `make lint` target without a skip.
+Use the fundamental tier while developing and the extensive tier before
+merging changes that affect workflows, hardware generation, or browser behavior.
+The two tiers are complementary; `all` runs each once.
+
+```bash
+scripts/test-all.sh fundamental       # default: fast Python and JS unit/API checks
+scripts/test-all.sh extensive         # toolchains, CLI, Harness integration, browsers
+scripts/test-all.sh all               # both tiers
+scripts/test-all.sh extensive --no-browser
+scripts/test-all.sh all --dry-run      # inspect the selected commands
+```
+
+Run `scripts/setup-all.sh` first. Fundamental does not build frontends or run
+hardware simulations. Extensive requires Verilator 5.x and GNU Make; optional
+SystemC/CIRCT tests retain their configuration-based skips. Browser dependencies
+come from Circuit Designer setup, including the Assistant's browser checks.
+Both tiers use deterministic model fixtures and require no model API key.
+See [the test-tier guide](docs/development.md#test-tiers) for selection rules,
+prerequisites, and the separately invoked owner/editor scenarios and evaluations.
+
+The existing focused and full-suite commands remain available:
 
 ```bash
 uv run python -m pytest -q tests testplan-service/tests

@@ -348,6 +348,7 @@ function dispatchLaunchActivity(entityRef: EntityRef): void {
 function SectionOptionsMenu({
   section,
   onCreate,
+  onRename,
   onEditDetails,
   onAddInstance,
   onAddPort,
@@ -357,6 +358,7 @@ function SectionOptionsMenu({
 }: {
   section: DocumentSectionData;
   onCreate?: (kind: "component" | "design") => void;
+  onRename?: () => void;
   onEditDetails?: () => void;
   onAddInstance?: () => void;
   onAddPort?: (family: ComponentPortInput["family"]) => void;
@@ -479,6 +481,18 @@ function SectionOptionsMenu({
               type="button"
             >
               Add design…
+            </button>
+          )}
+          {onRename && (
+            <button
+              onClick={() => {
+                close(true);
+                onRename();
+              }}
+              role="menuitem"
+              type="button"
+            >
+              Rename
             </button>
           )}
           {onEditDetails && (
@@ -630,6 +644,7 @@ type SectionEditMode = ""
   | "create-component"
   | "create-design"
   | "add-component-instance"
+  | "rename"
   | "metadata"
   | "add-wire-port"
   | "add-transactional-port"
@@ -990,18 +1005,6 @@ const SpecSection = createComponentImplementation(
             <div>
               {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
               <Heading>{section.title}</Heading>
-              {entityIsEditable && section.entity_ref && coordinator.controller && <RenameControl
-                id={`${section.section_id}-rename`}
-                name={section.title}
-                onSave={(name) => coordinator.controller!.updateEntityMetadata(section.entity_ref!, {
-                  display_name: name,
-                  short_description: factValue(section, "Short description"),
-                  description: factValue(section, "Description"),
-                })}
-              />}
-              {entityIsEditable && section.entity_ref?.entity_kind === "component" && mode !== "metadata" && (
-                <button className="spec-text-edit" onClick={() => begin("metadata")} type="button" title="Explain this component beside its interfaces and RTL">Edit text…</button>
-              )}
             </div>
             <SectionOptionsMenu
               instanceAvailability={instanceAvailability}
@@ -1019,10 +1022,21 @@ const SpecSection = createComponentImplementation(
                 ? (kind) => begin(kind === "component" ? "create-component" : "create-design")
                 : undefined}
               onEditDetails={entityIsEditable ? () => begin("metadata") : undefined}
+              onRename={entityIsEditable ? () => begin("rename") : undefined}
               portAvailability={portAvailability}
               section={section}
             />
           </header>
+          {mode === "rename" && entityIsEditable && <RenameForm
+            id={editorId}
+            name={section.title}
+            onSave={(name) => coordinator.controller!.updateEntityMetadata(section.entity_ref!, {
+              display_name: name,
+              short_description: factValue(section, "Short description"),
+              description: factValue(section, "Description"),
+            })}
+            finish={cancel}
+          />}
           {section.entity_ref && <details><summary>Technical details</summary><pre>{JSON.stringify({ reference: section.entity_ref, identity: section.facts.filter(fact => HIDDEN_IDENTITY_FACTS.has(fact.label)) }, null, 2)}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify(section.entity_ref))}>Copy reference</button></details>}
           {missingLeafRtl && (
             <p className="spec-implementation-status">RTL implementation missing. Generation produces a compile-safe scaffold; functional behavior is unimplemented.</p>
@@ -1636,13 +1650,22 @@ function safeHref(value: string): string | undefined {
 function RenameControl({ id, name, onSave }: { id: string; name: string; onSave: (name: string) => Promise<void> }) {
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
+  const finish = () => { coordinator.finishEditor(id); setEditing(false); };
+  if (!editing) return <button type="button" className="spec-text-edit" onClick={() => {
+    if (coordinator.requestEditor(id)) setEditing(true);
+  }}>Rename</button>;
+  return <RenameForm id={id} name={name} onSave={onSave} finish={finish} />;
+}
+
+function RenameForm({ id, name, onSave, finish }: {
+  id: string;
+  name: string;
+  onSave: (name: string) => Promise<void>;
+  finish: () => void;
+}) {
   const [draft, setDraft] = useState(name);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const finish = () => { coordinator.finishEditor(id); setEditing(false); setError(""); };
-  if (!editing) return <button type="button" className="spec-text-edit" onClick={() => {
-    if (coordinator.requestEditor(id)) { setDraft(name); setEditing(true); }
-  }}>Rename</button>;
   return <form className="spec-inline-editor" onSubmit={async event => {
     event.preventDefault(); setBusy(true); setError("");
     try { await onSave(draft); finish(); }

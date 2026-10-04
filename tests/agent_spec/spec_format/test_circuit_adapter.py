@@ -18,7 +18,7 @@ from spec2gds.agent_spec.spec_format.testing import _xml
 from spec2gds.agent_spec.spec_format.transactions import SpecEditTransaction
 
 
-def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool = False) -> SpecRevision:
+def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool = False, bounds: tuple[str, str] = ("DATA_WIDTH-1", "0")) -> SpecRevision:
     package = SpecPackage.create("adapter_demo")
     package.add_document(
         "component",
@@ -26,11 +26,11 @@ def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool =
             "component",
             "component_source",
             "source",
-            """
+            f"""
   <ipxact:model><ipxact:ports>
     <ipxact:port><ipxact:name>data</ipxact:name><ipxact:wire>
       <ipxact:direction>inout</ipxact:direction>
-      <ipxact:vectors><ipxact:vector><ipxact:left>DATA_WIDTH-1</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector></ipxact:vectors>
+      <ipxact:vectors><ipxact:vector><ipxact:left>{bounds[0]}</ipxact:left><ipxact:right>{bounds[1]}</ipxact:right></ipxact:vector></ipxact:vectors>
     </ipxact:wire></ipxact:port>
     <ipxact:port><ipxact:name>service</ipxact:name><ipxact:transactional>
       <ipxact:initiative>requires</ipxact:initiative>
@@ -48,11 +48,11 @@ def _direct_revision(*, connect_structured: bool = False, symbolic_slice: bool =
             "component",
             "component_sink",
             "sink",
-            """
+            f"""
   <ipxact:model><ipxact:ports>
     <ipxact:port><ipxact:name>data</ipxact:name><ipxact:wire>
       <ipxact:direction>in</ipxact:direction>
-      <ipxact:vectors><ipxact:vector><ipxact:left>DATA_WIDTH-1</ipxact:left><ipxact:right>0</ipxact:right></ipxact:vector></ipxact:vectors>
+      <ipxact:vectors><ipxact:vector><ipxact:left>{bounds[0]}</ipxact:left><ipxact:right>{bounds[1]}</ipxact:right></ipxact:vector></ipxact:vectors>
     </ipxact:wire></ipxact:port>
     <ipxact:port><ipxact:name>bundle</ipxact:name><ipxact:structured packed="true">
       <ipxact:struct direction="in"/>
@@ -110,6 +110,15 @@ def test_projects_direct_ports_inout_and_opaque_vector_text() -> None:
     assert projection.source_entity_kind == "design"
     assert projection.omitted_bus_items == ()
     assert set(projection.omitted_ports) == {"source.service", "source.bundle", "sink.bundle"}
+
+
+@pytest.mark.parametrize("bounds, width", [(("3", "0"), 4), (("0", "3"), 4), (("7", "4"), 4), (("3", "3"), 1)])
+def test_projects_concrete_vector_ranges_as_numeric_widths(bounds, width) -> None:
+    revision = _direct_revision(bounds=bounds)
+    document = project_design_to_circuit(revision, "design_direct").document
+    terminals = [terminal for component in document["components"] for terminal in component["terminals"]]
+    assert [terminal["width"] for terminal in terminals] == [width, width]
+    assert all(type(terminal["width"]) is int for terminal in terminals)
 
 
 def test_reports_bus_interconnections_as_intentionally_omitted() -> None:

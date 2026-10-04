@@ -115,6 +115,7 @@ def test_unsupported_source_is_rejected_before_output(
 
 
 @pytest.mark.skipif(not os.environ.get("CIRCT_PREFIX"), reason="CIRCT_PREFIX not configured")
+@pytest.mark.extensive
 def test_unsupported_circt_operation_is_rejected_before_output(tmp_path: Path) -> None:
     revision = _revision_with_body("assign data_out = data_in / 32'd3;\n")
     target = revision.entry_designs()[0].ref
@@ -129,6 +130,7 @@ def test_unsupported_circt_operation_is_rejected_before_output(tmp_path: Path) -
 
 
 @pytest.mark.skipif(not os.environ.get("CIRCT_PREFIX"), reason="CIRCT_PREFIX not configured")
+@pytest.mark.extensive
 def test_slang_error_points_to_stored_section() -> None:
     revision = _revision_with_body("assign data_out = ;\n")
     target = revision.entry_designs()[0].ref
@@ -142,6 +144,7 @@ def test_slang_error_points_to_stored_section() -> None:
 
 
 @pytest.mark.skipif(not os.environ.get("CIRCT_PREFIX"), reason="CIRCT_PREFIX not configured")
+@pytest.mark.extensive
 @pytest.mark.parametrize("path", [_ONE, _TWO])
 def test_pinned_circt_accepts_clocked_examples(path: Path) -> None:
     from spec2gds.agent_spec.activities.systemc_rtl.codegen import _compile
@@ -152,6 +155,7 @@ def test_pinned_circt_accepts_clocked_examples(path: Path) -> None:
 
 
 @pytest.mark.skipif(not os.environ.get("CIRCT_PREFIX"), reason="CIRCT_PREFIX not configured")
+@pytest.mark.extensive
 def test_regeneration_is_deterministic_and_isolated_from_verilog(tmp_path: Path) -> None:
     revision = SpecRevision.load(str(_ONE))
     target = revision.entry_designs()[0].ref
@@ -183,6 +187,7 @@ def test_regeneration_is_deterministic_and_isolated_from_verilog(tmp_path: Path)
     reason="CIRCT_PREFIX and a SystemC-capable C++ compiler are required",
 )
 @pytest.mark.parametrize("path, first_edge", [(_ONE, 0x12345678), (_TWO, 0)])
+@pytest.mark.extensive
 def test_native_systemc_matches_clocked_sample_behavior(
     path: Path, first_edge: int, tmp_path: Path
 ) -> None:
@@ -242,6 +247,7 @@ int sc_main(int, char**) {{
     not os.environ.get("CIRCT_PREFIX") or not shutil.which("g++"),
     reason="CIRCT_PREFIX and a SystemC-capable C++ compiler are required",
 )
+@pytest.mark.extensive
 def test_native_systemc_handles_slices_and_concatenation(tmp_path: Path) -> None:
     revision = _revision_with_body("""
 always_ff @(posedge clk or negedge rst_n) begin

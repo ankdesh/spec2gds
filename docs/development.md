@@ -21,6 +21,66 @@ tests/                             Python contract and integration tests
 docs/                              current architecture and workflows
 ```
 
+## Test tiers
+
+After `scripts/setup-all.sh`, run these commands from the repository root:
+
+```bash
+scripts/test-all.sh                   # fundamental is the default
+scripts/test-all.sh fundamental
+scripts/test-all.sh extensive
+scripts/test-all.sh all
+```
+
+| Tier | Coverage | Use |
+| --- | --- | --- |
+| Fundamental | Fast Python model, package, validation, transaction, projection, owner/API, Activity preflight, importer, runtime and Verification Planner tests; all Circuit Designer and Assistant unit tests | During development and for ordinary pull requests |
+| Extensive | Remaining Python RTL lint/compilation/simulation, SystemC/CIRCT compilation and Assistant CLI workflows; Harness integration; Circuit Designer, Spec Editor and Assistant browser suites | Before merging workflow, generator or UI changes, and for complete regression runs |
+
+The tiers are disjoint. `all` runs both without repeating fundamental tests.
+Existing `npm test` and unfiltered Python test commands retain their full
+selection. Nothing is removed from the suites.
+
+Preview commands with `scripts/test-all.sh all --dry-run`. Use
+`scripts/test-all.sh extensive --no-browser` when browser checks are being run
+through their dedicated commands below. The runner reports every failed check,
+continues independent suites, skips consumers of failed builds and exits nonzero
+if any check fails. It prints the total elapsed time after a successful run.
+
+Fundamental needs the installed root uv environment, Circuit Designer npm
+dependencies and linked Assistant/DSH dependencies. It does not rebuild products
+or run hardware simulations. Extensive builds the Assistant before CLI/Harness
+checks and the frontends before browser checks. It needs Verilator 5.x, GNU Make
+and a C++ compiler; `SYSTEMC_PREFIX` and `CIRCT_PREFIX` enable their existing
+optional compiler checks. Both tiers use deterministic model fixtures and need
+no model API keys. Local HTTP fixtures need permission to bind loopback sockets.
+
+The Assistant browser tests reuse Circuit Designer's Playwright and React
+dependencies and the Chromium installed by setup. `ASSISTANT_UI_TEST_DEPS` and
+`PLAYWRIGHT_BROWSERS_PATH` can override those defaults. The independent Circuit
+and Spec browser runners retain their own browser-path settings.
+
+Python selection uses the registered `extensive` marker:
+
+```bash
+uv run python -m pytest -q --strict-markers tests testplan-service/tests -m 'not extensive'
+uv run python -m pytest -q --strict-markers tests testplan-service/tests -m extensive
+```
+
+New fast tests enter fundamental automatically. Mark a test
+`@pytest.mark.extensive` when it compiles/simulates hardware or launches a complete
+Assistant workflow; use `pytestmark = pytest.mark.extensive` only for modules
+whose tests belong together. Keep fast structural/preflight tests fundamental
+even when they share a file with compiler tests. Marker names are checked by the
+runner. All current JavaScript unit tests remain fundamental; native Harness and
+browser integration retain their separate existing commands in extensive.
+
+The named owner/editor scenarios under `tests/ui-scenarios`, Assistant evaluation
+reports and live-provider/generalization runs remain separately invoked. They
+have their own service lifecycle, artifacts or model-key requirements; see
+[Assistant acceptance](assistant-acceptance-tests.md). Lint, typechecking and
+schema generation checks also retain their existing commands below.
+
 ## Python environment
 
 The combined launcher exports `config/services.json` to participating services.
@@ -32,8 +92,8 @@ Use `uv`; do not install project packages into the system interpreter.
 Running `uv sync` creates the repository-local `.venv`. The AI Assistant is a
 Node product and does not use Python or `uv`.
 
-The deterministic RTL Activity tests also require GNU Make and Verilator 5.x
-on `PATH`. This is a required external toolchain check, not an optional test.
+The extensive RTL Activity tests require GNU Make and Verilator 5.x on `PATH`.
+This requirement also applies to the unfiltered full Python command below.
 
 ```bash
 uv sync

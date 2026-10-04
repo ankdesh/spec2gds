@@ -117,11 +117,16 @@ def _terminal(port: PortIR, terminal_id: str) -> dict[str, typing.Any]:
         raise CircuitAdapterError(f"Port {port.name} has unsupported direction {port.direction!r}.")
     if port.width is None:
         raise CircuitAdapterError(f"Port {port.name} has an unsupported multidimensional or incomplete vector width.")
+    # SpecIR preserves vector ranges as text. Circuit Designer needs a numeric
+    # width for concrete ranges so it can validate endpoint slices.
+    width = port.width
+    if isinstance(width, str) and (bounds := re.fullmatch(r"\[([0-9]+):([0-9]+)\]", width)):
+        width = abs(int(bounds[1]) - int(bounds[2])) + 1
     return {
         "id": terminal_id,
         "label": port.name,
         "direction": direction,
-        "width": port.width,
+        "width": width,
         "category": "port",
     }
 

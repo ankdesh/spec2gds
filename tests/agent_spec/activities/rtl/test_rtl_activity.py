@@ -516,6 +516,7 @@ def test_packaged_templates_reject_incomplete_contexts() -> None:
         _render_template("module.sv.j2", module_name="incomplete")
 
 
+@pytest.mark.extensive
 def test_generated_project_lints_with_required_verilator(tmp_path: Path) -> None:
     version = subprocess.run(
         ["verilator", "--version"],
