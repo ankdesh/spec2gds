@@ -31,9 +31,9 @@ working-directory-relative path. See
 [Circuit Designer preferences](circuit-designer-preferences.md).
 
 The default allocation is Spec Editor `6010`, Circuit API `6011`, Circuit UI
-`6012`, AI Assistant `6013`, and Log Viewer `6014`. The specification editor's
+`6012`, AI Assistant `6013`, and Log Viewer `6014`. The Spec Editor's
 development-only Vite UI uses `6015`. Verification Planner runs separately on
-`6016` with `uv run testplan-service`; it is not in this registry or the combined
+`6016` with `uv run verification-planner`; it is not in this registry or the combined
 launcher. Its CLI owns its bind address and state directories. See
 [Verification Planner operation](verification-service-overall.md).
 The registry schema also contains the unified logging policy.
@@ -53,18 +53,18 @@ The `activities` object configures the Spec Editor's background Activity host:
 ```json
 {
   "activities": {
-    "workspace_root": "../generated",
+    "scratch_root": "../generated",
     "extension_modules": []
   }
 }
 ```
 
-`workspace_root` is resolved relative to the configuration file. The host owns
+`scratch_root` is resolved relative to the configuration file. The host owns
 `.spec2gds/activity-jobs.sqlite3` and `.spec2gds/snapshots/` there; keep those
 files when restarting the service so queued and interrupted jobs can resume.
 For editor-launched Activities, generated RTL, SystemC, and extension-owned
 directories are instead published beside the active `.spec` package. Direct
-SDK and script callers continue to select their own workspace root.
+SDK and script callers continue to select their own scratch root.
 Only one Activity executes at a time to serialize generators that may own the
 same output directory.
 
@@ -131,3 +131,6 @@ file.
 
 For LAN use, allow the selected ports through the server's host firewall and
 open the advertised URLs from the other systems.
+
+Use `activities.scratch_root` for generated output. The previous `workspace_root`
+configuration key remains accepted. The canonical key takes precedence.

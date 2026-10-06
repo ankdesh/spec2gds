@@ -168,7 +168,7 @@ body {
 }
 
 /* 3-Panel Main Layout */
-.workspace-layout {
+.center-layout {
   flex: 1;
   display: flex;
   overflow: hidden;
@@ -269,7 +269,7 @@ body {
   overflow: hidden;
 }
 
-.workspace-toolbar {
+.view-toolbar {
   height: 42px;
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
@@ -289,7 +289,7 @@ body {
   gap: 8px;
 }
 
-.workspace-content {
+.view-content {
   flex: 1;
   overflow-y: auto;
   padding: 16px;

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.domain.operations import CommandBatchRequest, CommandBatchResponse
 from testplan_service.exceptions import (
     DomainValidationError,
@@ -19,7 +20,7 @@ from testplan_service.exceptions import (
 router = APIRouter()
 
 
-def create_commands_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_commands_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating command batch execution endpoints."""
     commands_router = APIRouter(tags=["Commands"])
 
@@ -34,7 +35,7 @@ def create_commands_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def preview_commands(
         plan_id: str,
         payload: CommandBatchRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Validate candidate operations and return diff/diagnostics without committing changes."""
         return service.execute_commands(
@@ -54,7 +55,7 @@ def create_commands_router(get_service: Callable[[], TestPlanService]) -> APIRou
         payload: CommandBatchRequest,
         preview: bool = Query(False, description="Preview changes without committing"),
         if_match: str | None = Header(None, alias="If-Match"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Apply an atomic batch of typed operations with revision precondition and idempotency."""
         base_rev = payload.base_edit_revision

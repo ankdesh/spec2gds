@@ -2,7 +2,7 @@ import { assistantActions, integrationMetadata, matchesAssistantAction } from ".
 /** HTTP composition for Circuit operations, leases and source synchronization.
  * Generic operation preview validates Circuit semantics; source preview/commit
  * additionally call the authoritative owner. A source-bound proposal Accept
- * must enter the client's private draft rather than bypass Save to Specification. */
+ * must enter the client's private draft rather than bypass Save to Spec. */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import {
   CircuitBackendError,
@@ -353,7 +353,7 @@ export class CircuitDesignerService {
   // projections have another owner and can change only via its save protocol.
   private requireIndependent(documentId: string): void {
     if (this.sourceBindings.has(documentId)) {
-      throw new CircuitBackendError("validation_failed", "Source-bound documents must use Save to Specification.");
+      throw new CircuitBackendError("validation_failed", "Source-bound documents must use Save to Spec.");
     }
   }
 

@@ -15,7 +15,7 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { boot, waitFor } from './support/event-runtime.mjs';
 import { approveTimer } from './support/approved-timer.mjs';
 
-const dependencies = createRequire(resolve(process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
+const dependencies = createRequire(resolve(process.env.AI_ASSISTANT_UI_TEST_DEPS || process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
 const { chromium, expect } = dependencies('@playwright/test');
 const root = new URL('..',import.meta.url);
 const shell = `<!doctype html><html><head><meta charset="utf-8"><script src="/react.js"></script><script src="/react-dom.js"></script></head><body>
@@ -143,7 +143,7 @@ test('goal UI retains one native primary, waits for owner review, and controls m
     await f.page.getByRole('button',{name:'Discard',exact:true}).click();await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).waits.some(wait=>wait.state==='resolved'));
     await waitFor(()=>f.runtime.ctx.goals.get(f.runtime.ctx.agents.get(SessionId(id)))?.phase==='complete');
     await expect(f.page.locator('[data-s2g-execution]')).toContainText('goal complete');
-    await f.page.getByText('Monitor owner endpoint',{exact:true}).click();await f.page.getByLabel('Check interval in seconds').fill('5');
+    await f.page.getByText('Monitor service endpoint',{exact:true}).click();await f.page.getByLabel('Check interval in seconds').fill('5');
     await f.page.getByRole('button',{name:'Start monitoring',exact:true}).click();await expect(f.page.getByRole('button',{name:'Disable monitor',exact:true})).toBeVisible();
     await waitFor(()=>f.runtime.ctx.eventHttpSources.list(SessionId(id))[0]?.observed);
     await f.runtime.ctx.agents.get(SessionId(id)).whenIdle();const requests=f.runtime.adapter.requests.length;

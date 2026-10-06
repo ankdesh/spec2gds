@@ -28,7 +28,7 @@ test("independent Circuits retain an independent workspace identity", () => {
   assert.equal(circuit.title, "Standalone design");
 });
 
-test("private Spec owner URLs retain one package workspace across turns", () => {
+test("private Spec service URLs retain one package workspace across turns", () => {
   const previous = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY;
   process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY = "spec2gds-cli:/tmp/project/design.spec";
   try {
@@ -40,9 +40,20 @@ test("private Spec owner URLs retain one package workspace across turns", () => 
     }, "http://127.0.0.1:31002", { document_id: "design" });
     assert.equal(first.key, next.key);
     assert.equal(first.path, next.path);
-    assert.notEqual(first.ownerUrl, next.ownerUrl);
+    assert.notEqual(first.serviceUrl, next.serviceUrl);
   } finally {
     if (previous === undefined) delete process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY;
     else process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY = previous;
   }
+});
+
+test("service field names retain existing workspace identity hashes", async () => {
+  const { createHash } = await import("node:crypto");
+  const originalIdentity = { domain: "spec", ownerUrl: "http://spec.test", documentId: "soc", ownerDocumentKey: "pinned" };
+  const expected = createHash("sha256").update(JSON.stringify(originalIdentity)).digest("hex");
+  const descriptor = workspaceDescriptor("/tmp/product", {
+    domain: "spec", serviceBaseUrl: "http://spec.test", documentId: "soc", scope: "document",
+  }, "http://spec.test", { owner_document_key: "pinned" });
+  assert.equal(descriptor.key, expected);
+  assert.equal(descriptor.serviceUrl, originalIdentity.ownerUrl);
 });

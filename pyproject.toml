@@ -44,11 +44,17 @@ select = ["F", "I"]
 [project.scripts]
 spec2gds-spec = "scripts.spec2gds_spec:main"
 spec2gds-assistant = "scripts.spec2gds_assistant:main"
-spec2gds-server = "spec2gds.agent_spec.api.__main__:server_main"
-spec2gds-editor = "spec2gds.agent_spec.api.__main__:editor_main"
-spec2gds-import-document = "spec2gds.agent_spec.importers.cli:main"
+spec2gds-server = "spec2gds.spec.api.__main__:server_main"
+spec2gds-editor = "spec2gds.spec.api.__main__:editor_main"
+spec2gds-import-document = "spec2gds.spec.importers.cli:main"
 spec2gds-log-viewer = "spec2gds.log_viewer:main"
 testplan-service = "testplan_service.cli:main"
+
+# Canonical commands; the earlier commands above remain compatibility aliases.
+spec2gds-ai-assistant = "scripts.spec2gds_assistant:main"
+spec2gds-spec-service = "spec2gds.spec.api.__main__:server_main"
+spec2gds-spec-editor = "spec2gds.spec.api.__main__:editor_main"
+verification-planner = "testplan_service.cli:main"
 
 [tool.uv]
 package = true

@@ -16,7 +16,7 @@ export default defineConfig({
   base: "/editor-assets/",
   plugins: [react()],
   build: {
-    outDir: fileURLToPath(new URL("../../../spec2gds/agent_spec/spec_format/editor_dist", import.meta.url)),
+    outDir: fileURLToPath(new URL("../../../spec2gds/spec/spec_format/editor_dist", import.meta.url)),
     emptyOutDir: true,
     rollupOptions: {
       output: {

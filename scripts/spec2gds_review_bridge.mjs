@@ -29,7 +29,7 @@ try {
   } else if (command === "list") {
     const reviews = state.listBindings(true).flatMap(binding =>
       state.listReviews(binding.sessionId).map(review => ({
-        ...review, documentId: binding.documentId, ownerUrl: binding.ownerUrl,
+        ...review, documentId: binding.documentId, serviceUrl: binding.serviceUrl,
       })),
     );
     console.log(JSON.stringify({ reviews }));
@@ -58,7 +58,7 @@ try {
       reconcile: "reconcile", rejected: "rejected", discard: "discarded",
     }[command];
     const updated = state.transitionReview(binding.sessionId, proposalId, expected, next,
-      command === "complete" ? { ownerResult: payload, error: null } : {});
+      command === "complete" ? { serviceResult: payload, error: null } : {});
     console.log(JSON.stringify({ review: updated }));
   }
 } finally { state.close(); }

@@ -79,3 +79,5 @@ Generic circuit semantics remain in `circuit-core`; React canvas behavior is in
 `circuit-react`; the reusable application shell is in `circuit-app-react`.
 Browser downloads, URL routing, Spec synchronization labels, service URLs, and
 Assistant launch behavior belong in an application composition layer.
+
+In npm commands, `--workspace @spec2gds/circuit-app-react` selects the npm package.

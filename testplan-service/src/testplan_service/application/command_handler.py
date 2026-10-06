@@ -185,7 +185,8 @@ class CommandHandler:
             if op_name == "plan.update":
                 changes = raw_op.get("changes", {})
                 for k, v in changes.items():
-                    if k in {"name", "description", "owner_label", "tags"}:
+                    k = "designer_label" if k == "owner_label" else k
+                    if k in {"name", "description", "designer_label", "tags"}:
                         header_changes[k] = v
                 header_changes["updated_at"] = now_iso
 
@@ -721,7 +722,7 @@ class CommandHandler:
                             disposition=SourceAuditDisposition.UNREVIEWED,
                             reason=None,
                             linked_requirement_ids=existing_audit.linked_requirement_ids if existing_audit else [],
-                            reviewer_label=plan.owner_label or "author",
+                            reviewer_label=plan.designer_label or "author",
                             source_digest=sec.content_digest,
                             updated_at=now_iso,
                         )

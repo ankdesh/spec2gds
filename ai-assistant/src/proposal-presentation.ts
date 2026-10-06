@@ -1,5 +1,5 @@
-import { OwnerError } from "./owner-clients.js";
-import { OwnerContractError } from "./owner-operation-schema.js";
+import { ServiceError } from "./service-clients.js";
+import { ServiceContractError } from "./service-operation-schema.js";
 import type {
   ProposalChangeSummary,
   ProposalError,
@@ -83,11 +83,11 @@ export function errorCodeForOwnerStatus(status: unknown): { code: ProposalErrorC
     case "revision_conflict":
       return { code: "STALE_REVISION", retryable: true };
     case "locked":
-      return { code: "OWNER_LOCKED", retryable: true };
+      return { code: "SERVICE_LOCKED", retryable: true };
     case "provider_failed":
-      return { code: "OWNER_UNAVAILABLE", retryable: true };
+      return { code: "SERVICE_UNAVAILABLE", retryable: true };
     default:
-      return { code: "OWNER_REJECTED", retryable: false };
+      return { code: "SERVICE_REJECTED", retryable: false };
   }
 }
 
@@ -105,22 +105,22 @@ export function errorFromException(
   correlationId: string,
   error: unknown,
 ): ProposalError {
-  if (error instanceof OwnerContractError) {
-    return proposalError(binding, correlationId, "OWNER_CONTRACT_ERROR", error.message, false);
+  if (error instanceof ServiceContractError) {
+    return proposalError(binding, correlationId, "SERVICE_CONTRACT_ERROR", error.message, false);
   }
-  if (error instanceof OwnerError) {
+  if (error instanceof ServiceError) {
     if (error.status === 409) return proposalError(binding, correlationId, "STALE_REVISION", error.detail, true);
     if (error.status === 502 && typeof error.detail === "string" && (
-      error.detail.startsWith("Owner response exceeded")
-      || error.detail.startsWith("Owner returned non-JSON")
-      || error.detail.startsWith("Owner returned a non-object JSON")
+      error.detail.startsWith("Service response exceeded")
+      || error.detail.startsWith("Service returned non-JSON")
+      || error.detail.startsWith("Service returned a non-object JSON")
     )) {
-      return proposalError(binding, correlationId, "OWNER_CONTRACT_ERROR", error.detail, false);
+      return proposalError(binding, correlationId, "SERVICE_CONTRACT_ERROR", error.detail, false);
     }
     if (error.status === 408 || error.status === 429 || error.status >= 500) {
-      return proposalError(binding, correlationId, "OWNER_UNAVAILABLE", error.detail, true);
+      return proposalError(binding, correlationId, "SERVICE_UNAVAILABLE", error.detail, true);
     }
-    return proposalError(binding, correlationId, "OWNER_REJECTED", error.detail, false);
+    return proposalError(binding, correlationId, "SERVICE_REJECTED", error.detail, false);
   }
   return proposalError(binding, correlationId, "INTERNAL_ERROR", error instanceof Error ? error.message : String(error), false);
 }
@@ -202,7 +202,7 @@ export function changeSummaryFor(review: ProposalReview): ProposalChangeSummary 
 
 export function publicReview(review: ProposalReview): PublicProposalReview {
   const { artifactDigest: _digest, ...value } = review;
-  const result = isRecord(review.ownerResult) ? review.ownerResult : {};
+  const result = isRecord(review.serviceResult) ? review.serviceResult : {};
   return { ...value, changeSummary: changeSummaryFor(review),
     ...(typeof result.review_number === "number" ? { reviewNumber: result.review_number } : {}) };
 }

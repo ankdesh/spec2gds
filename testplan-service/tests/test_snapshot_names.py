@@ -5,13 +5,13 @@ from copy import deepcopy
 from lxml import etree
 from testplan_service.integrations.snapshot_decoder import decode_snapshot_bytes
 
-from spec2gds.agent_spec.activities import ActivitySnapshot
-from spec2gds.agent_spec.spec_format import ipxact
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.models import NarrativeBlock
-from spec2gds.agent_spec.spec_format.naming import normalize_package_names
-from spec2gds.agent_spec.spec_format.testing import build_test_package
-from spec2gds.agent_spec.spec_format.transactions import SetEntityMetadata, SpecEditTransaction
+from spec2gds.spec.activities import ActivitySnapshot
+from spec2gds.spec.spec_format import ipxact
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.models import NarrativeBlock
+from spec2gds.spec.spec_format.naming import normalize_package_names
+from spec2gds.spec.spec_format.testing import build_test_package
+from spec2gds.spec.spec_format.transactions import SetHardwareMetadata, SpecEditTransaction
 
 
 def test_snapshot_uses_source_names_and_qualified_nested_headings():
@@ -26,7 +26,7 @@ def test_snapshot_uses_source_names_and_qualified_nested_headings():
     revision = SpecRevision.from_package(package)
     target = revision.components[0].ref
     result = SpecEditTransaction(revision.source_revision_hash, (
-        SetEntityMetadata(target, display_name="Countdown timer", short_description=None, description=None),
+        SetHardwareMetadata(target, display_name="Countdown timer", short_description=None, description=None),
     )).apply(revision)
     assert result.succeeded
     snapshot = ActivitySnapshot.create(result.revision, target)

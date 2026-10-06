@@ -28,9 +28,9 @@ import { verilog } from "@codemirror/legacy-modes/mode/verilog";
 import {
   SPEC_DOCUMENT_CATALOG_ID,
   type PersistedEntitySectionType,
-} from "./entity-section-registry";
+} from "./section-registry";
 import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
-export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./entity-section-registry";
+export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./section-registry";
 
 import type {
   A2UIDocumentBatch,
@@ -48,7 +48,7 @@ import type {
   TransactionalPortKind,
 } from "@spec2gds/document-core";
 
-export const SPEC_ENTITY_ACTION_EVENT = "spec2gds:entity-action";
+export const SPEC_HARDWARE_ACTION_EVENT = "spec2gds:entity-action";
 export const SPEC_OPEN_CIRCUIT_EVENT = "spec2gds:open-circuit";
 export const SPEC_LAUNCH_ACTIVITY_EVENT = "spec2gds:launch-activity";
 
@@ -239,7 +239,7 @@ const SpecDocument = createComponentImplementation(
       event.preventDefault();
       const title = draftTitle.trim();
       if (!title) {
-        setTitleError("Specification name is required.");
+        setTitleError("Spec name is required.");
         return;
       }
       if (!coordinator.controller) return;
@@ -284,7 +284,7 @@ const SpecDocument = createComponentImplementation(
             <p className="spec-kicker">Unified hardware specification</p>
             {editingTitle ? (
               <form className="spec-title-editor" onSubmit={saveTitle}>
-                <label htmlFor="specification-title">Specification name</label>
+                <label htmlFor="specification-title">Spec name</label>
                 <input
                   id="specification-title"
                   maxLength={200}
@@ -328,7 +328,7 @@ const SpecDocument = createComponentImplementation(
 );
 
 function dispatchEntityAction(entityRef: EntityRef): void {
-  window.dispatchEvent(new CustomEvent(SPEC_ENTITY_ACTION_EVENT, {
+  window.dispatchEvent(new CustomEvent(SPEC_HARDWARE_ACTION_EVENT, {
     detail: { entityRef },
   }));
 }
@@ -670,7 +670,7 @@ function focusSectionOptions(sectionId: string): void {
   document.getElementById(sectionId)?.querySelector<HTMLButtonElement>(".spec-options-trigger")?.focus();
 }
 
-function EntityCreationForm({
+function HardwareCreationForm({
   kind,
   state,
 }: {
@@ -815,7 +815,7 @@ function ComponentInstanceForm({ state }: { state: SectionEditState }) {
   );
 }
 
-function EntityMetadataForm({ state }: { state: SectionEditState }) {
+function HardwareMetadataForm({ state }: { state: SectionEditState }) {
   const [displayName] = useState(() => factValue(state.section, "Display name") || state.section.title);
   const [shortDescription] = useState(() => factValue(state.section, "Short description"));
   const [description, setDescription] = useState(() => factValue(state.section, "Description"));
@@ -847,7 +847,7 @@ function EntityMetadataForm({ state }: { state: SectionEditState }) {
   return (
     <form className="spec-inline-editor spec-metadata-editor" onSubmit={submit}>
       <div className="spec-edit-field-wide">
-        <label htmlFor={`${state.editorId}-description`}>{state.section.entity_ref?.entity_kind === "component" ? "Component explanation" : "Specification text"}</label>
+        <label htmlFor={`${state.editorId}-description`}>{state.section.entity_ref?.entity_kind === "component" ? "Component explanation" : state.section.entity_ref?.entity_kind === "design" ? "Design explanation" : "Spec text"}</label>
         <textarea
           id={`${state.editorId}-description`}
           onChange={(event) => setDescription(event.target.value)}
@@ -1041,12 +1041,12 @@ const SpecSection = createComponentImplementation(
           {missingLeafRtl && (
             <p className="spec-implementation-status">RTL implementation missing. Generation produces a compile-safe scaffold; functional behavior is unimplemented.</p>
           )}
-          {mode === "create-component" && <EntityCreationForm kind="component" state={editState} />}
-          {mode === "create-design" && <EntityCreationForm kind="design" state={editState} />}
+          {mode === "create-component" && <HardwareCreationForm kind="component" state={editState} />}
+          {mode === "create-design" && <HardwareCreationForm kind="design" state={editState} />}
           {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
           {mode === "add-sv" && <NewSystemVerilogForm state={editState} />}
           {mode === "metadata"
-            ? <EntityMetadataForm state={editState} />
+            ? <HardwareMetadataForm state={editState} />
             : sectionText && <p className="spec-section-text" style={{ whiteSpace: "pre-wrap" }}>{sectionText}</p>}
           <FactList
             excludeLabels={mode === "metadata"
@@ -1078,7 +1078,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
     setBusy(true);
     setError("");
     try {
-      await coordinator.controller.upsertEntitySection(section.owner, draft, section.section_id);
+      await coordinator.controller.upsertEntitySection(section.parent, draft, section.section_id);
       cancel();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -1091,7 +1091,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
     setBusy(true);
     setError("");
     try {
-      await coordinator.controller.deleteEntitySection(section.owner, section.section_id);
+      await coordinator.controller.deleteEntitySection(section.parent, section.section_id);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {

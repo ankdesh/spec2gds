@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   PERSISTED_ENTITY_SECTION_TYPES,
   SPEC_DOCUMENT_CATALOG_ID,
-} from "../src/entity-section-registry";
+} from "../src/section-registry";
 
 describe("entity section renderer registry", () => {
   it("has a renderer for every persisted section type in the V2 catalog", () => {

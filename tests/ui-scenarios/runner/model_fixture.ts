@@ -48,7 +48,7 @@ export async function modelFixture(documentId: string) {
         decomposition_rationale: "Keep this cohesive combinational leaf unified.", assumptions: [], open_questions: [], concrete_configuration: { width } };
       if (!hasBoundTools) {
         if (outputs.some(output => output.architecture_review)) text = "Review the architecture card before creating contents.";
-        else if (outputs.some(output => output.source_creation || output.creation_error)) text = "The specification package is saved and its document chat will continue.";
+        else if (outputs.some(output => output.source_creation || output.creation_error)) text = "The specification package is saved and its document conversation will continue.";
         else if (!architectureId) { name = "prepare_architecture_review"; args = architecture; }
         else { name = "prepare_spec_document_creation"; args = { document_id: documentId, title: "Iterative scenario", architecture_review_id: architectureId }; }
       } else if (!context) name = "get_bound_context";

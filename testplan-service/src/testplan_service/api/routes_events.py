@@ -5,15 +5,16 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import AsyncGenerator, Callable
+
 from fastapi import APIRouter, Depends, Header
 from fastapi.responses import StreamingResponse
 
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 
 router = APIRouter()
 
 
-def create_events_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_events_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating SSE event streaming endpoint."""
     events_router = APIRouter(tags=["Events"])
 
@@ -21,7 +22,7 @@ def create_events_router(get_service: Callable[[], TestPlanService]) -> APIRoute
     async def stream_plan_events(
         plan_id: str,
         last_event_id: str | None = Header(None, alias="Last-Event-ID"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> StreamingResponse:
         """Stream real-time SSE notifications for plan and checkpoint changes."""
 

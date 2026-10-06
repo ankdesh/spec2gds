@@ -27,7 +27,7 @@ flowchart LR
     Edit --> Save{"Save or Cancel"}
     Save -->|"Independent Save"| Validate["Validate and commit session"]
     Validate --> Download["Download .circuit.json"]
-    Save -->|"Save to Specification"| Source["Preview and atomically commit .spec"]
+    Save -->|"Save to Spec"| Source["Preview and atomically commit .spec"]
     Source --> Session
     Save -->|"Cancel"| Session
 ```

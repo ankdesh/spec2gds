@@ -16,18 +16,18 @@ function digest(value: unknown): string {
 export function workspaceDescriptor(
   scratchRoot: string,
   input: BindingInput,
-  ownerUrl: string,
+  serviceUrl: string,
   context: Record<string, unknown>,
   sourceBinding?: Record<string, unknown> | null,
 ): WorkspaceDescriptor {
   let domain = input.domain;
-  let workspaceOwnerUrl = ownerUrl;
+  let workspaceServiceUrl = serviceUrl;
   let documentId = input.documentId;
   let title = typeof context.name === "string" ? context.name : sourceName(context, input.title || (input.domain === "spec" ? "Specification" : "Circuit"));
   if (input.domain === "circuit" && sourceBinding && typeof sourceBinding.source_document_id === "string"
     && typeof sourceBinding.source_service_url === "string") {
     domain = "spec";
-    workspaceOwnerUrl = sourceBinding.source_service_url.replace(/\/$/, "");
+    workspaceServiceUrl = sourceBinding.source_service_url.replace(/\/$/, "");
     documentId = sourceBinding.source_document_id;
     title = typeof sourceBinding.source_name === "string" ? sourceBinding.source_name : "Specification";
   } else if (input.domain === "circuit" && isRecord(context.document)) {
@@ -35,16 +35,16 @@ export function workspaceDescriptor(
     if (typeof label === "string" && label.trim()) title = label.trim();
   }
   // Private CLI owners change ports each turn; the package path supplies a stable key.
-  const identityOwnerUrl = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || workspaceOwnerUrl;
-  const ownerDocumentKey = domain === "spec" && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY
+  const identityOwnerUrl = process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || workspaceServiceUrl;
+  const serviceDocumentKey = domain === "spec" && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY
     ? (typeof sourceBinding?.source_owner_document_key === "string" ? sourceBinding.source_owner_document_key : typeof context.owner_document_key === "string" ? context.owner_document_key : undefined) : undefined;
-  const key = digest({ domain, ownerUrl: identityOwnerUrl, documentId, ...(ownerDocumentKey ? { ownerDocumentKey } : {}) });
+  const key = digest({ domain, ownerUrl: identityOwnerUrl, documentId, ...(serviceDocumentKey ? { ownerDocumentKey: serviceDocumentKey } : {}) });
   return {
     key,
     title,
     path: resolve(scratchRoot, "design-sources", key),
     domain,
-    ownerUrl: workspaceOwnerUrl,
+    serviceUrl: workspaceServiceUrl,
     documentId,
   };
 }

@@ -340,7 +340,7 @@ function PathDialog({
       >
         {mode === "new" && (
           <>
-            <label htmlFor="specification-name">Specification name</label>
+            <label htmlFor="specification-name">Spec name</label>
             <input
               autoFocus
               id="specification-name"
@@ -535,7 +535,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
     return (
       <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="Getting started">
         <div className="editor-dialog__copy">
-          <p>Use <strong>File → New Specification</strong> to name and create a server-local package, or <strong>File → Open Specification</strong> to load one.</p>
+          <p>Use <strong>File → New Spec</strong> to name and create a server-local package, or <strong>File → Open Spec</strong> to load one.</p>
           <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
           <p>Entry designs can add named instances of available top-level components. Leaf components keep wire, transactional, and packed structured ports together in one editable table; wire ranges use <code>left:right</code> syntax.</p>
           <p>Saved edits are validated and persisted automatically after an explicit Save.</p>
@@ -560,7 +560,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
   return (
     <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="About spec2gds">
       <div className="editor-dialog__copy">
-        <p><strong>spec2gds Specification Editor</strong></p>
+        <p><strong>spec2gds Spec Editor</strong></p>
         <p>A deterministic editor for <code>spec2gds-v1</code> hardware specification packages.</p>
       </div>
     </Modal>
@@ -686,12 +686,12 @@ export default function EditorMenuBar({
         <div className="app-header__primary">
           <a className="brand" href="#" onClick={(event) => { event.preventDefault(); onViewChange("document"); }}>
             <span className="brand__mark" aria-hidden="true">S</span>
-            <span><strong>spec2gds</strong><small>Specification document</small></span>
+            <span><strong>spec2gds</strong><small>Spec document</small></span>
           </a>
           <nav aria-label="Application menu" className="editor-menubar" role="menubar">
             <TopMenu id="file" label="File" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-              <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Specification…</MenuAction>
-              <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Specification…</MenuAction>
+              <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Spec…</MenuAction>
+              <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Spec…</MenuAction>
               <MenuAction
                 disabled={!path || loading}
                 onActivate={activate(() => { void onOpen(path); })}

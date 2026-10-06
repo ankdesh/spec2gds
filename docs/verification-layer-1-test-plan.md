@@ -3,7 +3,7 @@
 Layer 1 records human-reviewed verification intent against an immutable imported
 Activity Snapshot. It defines what needs verification; it does not generate
 stimulus or infer passing evidence. [Service operation](verification-service-overall.md)
-explains setup; [architecture](testplan-service-architecture.md) maps the code.
+explains setup; [architecture](verification-planner-architecture.md) maps the code.
 
 ## Records and source identity
 

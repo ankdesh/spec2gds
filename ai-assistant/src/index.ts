@@ -17,12 +17,12 @@ import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import z from "@deepseek-ai/schemastery";
 import { SessionId } from "@deepseek-ai/dsh-session";
-import { OwnerClients, OwnerError } from "./owner-clients.js";
+import { ServiceClients, ServiceError } from "./service-clients.js";
 import { errorFromException, logProposalFailure, proposalError, publicReview } from "./proposal-presentation.js";
 import { artifactDigest, ProductState } from "./state.js";
 import { findProposal, findSpecChange, registerDomainTools } from "./tools.js";
 import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, WorkspaceDescriptor } from "./types.js";
-import { parseOwnerOperationContract } from "./owner-operation-schema.js";
+import { parseServiceOperationContract } from "./service-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
 import { registerArchitectureTool } from "./architecture-review.js";
@@ -129,7 +129,7 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
     eventTemplateRevision: typeof value.eventTemplateRevision === "number" ? value.eventTemplateRevision : undefined,
     serviceBaseUrl: value.serviceBaseUrl.trim(),
     documentId: value.documentId.trim(),
-    ownerDocumentKey: typeof value.ownerDocumentKey === "string" ? value.ownerDocumentKey : undefined,
+    serviceDocumentKey: typeof value.serviceDocumentKey === "string" ? value.serviceDocumentKey : typeof value.ownerDocumentKey === "string" ? value.ownerDocumentKey : undefined,
     scope,
     entityKind: typeof value.entityKind === "string" ? value.entityKind.trim() : undefined,
     entityId: typeof value.entityId === "string" ? value.entityId.trim() : undefined,
@@ -138,7 +138,7 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
 }
 
 /**
- * Enter DSH through its one-time browser token while retaining product launch
+ * Enter DeepSeek Harness through its one-time browser token while retaining product launch
  * data across the token exchange's deliberate redirect to a clean root URL.
  * A relative target prevents an untrusted Host header from receiving the
  * process credential; URL fragments are browser-local and survive the 303.
@@ -185,7 +185,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   };
   const storedConversations = new Set<string>();
   const configurations = new EventConfigurations(state.database, config);
-  const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
+  const owners = new ServiceClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
   const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve, snapshots);
   const attached = new Set<string>();
   const legacyExecutions = new Set<string>();
@@ -244,20 +244,20 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     let schemaError;
     try {
       if (binding.domain === "spec") {
-        const policy = await owners.specPolicy(binding.ownerUrl);
+        const policy = await owners.specPolicy(binding.serviceUrl);
         agent.ctx.systemPrompt?.section({ name: "spec2gds:approval-policy", order: 205,
           text: policy.approval_policy === "automatic"
             ? instructionsFor(agent.id).text("host.32")
             : instructionsFor(agent.id).text("host.33") });
       }
-      if (binding.domain === "spec" && !binding.ownerDocumentKey) {
+      if (binding.domain === "spec" && !binding.serviceDocumentKey) {
         const context = await owners.context(binding);
         if (typeof context.owner_document_key === "string") {
-          state.pinOwnerDocument(binding.sessionId, context.owner_document_key);
-          binding.ownerDocumentKey = context.owner_document_key;
+          state.pinServiceDocument(binding.sessionId, context.owner_document_key);
+          binding.serviceDocumentKey = context.owner_document_key;
         }
       }
-      operationContract = parseOwnerOperationContract(await owners.operationContract(binding));
+      operationContract = parseServiceOperationContract(await owners.operationContract(binding));
     } catch (error) {
       schemaError = error instanceof Error ? error.message : String(error);
     }
@@ -309,7 +309,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     return selected === "goal" || selected === "orchestrated" ? selected : "focused";
   };
 
-  // DSH deliberately leaves turn budgeting to product policy. Spec work is
+  // DeepSeek Harness leaves turn budgeting to product policy. Spec work is
   // narrow: one context read and one proposal call normally settle in two or
   // three model steps. A visible user-question call earns exactly
   // one additional focused step so context -> question -> proposal -> final
@@ -374,18 +374,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       catch (error) { throw new Error(`Invalid SPEC2GDS_BINDING_JSON: ${error instanceof Error ? error.message : String(error)}`); }
       const validated = await owners.validateBinding(input);
       const temporary = {
-        sessionId: String(agent.id), status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
+        sessionId: String(agent.id), status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, serviceUrl: validated.serviceUrl,
         documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
         entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? sourceName(validated.context),
         workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
-        workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
+        workspaceDomain: input.domain, workspaceServiceUrl: validated.serviceUrl, workspaceDocumentId: input.documentId,
       };
-      const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
+      const workspace = workspaceDescriptor(config.scratchRoot, input, validated.serviceUrl, validated.context,
         await owners.circuitSourceBinding(temporary));
       await mkdir(workspace.path, { recursive: true, mode: 0o700 });
-      state.createBinding(String(agent.id), { ...input, ownerUrl: validated.ownerUrl, sourceName: sourceName(validated.context),
+      state.createBinding(String(agent.id), { ...input, serviceUrl: validated.serviceUrl, sourceName: sourceName(validated.context),
         workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
-        workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
+        workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId });
       binding = state.activateBinding(String(agent.id));
     }
     if (!binding) (agent as unknown as Agent).ctx.tools.guard(exec =>
@@ -408,7 +408,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     if (config.interactiveForms && !parentSession) {
       registerSourceCreationTool(agent, creations, () => ({
         sourceSessionId: String(agent.id), originalRequest: latestUserRequests.get(String(agent.id)) ?? "",
-        preset: binding?.preset ?? agentPreset(agent), preferredOwner: binding?.domain === "spec" ? binding.ownerUrl : undefined,
+        preset: binding?.preset ?? agentPreset(agent), preferredOwner: binding?.domain === "spec" ? binding.serviceUrl : undefined,
       }), instructionsFor(agent.id));
     }
   });
@@ -441,30 +441,30 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       try { configurations.selection(input.domain, input.preset, input.eventTemplateKey, input.eventTemplateRevision); }
       catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
     }
-    let validated: Awaited<ReturnType<OwnerClients["validateBinding"]>>;
+    let validated: Awaited<ReturnType<ServiceClients["validateBinding"]>>;
     try { validated = await owners.validateBinding(input); }
     catch (error) {
-      if (error instanceof OwnerError) throw error;
+      if (error instanceof ServiceError) throw error;
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }
     const sessionId = requestedId?.trim() || randomUUID();
     if (state.getBinding(sessionId)) throw new HttpError(409, "This session already has a document binding.");
     const temporary = {
-      sessionId, status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, ownerUrl: validated.ownerUrl,
+      sessionId, status: "creating" as const, preset: input.preset ?? "focused", domain: input.domain, serviceUrl: validated.serviceUrl,
       documentId: input.documentId, scope: input.domain === "circuit" ? "document" as const : input.scope ?? "document",
       entityKind: input.entityKind ?? null, entityId: input.entityId ?? null, title: input.title ?? sourceName(validated.context),
       workspaceKey: "", workspaceTitle: "", workspacePath: "", archived: false, createdAt: "", updatedAt: "",
-      workspaceDomain: input.domain, workspaceOwnerUrl: validated.ownerUrl, workspaceDocumentId: input.documentId,
+      workspaceDomain: input.domain, workspaceServiceUrl: validated.serviceUrl, workspaceDocumentId: input.documentId,
     };
     // Source-derived Circuits share their Spec workspace, but the conversation
     // keeps its exact domain/document/owner key independently of visible UI state.
-    const workspace = workspaceDescriptor(config.scratchRoot, input, validated.ownerUrl, validated.context,
+    const workspace = workspaceDescriptor(config.scratchRoot, input, validated.serviceUrl, validated.context,
       await owners.circuitSourceBinding(temporary));
     await mkdir(workspace.path, { recursive: true, mode: 0o700 });
-    const binding = state.createBinding(sessionId, { ...input, ownerUrl: validated.ownerUrl, sourceName: sourceName(validated.context),
-      ownerDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.ownerDocumentKey,
+    const binding = state.createBinding(sessionId, { ...input, serviceUrl: validated.serviceUrl, sourceName: sourceName(validated.context),
+      serviceDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.serviceDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
-      workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
+      workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId });
     snapshots.pin(sessionId, sourceSessionId);
     if (binding.preset !== "focused") {
       // Do not leave a usable reservation when its selected configuration fails
@@ -509,7 +509,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     owners.normalize(input);
     if (input.domain === "spec") {
       const snapshot = await owners.createSpec(input.serviceBaseUrl, specDestination(config.specDocumentRoot, documentId, title), documentId, title);
-      if (typeof snapshot.owner_document_key === "string") input.ownerDocumentKey = snapshot.owner_document_key;
+      if (typeof snapshot.owner_document_key === "string") input.serviceDocumentKey = snapshot.owner_document_key;
     }
     else await owners.createCircuit(input.serviceBaseUrl, documentId, title);
     const result = await reserve({ ...input, title });
@@ -522,26 +522,26 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   async function reviewAction(binding: SessionBinding, review: ProposalReview, action: string): Promise<ProposalReview> {
     if (artifactDigest(review.artifact) !== review.artifactDigest) throw new HttpError(409, "Stored proposal content failed its integrity check.");
     if (action === "discard") {
-      if (binding.domain === "spec" && (await owners.specPolicy(binding.ownerUrl)).submissions) {
+      if (binding.domain === "spec" && (await owners.specPolicy(binding.serviceUrl)).submissions) {
         try { await owners.rejectSpec(binding, review.proposalId); }
-        catch (error) { if (!(error instanceof OwnerError && error.status === 404)) throw error; }
+        catch (error) { if (!(error instanceof ServiceError && error.status === 404)) throw error; }
       }
       return state.transitionReview(binding.sessionId, review.proposalId, ["ready", "rejected", "stale", "reconcile"], "discarded");
     }
     if (binding.domain === "spec" && action === "apply") {
       if (review.state === "reconcile") {
         try {
-          const policy = await owners.specPolicy(binding.ownerUrl);
+          const policy = await owners.specPolicy(binding.serviceUrl);
           if (policy.submissions) {
             const receipt = await owners.specSubmission(binding, review.proposalId);
             if (isRecord(receipt.artifact) && artifactDigest(receipt.artifact) === review.artifactDigest
-                && receipt.state === "applied" && isRecord(receipt.owner_result)) {
-              return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, ownerResult: receipt.owner_result });
+                && receipt.state === "applied" && isRecord((receipt.service_result ?? receipt.owner_result))) {
+              return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, serviceResult: (receipt.service_result ?? receipt.owner_result) });
             }
           } else {
             const found = findSpecChange(await owners.specChanges(binding), review.proposalId);
             if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", {
-              error: null, ownerResult: { ...found, source_revision_hash: found.result_source_revision_hash, application_mode: "review" },
+              error: null, serviceResult: { ...found, source_revision_hash: found.result_source_revision_hash, application_mode: "review" },
             });
           }
         }
@@ -549,7 +549,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       }
       state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
       try {
-        const policy = await owners.specPolicy(binding.ownerUrl);
+        const policy = await owners.specPolicy(binding.serviceUrl);
         if (!policy.submissions) {
           const current = await owners.context(binding);
           if (current.source_revision_hash !== review.baseRevision) {
@@ -566,18 +566,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           await owners.stageSpec(binding, review.artifact);
           result = await owners.approveSpec(binding, review.proposalId);
         } else result = await owners.applySpec(binding, review.artifact);
-        if (result.status !== "applied") throw new OwnerError(502, "The owner did not confirm a saved change.", true);
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, ownerResult: result });
+        if (result.status !== "applied") throw new ServiceError(502, "The service did not confirm a saved change.", true);
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, serviceResult: result });
       } catch (error) {
         const normalized = errorFromException(binding, review.proposalId, error);
         logProposalFailure(binding, normalized, review.proposalId);
-        if (error instanceof OwnerError && error.uncertain) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "reconcile", { diagnostics: error.detail, error: normalized });
+        if (error instanceof ServiceError && error.uncertain) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "reconcile", { diagnostics: error.detail, error: normalized });
         return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], normalized.error_code === "STALE_REVISION" ? "stale" : "rejected", { diagnostics: normalized.owner_diagnostics, error: normalized });
       }
     }
     if (binding.domain === "circuit" && action === "send") {
       if (review.state === "reconcile") {
-        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "sent", { error: null, ownerResult: found }); }
+        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "sent", { error: null, serviceResult: found }); }
         catch { /* Retry with the persisted identity below. */ }
       }
       state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
@@ -591,11 +591,11 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             diagnostics: detail, error: normalized,
           });
         }
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, ownerResult: await owners.sendCircuit(binding, review.artifact) });
+        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, serviceResult: await owners.sendCircuit(binding, review.artifact) });
       } catch (error) {
-        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, ownerResult: found }); }
+        try { const found = findProposal(await owners.circuitProposals(binding), review.proposalId); if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "sent", { error: null, serviceResult: found }); }
         catch { /* Preserve the original outcome. */ }
-        const uncertain = error instanceof OwnerError && (error.uncertain || error.status === 409);
+        const uncertain = error instanceof ServiceError && (error.uncertain || error.status === 409);
         const normalized = errorFromException(binding, review.proposalId, error);
         logProposalFailure(binding, normalized, review.proposalId);
         return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], uncertain ? "reconcile" : "rejected", { diagnostics: normalized.owner_diagnostics, error: normalized });
@@ -604,7 +604,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     throw new HttpError(400, "Action does not match this review domain.");
   }
 
-  // Publish durable owner-preview identity, then correlate a goal wait to that exact
+  // Publish durable service preview identity, then correlate a goal wait to that exact
   // proposal. A matching receipt resolves the wait; it does not finish the goal.
   async function publishPreparedReview(binding: SessionBinding, review: ProposalReview): Promise<void> {
     if (binding.preset === "focused") return;
@@ -731,7 +731,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
           const workspaces = [...new Map(state.listBindings().map(binding => [binding.workspaceKey, {
             key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
-            domain: binding.workspaceDomain, ownerUrl: binding.workspaceOwnerUrl, documentId: binding.workspaceDocumentId,
+            domain: binding.workspaceDomain, serviceUrl: binding.workspaceServiceUrl, documentId: binding.workspaceDocumentId,
           }])).values()];
           return writeJson(response, 200, { workspaces, unbound_workspace: { key: "assistant-unbound", title: "AI Assistant", path: resolve(config.scratchRoot, "unbound") } });
         }
@@ -764,8 +764,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
                 try {
                   const receipt = await owners.specSubmission(binding, review.proposalId);
                   if (!isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) continue;
-                  if (receipt.state === "applied" && isRecord(receipt.owner_result)) {
-                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "applied", { error: null, ownerResult: receipt.owner_result });
+                  if (receipt.state === "applied" && isRecord((receipt.service_result ?? receipt.owner_result))) {
+                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "applied", { error: null, serviceResult: (receipt.service_result ?? receipt.owner_result) });
                     await settleReviewedExecution(binding, updated);
                   } else if (receipt.state === "discarded") {
                     const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "discarded");
@@ -781,7 +781,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             if (!binding) return writeJson(response, 200, { execution: null, configuration: null, legacy: false, monitorSuggestion: null });
             return writeJson(response, 200, { execution: ctx.eventSystems.get(SessionId(sessionId)) ?? null,
               configuration: configurations.pinned(sessionId) ?? null, legacy: legacyExecutions.has(sessionId), monitorSuggestion: {
-                url: binding.domain === "spec" ? `${binding.ownerUrl}/assistant/context/document?${new URLSearchParams({ document_id: binding.documentId, ...(binding.ownerDocumentKey ? { owner_document_key: binding.ownerDocumentKey } : {}) })}` : `${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}`,
+                url: binding.domain === "spec" ? `${binding.serviceUrl}/assistant/context/document?${new URLSearchParams({ document_id: binding.documentId, ...(binding.serviceDocumentKey ? { owner_document_key: binding.serviceDocumentKey } : {}) })}` : `${binding.serviceUrl}/documents/${encodeURIComponent(binding.documentId)}`,
                 pointer: binding.domain === "spec" ? "/source_revision_hash" : "/revision" }, sources: ctx.eventHttpSources.list(SessionId(sessionId)),
               goal: ctx.agents.get(SessionId(sessionId)) ? ctx.goals.get(ctx.agents.get(SessionId(sessionId)) as unknown as Agent) : null });
           }
@@ -798,7 +798,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
               await ctx.eventSystems.answerWait(SessionId(id), Number(body.revision), body.waitId as Parameters<EventSystemService["answerWait"]>[2], body.answer);
             } else if (body.action === "add") {
               if (!isRecord(body.definition) || typeof body.definition.url !== "string" || body.definition.eventType !== "source.changed") throw new Error("Source definition must use the approved source.changed event.");
-              const url = new URL(body.definition.url), owner = new URL(binding.ownerUrl);
+              const url = new URL(body.definition.url), owner = new URL(binding.serviceUrl);
               const prefix = owner.pathname.replace(/\/$/, "");
               if (url.origin !== owner.origin || (prefix && url.pathname !== prefix && !url.pathname.startsWith(`${prefix}/`))) throw new Error("HTTP source must monitor this conversation's bound owner service.");
               await ctx.eventHttpSources.add(SessionId(id), body.definition as unknown as HttpSourceInput);
@@ -855,7 +855,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       } catch (error) {
         if (response.headersSent) return response.destroy();
         if (error instanceof SourceCreationError) return writeJson(response, error.status, { error: error.message });
-        if (error instanceof HttpError || error instanceof OwnerError) return writeJson(response, error.status, { error: error.message, detail: error.detail });
+        if (error instanceof HttpError || error instanceof ServiceError) return writeJson(response, error.status, { error: error.message, detail: error.detail });
         return writeJson(response, 500, { error: error instanceof Error ? error.message : String(error) });
       }
     } }));
@@ -872,7 +872,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       webCtx.effect(() => webCtx.webServer.register({ kind: "exact", path: route, handler: async (request: any, response: any) => {
         try {
           const url = new URL(request.url ?? route, "http://localhost");
-          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", ownerDocumentKey: url.searchParams.get("owner_document_key") ?? undefined, scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
+          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", serviceDocumentKey: url.searchParams.get("owner_document_key") ?? undefined, scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
           response.writeHead(303, {
             Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId),
             "Cache-Control": "no-store",
@@ -880,7 +880,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           });
           response.end();
         } catch (error) {
-          const status = error instanceof OwnerError || error instanceof HttpError ? error.status : 400;
+          const status = error instanceof ServiceError || error instanceof HttpError ? error.status : 400;
           writeJson(response, status, { error: error instanceof Error ? error.message : String(error) });
         }
       } }));

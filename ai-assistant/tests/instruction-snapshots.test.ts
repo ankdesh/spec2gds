@@ -126,8 +126,8 @@ test("event-member instructions resolve from the pinned release and retain capab
     const definition = defaultInstructions.eventDefinition("spec", "orchestrated");
     assert.match(definition.agents[0].prompt, /./);
     assert.ok(definition.agents.find((m: any) => m.id === "reviewer").tools.every((name: string) => !name.startsWith("prepare_")));
-    const input: any = { domain: "spec", ownerUrl: "http://service", serviceBaseUrl: "http://service", documentId: "d", scope: "document",
-      workspaceKey: "w", workspaceTitle: "w", workspacePath: "/tmp/w", workspaceDomain: "spec", workspaceOwnerUrl: "http://service", workspaceDocumentId: "d" };
+    const input: any = { domain: "spec", serviceUrl: "http://service", serviceBaseUrl: "http://service", documentId: "d", scope: "document",
+      workspaceKey: "w", workspaceTitle: "w", workspacePath: "/tmp/w", workspaceDomain: "spec", workspaceServiceUrl: "http://service", workspaceDocumentId: "d" };
     state.createBinding("source", input); state.createBinding("destination", input);
     config.pinInstructions("source", "spec", "orchestrated", definition, {} as any);
     const changed = structuredClone(definition); changed.agents[0].prompt = "Changed catalogue.";
@@ -146,6 +146,6 @@ test("schema outages retain a valid native unavailable tool without granting ope
     assert.deepEqual(tool.parameters, { type: "object", properties: {} });
     const result = await tool.execute({}, { callId: "unavailable" });
     assert.equal(result.success, false);
-    assert.equal(result.error.error_code, "OWNER_CONTRACT_ERROR");
+    assert.equal(result.error.error_code, "SERVICE_CONTRACT_ERROR");
   }
 });

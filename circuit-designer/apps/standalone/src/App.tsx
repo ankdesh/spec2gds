@@ -35,7 +35,7 @@ export function App() {
   const tools = useMemo<CircuitToolContribution[]>(() => [{
     id: "spec2gds.ai-assistant",
     label: "AI Assistant",
-    description: "Open a chat bound to the current circuit.",
+    description: "Open a conversation bound to the current circuit.",
     run: ({ snapshot }) => {
       const target = assistantUrl(assistantLinks.uiUrl, assistantLinks.serviceUrl, snapshot.document.document_id);
       const opened = window.open(target, "_blank", "noopener,noreferrer");

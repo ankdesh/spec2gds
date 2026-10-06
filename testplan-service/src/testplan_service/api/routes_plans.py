@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Any, Callable
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
 
-from testplan_service.application.service import TestPlanService
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.domain.models import PlanHeader
 from testplan_service.exceptions import PlanNotFoundError, RecordNotFoundError
 
@@ -20,18 +21,18 @@ class CreatePlanRequest(BaseModel):
     snapshot_id: str
     root_scope_id: str
     description: str = ""
-    owner_label: str | None = None
+    designer_label: str | None = Field(default=None, validation_alias=AliasChoices("designer_label", "owner_label"))
     tags: list[str] = Field(default_factory=list)
 
 
-def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
-    """Factory creating the plans API router with injected TestPlanService."""
+def create_plans_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
+    """Factory creating the plans API router with injected VerificationPlannerService."""
     plans_router = APIRouter(tags=["Plans"])
 
     @plans_router.post("/plans", status_code=status.HTTP_201_CREATED)
     def create_plan(
         payload: CreatePlanRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> PlanHeader:
         """Create a new plan bound to a validated snapshot root."""
         return service.create_plan(
@@ -39,13 +40,13 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
             snapshot_id=payload.snapshot_id,
             root_scope_id=payload.root_scope_id,
             description=payload.description,
-            owner_label=payload.owner_label,
+            designer_label=payload.designer_label,
             tags=payload.tags,
         )
 
     @plans_router.get("/plans")
     def list_plans(
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[PlanHeader]:
         """List all plans in the library."""
         return service.list_plans()
@@ -53,7 +54,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     @plans_router.get("/plans/{plan_id}")
     def get_plan(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Get plan header, revisions, active snapshot view, and checkpoints."""
         plan = service.get_plan(plan_id)
@@ -75,7 +76,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
         record_type: str | None = Query(None, description="Filter by type (requirement, section, intent, issue)"),
         scope_id: str | None = Query(None, description="Filter by scope occurrence ID"),
         include_archived: bool = Query(False, description="Include soft-archived records"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Query canonical records with optional filtering."""
         return service.get_records(
@@ -89,7 +90,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     def get_record(
         plan_id: str,
         record_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Retrieve one canonical record by ID."""
         rec = service.get_record(plan_id, record_id)
@@ -101,7 +102,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     def get_hierarchy(
         plan_id: str,
         scope_id: str | None = Query(None, description="Filter by root scope"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Hierarchy tree read projection with descendant counts."""
         try:
@@ -112,7 +113,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     @plans_router.get("/plans/{plan_id}/source-sections")
     def get_source_sections(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Source sections and their manual audit review dispositions."""
         plan = service.get_plan(plan_id)
@@ -139,7 +140,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     @plans_router.get("/plans/{plan_id}/requirements")
     def get_requirements(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Captured requirements with linked intent counts."""
         records = service.get_records(plan_id, record_type="requirement", include_archived=False)
@@ -161,7 +162,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     def get_intents(
         plan_id: str,
         scope_id: str | None = Query(None),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Verification intents with Given/When/Then and authoring states."""
         return service.get_records(plan_id, record_type="intent", scope_id=scope_id, include_archived=False)
@@ -169,7 +170,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     @plans_router.get("/plans/{plan_id}/readiness")
     def get_readiness(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Readiness checklist evaluation summary."""
         try:
@@ -181,7 +182,7 @@ def create_plans_router(get_service: Callable[[], TestPlanService]) -> APIRouter
     def search_plan(
         plan_id: str,
         q: str = Query(..., min_length=1),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Search items across titles, keys, statements, and behavior."""
         return service.search_plan(plan_id, q)

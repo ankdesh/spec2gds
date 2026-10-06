@@ -59,7 +59,7 @@ The function decorator is the shortest authoring path:
 ```python
 import pydantic
 
-from spec2gds.agent_spec.activities import (
+from spec2gds.spec.activities import (
     ActivityContext,
     ActivityResult,
     ActivityScopes,
@@ -105,8 +105,8 @@ roles; the eventual host chooses durable storage and artifact IDs.
 
 An Activity that must publish a persistent generated tree declares
 `requires_workspace_output=True`. The invoking host supplies an
-`ActivityWorkspaceWriter` through `ActivityContext.workspace`; the Activity
-submits only relative paths and in-memory bytes. `LocalActivityWorkspace`
+`ActivityScratchWriter` through `ActivityContext.workspace`; the Activity
+submits only relative paths and in-memory bytes. `LocalActivityScratchDirectory`
 provides the direct local implementation. It atomically replaces only folders
 carrying a matching ownership manifest, so extension code never receives an
 unrestricted filesystem root.
@@ -116,13 +116,13 @@ Direct invocation passes this capability explicitly:
 ```python
 from pathlib import Path
 
-from spec2gds.agent_spec.activities import LocalActivityWorkspace, invoke_activity
+from spec2gds.spec.activities import LocalActivityScratchDirectory, invoke_activity
 
 result = invoke_activity(
     registry,
     "acme.code_generator",
     snapshot,
-    LocalActivityWorkspace(Path("generated")),
+    LocalActivityScratchDirectory(Path("generated")),
 )
 ```
 
@@ -171,5 +171,5 @@ permissions, and returned provenance. The underlying `invoke_activity()` and
 `render_context()` functions are also public for focused tests.
 
 The repository examples live in
-`spec2gds.agent_spec.activities.reference`. Contract tests are in
-`tests/agent_spec/activities/`.
+`spec2gds.spec.activities.reference`. Contract tests are in
+`tests/spec/activities/`.

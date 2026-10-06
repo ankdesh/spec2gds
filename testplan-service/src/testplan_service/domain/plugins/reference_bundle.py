@@ -7,8 +7,8 @@ and validation report) without claiming executable test generation.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 import hashlib
+from datetime import datetime, timezone
 from typing import Any
 
 from testplan_service.constants import SCHEMA_VERSION_TEST_IR
@@ -52,7 +52,7 @@ class ReferenceBundlePlugin(BackendPlugin):
             capabilities={
                 "recipe_kinds": ["scenario", "property"],
                 "executable": False,
-                "produces_hdl": False,
+                "produces_rtl": False,
                 "supports_parallel": True,
                 "supports_models": ["record", "fsm", "bounded_queue"],
                 "supports_properties": [

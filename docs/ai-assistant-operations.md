@@ -99,11 +99,11 @@ For a contentful new document, use this required sequence:
 4. Inspect the service result. An automatic save must show the saved receipt. A restricted
    proposal must remain pending until approved in Spec Editor.
 5. In Spec Editor, open the exact saved path if another document is visible. Open
-   **Assistant submission history**, inspect **Details and diff**, then approve the
+   **AI Assistant submission history**, inspect **Details and diff**, then approve the
    stored proposal. Refresh Assistant status if needed. Do not infer the target from
    the service's active document.
 
-Use **File → Open Specification** for a server-local `.spec` path. There is no
+Use **File → Open Spec** for a server-local `.spec` path. There is no
 `/specs/<document-id>` editor route. Use **Edit text…** for explanations. For RTL
 output, use the component/design **Options → Launch activity… → rtl.generate → Run**.
 The [generator reference](rtl-generation-activity.md) defines targets and reports.
@@ -405,13 +405,13 @@ answer or a UI card.
 | Boundary | Main entry points |
 | --- | --- |
 | Host composition, launch, review actions, and native hooks | [index.ts](../ai-assistant/src/index.ts). |
-| Prompts and exact context | [Catalogue](../ai-assistant/profile/catalog), [domain-context.ts](../ai-assistant/src/domain-context.ts), and [service-clients.ts](../ai-assistant/src/owner-clients.ts). |
-| Tool admission and proposal preparation | [tools.ts](../ai-assistant/src/tools.ts), [service-operation-schema.ts](../ai-assistant/src/owner-operation-schema.ts), and [proposal-pipeline.ts](../ai-assistant/src/proposal-pipeline.ts). |
+| Prompts and exact context | [Catalogue](../ai-assistant/profile/catalog), [domain-context.ts](../ai-assistant/src/domain-context.ts), and [service-clients.ts](../ai-assistant/src/service-clients.ts). |
+| Tool admission and proposal preparation | [tools.ts](../ai-assistant/src/tools.ts), [service-operation-schema.ts](../ai-assistant/src/service-operation-schema.ts), and [proposal-pipeline.ts](../ai-assistant/src/proposal-pipeline.ts). |
 | Formatting, aliases, and persistent IDs | [normalize.ts](../ai-assistant/src/normalize.ts). |
 | Architecture and document creation | [architecture-review.ts](../ai-assistant/src/architecture-review.ts) and [source-creation.ts](../ai-assistant/src/source-creation.ts). |
 | Product records, execution, and configuration | [state.ts](../ai-assistant/src/state.ts), [execution-policy.ts](../ai-assistant/src/execution-policy.ts), and [event-configuration.ts](../ai-assistant/src/event-configuration.ts). |
 | Cards, diagnostics, and metrics | [Client](../ai-assistant/client/index.js), [proposal-presentation.ts](../ai-assistant/src/proposal-presentation.ts), and [eval-metrics.ts](../ai-assistant/src/eval-metrics.ts). |
-| Spec service semantics and saved receipts | [Spec format source](../spec2gds/agent_spec/spec_format). |
+| Spec service semantics and saved receipts | [Spec format source](../spec2gds/spec/spec_format). |
 | Restricted browser approval | [Spec Editor](../circuit-designer/apps/editor/src/App.tsx). |
 | Circuit proposals, drafts, and source saves | [Circuit service](../circuit-designer/packages/service/src) and [standalone editor](../circuit-designer/apps/standalone/src). |
 
@@ -422,7 +422,7 @@ Run source checks with a supported Node runtime. From the repository root:
 ```bash
 uv sync
 npm --prefix ai-assistant run build
-uv run python -m pytest tests/agent_spec/spec_format -q
+uv run python -m pytest tests/spec/spec_format -q
 npm --prefix circuit-designer run build:editor
 ```
 
@@ -508,7 +508,7 @@ RTL functional checks need Verilator 5.x, Make, and a C++ compiler. Run from the
 repository root:
 
 ```bash
-uv run --no-sync python -m pytest tests/agent_spec/activities/rtl -q
+uv run --no-sync python -m pytest tests/spec/activities/rtl -q
 uv run --no-sync python scripts/rtl_evaluation.py --project /absolute/published/project --case adder_8 --source-revision sha256:SOURCE_REVISION --output /tmp/adder-check
 ```
 
@@ -585,8 +585,8 @@ in TEMP. New acceptance tests must fail if they violate a required result.
 | [AS-34](ai-assistant.md#as-34) | Extension procedure and deterministic evidence without a model-quality claim. | This procedure, generated-type checks, packaged asset checks, deterministic native/UI tests. |
 
 Fixture files are under [Assistant tests](../ai-assistant/tests),
-[service tests](../tests/agent_spec/spec_format), [UI scenarios](../tests/ui-scenarios/runner),
-and [RTL tests](../tests/agent_spec/activities/rtl). Read the actual test before
+[service tests](../tests/spec/spec_format), [UI scenarios](../tests/ui-scenarios/runner),
+and [RTL tests](../tests/spec/activities/rtl). Read the actual test before
 claiming its coverage. Do not use fixed historical pass counts as release gates.
 
 ## TD-05 verification record

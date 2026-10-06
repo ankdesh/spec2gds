@@ -31,7 +31,7 @@ preflight.
 
 ## Generated project
 
-The caller supplies a `LocalActivityWorkspace`. The editor roots it at the
+The caller supplies a `LocalActivityScratchDirectory`. The editor roots it at the
 folder containing the active `.spec` package. The Activity publishes:
 
 ```text
@@ -60,7 +60,7 @@ design. Unmanaged folders and symbolic links are refused.
 
 Generated C++, CMake, and project documentation are rendered from packaged
 Jinja2 templates under
-`spec2gds/agent_spec/activities/systemc_at/templates/`. The Python generator
+`spec2gds/spec/activities/systemc_at/templates/`. The Python generator
 retains every semantic decision: Spec traversal, topology validation, name
 allocation, socket direction, connection ordering, and manifest hashing.
 Templates receive only normalized strings, booleans, and ordered collections
@@ -78,14 +78,14 @@ reports repeatable for an identical source snapshot.
 ```python
 from pathlib import Path
 
-from spec2gds.agent_spec.activities import (
+from spec2gds.spec.activities import (
     ActivitySnapshot,
-    LocalActivityWorkspace,
+    LocalActivityScratchDirectory,
     SpecExtensionRegistry,
     invoke_activity,
 )
-from spec2gds.agent_spec.activities.systemc_at import register_extensions
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
+from spec2gds.spec.activities.systemc_at import register_extensions
+from spec2gds.spec.spec_format.ir import SpecRevision
 
 revision = SpecRevision.load("design.spec")
 target = revision.entry_designs()[0].ref
@@ -97,7 +97,7 @@ result = invoke_activity(
     registry,
     "systemc.generate_at_skeleton",
     snapshot,
-    LocalActivityWorkspace(Path("generated")),
+    LocalActivityScratchDirectory(Path("generated")),
 )
 print(result.summary)
 ```
@@ -125,5 +125,5 @@ compile and run the generated fixture, set `SYSTEMC_PREFIX`:
 
 ```bash
 SYSTEMC_PREFIX=/path/to/systemc-dist \
-  uv run python -m pytest tests/agent_spec/activities/systemc_at -q
+  uv run python -m pytest tests/spec/activities/systemc_at -q
 ```

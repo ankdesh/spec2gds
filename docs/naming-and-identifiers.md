@@ -17,7 +17,7 @@ does not change a hardware symbol, an existing `.spec` path, or a chat binding.
 | Conversation | Editable conversation title | Independent of source name |
 | Verification record | Title/name and useful engineering key | Existing verification record scope |
 
-Spec's resolver is `spec2gds/agent_spec/spec_format/naming.py`. Projections,
+Spec's resolver is `spec2gds/spec/spec_format/naming.py`. Projections,
 Activity SDK summaries, Assistant context, Circuit adapters, verification
 decoding, and public generation paths consume it. TypeScript consumers use
 owner-provided labels. Circuit's standalone naming rules live in
@@ -48,13 +48,13 @@ names; exact machine contracts retain their existing fields.
 | Related entities and live-view callouts | Linked names or readable view descriptions | `spec_format/document.py`, document renderer |
 | Rename/create dialogs, launch notices | Name input, named targets | `spec_format/transactions.py`, `apps/editor/src/App.tsx` |
 | Source review and validation | Qualified section name and source line/column | `spec_format/sv_validation.py`, editor app |
-| Assistant creation and retries | One Name input, owner-derived filename, reserved destination and identity | `ai-assistant/src/source-creation.ts`, `owner_store.py`, `v1_api.py` |
+| Assistant creation and retries | One Name input, owner-derived filename, reserved destination and identity | `ai-assistant/src/source-creation.ts`, `spec_service_store.py`, `v1_api.py` |
 | Assistant source labels and workspaces | Owner names; numbered workspace collisions | `ai-assistant/src/naming.ts`, `state.ts`, `workspaces.ts`, `index.ts` |
-| Assistant proposals/history/replies | Named changes, state, review numbers | `spec_format/assistant.py`, `owner_store.py`, `ai-assistant/src/proposal-presentation.ts`, client |
+| Assistant proposals/history/replies | Named changes, state, review numbers | `spec_format/assistant.py`, `spec_service_store.py`, `ai-assistant/src/proposal-presentation.ts`, client |
 | Architecture reviews and CLI decisions | Document-scoped review numbers; exact IDs accepted in technical workflows | `ai-assistant/src/state.ts`, `scripts/spec2gds_spec.py` |
 | Circuit selectors/inspectors | Readable owner context and exact signal/instance names | `packages/core/src/naming.ts`, `packages/app-react/src/CircuitDialogs.tsx` |
 | Circuit JSON, SVG, PNG and topology previews | Safe readable filename stems | `packages/service/src/session-backend.ts`, `packages/app-react/src/circuit-files.ts`, topology live view |
-| RTL and SystemC projects/reports | Named public directories, named targets; hardware code unchanged | `activities/view.py`, `activities/{rtl,systemc_at,systemc_rtl}`, `activities/workspace.py` |
+| RTL and SystemC projects/reports | Named public directories, named targets; hardware code unchanged | `activities/view.py`, `activities/{rtl,systemc_at,systemc_rtl}`, `activities/scratch_directory.py` |
 | Verification source snapshots | Actual entity names, qualified occurrence context | `testplan-service/.../integrations/snapshot_decoder.py` |
 | Verification scopes, dependencies, bindings, backends, checkpoints and evidence | Searchable named choices, retained requirement/checkpoint codes | Verification `ui/static/app.js`, `domain/recipes.py`, `application/command_handler.py` |
 | Verification exports and generation receipts | Named files/records, stable readable generation numbers | Verification `application/export_service.py`, `api/routes_exports.py`, `storage/sqlite_repo.py` |
@@ -62,7 +62,7 @@ names; exact machine contracts retain their existing fields.
 | Activity summaries and command targets | Owner-resolved names, package-scoped name selection | `activities/view.py`, `scripts/run_rtl_activity.py` |
 | Assistant command targets | Owner-resolved document/entity/qualified section names, exact package constraints | `ai-assistant/scripts/request.mjs`, Spec and Circuit `/documents/resolve` |
 
-`spec_format` paths are under `spec2gds/agent_spec/`; `packages` and `apps`
+`spec_format` paths are under `spec2gds/spec/`; `packages` and `apps`
 paths are under `circuit-designer/`; verification paths are under
 `testplan-service/src/testplan_service/`.
 
@@ -91,7 +91,7 @@ Public filename stems use ASCII transliteration, lowercase letters/digits,
 hyphens, a length limit, and Windows reserved-name protection. Filename
 collisions receive readable numbers. Exports use the current display name.
 Private content-addressed storage stays ID-based. Generated-directory
-replacement checks generator/document/target ownership before overwriting;
+replacement checks Activity/document/target provenance before overwriting;
 foreign valid owners get numbered destinations, while unmanaged, malformed,
 or symlinked destinations fail safely. A display rename may leave an older
 owned generated directory intact; it is not a source-path migration.

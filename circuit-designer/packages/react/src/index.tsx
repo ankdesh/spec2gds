@@ -73,7 +73,7 @@ export type CircuitCanvasContextTarget =
   | { kind: "canvas" }
   | { kind: "node"; nodeId: string }
   | { kind: "boundary"; terminalId: string }
-  | { kind: "terminal"; terminalId: string; owner: { kind: "node" | "boundary"; id: string } }
+  | { kind: "terminal"; terminalId: string; parent: { kind: "node" | "boundary"; id: string } }
   | { kind: "net"; netId: string }
   | { kind: "route-segment"; netId: string; segmentId: string }
   | { kind: "route-vertex"; netId: string; vertexId: string; vertexKind: "bend" | "junction" }
@@ -232,7 +232,7 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             data.onTerminalContextMenu({
               kind: "terminal",
               terminalId: terminal.id,
-              owner: data.contextTarget.kind === "node"
+              parent: data.contextTarget.kind === "node"
                 ? { kind: "node", id: data.contextTarget.nodeId }
                 : { kind: "boundary", id: data.contextTarget.terminalId },
             }, {
@@ -269,7 +269,7 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
               data.onTerminalContextMenu({
                 kind: "terminal",
                 terminalId: terminal.id,
-                owner: data.contextTarget.kind === "node"
+                parent: data.contextTarget.kind === "node"
                   ? { kind: "node", id: data.contextTarget.nodeId }
                   : { kind: "boundary", id: data.contextTarget.terminalId },
               }, {

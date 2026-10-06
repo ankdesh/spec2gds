@@ -23,7 +23,7 @@ logger = logging.getLogger("testplan-service")
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        prog="testplan-service",
+        prog="verification-planner",
         description=f"{DEFAULT_PRODUCT_TITLE} Service and Interactive Web Editor",
     )
     parser.add_argument(

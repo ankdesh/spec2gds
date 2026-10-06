@@ -79,7 +79,7 @@ test("supports keyboard navigation, nested submenus, dismissal, and focus restor
   await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowRight");
   await expect(page.getByRole("menu", { name: "Download" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: /Download circuit JSON/ })).toBeFocused();
+  await expect(page.getByRole("menuitem", { name: /Download Circuit JSON/ })).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(page.getByRole("menu", { name: "Download" })).toHaveCount(0);
   await expect(page.getByRole("menuitem", { name: "Download", exact: true })).toBeFocused();
@@ -180,7 +180,7 @@ test("edits a writable specification binding and saves it through source preview
   await expect(page.getByText("VLNV: spec2gds.local:work:spec_block:1.0")).not.toBeVisible();
   await page.getByRole("button", { name: "Create definition + instance" }).click();
 
-  const save = page.getByRole("button", { name: "Save to Specification", exact: true });
+  const save = page.getByRole("button", { name: "Save to Spec", exact: true });
   await expect(save).toBeVisible();
   await save.click();
   await expect(page.locator(".document-status")).toContainText("Specification bound");

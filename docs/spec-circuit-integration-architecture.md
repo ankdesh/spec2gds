@@ -243,7 +243,7 @@ stateDiagram-v2
     Viewing --> Draft: Begin Editing
     Draft --> Draft: Add, move, connect, route, undo, redo
     Draft --> Viewing: Cancel Changes
-    Draft --> Saving: Save to Source
+    Draft --> Saving: Save to Spec
     Saving --> Viewing: Source accepts and session refreshes
     Saving --> Draft: Validation or revision conflict
 ```
@@ -272,7 +272,7 @@ sequenceDiagram
     participant PKG as .spec package
     participant SE as Spec Editor UI
 
-    User->>CD: Save to Source
+    User->>CD: Save to Spec
     CD->>CD: Add visible layout and route data to draft
     CD->>CS: POST documents/id/source/commit
     CS->>CS: Check lease and preview Circuit operations
@@ -467,10 +467,10 @@ Spec source provider and updates the `.spec` package.
 
 | Responsibility | Main location |
 | --- | --- |
-| Spec launch and source callback endpoints | `spec2gds/agent_spec/spec_format/v1_api.py` |
-| Forward projection and reverse operation compiler | `spec2gds/agent_spec/spec_format/circuit_adapter.py` |
-| Durable layout annotation model | `spec2gds/agent_spec/spec_format/circuit_layouts.py` |
-| Durable timing annotation model | `spec2gds/agent_spec/spec_format/circuit_timings.py` |
+| Spec launch and source callback endpoints | `spec2gds/spec/spec_format/v1_api.py` |
+| Forward projection and reverse operation compiler | `spec2gds/spec/spec_format/circuit_adapter.py` |
+| Durable layout annotation model | `spec2gds/spec/spec_format/circuit_layouts.py` |
+| Durable timing annotation model | `spec2gds/spec/spec_format/circuit_timings.py` |
 | Circuit source-binding routes and save orchestration | `circuit-designer/packages/service/src/server.ts` |
 | Authenticated callback client | `circuit-designer/packages/service/src/source-provider.ts` |
 | Temporary Circuit session and leases | `circuit-designer/packages/service/src/session-backend.ts` |

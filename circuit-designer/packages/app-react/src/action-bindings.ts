@@ -32,7 +32,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("open-document", "File", "Open circuit", "Open a canonical Circuit Designer JSON file."),
   command("save-document", "File", "Save changes", "Commit the private draft and download its canonical circuit file."),
   command("cancel-changes", "File", "Cancel changes", "Discard the current private draft."),
-  command("download-json", "File", "Download circuit JSON", "Download the authoritative canonical circuit file."),
+  command("download-json", "File", "Download Circuit JSON", "Download the authoritative canonical circuit file."),
   command("export-svg", "File", "Export SVG", "Export the circuit as an SVG image."),
   command("export-png", "File", "Export PNG", "Export the circuit as a PNG image."),
   command("begin-edit", "Edit", "Begin editing", "Acquire a private edit lease for this circuit."),
@@ -70,7 +70,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   { id: "zoom-out", group: "View", label: "Zoom out", description: "Decrease the canvas zoom level.", mouseOptions: ["none", "wheel-down", ...commandMouseOptions.slice(1)] },
   command("fit-circuit", "View", "Fit circuit", "Fit the complete circuit in the viewport."),
   command("run-primary-tool", "Tools", "Run host tool", "Run the primary tool contributed by this host application."),
-  command("getting-started", "Help", "Getting started", "Show a concise Circuit Designer workflow guide."),
+  command("getting-started", "Help", "Getting started", "Show a concise Circuit Designer flow guide."),
   command("about", "Help", "About Circuit Designer", "Show product and persistence information."),
 ];
 

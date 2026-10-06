@@ -66,12 +66,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     if (payload.domain === "spec" && payload.document) {
       const document = payload.document;
       return [{ domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
-        ownerDocumentKey: document.owner_document_key,
-        title: String(document.title || "Specification"), scope: "document" },
+        serviceDocumentKey: document.owner_document_key,
+        title: String(document.title || "Spec"), scope: "document" },
       ...(Array.isArray(payload.entities) ? payload.entities : []).map(entity => ({
         domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
-        ownerDocumentKey: document.owner_document_key,
-        title: `${entity.title || "Entity"} · ${entity.entity_kind || "entity"}`,
+        serviceDocumentKey: document.owner_document_key,
+        title: `${entity.title || (entity.entity_kind === "design" ? "Design" : "Component")} · ${entity.entity_kind || "entity"}`,
         scope: "entity", entityKind: String(entity.entity_kind || "entity"), entityId: String(entity.entity_id),
       }))];
     }
@@ -84,10 +84,10 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
 
   function belongsToWorkspace(target, workspace) {
     if (!workspace) return true;
-    if (workspace.domain === target.domain && workspace.ownerUrl === target.serviceBaseUrl && workspace.documentId === target.documentId) return true;
+    if (workspace.domain === target.domain && workspace.serviceUrl === target.serviceBaseUrl && workspace.documentId === target.documentId) return true;
     const source = target.sourceBinding;
     return target.domain === "circuit" && workspace.domain === "spec" && source
-      && String(source.source_service_url || "").replace(/\/$/, "") === workspace.ownerUrl
+      && String(source.source_service_url || "").replace(/\/$/, "") === workspace.serviceUrl
       && source.source_document_id === workspace.documentId;
   }
 
@@ -274,7 +274,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         title: reservation.session.workspaceTitle,
         path: reservation.session.workspacePath,
         domain: reservation.session.workspaceDomain,
-        ownerUrl: reservation.session.workspaceOwnerUrl,
+        serviceUrl: reservation.session.workspaceServiceUrl,
         documentId: reservation.session.workspaceDocumentId,
       };
       const workspace = await ensureWorkspace(ctx, descriptor);
@@ -301,7 +301,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const sessionId = await createBoundSession(ctx, reserved, undefined, { open: false, preserveReservation: true });
     if (!reserved.continuation.sent) {
       const session = ctx.sessions.binding(sessionId)?.session;
-      if (!session) throw new Error("The specification chat is not ready. Retry this card to continue in the saved package.");
+      if (!session) throw new Error("The Spec conversation is not ready. Retry this card to continue in the saved package.");
       const result = await session.prompt([{ type: "text", text: reserved.continuation.message }], "queue", undefined, reserved.continuation.requestId);
       if (!result.ok) throw new Error(result.error?.message || "The initial request could not be submitted. Retry this card.");
       await api(`/source-requests/${encodeURIComponent(reserved.creation_request.requestId)}/continued`, {});
@@ -385,7 +385,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       finally { setBusy(false); }
     }
     return h("article", { className: "s2g-review" },
-      h("header", null, h("h4", null, `${review.reviewNumber ? `Review ${review.reviewNumber} · ` : ""}${artifact.title || "Design proposal"}`), h("span", { className: "s2g-state", role: "status" }, review.state === "applied" && record(review.ownerResult).application_mode === "automatic" ? "Applied automatically" : review.state)),
+      h("header", null, h("h4", null, `${review.reviewNumber ? `Review ${review.reviewNumber} · ` : ""}${artifact.title || "Design proposal"}`), h("span", { className: "s2g-state", role: "status" }, review.state === "applied" && record(review.serviceResult).application_mode === "automatic" ? "Applied automatically" : review.state)),
       review.state === "applied" ? h("small", null, "Changes saved") : null,
       h("section", { className: "s2g-summary" },
         h("p", null, record(review.changeSummary).text || "Proposal summary unavailable."),
@@ -397,9 +397,9 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         h("p", null, String(record(review.error).details || "The proposal was not accepted.")),
         h("small", null, record(review.error).retryable ? "This may be retried after the underlying condition changes." : "No automatic retry will be attempted.")) : null,
       review.domain === "spec" ? h(SpecDiff, { preview: review.preview }) : h(CircuitDiff, { preview: review.preview }),
-      h("details", null, h("summary", null, "Technical details"), h("button", { onClick: () => navigator.clipboard.writeText(pretty(review)) }, "Copy details"), h("pre", null, pretty({ operations, proposal: review.proposalId, saved_revision: record(review.ownerResult).source_revision_hash }))),
-      h("details", null, h("summary", null, "Requested change, rationale, assumptions, and owner preview"), h("pre", null, pretty({ requested_change: artifact.summary, rationale: artifact.rationale, assumptions: artifact.assumptions, preview: review.preview, diagnostics: review.diagnostics }))),
-      actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Approve and apply" : "Send to Circuit Designer") : null) : null,
+      h("details", null, h("summary", null, "Technical details"), h("button", { onClick: () => navigator.clipboard.writeText(pretty(review)) }, "Copy details"), h("pre", null, pretty({ operations, proposal: review.proposalId, saved_revision: record(review.serviceResult).source_revision_hash }))),
+      h("details", null, h("summary", null, "Requested change, rationale, assumptions, and service preview"), h("pre", null, pretty({ requested_change: artifact.summary, rationale: artifact.rationale, assumptions: artifact.assumptions, preview: review.preview, diagnostics: review.diagnostics }))),
+      actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Save to Spec" : "Send to Circuit Designer") : null) : null,
       error ? h("p", { className: "s2g-error" }, error) : null);
   }
 
@@ -553,7 +553,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h("header", null, h("h4", null, "Create a specification"), h("span", { className: "s2g-state" }, value.status)),
       h("p", null, value.status === "cancelled" ? "Creation cancelled. No package was created."
         : saved ? "The package is saved. Its contents follow the Spec Editor approval policy."
-          : "Review the suggested names. Creating the package opens a new chat and continues your original request there."),
+          : "Review the suggested names. Creating the package opens a new conversation and continues your original request there."),
       value.status !== "cancelled" ? h("p", null, "Save location: ", h("code", null, path)) : null,
       error || value.error ? h("p", { className: "s2g-error", role: "alert" }, error || value.error) : null,
       !terminal ? h("form", { className: "s2g-form", onSubmit: submit },
@@ -564,8 +564,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         h("div", { className: "s2g-actions" },
           editable ? h("button", { type: "button", disabled: busy, onClick: cancel }, "Cancel") : null,
           h("button", { type: "button", disabled: busy, onClick: () => { setBusy(true); refresh().catch(caught => setError(caught.message)).finally(() => setBusy(false)); } }, "Refresh"),
-          value.status !== "creating" ? h("button", { className: "primary", type: "submit", disabled: busy || unavailable }, value.status === "uncertain" ? "Recover creation receipt" : saved ? "Continue in specification chat" : "Create specification and continue") : null)) : null,
-      value.status === "continued" ? h("div", { className: "s2g-actions" }, h("button", { type: "button", onClick: () => onOpen(value.destinationSessionId) }, "Open specification chat")) : null);
+          value.status !== "creating" ? h("button", { className: "primary", type: "submit", disabled: busy || unavailable }, value.status === "uncertain" ? "Recover creation receipt" : saved ? "Continue in Spec conversation" : "Create Spec and continue") : null)) : null,
+      value.status === "continued" ? h("div", { className: "s2g-actions" }, h("button", { type: "button", onClick: () => onOpen(value.destinationSessionId) }, "Open Spec conversation")) : null);
   }
 
   const proposalToolNames = new Set(["prepare_spec_proposal", "prepare_circuit_proposal", "prepare_spec_document_creation", "prepare_architecture_review"]);
@@ -636,7 +636,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     if (matched.architectureReview) return h(ArchitectureReviewCard, { key: matched.architectureReview.reviewId, request: matched.architectureReview, inputActions });
     if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
     if (matched.creationError) return h("article", { className: "s2g-review", role: "alert" },
-      h("h4", null, matched.toolName === "prepare_architecture_review" ? "Architecture review could not be prepared" : "Specification creation unavailable"),
+      h("h4", null, matched.toolName === "prepare_architecture_review" ? "Architecture review could not be prepared" : "Spec creation unavailable"),
       h("p", { className: "s2g-error" }, matched.creationError),
       matched.blocked ? h("p", null, "The turn stopped before this request completed. Correct the reported fields before retrying.") : null);
     if (matched.review) return h(ReviewCard, { review: matched.review });
@@ -690,7 +690,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         selection.innerHTML = templates.map(item => `<option value="${escapeHtml(item.key)}">${escapeHtml(item.name)}${item.builtin ? " (built-in)" : ` · revision ${item.revision}`}</option>`).join("");
         selection.value = selected.key; field("[data-name]").value = selected.builtin ? `${selected.name} custom` : selected.name;
         const visual = field("[data-visual]");
-        visual.innerHTML = `<h3>Agents and approved capabilities</h3>${draft.definition.agents.map((agent,i) => `<fieldset data-agent="${i}"><legend>${escapeHtml(roleName(agent.id))} · ${agent.id === "primary" ? "proposal owner" : "read-only specialist"}</legend>
+        visual.innerHTML = `<h3>Agents and approved capabilities</h3>${draft.definition.agents.map((agent,i) => `<fieldset data-agent="${i}"><legend>${escapeHtml(roleName(agent.id))} · ${agent.id === "primary" ? "proposal author" : "read-only specialist"}</legend>
           <label>Prompt · ${escapeHtml(agent.id)}<textarea aria-label="Prompt · ${escapeHtml(agent.id)}" data-prompt rows="5">${escapeHtml(agent.prompt)}</textarea></label>
           <label>Model route · ${escapeHtml(agent.id)}<select data-route><option value="inherit">Inherit selected native route</option><option value="deployment">${escapeHtml(catalog.route.provider)} / ${escapeHtml(catalog.route.model)}</option></select></label>
           <div>Native composition: ${escapeHtml(agent.agentPreset || "read-only event member")}; skills/MCP come from that composition.</div>
@@ -773,16 +773,16 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h("h3",null,"Pinned event configuration"), h("p",null,`${execution.definition.id}@${execution.definition.version} · digest ${execution.digest}. Changes apply to new conversations.`),
       h("button",{onClick:()=>void editEventTemplate(execution.definition.id.includes(".circuit.")?"circuit":"spec",execution.mode,sources).catch(error=>window.alert(error.message))},"Configure event templates"),
       h("details",null,h("summary",null,"Pinned prompts, capabilities, payloads, subscriptions, and limits"),h("pre",null,JSON.stringify({definition:execution.definition,limits:execution.limits},null,2))),
-      ...execution.members.map(member=>h("button",{key:member.id,disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native session history · ${member.id}`)),
+      ...execution.members.map(member=>h("button",{key:member.id,disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native conversation history · ${member.id}`)),
       h("h3",null,"Why did this agent run?"),
       h("label",null,"Inspect event",h("select",{value:event?.id||"",onChange:change=>setSelected(change.target.value)},...events.map(item=>h("option",{key:item.id,value:item.id},`${item.type} · ${item.producer} · ${item.id}`)))),
       event?h("div",{"data-causal-event":event.id},h("p",null,`Causal chain: ${lineage.map(item=>`${item.type} (${item.producer})`).join(" → ")}`),h("p",null,`Correlation ${event.correlation} · cause ${event.causation||"root input"} · depth ${event.depth}`),h("pre",null,JSON.stringify(event.payload,null,2)),
         ...deliveries.filter(item=>item.eventId===event.id).map(delivery=>{
           const subscription=execution.definition.subscriptions.find(item=>item.id===delivery.subscription), member=execution.members.find(item=>item.id===delivery.target);
           const results=events.filter(item=>item.causation===event.id);
-          return h("article",{key:delivery.id,"data-delivery":delivery.id},h("h4",null,`${delivery.target} · ${delivery.state}`),h("p",null,`Matched ${subscription?`${subscription.id}: exact ${subscription.event} → ${subscription.target}`:delivery.subscription}. Attempt ${delivery.attempt}; activation ${delivery.activationId}; delivery ${delivery.id}.`),h("p",null,`Retry of ${delivery.retryOf||"none"}${delivery.notBefore?`; eligible ${new Date(delivery.notBefore).toISOString()}`:""}. ${delivery.error||""}`),member?h("button",{disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native session history · ${member.id}`):null,h("p",null,`Causal results: ${results.map(item=>`${item.type} (${item.producer})`).join(", ")||"none recorded"}`));
+          return h("article",{key:delivery.id,"data-delivery":delivery.id},h("h4",null,`${delivery.target} · ${delivery.state}`),h("p",null,`Matched ${subscription?`${subscription.id}: exact ${subscription.event} → ${subscription.target}`:delivery.subscription}. Attempt ${delivery.attempt}; activation ${delivery.activationId}; delivery ${delivery.id}.`),h("p",null,`Retry of ${delivery.retryOf||"none"}${delivery.notBefore?`; eligible ${new Date(delivery.notBefore).toISOString()}`:""}. ${delivery.error||""}`),member?h("button",{disabled:!member.created,onClick:()=>openNativeSession(member.sessionId)},`Native conversation history · ${member.id}`):null,h("p",null,`Causal results: ${results.map(item=>`${item.type} (${item.producer})`).join(", ")||"none recorded"}`));
         })) : h("p",null,"No events recorded yet."),
-      goal?h("details",null,h("summary",null,"Native goal state and continuation rounds"),h("pre",null,JSON.stringify(goal,null,2))):null,
+      goal?h("details",null,h("summary",null,"Native goal state and continuation turns"),h("pre",null,JSON.stringify(goal,null,2))):null,
       h("h3",null,"Where did the budget go?"),h("p",null,"All native primary, specialist, continuation, and retry requests share this allowance. Pending requests show reserved tokens until settled."),
       h("table",null,h("caption",null,"Model request charges"),h("thead",null,h("tr",null,...["Request","Tokens","Active ms","State"].map(label=>h("th",{key:label,scope:"col"},label)))),h("tbody",null,...execution.requests.map(request=>h("tr",{key:request.id},h("td",null,request.id),h("td",null,String(request.tokens)),h("td",null,String(request.activeMillis)),h("td",null,request.settled?"settled":"reserved"))))),
       h("h3",null,"External sources"),...(sources||[]).map(source=>h("pre",{key:source.id},JSON.stringify({id:source.id,definition:source.definition,enabled:source.enabled,sequence:source.sequence,error:source.error},null,2))));
@@ -796,7 +796,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const [seconds, setSeconds] = React.useState("60");
     const [error, setError] = React.useState("");
     const [busy, setBusy] = React.useState(false);
-    return h("details", null, h("summary", null, "Monitor owner endpoint"),
+    return h("details", null, h("summary", null, "Monitor service endpoint"),
       h("form", { className: "s2g-form", onSubmit: async event => {
         event.preventDefault(); setBusy(true); setError("");
         try {
@@ -808,12 +808,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
         finally { setBusy(false); }
       } },
-      h("label", null, "Approved owner URL", h("input", { type: "url", value: url, required: true, onChange: event => setUrl(event.target.value) })),
+      h("label", null, "Approved service URL", h("input", { type: "url", value: url, required: true, onChange: event => setUrl(event.target.value) })),
       h("label", null, "JSON pointer", h("input", { value: pointer, placeholder: "/source_revision_hash", onChange: event => setPointer(event.target.value) })),
       h("label", null, "Condition", h("select", { value: condition, onChange: event => setCondition(event.target.value) }, h("option", { value: "changed" }, "Value changes"), h("option", { value: "equals" }, "Value equals JSON"))),
       condition === "equals" ? h("label", null, "Expected JSON value", h("input", { value: expected, required: true, placeholder: '"ready"', onChange: event => setExpected(event.target.value) })) : null,
       h("label", null, "Check interval in seconds", h("input", { type: "number", min: 5, max: 3600, value: seconds, onChange: event => setSeconds(event.target.value) })),
-      h("p", null, "Unchanged checks use no model requests. Changed observations use this conversation's remaining budget and owner approval rules."),
+      h("p", null, "Unchanged checks use no model requests. Changed observations use this conversation's remaining budget and service approval rules."),
       h("button", { type: "submit", disabled: busy }, "Start monitoring"), error ? h("p", { className: "s2g-error" }, error) : null));
   }
 
@@ -865,7 +865,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h("strong", null, (execution.status === "active" && execution.waits?.some(wait => wait.state === "waiting") ? "waiting" : execution.status === "active" && goal?.phase === "complete" ? "goal complete" : execution.status === "active" && goal?.phase === "blocked" ? "goal blocked" : execution.status).replaceAll("-", " ")),
       h("div", { className: "s2g-workflow-main" },
         h("div", { className: "s2g-workflow-objective" }, execution.reason || `${execution.mode} · ${members.map(member => member.name || member.id.replaceAll("_", " ")).join(", ")}`),
-        h("div", { className: "s2g-workflow-meta" }, `rounds ${execution.rounds.length}/${limits.maxRounds} · requests ${requests.length}/${limits.maxRequests} · tokens ${tokens}/${limits.maxTokens} · active seconds ${Math.ceil(requests.reduce((sum, request) => sum + request.activeMillis, 0) / 1000)}/${Math.floor(limits.maxActiveMillis / 1000)} · pending ${pending.length} · failures ${failed.length}`),
+        h("div", { className: "s2g-workflow-meta" }, `turns ${execution.rounds.length}/${limits.maxRounds} · requests ${requests.length}/${limits.maxRequests} · tokens ${tokens}/${limits.maxTokens} · active seconds ${Math.ceil(requests.reduce((sum, request) => sum + request.activeMillis, 0) / 1000)}/${Math.floor(limits.maxActiveMillis / 1000)} · pending ${pending.length} · failures ${failed.length}`),
         h("details", null, h("summary", null, "Technical details"),
           h("ul", null, ...(execution.events || []).slice(-8).map(event => h("li", { key: event.id }, `${event.type} · ${event.producer}`))),
           ...failed.map(delivery => h("div", { key: delivery.id },
@@ -913,12 +913,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     }, [sessionId]);
     if (!source) return null;
     return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}`),
-      h("details", null, h("summary", null, "Technical details"), h("pre", null, pretty({ document: source.documentId, entity: source.entityId, owner: source.ownerDocumentKey })),
-        h("button", { onClick: () => void navigator.clipboard.writeText(pretty({ document: source.documentId, entity: source.entityId, owner: source.ownerDocumentKey })) }, "Copy identifiers")));
+      h("details", null, h("summary", null, "Technical details"), h("pre", null, pretty({ document: source.documentId, entity: source.entityId, owner: source.serviceDocumentKey })),
+        h("button", { onClick: () => void navigator.clipboard.writeText(pretty({ document: source.documentId, entity: source.entityId, owner: source.serviceDocumentKey })) }, "Copy identifiers")));
   }
 
   function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
-  function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds assistant"); }
+  function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds AI Assistant"); }
 
   module.exports.inject = ["slots", "uiConversation", "uiSession", "sessions", "workspaces"];
   module.exports.apply = function apply(ctx) {

@@ -133,7 +133,7 @@ export function buildCircuitContextMenu(options: CircuitContextMenuOptions): Cir
     ? [contextAction("select-connected-net"), contextAction("disconnect-port")]
     : [action("open-connect", "New connection…")];
   portCommands.push(separator, placementMenu(options));
-  if (target.kind === "boundary" || target.owner.kind === "boundary") {
+  if (target.kind === "boundary" || target.parent.kind === "boundary") {
     portCommands.push(separator, contextAction("delete-boundary-terminal"));
   }
   return portCommands;

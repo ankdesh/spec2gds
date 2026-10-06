@@ -9,7 +9,7 @@ sequenceDiagram
     participant API as Spec API
     participant Package as .spec package
 
-    User->>UI: File → New Specification; enter name and server-local path
+    User->>UI: File → New Spec; enter name and server-local path
     UI->>API: POST /documents/create with title and path
     API->>Package: Create and validate empty package
     Package-->>API: Source revision hash
@@ -47,10 +47,10 @@ The editor creates components and entry designs with the fixed internal
 adds or edits all three leaf-component port families. The visible specification
 title is stored separately so renaming it does not migrate IDs or references.
 Bus interfaces, detailed TLM protocol modeling, structured subports, identity
-migration, port deletion, and composite boundaries remain separate workflows.
+migration, port deletion, and composite boundaries remain separate flows.
 Existing bus interfaces, port maps, channels, interface connections, and
 bus/abstraction definitions are preserved in the package but hidden from the
-editor document until those workflows are ready.
+editor document until those flows are ready.
 
 ## Open a specification in Circuit Designer
 
@@ -74,7 +74,7 @@ sequenceDiagram
     CD->>CS: Read session
     CS-->>CD: Projected circuit and source binding
     User->>CD: Begin editing and change topology/layout
-    CD->>CS: Save to Specification(candidate, base source revision)
+    CD->>CS: Save to Spec(candidate, base source revision)
     CS->>SA: Authenticated preview, then idempotent commit
     SA->>SA: Validate and atomically save .spec
     SA-->>CS: Authoritative re-projection and new source revision
@@ -155,14 +155,14 @@ sequenceDiagram
       User->>Assistant: Send reviewed proposal
       Assistant->>Owner: Store pending Circuit proposal
       User->>Editor: Accept into private draft
-      User->>Editor: Save to Specification or download independent file
+      User->>Editor: Save to Spec or download independent file
     end
 ```
 
 Discussion alone changes nothing. Spec application follows the owner's automatic
 or restricted policy and always validates the authored revision. Circuit send
 and acceptance are separate from saved source; source-bound changes require
-**Save to Specification**. A stale or rejected proposal leaves source unchanged.
+**Save to Spec**. A stale or rejected proposal leaves source unchanged.
 
 ## Import an existing document
 

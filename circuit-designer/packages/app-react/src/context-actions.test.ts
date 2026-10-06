@@ -36,7 +36,7 @@ describe("Circuit Designer context menu composition", () => {
 
   test("switches port connection commands and includes complete placement controls", () => {
     const free = commandIds(buildCircuitContextMenu({
-      target: { kind: "terminal", terminalId: "u:a", owner: { kind: "node", id: "u" } },
+      target: { kind: "terminal", terminalId: "u:a", parent: { kind: "node", id: "u" } },
       inspectorOpen: false,
       terminalSide: "EAST",
     }));

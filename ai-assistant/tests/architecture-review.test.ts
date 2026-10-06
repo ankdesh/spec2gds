@@ -45,13 +45,13 @@ test("approved review reuse requires the same owner document and fresh revision"
   const root = mkdtempSync(join(tmpdir(), "architecture-binding-"));
   const state = new ProductState(join(root, "state.sqlite3"));
   try {
-    const binding = { domain: "spec" as const, serviceBaseUrl: "http://owner", ownerUrl: "http://owner", documentId: "shared-id",
+    const binding = { domain: "spec" as const, serviceBaseUrl: "http://owner", serviceUrl: "http://owner", documentId: "shared-id",
       scope: "document" as const, workspaceKey: "key", workspaceTitle: "Workspace", workspacePath: root,
-      workspaceDomain: "spec" as const, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "shared-id" };
-    state.createBinding("same", { ...binding, ownerDocumentKey: "package-A" });
-    state.createBinding("copy", { ...binding, ownerDocumentKey: "package-B" });
+      workspaceDomain: "spec" as const, workspaceServiceUrl: "http://owner", workspaceDocumentId: "shared-id" };
+    state.createBinding("same", { ...binding, serviceDocumentKey: "package-A" });
+    state.createBinding("copy", { ...binding, serviceDocumentKey: "package-B" });
     state.storeArchitecture({ reviewId: "approved", sessionId: "original", callId: "review", status: "pending", plan: architecturePlan,
-      ownerDocumentKey: "package-A", documentId: "shared-id", scope: "document", entityId: null, sourceRevision: "sha256:A" });
+      serviceDocumentKey: "package-A", documentId: "shared-id", scope: "document", entityId: null, sourceRevision: "sha256:A" });
     state.decideArchitecture("approved", "approved", "");
     assert.equal(state.requireArchitecture("same", "approved", "sha256:A").reviewId, "approved");
     assert.throws(() => state.requireArchitecture("copy", "approved", "sha256:A"), /approval/);

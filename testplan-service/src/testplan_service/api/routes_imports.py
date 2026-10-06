@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.constants import MAX_SOURCE_UPLOAD_BYTES
 from testplan_service.exceptions import BundleError, SnapshotError
 
@@ -18,7 +19,7 @@ class CommitBundleImportRequest(BaseModel):
     resolution: str = "create"  # "create" or "import_as_copy"
 
 
-def create_imports_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_imports_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating snapshot upload and bundle import endpoints."""
     imports_router = APIRouter(tags=["Imports"])
 
@@ -26,7 +27,7 @@ def create_imports_router(get_service: Callable[[], TestPlanService]) -> APIRout
     async def upload_source_snapshot(
         request: Request,
         file: UploadFile | None = File(None),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Upload and decode an Activity Snapshot v1 container."""
         if file is not None:
@@ -61,7 +62,7 @@ def create_imports_router(get_service: Callable[[], TestPlanService]) -> APIRout
     async def upload_bundle(
         request: Request,
         file: UploadFile | None = File(None),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Upload, validate, and stage a portable .vplan bundle."""
         if file is not None:
@@ -79,7 +80,7 @@ def create_imports_router(get_service: Callable[[], TestPlanService]) -> APIRout
     def commit_bundle(
         staging_id: str,
         payload: CommitBundleImportRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Commit a staged bundle with conflict resolution ('create' or 'import_as_copy')."""
         staging_file = service.blob_store.staging_dir / f"{staging_id}.tmp"

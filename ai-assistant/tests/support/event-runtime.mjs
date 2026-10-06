@@ -56,7 +56,7 @@ class Adapter extends LlmAdapter {
     }
   }
 }
-export async function boot(directory,ownerUrl,orchestratedLimits={},interactiveForms=false) {
+export async function boot(directory,serviceUrl,orchestratedLimits={},interactiveForms=false) {
   const routes=[];
   class Transport extends Service {
     constructor(ctx) { super(ctx,'webServer'); }
@@ -72,10 +72,10 @@ export async function boot(directory,ownerUrl,orchestratedLimits={},interactiveF
   for(const name of names) modules.set(`@deepseek-ai/dsh-${name}`,await import(`@deepseek-ai/dsh-${name}`));
   modules.set('@spec2gds/harness-assistant',Product);
   modules.set('test:transport',Transport); modules.set('test:connection',Connection);
-  const configFor=name=>name==='agent-default-model'?{provider:'mock',model:'mock'}:name==='session-persistence-jsonl'?{root:join(directory,'sessions'),compression:'none'}:name==='storage-sqlite'?{path:join(directory,'events.sqlite3')}:name==='storage-domain'?{backend:'sqlite'}:name==='event-system-yaml'?{roots:[join(productRoot,'profile/catalog/event-systems')],maxFileBytes:262144,maxPromptBytes:32768}:name==='prompt-catalog-yaml'?{roots:[join(productRoot,'profile/catalog/prompts')]}:name==='event-system-http'?{allowedOrigins:[ownerUrl],tickMillis:10,minIntervalMillis:10,maxIntervalMillis:10000,timeoutMillis:1000,maxResponseBytes:4096,maxSourcesPerConversation:2,maxTotalSources:4,maxConcurrentChecks:2,maxFailures:3}:name==='goal'?{defaultMaxGoalRounds:8}:name==='agent-loop'?{agents:[]}:undefined;
+  const configFor=name=>name==='agent-default-model'?{provider:'mock',model:'mock'}:name==='session-persistence-jsonl'?{root:join(directory,'sessions'),compression:'none'}:name==='storage-sqlite'?{path:join(directory,'events.sqlite3')}:name==='storage-domain'?{backend:'sqlite'}:name==='event-system-yaml'?{roots:[join(productRoot,'profile/catalog/event-systems')],maxFileBytes:262144,maxPromptBytes:32768}:name==='prompt-catalog-yaml'?{roots:[join(productRoot,'profile/catalog/prompts')]}:name==='event-system-http'?{allowedOrigins:[serviceUrl],tickMillis:10,minIntervalMillis:10,maxIntervalMillis:10000,timeoutMillis:1000,maxResponseBytes:4096,maxSourcesPerConversation:2,maxTotalSources:4,maxConcurrentChecks:2,maxFailures:3}:name==='goal'?{defaultMaxGoalRounds:8}:name==='agent-loop'?{agents:[]}:undefined;
   const rows=names.map(name=>({name:`@deepseek-ai/dsh-${name}`,...configFor(name)?{config:configFor(name)}:{}}));
   rows.push({name:'test:transport'},{name:'test:connection'});
-  rows.push({name:'@spec2gds/harness-assistant',config:{provider:'mock',model:'mock',stateRoot:directory,scratchRoot:join(directory,'workspaces'),specDocumentRoot:join(directory,'documents'),specAllowlist:ownerUrl,circuitAllowlist:'http://127.0.0.1:9/api/circuit-designer/v1',requestTimeoutMs:3000,maxStepsPerTurn:3,maxOutputTokens:1200,interactiveForms,execution:{goal:{...limits,maxRequests:32,maxTokens:300000,maxMembers:1,maxConcurrency:1},orchestrated:{...limits,...orchestratedLimits}}}});
+  rows.push({name:'@spec2gds/harness-assistant',config:{provider:'mock',model:'mock',stateRoot:directory,scratchRoot:join(directory,'workspaces'),specDocumentRoot:join(directory,'documents'),specAllowlist:serviceUrl,circuitAllowlist:'http://127.0.0.1:9/api/circuit-designer/v1',requestTimeoutMs:3000,maxStepsPerTurn:3,maxOutputTokens:1200,interactiveForms,execution:{goal:{...limits,maxRequests:32,maxTokens:300000,maxMembers:1,maxConcurrency:1},orchestrated:{...limits,...orchestratedLimits}}}});
   await writeFile(join(directory,'cordis.yml'),JSON.stringify(rows));
   const ctx=new Context();ctx.baseUrl=pathToFileURL(directory).href+'/';
   await ctx.plugin(Loader);ctx.loader.builtins.include=Include;

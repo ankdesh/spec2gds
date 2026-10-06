@@ -1,7 +1,7 @@
 # RTL semantics examples
 
 The minimal samples demonstrate how a component keeps its interface in
-IP-XACT while storing only its SystemVerilog module body in an entity section.
+IP-XACT while storing only its SystemVerilog section in a Component.
 The `rtl.generate` Activity assembles the two sources into a complete module.
 
 ## Included examples
@@ -22,14 +22,14 @@ valid signal because IP-XACT does not declare one.
 Open either package in Spec Editor and inspect the component's inline
 **SystemVerilog** section. The stored text may contain declarations and
 behavior such as `logic` and `always_ff`, but it does not contain `module`,
-`endmodule`, or port declarations. The generator obtains `clk`, `rst_n`,
+`endmodule`, or port declarations. The Activity obtains `clk`, `rst_n`,
 `data_in`, `valid_in`, and `data_out` from IP-XACT and emits those declarations
 exactly once.
 
 Add or edit the section through **Options → Add section → SystemVerilog**. Run
 **Options → More actions… → Launch activity… → Generate RTL** on the entry design to publish a
 fresh project beside the active `.spec` package. The separate helper below uses
-the configured Activity workspace.
+the configured Activity scratch directory.
 
 ## Generate and verify output
 

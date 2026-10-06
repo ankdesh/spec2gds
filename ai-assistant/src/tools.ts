@@ -6,9 +6,9 @@
 import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import { registeredTool, nativeTool, type ToolRunContext } from "./tool-registry.js";
 import { defaultInstructions, type InstructionBundle } from "./instructions.js";
-import { type OwnerClients } from "./owner-clients.js";
+import { type ServiceClients } from "./service-clients.js";
 import { catalogPromptSectionsFor, promptSectionsFor, type BoundPromptCatalog } from "./domain-context.js";
-import { type OwnerOperationContract } from "./owner-operation-schema.js";
+import { type ServiceOperationContract } from "./service-operation-schema.js";
 import { proposalError } from "./proposal-presentation.js";
 import { type ProductState } from "./state.js";
 import type { ProposalReview, SessionBinding } from "./types.js";
@@ -27,12 +27,12 @@ export function registerDomainTools(
   },
   binding: SessionBinding,
   state: ProductState,
-  owners: OwnerClients,
+  owners: ServiceClients,
   promptCatalog?: BoundPromptCatalog,
   onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   currentUserRequest?: () => string,
   interactiveForms = false,
-  operationContract?: OwnerOperationContract,
+  operationContract?: ServiceOperationContract,
   schemaError?: string,
   onDomainToolUse?: () => Promise<void>,
   readOnly = false,
@@ -40,7 +40,7 @@ export function registerDomainTools(
 ): void {
   let specContract = operationContract;
   let disposeSpecTool: (() => void) | undefined;
-  const installSpecTool = (contract: OwnerOperationContract) => {
+  const installSpecTool = (contract: ServiceOperationContract) => {
     disposeSpecTool?.();
     specContract = contract;
     disposeSpecTool = registerSpecProposalTool(agentContext, binding, state, owners, contract, interactiveForms, onReviewPrepared, currentUserRequest, onDomainToolUse, instructions);
@@ -59,7 +59,7 @@ export function registerDomainTools(
     const disposeUnavailable = agentContext.tools.register(registeredTool({
       ...nativeTool(binding.domain === "spec" ? "prepare_spec_proposal" : "prepare_circuit_proposal", instructions, undefined, true),
       async execute(_args: unknown, exec: ToolRunContext) {
-        return failureResult(proposalError(binding, callId(exec), "OWNER_CONTRACT_ERROR", schemaError ?? "Owner operation schema unavailable."),
+        return failureResult(proposalError(binding, callId(exec), "SERVICE_CONTRACT_ERROR", schemaError ?? "Owner operation schema unavailable."),
           instructions.text("result.8"));
       },
     }));

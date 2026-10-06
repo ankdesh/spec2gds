@@ -50,7 +50,7 @@
   </div>
 
   <!-- 3-Panel Main Layout -->
-  <div class="workspace-layout">
+  <div class="center-layout">
     <!-- Left Panel: Hierarchy (280px) -->
     <aside class="panel-hierarchy" id="panelHierarchy">
       <div class="hierarchy-header">
@@ -64,7 +64,7 @@
     <!-- Center Workspace -->
     <main class="panel-center" id="panelCenter">
       <!-- Toolbar for Layer 1: Test Plan -->
-      <div class="workspace-toolbar" id="toolbarPlan">
+      <div class="view-toolbar" id="toolbarPlan">
         <div class="toolbar-group">
           <button id="btnAddSection" class="btn btn-secondary btn-sm">+ Section</button>
           <button id="btnAddIntent" class="btn btn-primary btn-sm">+ Intent</button>
@@ -76,7 +76,7 @@
       </div>
 
       <!-- Toolbar for Layer 2: Coverage & Evidence -->
-      <div class="workspace-toolbar" id="toolbarCoverage" style="display: none;">
+      <div class="view-toolbar" id="toolbarCoverage" style="display: none;">
         <div class="toolbar-group">
           <div class="subnav-btn-group">
             <button class="btn btn-secondary btn-sm active" id="btnSubnavMatrix">Coverage Matrix</button>
@@ -94,7 +94,7 @@
       </div>
 
       <!-- Toolbar for Layer 3: Implementation -->
-      <div class="workspace-toolbar" id="toolbarImplementation" style="display: none;">
+      <div class="view-toolbar" id="toolbarImplementation" style="display: none;">
         <div class="toolbar-group">
           <div class="subnav-btn-group">
             <button class="btn btn-secondary btn-sm active" id="btnSubnavRecipes">Recipes</button>
@@ -112,7 +112,7 @@
       </div>
 
       <!-- Main Workspace Views -->
-      <div class="workspace-content" id="workspaceContent">
+      <div class="view-content" id="workspaceContent">
         <!-- Layer 1: Outline View (Default) -->
         <div id="viewOutline">
           <table class="data-table" id="intentTable">

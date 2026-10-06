@@ -14,7 +14,7 @@
     }
   },
   "activities": {
-    "workspace_root": "../generated",
+    "scratch_root": "../generated",
     "extension_modules": []
   },
   "spec_editor": {

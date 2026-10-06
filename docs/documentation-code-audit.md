@@ -9,8 +9,8 @@ uses `uv` and a local `.venv`; the root and package READMEs contain run instruct
 | Documentation family | Implementation and verification evidence |
 | --- | --- |
 | Architecture, flows, setup, addresses and logging | `config/services.json`, `scripts/setup-all.sh`, `scripts/serve-all.sh`, `spec2gds/service_registry.py`, `runtime/src/spec2gds_runtime/`; launcher/config/logging tests |
-| Spec packages, editing, sections and review | `spec2gds/agent_spec/spec_format/`: archive, IR, sections, transactions, owner/review/proposal stores and `v1_api.py`; `tests/agent_spec/spec_format/` |
-| Activities and RTL/SystemC examples | `spec2gds/agent_spec/activities/`: contracts, snapshot, registry, workspace and generator packages, plus `tools/systemc-rtl/main.cpp`; Activity tests and `scripts/generate_rtl_examples.py` |
+| Spec packages, editing, sections and review | `spec2gds/spec/spec_format/`: archive, IR, sections, transactions, owner/review/proposal stores and `v1_api.py`; `tests/spec/spec_format/` |
+| Activities and RTL/SystemC examples | `spec2gds/spec/activities/`: contracts, snapshot, registry, workspace and generator packages, plus `tools/systemc-rtl/main.cpp`; Activity tests and `scripts/generate_rtl_examples.py` |
 | Spec editor browser | `circuit-designer/apps/editor/src/` and `packages/document-{core,a2ui-react}/`; client unit tests, editor browser fixtures and isolated owner scenarios |
 | Circuit semantics, UI, layout and source saves | `circuit-designer/schema/`, `packages/{core,layout,react,app-react,service}/` and `apps/standalone/`; schema consistency, workspace tests/builds and Circuit browser fixtures |
 | Assistant owner tools, creation and focused CLI | `ai-assistant/src/`, `scripts/spec2gds_{assistant,spec}.py` and product request/dev scripts; contract, CLI, refinement and Harness integration fixtures |
@@ -33,7 +33,7 @@ The Assistant guides were consolidated on 2026-10-05. Use these four documents:
 The results below are historical evidence from the 2026-10-01 source audit. They
 do not prove that the later Assistant contract is fully implemented.
 
-Planner material remains in its [architecture](testplan-service-architecture.md),
+Planner material remains in its [architecture](verification-planner-architecture.md),
 [layer references](README.md#verification-planner), and
 [remaining requirements](verification-planner-backlog.md).
 

@@ -72,11 +72,11 @@ run_extensive() {
   if "${browser_tests}"; then
     if run_check "Build Circuit Designer and editor" npm --prefix circuit-designer run build; then
       run_check "Circuit Designer browser" npm --prefix circuit-designer run test:e2e || true
-      run_check "Specification editor browser" npm --prefix circuit-designer run test:e2e:editor || true
+      run_check "Spec Editor browser" npm --prefix circuit-designer run test:e2e:editor || true
       # Reuse the React/Playwright dependencies and Chromium installed by setup.
       if "${assistant_ready}"; then
         run_check "Assistant browser" env \
-          "ASSISTANT_UI_TEST_DEPS=${ASSISTANT_UI_TEST_DEPS:-${PROJECT_ROOT}/circuit-designer}" \
+          "AI_ASSISTANT_UI_TEST_DEPS=${AI_ASSISTANT_UI_TEST_DEPS:-${ASSISTANT_UI_TEST_DEPS:-${PROJECT_ROOT}/circuit-designer}}" \
           "PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-${PROJECT_ROOT}/circuit-designer/.playwright-browsers}" \
           npm --prefix ai-assistant run test:ui || true
       fi

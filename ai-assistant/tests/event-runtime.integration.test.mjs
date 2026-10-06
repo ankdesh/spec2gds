@@ -31,12 +31,12 @@ for(const preset of ['goal','orchestrated']) test(`${preset} composes native exe
     response.writeHead(404);response.end('{}');
   });
   owner.listen(0,'127.0.0.1');await once(owner,'listening');
-  const ownerUrl=`http://127.0.0.1:${owner.address().port}`;
+  const serviceUrl=`http://127.0.0.1:${owner.address().port}`;
   let ctx;
   const previousBinding=process.env.SPEC2GDS_BINDING_JSON;
   try {
-    const runtime=await boot(directory,ownerUrl);ctx=runtime.ctx;
-    process.env.SPEC2GDS_BINDING_JSON=JSON.stringify({domain:'spec',serviceBaseUrl:ownerUrl,documentId:'doc-test',scope:'document',preset});
+    const runtime=await boot(directory,serviceUrl);ctx=runtime.ctx;
+    process.env.SPEC2GDS_BINDING_JSON=JSON.stringify({domain:'spec',serviceBaseUrl:serviceUrl,documentId:'doc-test',scope:'document',preset});
     const primary=await ctx.agents.create({sessionId:SessionId(`native-${preset}`),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:preset},setup:async(agentCtx)=>{if(preset==='goal')await agentCtx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
     approveTimer(directory, String(primary.agent.id));
     if(preset==='goal')ctx.goals.create(primary.agent,{objective:'Prepare a timer proposal.',maxGoalRounds:8});
@@ -83,7 +83,7 @@ for(const preset of ['goal','orchestrated']) test(`${preset} composes native exe
         const before=runtime.adapter.requests.length;
         const foreign=await runtime.api(`/bindings/${primary.agent.id}/execution/sources`,{action:'add',definition:{url:'http://127.0.0.1:9/foreign',eventType:'source.changed',pointer:'/source_revision_hash',condition:'changed',intervalMillis:20,debounceMillis:0,emitInitial:false}});
         assert.equal(foreign.status,409);
-        const added=await runtime.api(`/bindings/${primary.agent.id}/execution/sources`,{action:'add',definition:{url:ownerUrl+'/assistant/context/document',eventType:'source.changed',pointer:'/source_revision_hash',condition:'changed',intervalMillis:20,debounceMillis:0,emitInitial:false}});
+        const added=await runtime.api(`/bindings/${primary.agent.id}/execution/sources`,{action:'add',definition:{url:serviceUrl+'/assistant/context/document',eventType:'source.changed',pointer:'/source_revision_hash',condition:'changed',intervalMillis:20,debounceMillis:0,emitInitial:false}});
         assert.equal(added.status,200,JSON.stringify(added));
         await waitFor(()=>ctx.eventHttpSources.list(primary.agent.id)[0].observed);
         await new Promise(resolve=>setTimeout(resolve,100));assert.equal(runtime.adapter.requests.length,before);

@@ -4,19 +4,19 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { approvedArchitecture } from "./support/architecture.js";
-import { OwnerError } from "../src/owner-clients.js";
-import { parseOwnerOperationContract } from "../src/owner-operation-schema.js";
+import { ServiceError } from "../src/service-clients.js";
+import { parseServiceOperationContract } from "../src/service-operation-schema.js";
 import { ProductState } from "../src/state.js";
 import { registerDomainTools } from "../src/tools.js";
 
 function fixture(policy: "automatic" | "review" = "automatic", notificationFails = false) {
   const root = mkdtempSync(join(tmpdir(), "spec-iterative-"));
   const state = new ProductState(join(root, "state.sqlite3"));
-  const binding = state.createBinding("chat", { domain: "spec", serviceBaseUrl: "http://owner", ownerUrl: "http://owner",
-    documentId: "document", scope: "document", ownerDocumentKey: "package-A", workspaceKey: "workspace", workspaceTitle: "Workspace",
-    workspacePath: root, workspaceDomain: "spec", workspaceOwnerUrl: "http://owner", workspaceDocumentId: "document" });
+  const binding = state.createBinding("chat", { domain: "spec", serviceBaseUrl: "http://owner", serviceUrl: "http://owner",
+    documentId: "document", scope: "document", serviceDocumentKey: "package-A", workspaceKey: "workspace", workspaceTitle: "Workspace",
+    workspacePath: root, workspaceDomain: "spec", workspaceServiceUrl: "http://owner", workspaceDocumentId: "document" });
   let wire = JSON.parse(readFileSync(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
-  const schema = JSON.parse(readFileSync(new URL("../../spec2gds/agent_spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
+  const schema = JSON.parse(readFileSync(new URL("../../spec2gds/spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
   if (!wire.operation_schema.oneOf.some((item: any) => item.properties.type.const === "set_entity_metadata")) wire.operation_schema.oneOf.push(schema.oneOf.find((item: any) => item.properties.type.const === "set_entity_metadata"));
   let revision = "sha256:A";
   let submissionError: Error | null = null;
@@ -40,7 +40,7 @@ function fixture(policy: "automatic" | "review" = "automatic", notificationFails
   const architectureReviewId = approvedArchitecture(state, "chat", "Create leaf", revision);
   const tools = new Map<string, any>();
   registerDomainTools({ tools: { register: (tool: any) => { tools.set(tool.name, tool); return () => { tools.delete(tool.name); }; } } },
-    binding, state, owners, undefined, review => { prepared.push(review); if (notificationFails) throw new Error("Execution ledger unavailable"); }, undefined, !notificationFails, parseOwnerOperationContract(wire));
+    binding, state, owners, undefined, review => { prepared.push(review); if (notificationFails) throw new Error("Execution ledger unavailable"); }, undefined, !notificationFails, parseServiceOperationContract(wire));
   const args: any = { architecture_review_id: architectureReviewId, supported: true, base_source_revision_hash: revision, unsupported_reason: null, title: "Create leaf", summary: "Create leaf", rationale: "Requested", assumptions: [],
     operations: [{ operation_id: "create", type: "create_entity", kind: "component", name: "leaf", entity_id: "leaf-local", ports: [{ name: "clk", family: "wire", direction: "in" }], instances: [] }, { operation_id: "explain", type: "set_entity_metadata", entity: { document_id: "document", entity_id: "leaf-local", entity_kind: "component" }, description: "Leaf clock input. Implementation pending." }] };
   const execute = (values = args) => tools.get("prepare_spec_proposal").execute(values, { callId: "call", signal: new AbortController().signal });
@@ -59,9 +59,9 @@ test("fully specified creation saves automatically without a details card", asyn
     const result = await f.execute();
     assert.equal(result.success, true);
     assert.equal(result.review.state, "applied");
-    assert.equal(result.review.ownerResult.source_revision_hash, "sha256:B");
+    assert.equal(result.review.serviceResult.source_revision_hash, "sha256:B");
     assert.equal(f.submitted.length, 1);
-    assert.equal(f.submitted[0].target.ownerDocumentKey, "package-A");
+    assert.equal(f.submitted[0].target.serviceDocumentKey, "package-A");
     assert.equal(f.submitted[0].artifact.base_source_revision_hash, "sha256:A");
     assert.equal(f.prepared[0].state, "applied");
     assert.equal(result.required_input, undefined);
@@ -95,7 +95,7 @@ test("restricted creation after architecture approval remains pending owner appr
     const result = await f.execute();
     assert.equal(result.required_input, undefined);
     assert.equal(result.review.state, "ready");
-    assert.equal(result.review.ownerResult.status, "approval_required");
+    assert.equal(result.review.serviceResult.status, "approval_required");
   } finally { f.close(); }
 });
 
@@ -130,7 +130,7 @@ test("old operations are rejected without replacing their authored revision", as
 test("policy discovery failure cannot authorize an automatic save", async () => {
   const f = fixture();
   try {
-    f.discoveryError = new OwnerError(503, "Policy unavailable");
+    f.discoveryError = new ServiceError(503, "Policy unavailable");
     const result = await f.execute();
     assert.equal(result.success, false);
     assert.equal(f.submitted.length, 0);
@@ -165,18 +165,18 @@ test("context reads refresh a changed contract in the existing conversation", as
 test("uncertain writes remain reconcilable and never claim an applied result", async () => {
   const f = fixture();
   try {
-    f.submissionError = new OwnerError(503, "Response lost after save", true);
+    f.submissionError = new ServiceError(503, "Response lost after save", true);
     const result = await f.execute();
     assert.equal(result.success, false);
     assert.equal(result.review.state, "reconcile");
-    assert.equal(result.review.ownerResult, null);
+    assert.equal(result.review.serviceResult, null);
   } finally { f.close(); }
 });
 
 test("Spec context refresh retains existing pending reviews", async () => {
   const f = fixture("review");
   try {
-    f.state.createReview({ proposalId: "pending", sessionId: "chat", callId: "old", domain: "spec", state: "ready", baseRevision: "sha256:A", artifact: {}, preview: null, diagnostics: [], error: null, ownerResult: null });
+    f.state.createReview({ proposalId: "pending", sessionId: "chat", callId: "old", domain: "spec", state: "ready", baseRevision: "sha256:A", artifact: {}, preview: null, diagnostics: [], error: null, serviceResult: null });
     f.revision = "sha256:B";
     await f.tools.get("get_bound_context").execute({}, { callId: "context", signal: new AbortController().signal });
     assert.equal(f.state.getReview("chat", "pending")!.state, "ready");

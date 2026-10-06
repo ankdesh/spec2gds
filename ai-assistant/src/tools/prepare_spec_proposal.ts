@@ -7,11 +7,11 @@ import { registeredTool, nativeTool, type ToolRunContext } from "../tool-registr
 import type { ToolArguments } from "../tool-arguments.js";
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
 import { snapshotJsonValue } from "@deepseek-ai/dsh-util-values";
-import { OwnerError, type OwnerClients } from "../owner-clients.js";
+import { ServiceError, type ServiceClients } from "../service-clients.js";
 import { validateProposalEnvelope } from "../operation-schemas.js";
 import { normalizeSpecFormatting } from "../normalize.js";
 import { validateArchitectureOperations } from "../architecture-review.js";
-import { specFormattingAdmission, validateOwnerOperations, verifyOwnerOperationContract, type OwnerOperationContract } from "../owner-operation-schema.js";
+import { specFormattingAdmission, validateServiceOperations, verifyServiceOperationContract, type ServiceOperationContract } from "../service-operation-schema.js";
 import { buildSpecArtifact, reviewStateForPreview } from "../proposal-pipeline.js";
 import { errorFromException, errorFromOwnerResult, logProposalFailure, proposalError } from "../proposal-presentation.js";
 import { artifactDigest, type ProductState } from "../state.js";
@@ -22,8 +22,8 @@ export function registerSpecProposalTool(
   agentContext: { tools: { register(tool: unknown): () => void } },
   binding: SessionBinding,
   state: ProductState,
-  owners: OwnerClients,
-  contract: OwnerOperationContract,
+  owners: ServiceClients,
+  contract: ServiceOperationContract,
   interactiveForms: boolean,
   onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   currentUserRequest?: () => string,
@@ -34,14 +34,14 @@ export function registerSpecProposalTool(
     ...nativeTool("prepare_spec_proposal", instructions, specFormattingAdmission(contract.tool_schema)),
     async execute(args: ToolArguments["prepare_spec_proposal"], exec: ToolRunContext) {
       await onDomainToolUse?.();
-      let policy: Awaited<ReturnType<OwnerClients["specPolicy"]>>;
-      try { policy = await owners.specPolicy(binding.ownerUrl, exec.signal); }
+      let policy: Awaited<ReturnType<ServiceClients["specPolicy"]>>;
+      try { policy = await owners.specPolicy(binding.serviceUrl, exec.signal); }
       catch (error) {
         return failureResult(errorFromException(binding, callId(exec), error), instructions.text("result.9"));
       }
       try { args = { ...args, operations: snapshotJsonValue(normalizeSpecFormatting(args.operations, binding.documentId)) as typeof args.operations };
         validateProposalEnvelope(args.supported, args.unsupported_reason, args.operations);
-        if (args.supported) validateOwnerOperations(contract, args.operations); }
+        if (args.supported) validateServiceOperations(contract, args.operations); }
       catch (error) {
         const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
         logProposalFailure(binding, normalized);
@@ -79,7 +79,7 @@ export function registerSpecProposalTool(
             if (isRecord(receipt.artifact) && artifactDigest(receipt.artifact) === review.artifactDigest
                 && receipt.state === "applied" && isRecord(receipt.owner_result)) {
               review = state.transitionReview(binding.sessionId, review.proposalId, [review.state], "applied",
-                { error: null, diagnostics: [], ownerResult: receipt.owner_result });
+                { error: null, diagnostics: [], serviceResult: receipt.owner_result });
               await onReviewPrepared?.(review);
             }
           } catch { /* Preserve uncertain state until the exact owner receipt is available. */ }
@@ -129,7 +129,7 @@ export function registerSpecProposalTool(
       }
       const revision = context.source_revision_hash;
       if (typeof revision !== "string" || !revision) {
-        const normalized = proposalError(binding, callId(exec), "OWNER_CONTRACT_ERROR", "Spec context did not include a source revision.");
+        const normalized = proposalError(binding, callId(exec), "SERVICE_CONTRACT_ERROR", "Spec context did not include a source revision.");
         logProposalFailure(binding, normalized);
         return failureResult(normalized, instructions.text("result.16"));
       }
@@ -150,11 +150,11 @@ export function registerSpecProposalTool(
       }
       state.createReview({
         proposalId, sessionId: binding.sessionId, callId: callId(exec), domain: "spec",
-        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, ownerResult: null,
+        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, serviceResult: null,
       });
       try {
         const latest = await owners.operationContract(binding, exec.signal);
-        verifyOwnerOperationContract(contract, latest);
+        verifyServiceOperationContract(contract, latest);
         const preview = await owners.previewSpec(binding, artifact, exec.signal);
         const next = reviewStateForPreview("spec", preview.status);
         const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);
@@ -166,10 +166,10 @@ export function registerSpecProposalTool(
           state.transitionReview(binding.sessionId, proposalId, ["ready"], "applying");
           const result = await owners.submitSpec(binding, artifact, exec.signal);
           if (result.status !== "applied" && result.status !== "approval_required") {
-            throw new OwnerError(502, "The owner returned an unknown submission outcome.", true);
+            throw new ServiceError(502, "The service returned an unknown submission outcome.", true);
           }
           review = state.transitionReview(binding.sessionId, proposalId, ["applying"],
-            result.status === "applied" ? "applied" : "ready", { ownerResult: result });
+            result.status === "applied" ? "applied" : "ready", { serviceResult: result });
         }
         if (review.state === "ready" || review.state === "applied") await onReviewPrepared?.(review);
         return reviewResult(review, instructions);

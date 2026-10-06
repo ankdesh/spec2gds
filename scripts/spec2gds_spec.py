@@ -8,24 +8,24 @@ import pathlib
 import sys
 from contextlib import contextmanager, nullcontext
 
-from spec2gds.agent_spec.spec_format.archive import SpecPackage, SpecValidationError
-from spec2gds.agent_spec.spec_format.assistant import SpecChangeProposal
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.naming import (
+from spec2gds.spec.spec_format.archive import SpecPackage, SpecValidationError
+from spec2gds.spec.spec_format.assistant import SpecChangeProposal
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.naming import (
     document_name,
     entity_name,
     normalize_package_names,
     readable_name,
 )
-from spec2gds.agent_spec.spec_format.owner_store import document_key
-from spec2gds.agent_spec.spec_format.proposal_service import (
+from spec2gds.spec.spec_format.proposal_service import (
     ProposalApplyError,
     apply_assistant_proposal,
     reconcile_assistant_receipts,
 )
-from spec2gds.agent_spec.spec_format.review_store import list_spec_reviews, review_bridge
-from spec2gds.agent_spec.spec_format.v1_api import V1Session
-from spec2gds.agent_spec.spec_format.workspace_target import (
+from spec2gds.spec.spec_format.review_store import list_spec_reviews, review_bridge
+from spec2gds.spec.spec_format.spec_service_store import document_key
+from spec2gds.spec.spec_format.v1_api import V1Session
+from spec2gds.spec.spec_format.workspace_target import (
     assistant_state_root,
     resolve_spec_target,
 )
@@ -132,13 +132,13 @@ def _review_command(action: str, target: str, proposal_id: str | None = None, te
                     if action == "reviews":
                         receipt = journal.get(item["proposal_id"])
                         stored = next(review for review in reviews if review["proposalId"] == item["proposal_id"])
-                        stored.update(ordinal=item["ordinal"], state=receipt["state"], ownerResult=receipt["owner_result"], diagnostics=receipt["diagnostics"])
+                        stored.update(ordinal=item["ordinal"], state=receipt["state"], serviceResult=receipt["service_result"], diagnostics=receipt["diagnostics"])
                     continue
                 receipt = journal.get(item["proposal_id"])
                 reviews.append({"proposalId": receipt["proposal_id"], "sessionId": receipt["session_id"],
                     "ordinal": item["ordinal"], "state": receipt["state"], "baseRevision": receipt["artifact"]["base_source_revision_hash"],
                     "artifact": receipt["artifact"], "preview": receipt["preview"],
-                    "diagnostics": receipt["diagnostics"], "ownerResult": receipt["owner_result"]})
+                    "diagnostics": receipt["diagnostics"], "serviceResult": receipt["service_result"]})
             cursor = page["next_cursor"]
             if cursor is None:
                 break
@@ -158,7 +158,7 @@ def _review_command(action: str, target: str, proposal_id: str | None = None, te
                     "proposal_id": item["proposalId"], "session_id": item["sessionId"],
                     "state": item["state"], "base_revision": item["baseRevision"],
                     "artifact": item["artifact"], "preview": item["preview"],
-                    "diagnostics": item["diagnostics"], "owner_result": item["ownerResult"],
+                    "diagnostics": item["diagnostics"], "service_result": item["serviceResult"],
                 } for item in reviews],
             }, indent=2))
             return 0
@@ -196,8 +196,8 @@ def _review_command(action: str, target: str, proposal_id: str | None = None, te
             journal.update(selected["proposalId"], state="reconcile")
             bridge("reconcile", selected)
             raise
-        journal.update(selected["proposalId"], state="applied", owner_result=result, diagnostics=[])
-        journal.observe({"document_id": document_id, "owner_document_key": session.owner_document_key,
+        journal.update(selected["proposalId"], state="applied", service_result=result, diagnostics=[])
+        journal.observe({"document_id": document_id, "owner_document_key": session.service_document_key,
             "source_revision_hash": result["source_revision_hash"], "origin": "assistant", "affected_entities": []})
         bridge("complete", selected, result)
         print(json.dumps(result, default=str) if technical else f"Review {selected.get('ordinal')}: saved changes to {document_name(session.revision)}")
@@ -213,7 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             listing = review_bridge(root, "architecture-list")["architecture_reviews"]
             document_id = SpecPackage.load(str(path)).manifest.document_id
             owner_key = document_key(str(path), document_id)
-            available = [item for item in listing if ((item.get("ownerDocumentKey") == owner_key and item.get("documentId") == document_id) or (item.get("destinationOwnerDocumentKey") == owner_key and item.get("destinationDocumentId") == document_id))]
+            available = [item for item in listing if ((item.get("serviceDocumentKey") == owner_key and item.get("documentId") == document_id) or (item.get("destinationServiceDocumentKey") == owner_key and item.get("destinationDocumentId") == document_id))]
             for number, item in enumerate(available, 1):
                 item.setdefault("reviewNumber", number)
             if args.command == "architecture-reviews":

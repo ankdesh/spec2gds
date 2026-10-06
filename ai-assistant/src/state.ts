@@ -11,7 +11,16 @@ import type { BindingInput, ProposalReview, ReviewState, SessionBinding, SourceC
 
 const now = (): string => new Date().toISOString();
 const json = (value: unknown): string | null => value === undefined || value === null ? null : JSON.stringify(value);
-const parse = (value: unknown): unknown => typeof value === "string" ? JSON.parse(value) : null;
+function parseProductRecord(value: string): any {
+  const record = JSON.parse(value);
+  if (!record || typeof record !== "object" || Array.isArray(record)) return record;
+  for (const [legacy, canonical] of Object.entries({ ownerUrl: "serviceUrl", ownerDocumentKey: "serviceDocumentKey", destinationOwnerDocumentKey: "destinationServiceDocumentKey", workspaceOwnerUrl: "workspaceServiceUrl", ownerResult: "serviceResult" })) {
+    if (Object.hasOwn(record, legacy) && !Object.hasOwn(record, canonical)) record[canonical] = record[legacy];
+  }
+  if (typeof record.error_code === "string" && record.error_code.startsWith("OWNER_")) record.error_code = record.error_code.replace("OWNER_", "SERVICE_");
+  return record;
+}
+const parse = (value: unknown): unknown => typeof value === "string" ? parseProductRecord(value) : null;
 
 export function artifactDigest(value: unknown): string {
   return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
@@ -102,24 +111,24 @@ export class ProductState {
   architectureReview(id: string): Record<string, any> | null {
     const row = this.database.prepare("SELECT record_json FROM architecture_reviews WHERE review_id=?")
       .get(id) as { record_json: string } | undefined;
-    return row ? JSON.parse(row.record_json) : null;
+    return row ? parseProductRecord(row.record_json) : null;
   }
 
   architectureForCall(sessionId: string, callId: string): Record<string, any> | null {
     const row = this.database.prepare("SELECT record_json FROM architecture_reviews WHERE session_id=? AND call_id=?")
       .get(sessionId, callId) as { record_json: string } | undefined;
-    return row ? JSON.parse(row.record_json) : null;
+    return row ? parseProductRecord(row.record_json) : null;
   }
 
   listArchitectureReviews(): Record<string, any>[] {
     return (this.database.prepare("SELECT record_json FROM architecture_reviews ORDER BY rowid").all() as Array<{record_json: string}>)
-      .map(row => JSON.parse(row.record_json));
+      .map(row => parseProductRecord(row.record_json));
   }
 
   storeArchitecture(record: Record<string, any>): void {
     if (!record.reviewNumber) {
-      const scope = record.ownerDocumentKey || `new:${record.sessionId}`;
-      const previous = this.listArchitectureReviews().filter(item => (item.ownerDocumentKey || `new:${item.sessionId}`) === scope);
+      const scope = record.serviceDocumentKey || `new:${record.sessionId}`;
+      const previous = this.listArchitectureReviews().filter(item => (item.serviceDocumentKey || `new:${item.sessionId}`) === scope);
       record.reviewNumber = Math.max(0, ...previous.map(item => Number(item.reviewNumber) || 0)) + 1;
     }
     this.database.prepare(`INSERT INTO architecture_reviews VALUES(?,?,?,?,?)
@@ -143,10 +152,10 @@ export class ProductState {
   requireArchitecture(sessionId: string, id: string | undefined, revision?: string): Record<string, any> {
     const record = id ? this.architectureReview(id) : null;
     const binding = this.getBinding(sessionId);
-    const sameSource = Boolean(binding?.ownerDocumentKey && binding.ownerDocumentKey === record?.ownerDocumentKey
+    const sameSource = Boolean(binding?.serviceDocumentKey && binding.serviceDocumentKey === record?.serviceDocumentKey
       && binding.documentId === record?.documentId && binding.scope === record?.scope
       && binding.entityId === (record?.entityId ?? null));
-    const sameDestination = Boolean(binding?.ownerDocumentKey && binding.ownerDocumentKey === record?.destinationOwnerDocumentKey
+    const sameDestination = Boolean(binding?.serviceDocumentKey && binding.serviceDocumentKey === record?.destinationServiceDocumentKey
       && binding.documentId === record?.destinationDocumentId && binding.scope === "document");
     if (!record || record.status !== "approved" || (![record.sessionId, record.destinationSessionId].includes(sessionId) && !sameSource && !sameDestination)) {
       throw new Error("Prepare an architecture review and obtain its approval before creating content or changing architecture. Supply architecture_review_id.");
@@ -161,19 +170,19 @@ export class ProductState {
   getSourceCreation(requestId: string): SourceCreationRequest | null {
     const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE request_id=?")
       .get(requestId) as { request_json: string } | undefined;
-    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+    return row ? parseProductRecord(row.request_json) as SourceCreationRequest : null;
   }
 
   sourceCreationForCall(sessionId: string, callId: string): SourceCreationRequest | null {
     const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE source_session_id=? AND call_id=?")
       .get(sessionId, callId) as { request_json: string } | undefined;
-    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+    return row ? parseProductRecord(row.request_json) as SourceCreationRequest : null;
   }
 
   sourceCreationForArchitecture(reviewId: string): SourceCreationRequest | null {
     const row = this.database.prepare("SELECT request_json FROM source_creation_requests WHERE json_extract(request_json,'$.architectureReviewId')=? AND status<>'cancelled' ORDER BY rowid DESC LIMIT 1")
       .get(reviewId) as { request_json: string } | undefined;
-    return row ? JSON.parse(row.request_json) as SourceCreationRequest : null;
+    return row ? parseProductRecord(row.request_json) as SourceCreationRequest : null;
   }
 
   storeSourceCreation(request: SourceCreationRequest): void {
@@ -238,12 +247,12 @@ export class ProductState {
   }
 
   createBinding(sessionId: string, input: BindingInput & {
-    ownerUrl: string;
+    serviceUrl: string;
     workspaceKey: string;
     workspaceTitle: string;
     workspacePath: string;
     workspaceDomain: "spec" | "circuit";
-    workspaceOwnerUrl: string;
+    workspaceServiceUrl: string;
     workspaceDocumentId: string;
   }): SessionBinding {
     const timestamp = now();
@@ -254,12 +263,12 @@ export class ProductState {
     this.database.prepare(`
       INSERT INTO bindings(session_id,status,preset,domain,owner_url,document_id,scope,entity_kind,entity_id,title,workspace_key,workspace_title,workspace_path,workspace_domain,workspace_owner_url,workspace_document_id,created_at,updated_at,owner_document_key)
       VALUES(?, 'creating', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(sessionId, input.preset ?? "focused", input.domain, input.ownerUrl, input.documentId, scope,
+    `).run(sessionId, input.preset ?? "focused", input.domain, input.serviceUrl, input.documentId, scope,
       input.entityKind ?? null, input.entityId ?? null,
       input.title?.trim() || input.sourceName || (input.domain === "spec" ? "Specification" : "Circuit"),
       input.workspaceKey, input.workspaceTitle, input.workspacePath,
-      input.workspaceDomain, input.workspaceOwnerUrl, input.workspaceDocumentId,
-      timestamp, timestamp, input.ownerDocumentKey ?? null);
+      input.workspaceDomain, input.workspaceServiceUrl, input.workspaceDocumentId,
+      timestamp, timestamp, input.serviceDocumentKey ?? null);
     if (input.sourceName) this.refreshSourceName(sessionId, input.sourceName);
     return this.getBinding(sessionId)!;
   }
@@ -305,10 +314,10 @@ export class ProductState {
     this.database.prepare("UPDATE bindings SET updated_at=? WHERE session_id=?").run(now(), sessionId);
   }
 
-  pinOwnerDocument(sessionId: string, key: string): void {
+  pinServiceDocument(sessionId: string, key: string): void {
     const binding = this.getBinding(sessionId);
     if (!binding || binding.domain !== "spec") throw new Error("Unknown Spec binding.");
-    if (binding.ownerDocumentKey && binding.ownerDocumentKey !== key) throw new Error("A chat cannot switch package bindings.");
+    if (binding.serviceDocumentKey && binding.serviceDocumentKey !== key) throw new Error("A chat cannot switch package bindings.");
     this.database.prepare("UPDATE bindings SET owner_document_key=? WHERE session_id=?").run(key, sessionId);
   }
 
@@ -337,7 +346,7 @@ export class ProductState {
       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `).run(input.proposalId, input.sessionId, input.callId, input.domain, input.state,
       input.baseRevision, json(input.artifact), digest, json(input.preview), json(input.diagnostics),
-      json(input.error), json(input.ownerResult), timestamp, timestamp);
+      json(input.error), json(input.serviceResult), timestamp, timestamp);
     this.touchBinding(input.sessionId);
     return this.getReview(input.sessionId, input.proposalId)!;
   }
@@ -374,7 +383,7 @@ export class ProductState {
     // Pending Spec artifacts stay pending until an explicit decision. The
     // owner revalidates their original revision at approval time.
     const stale = this.listReviews(sessionId).filter(review => review.domain !== "spec" && review.baseRevision !== revision && ["ready", "rejected"].includes(review.state));
-    const detail = "The owner revision changed after this preview.";
+    const detail = "The service revision changed after this preview.";
     for (const review of stale) {
       this.transitionReview(sessionId, review.proposalId, [review.state], "stale", {
         diagnostics: detail,
@@ -389,7 +398,7 @@ export class ProductState {
     proposalId: string,
     expected: ReviewState[],
     state: ReviewState,
-    values: { preview?: unknown; diagnostics?: unknown; error?: unknown; ownerResult?: unknown } = {},
+    values: { preview?: unknown; diagnostics?: unknown; error?: unknown; serviceResult?: unknown } = {},
   ): ProposalReview {
     const current = this.getReview(sessionId, proposalId);
     if (!current) throw new Error("Unknown proposal review.");
@@ -403,7 +412,7 @@ export class ProductState {
       values.preview === undefined ? json(current.preview) : json(values.preview),
       values.diagnostics === undefined ? json(current.diagnostics) : json(values.diagnostics),
       values.error === undefined ? json(current.error) : json(values.error),
-      values.ownerResult === undefined ? json(current.ownerResult) : json(values.ownerResult),
+      values.serviceResult === undefined ? json(current.serviceResult) : json(values.serviceResult),
       now(), sessionId, proposalId, current.version);
     if (result.changes !== 1) throw new Error("Review changed concurrently; reload and retry.");
     this.touchBinding(sessionId);
@@ -414,8 +423,8 @@ export class ProductState {
     return {
       sessionId: String(row.session_id), status: row.status as SessionBinding["status"],
       preset: (row.preset ?? "focused") as SessionBinding["preset"],
-      domain: row.domain as SessionBinding["domain"], ownerUrl: String(row.owner_url),
-      ownerDocumentKey: typeof row.owner_document_key === "string" ? row.owner_document_key : null,
+      domain: row.domain as SessionBinding["domain"], serviceUrl: String(row.owner_url),
+      serviceDocumentKey: typeof row.owner_document_key === "string" ? row.owner_document_key : null,
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),
       entityId: row.entity_id === null ? null : String(row.entity_id), title: String(row.title),
@@ -423,7 +432,7 @@ export class ProductState {
       workspaceKey: String(row.workspace_key), workspaceTitle: String(row.workspace_title),
       workspacePath: String(row.workspace_path),
       workspaceDomain: row.workspace_domain as SessionBinding["workspaceDomain"],
-      workspaceOwnerUrl: String(row.workspace_owner_url), workspaceDocumentId: String(row.workspace_document_id),
+      workspaceServiceUrl: String(row.workspace_owner_url), workspaceDocumentId: String(row.workspace_document_id),
       archived: Boolean(row.archived), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     };
   }
@@ -434,7 +443,7 @@ export class ProductState {
       domain: row.domain as ProposalReview["domain"], state: row.state as ReviewState,
       baseRevision: String(row.base_revision), artifact: parse(row.artifact_json) as Record<string, unknown>,
       artifactDigest: String(row.artifact_digest), preview: parse(row.preview_json) as Record<string, unknown> | null,
-      diagnostics: parse(row.diagnostics_json), error: parse(row.error_json) as ProposalReview["error"], ownerResult: parse(row.owner_result_json),
+      diagnostics: parse(row.diagnostics_json), error: parse(row.error_json) as ProposalReview["error"], serviceResult: parse(row.owner_result_json),
       version: Number(row.version), createdAt: String(row.created_at), updatedAt: String(row.updated_at),
     };
   }

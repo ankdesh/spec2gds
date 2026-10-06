@@ -1,12 +1,12 @@
 import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
-/** Recoverable Spec package creation and separate continuation-chat reservation.
- * Persist exact request inputs/progress before owner calls. Package creation and
- * native chat creation are separate side effects; uncertainty needs receipt
+/** Recoverable Spec package creation and separate continuation conversation reservation.
+ * Persist exact request inputs/progress before service calls. Package creation and
+ * native conversation creation are separate side effects; uncertainty needs receipt
  * reconciliation using stable identities rather than a second package request. */
 import { randomUUID } from "node:crypto";
 import { dirname, resolve, sep } from "node:path";
 import { type InstructionBundle } from "./instructions.js";
-import { normalizeSpecUrl, OwnerClients, OwnerError } from "./owner-clients.js";
+import { normalizeSpecUrl, ServiceClients, ServiceError } from "./service-clients.js";
 import { ProductState } from "./state.js";
 import type { AssistantPreset, BindingInput, SourceCreationRequest, SessionBinding, WorkspaceDescriptor } from "./types.js";
 import { filenameStem } from "./naming.js";
@@ -38,7 +38,7 @@ export class SourceCreations {
   readonly root: string;
   private readonly reserving = new Set<string>();
 
-  constructor(readonly state: ProductState, readonly owners: OwnerClients, root: string, private readonly reserve: Reserve, private readonly snapshots?: InstructionSnapshots) {
+  constructor(readonly state: ProductState, readonly owners: ServiceClients, root: string, private readonly reserve: Reserve, private readonly snapshots?: InstructionSnapshots) {
     this.root = resolve(root);
   }
 
@@ -70,7 +70,7 @@ export class SourceCreations {
         this.state.requireArchitecture(input.sourceSessionId, input.architectureReviewId, context.source_revision_hash);
       }
     }
-    if (!input.originalRequest.trim()) throw new SourceCreationError(400, "The original user request is unavailable. Submit the request again in this chat.");
+    if (!input.originalRequest.trim()) throw new SourceCreationError(400, "The original designer request is unavailable. Submit the request again in this conversation.");
     const capabilities = await this.owners.capabilities();
     const services = capabilities.spec as Array<{ url: string; available: boolean }>;
     const selected = services.find(item => item.url === input.preferredOwner && item.available)
@@ -109,7 +109,7 @@ export class SourceCreations {
     const request = this.get(requestId);
     if (request.status === "continued") return request;
     if (request.status !== "reserved" || this.state.getBinding(request.destinationSessionId)?.status !== "active") {
-      throw new SourceCreationError(409, "Activate the specification chat before acknowledging its continuation.");
+      throw new SourceCreationError(409, "Activate the Spec conversation before acknowledging its continuation.");
     }
     const continued = { ...request, status: "continued" as const, error: null };
     this.state.storeSourceCreation(continued);
@@ -133,7 +133,7 @@ export class SourceCreations {
         throw new SourceCreationError(409, "Retry uncertain creation with exactly the saved request details.");
       }
       if (!(await this.owners.specPolicy(request.serviceBaseUrl)).creationReceipts) {
-        throw new SourceCreationError(409, "The owner cannot replay this creation receipt safely.");
+        throw new SourceCreationError(409, "The Spec service cannot replay this creation receipt safely.");
       }
       if (!this.state.retrySourceCreation(request)) throw new SourceCreationError(409, "Creation retry is already in progress. Reload the card.");
       request = this.get(requestId);
@@ -144,7 +144,7 @@ export class SourceCreations {
     if (request.status === "pending") {
       const documentId = values.documentId.trim();
       const title = values.title.trim();
-      if (!title) throw new SourceCreationError(400, "Specification title is required.");
+      if (!title) throw new SourceCreationError(400, "Spec title is required.");
       const destination = specDestination(this.root, documentId, title);
       let serviceBaseUrl: string;
       try { serviceBaseUrl = normalizeSpecUrl(values.serviceBaseUrl, this.owners.specAllowlist); }
@@ -160,14 +160,14 @@ export class SourceCreations {
       try {
         const snapshot = await this.owners.createSpec(serviceBaseUrl, destination, documentId, title, request.requestId);
         if (snapshot.document_id !== documentId || typeof snapshot.source_revision_hash !== "string") {
-          throw new OwnerError(502, "The owner creation response did not identify the requested specification.", true);
+          throw new ServiceError(502, "The Spec service creation response did not identify the requested specification.", true);
         }
         request = { ...request, status: "created", sourceRevisionHash: snapshot.source_revision_hash,
           destination: typeof snapshot.source_path === "string" ? snapshot.source_path : destination,
-          ownerDocumentKey: typeof snapshot.owner_document_key === "string" ? snapshot.owner_document_key : undefined };
+          serviceDocumentKey: typeof snapshot.owner_document_key === "string" ? snapshot.owner_document_key : undefined };
         this.state.storeSourceCreation(request);
       } catch (error) {
-        const uncertain = !(error instanceof OwnerError) || error.uncertain;
+        const uncertain = !(error instanceof ServiceError) || error.uncertain;
         const details = error instanceof Error ? error.message : String(error);
         this.state.storeSourceCreation({ ...request, status: uncertain ? "uncertain" : "pending",
           error: uncertain ? (request.creationReceipts
@@ -181,35 +181,35 @@ export class SourceCreations {
     }
 
     if (request.status === "created") {
-      if (this.reserving.has(requestId)) throw new SourceCreationError(409, "Chat setup is already in progress. Reload the card shortly.");
+      if (this.reserving.has(requestId)) throw new SourceCreationError(409, "Conversation setup is already in progress. Reload the card shortly.");
       this.reserving.add(requestId);
       try {
         const stored = this.state.getBinding(request.destinationSessionId);
         let reservation: Reservation;
         if (stored) {
-          if (stored.domain !== "spec" || stored.documentId !== request.documentId || stored.ownerUrl !== request.serviceBaseUrl) {
-            throw new SourceCreationError(409, "The reserved chat does not match the created specification.");
+          if (stored.domain !== "spec" || stored.documentId !== request.documentId || stored.serviceUrl !== request.serviceBaseUrl) {
+            throw new SourceCreationError(409, "The reserved conversation does not match the created specification.");
           }
           reservation = { session: stored, workspace: {
             key: stored.workspaceKey, title: stored.workspaceTitle, path: stored.workspacePath,
-            domain: stored.workspaceDomain, ownerUrl: stored.workspaceOwnerUrl, documentId: stored.workspaceDocumentId,
+            domain: stored.workspaceDomain, serviceUrl: stored.workspaceServiceUrl, documentId: stored.workspaceDocumentId,
           } };
         } else {
           this.snapshots?.pin(request.destinationSessionId, request.sourceSessionId);
           const result = await this.reserve({ domain: "spec", serviceBaseUrl: request.serviceBaseUrl,
-            documentId: request.documentId, ownerDocumentKey: request.ownerDocumentKey, title: request.title, scope: "document", preset: request.preset }, request.destinationSessionId, request.sourceSessionId);
+            documentId: request.documentId, serviceDocumentKey: request.serviceDocumentKey, title: request.title, scope: "document", preset: request.preset }, request.destinationSessionId, request.sourceSessionId);
           reservation = { session: result.binding, workspace: result.workspace };
         }
         if (request.architectureReviewId) {
           const architecture = this.state.requireArchitecture(request.sourceSessionId, request.architectureReviewId);
           this.state.storeArchitecture({ ...architecture, destinationSessionId: request.destinationSessionId,
-            destinationSourceRevision: request.sourceRevisionHash, destinationOwnerDocumentKey: request.ownerDocumentKey ?? null,
+            destinationSourceRevision: request.sourceRevisionHash, destinationServiceDocumentKey: request.serviceDocumentKey ?? null,
             destinationDocumentId: request.documentId });
         }
         request = { ...request, status: "reserved", reservation, error: null };
         this.state.storeSourceCreation(request);
       } catch (error) {
-        this.state.storeSourceCreation({ ...request, error: `The package was saved at ${request.destination}, but chat setup failed: ${error instanceof Error ? error.message : String(error)}. Reopen that package in the Spec Editor if necessary, then retry this card.` });
+        this.state.storeSourceCreation({ ...request, error: `The package was saved at ${request.destination}, but conversation setup failed: ${error instanceof Error ? error.message : String(error)}. Reopen that package in the Spec Editor if necessary, then retry this card.` });
         throw error;
       } finally { this.reserving.delete(requestId); }
     }

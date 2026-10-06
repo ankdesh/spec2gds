@@ -47,7 +47,7 @@ adapter is bundled. The default registry contains
 The reference plugin emits `test-ir.json`, `target-bindings.json`, `recipe.md`,
 `producer-manifest.json`, `synthetic-result-template.json` and
 `validation-report.json`. Its manifest says `executable: false` and
-`produces_hdl: false`. The synthetic template must remain fixture evidence.
+`produces_rtl: false`. The synthetic template must remain fixture evidence.
 
 `OutputWriter` holds bytes in memory, refuses absolute/traversing or duplicate
 artifact paths and limits total bytes. It is an artifact capability, not an

@@ -5,16 +5,16 @@ import argparse
 import json
 from pathlib import Path
 
-from spec2gds.agent_spec.activities import (
+from spec2gds.spec.activities import (
     ActivitySnapshot,
-    LocalActivityWorkspace,
+    LocalActivityScratchDirectory,
     SpecExtensionRegistry,
     activity_availability,
     invoke_activity,
 )
-from spec2gds.agent_spec.activities.rtl import register_extensions
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.naming import entity_name, select_entity
+from spec2gds.spec.activities.rtl import register_extensions
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.naming import entity_name, select_entity
 
 
 def select_target(revision: SpecRevision, selection: str | None):
@@ -50,7 +50,7 @@ def main() -> int:
             print(diagnostic)
     if not availability.available:
         return 2
-    result = invoke_activity(registry, "rtl.generate", snapshot, LocalActivityWorkspace(args.workspace.resolve()))
+    result = invoke_activity(registry, "rtl.generate", snapshot, LocalActivityScratchDirectory(args.workspace.resolve()))
     if args.json:
         print(json.dumps(result.report, indent=2))
     else:

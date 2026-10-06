@@ -1,4 +1,4 @@
-"""Testplan Service - Self-contained hierarchical testplan manager and editor."""
+"""Verification Planner - Self-contained hierarchical Test Plan manager and editor."""
 
 from __future__ import annotations
 

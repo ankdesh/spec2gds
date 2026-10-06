@@ -1,4 +1,4 @@
-/** Versioned HTTP client for Circuit owner operations and event subscriptions.
+/** Versioned HTTP client for Circuit service operations and event subscriptions.
  * Transport success is distinct from an accepted domain result. Callers retain
  * expected revisions, lease identities and request IDs across retries; this
  * adapter does not grant a fresh revision after a conflict. */

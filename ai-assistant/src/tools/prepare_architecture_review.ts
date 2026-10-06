@@ -4,11 +4,11 @@ import type { ToolArguments } from "../tool-arguments.js";
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import { artifactDigest, ProductState } from "../state.js";
-import type { OwnerClients } from "../owner-clients.js";
+import type { ServiceClients } from "../service-clients.js";
 import { isRecord } from "../types.js";
 export function registerArchitectureTool(
   agent: { id: string; ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } } },
-  state: ProductState, owners: OwnerClients, currentRequest: () => string,
+  state: ProductState, owners: ServiceClients, currentRequest: () => string,
   onPrepared?: (record: Record<string, any>) => Promise<void>,
   instructions: InstructionBundle = defaultInstructions,
 ): void {
@@ -66,7 +66,7 @@ export function registerArchitectureTool(
           }
           record = { reviewId: randomUUID(), sessionId: String(agent.id), callId: String(exec.callId), status: "pending",
             plan: args, digest: artifactDigest(args), originalRequest,
-            documentId: binding?.documentId ?? null, ownerDocumentKey: context?.owner_document_key ?? binding?.ownerDocumentKey ?? null,
+            documentId: binding?.documentId ?? null, serviceDocumentKey: context?.owner_document_key ?? binding?.serviceDocumentKey ?? null,
             scope: binding?.scope ?? null, entityId: binding?.entityId ?? null,
             sourceRevision: context?.source_revision_hash ?? null, createdAt: new Date().toISOString() };
           state.storeArchitecture(record);

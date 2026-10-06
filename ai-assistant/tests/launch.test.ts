@@ -245,7 +245,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
       if (url === "/spec2gds-api/bindings/bound-session") return { session: {
         sessionId: "bound-session", preset: "focused", workspaceKey: "workspace-1", workspaceTitle: "Bound design",
         workspacePath: "/tmp/bound-design", workspaceDomain: "spec",
-        workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
+        workspaceServiceUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
       } };
       return {};
     } }),

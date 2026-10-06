@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, HTTPException
 
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.domain.recipes import BackendConfiguration, Recipe, TargetBindingSet
 from testplan_service.exceptions import PlanNotFoundError, RecordNotFoundError
 
 
-def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_recipes_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating recipes and implementation authoring endpoints."""
     router = APIRouter(tags=["Recipes & Implementation"])
 
@@ -18,7 +19,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     def validate_recipe(
         plan_id: str,
         recipe_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Validate a recipe against Core Validation Order and capability rules without mutating state."""
         try:
@@ -37,7 +38,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     @router.get("/plans/{plan_id}/recipes", response_model=list[Recipe])
     def list_recipes(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[Recipe]:
         """List all active recipes in a plan."""
         return service.get_recipes(plan_id)
@@ -46,7 +47,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     def get_recipe(
         plan_id: str,
         recipe_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Recipe:
         """Get an individual recipe by ID."""
         recipe = service.get_recipe(plan_id, recipe_id)
@@ -60,7 +61,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     @router.get("/plans/{plan_id}/binding-sets", response_model=list[TargetBindingSet])
     def list_binding_sets(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[TargetBindingSet]:
         """List all target signal binding sets for a plan."""
         return service.get_binding_sets(plan_id)
@@ -69,7 +70,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     def get_binding_set(
         plan_id: str,
         binding_set_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> TargetBindingSet:
         """Get a single target binding set by ID."""
         bnd = service.get_binding_set(plan_id, binding_set_id)
@@ -83,7 +84,7 @@ def create_recipes_router(get_service: Callable[[], TestPlanService]) -> APIRout
     @router.get("/plans/{plan_id}/backend-configurations", response_model=list[BackendConfiguration])
     def list_backend_configurations(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[BackendConfiguration]:
         """List all saved backend toolchain configurations for a plan."""
         return service.get_backend_configurations(plan_id)

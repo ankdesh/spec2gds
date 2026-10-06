@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from spec2gds.agent_spec.activities import ActivitySnapshot
-from spec2gds.agent_spec.spec_format.archive import SpecPackage
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
-
+from spec2gds.spec.activities import ActivitySnapshot
+from spec2gds.spec.spec_format.archive import SpecPackage
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.models import EntityRef, NarrativeBlock
 from testplan_service.fixtures.fifo_snapshot import _fifo_component_xml
 
 _NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"

@@ -68,7 +68,7 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     writable: binding.writable,
     capabilities: binding.capabilities,
     message: binding.message,
-    saveLabel: "Save to Specification",
+    saveLabel: "Save to Spec",
     draftLabel: "Specification draft",
     boundLabel: "Specification bound",
     identifierPattern: "^[A-Za-z_][A-Za-z0-9_.-]*$",

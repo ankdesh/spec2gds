@@ -27,7 +27,7 @@ stable. Do not reuse a removed ID for another rule.
 | --- | --- |
 | Spec | The logical design document shown in Spec Editor. |
 | `.spec` file | The physical archive that stores IP-XACT, narrative, and assets. |
-| Component | An interface and its implementation. A leaf has stored RTL; a composite owns an internal design. |
+| Component | An interface and its implementation. A leaf has SystemVerilog section; a composite contains an internal design. |
 | Design | Structured composition: component instances and connections. |
 | Service | The service that validates and saves its document. |
 | Binding | The permanent service, document identity, and writable scope of one conversation. |
@@ -185,11 +185,11 @@ state, not as an untracked replacement proposal.
 
 **AS-09 — Architecture approval for Spec content.** Require human architecture
 approval before new hardware content is added, structural changes are made, or
-stored RTL is changed. This includes target creation/deletion, ports, parameters that affect
+SystemVerilog section is changed. This includes target creation/deletion, ports, parameters that affect
 interfaces or behavior, bus interfaces, channels, internal designs, instances,
 and connections. It also includes initial RTL and RTL-only refinement.
 
-Treat a stored RTL body change as an RTL edit. Do not assume semantic equivalence
+Treat a SystemVerilog section change as an RTL edit. Do not assume semantic equivalence
 to bypass approval. Removing presentation fences before storage is formatting
 admission, not another RTL edit. A proposal that changes only narrative,
 description, or display metadata needs no architecture approval. Text edits must
@@ -466,9 +466,9 @@ responsibilities and interfaces. A general preference for cohesive counters must
 not override an explicit request for a control/register hierarchy. Present that
 choice for architecture approval.
 
-Stored SV defines implemented behavior. Structured ports/designs define interface
+SV section defines implemented behavior. Structured ports/designs define interface
 and wiring. Description and requirements define intent and guide implementation.
-Read stored SV/wiring before describing existing behavior. Report disagreements
+Read SV section/wiring before describing existing behavior. Report disagreements
 between implementation and text; preserve both until the user requests a change.
 Explain purpose, interface behavior, timing, reset, state, corner cases, and
 assumptions. Composite descriptions explain child responsibilities. Link authored
@@ -477,7 +477,7 @@ the relevant targets. Preserve unrelated authored text and paragraph breaks.
 
 Generation must not interpret prose or silently synchronize RTL. Text-only edits
 leave generated SV bytes unchanged, although provenance can change. No functional
-stored RTL means unimplemented. A compile-safe scaffold is not a functional
+SystemVerilog section means unimplemented. A compile-safe scaffold is not a functional
 implementation. Validation must follow stable target identity even if metadata
 changes the display name in the same batch.
 
@@ -490,7 +490,7 @@ design. One composite component owns its internal design. Composite ports remain
 subject to the service's read-only restrictions; architecture approval does not
 remove them.
 
-The RTL generator accepts component/design targets, emits only reachable hierarchy,
+The RTL generation Activity accepts component/design targets, emits only reachable hierarchy,
 and emits one module per reused definition. Numeric endpoint slices use
 `{lsb,width}`; unsliced boundary strings remain compatible. Validate bounds,
 effective widths, overlap, and drivers. Preserve unconnected-port warnings.
@@ -502,7 +502,7 @@ CLI generation targets use exact target IDs or full VLNVs. Unknown/ambiguous tar
 fail. An omitted target requires one entry design. Reports retain target,
 implementation status, consumed-section/target provenance, and source revision.
 V3 reports/manifests and saved V2 records remain distinct. Use the
-[RTL generation reference](rtl-generation-activity.md) for the generator API.
+[RTL generation reference](rtl-generation-activity.md) for the Activity API.
 
 ## 6. Prompts, failures, and visible state
 
@@ -565,7 +565,7 @@ summaries and exact stored artifacts for diffs. Put internal IDs/hashes in techn
 details; keep useful hardware names visible. A model's success sentence is not a
 saved-state indicator.
 
-## 7. Execution, persistence, and Circuit ownership
+## 7. Execution, persistence, and Circuit serviceship
 
 <a id="as-21"></a>
 

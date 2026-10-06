@@ -16,7 +16,7 @@ remain in Git.
 
 ## Specification editing and Activities
 
-- [Editor UI](editor-ui.md), [entity sections/SystemVerilog](entity-sections.md),
+- [Editor UI](editor-ui.md), [entity sections/SystemVerilog](component-sections.md),
   and [owner refinement, live views, and drafts](spec-editor-iterative-refinement.md)
 - [Activity Snapshot v1](activity-snapshot-v1.md) and [Activity SDK](activity-sdk.md)
 - [RTL generation](rtl-generation-activity.md), [RTL semantics examples](rtl-semantics-examples.md)
@@ -38,7 +38,7 @@ not grant capabilities or establish current product behavior.
 
 ## Circuit Designer
 
-- [Spec/Circuit ownership and flow diagrams](spec-circuit-integration-architecture.md)
+- [Spec/Circuit serviceship and flow diagrams](spec-circuit-integration-architecture.md)
   and [specification synchronization](circuit-designer-spec-sync.md)
 - [Interactions](circuit-designer-interactions.md), [preferences](circuit-designer-preferences.md)
   and [timing stages](circuit-designer-timing-stages.md)
@@ -47,7 +47,7 @@ not grant capabilities or establish current product behavior.
 
 ## Verification Planner
 
-- [Architecture](testplan-service-architecture.md) and [service operation](verification-service-overall.md)
+- [Architecture](verification-planner-architecture.md) and [service operation](verification-service-overall.md)
 - [Layer 1: Test Plan](verification-layer-1-test-plan.md)
 - [Layer 2: Coverage and Evidence](verification-layer-2-coverage.md)
 - [Layer 3: Recipes and reference generation](verification-layer-3-implementation.md)

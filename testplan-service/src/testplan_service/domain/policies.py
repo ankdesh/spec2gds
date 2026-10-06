@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from testplan_service.constants import MAX_TEXT_LENGTH, MAX_TITLE_LENGTH
 
@@ -58,7 +59,7 @@ class IntentWaiver(BaseModel):
     profile_ids: list[str] = Field(default_factory=list)
     checkpoint_id: str
     reason: str = Field(min_length=1, max_length=MAX_TEXT_LENGTH)
-    owner_label: str
+    designer_label: str = Field(validation_alias=AliasChoices("designer_label", "owner_label"))
     expires_at: str  # ISO 8601 UTC
     milestone_label: str | None = None
     supporting_evidence_ids: list[str] = Field(default_factory=list)

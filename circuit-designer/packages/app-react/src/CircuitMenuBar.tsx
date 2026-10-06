@@ -48,7 +48,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
   const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || tools.length).map((menu) => ({
     ...menu,
     entries: menu.id === "tools" ? toolMenuEntries(tools) : menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
-      ? { ...entry, label: sourceSaveLabel ?? "Save to Source" }
+      ? { ...entry, label: sourceSaveLabel ?? "Save to Spec" }
       : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
       : entry.kind === "action" && entry.commandId === "toggle-timing-overlay"

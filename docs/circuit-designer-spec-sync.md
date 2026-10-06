@@ -5,7 +5,7 @@ For a diagram-led explanation of the complete structure and request flow, see
 
 Circuit Designer can edit a design whose authoritative source is an open
 `.spec` package. The Circuit service still keeps only an ephemeral working
-session: **Save to Specification** is the durable write boundary and the Spec
+session: **Save to Spec** is the durable write boundary and the Spec
 API remains the owner of IP-XACT.
 
 Leaf components without an internal design are previews and remain read-only.
@@ -14,14 +14,14 @@ internal design receive a writable source binding.
 
 ## Start the services
 
-Install the Python and JavaScript workspaces, then start the combined stack:
+Install the Python environment and JavaScript npm packages, then start the combined stack:
 
 ```bash
 scripts/setup-all.sh
 scripts/serve-all.sh start
 ```
 
-Open a `.spec` package in the Specification Editor. Use a design section's
+Open a `.spec` package in the Spec Editor. Use a design section's
 **Open Circuit Designer** preview action, **Options → Open circuit**, or the
 top-level **Circuit** menu. The Spec API projects the immutable source revision,
 creates or refreshes a stable Circuit session, and registers a server-to-server
@@ -33,7 +33,7 @@ blocked unless explicitly allowlisted by the embedding service.
 ## Edit and save
 
 Choose **Edit → Begin Editing**, make topology or layout changes, and use
-**File → Save to Specification**, its configured shortcut, or the compact
+**File → Save to Spec**, its configured shortcut, or the compact
 header button shown for a dirty draft. Supported source edits include:
 
 - placing package components and creating or deleting instances;
@@ -53,7 +53,7 @@ session with the authoritative re-projection, release the edit lease, and leave
 edit mode.
 
 The Spec API publishes `source.changed` after the package commit. A
-Specification Editor with no local form open refreshes its tables and derived
+Spec Editor with no local form open refreshes its tables and derived
 SVG immediately. If an inline form has unsaved input, the editor preserves it
 and offers an explicit refresh instead.
 
@@ -74,7 +74,7 @@ rejected. Circuit Designer keeps the entire private draft and shows:
 
 - **Reopen Latest**, which discards the private draft and re-projects the
   current `.spec` revision; and
-- **Download Circuit JSON**, which saves the stale candidate for inspection or
+- **Download Draft JSON**, which saves the stale candidate for inspection or
   manual recovery.
 
 There is no automatic rebase and no force-overwrite path. The first successful

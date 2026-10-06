@@ -1,4 +1,4 @@
-"""Build the RTL examples and publish them to the configured Activity workspace."""
+"""Build the RTL examples and publish them to the configured Activity scratch directory."""
 
 from __future__ import annotations
 
@@ -7,23 +7,23 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from spec2gds.agent_spec.activities import (
+from spec2gds.service_registry import load_service_registry
+from spec2gds.spec.activities import (
     ActivitySnapshot,
-    LocalActivityWorkspace,
+    LocalActivityScratchDirectory,
     SpecExtensionRegistry,
     invoke_activity,
 )
-from spec2gds.agent_spec.activities.rtl import register_extensions
-from spec2gds.agent_spec.spec_format.archive import SpecPackage
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.models import EntityRef
-from spec2gds.agent_spec.spec_format.naming import generated_path
-from spec2gds.agent_spec.spec_format.sections import (
+from spec2gds.spec.activities.rtl import register_extensions
+from spec2gds.spec.spec_format.archive import SpecPackage
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.models import EntityRef
+from spec2gds.spec.spec_format.naming import generated_path
+from spec2gds.spec.spec_format.sections import (
     SECTION_NAMESPACE,
     SECTION_ROOT,
     upsert_systemverilog_section,
 )
-from spec2gds.service_registry import load_service_registry
 
 ROOT = Path(__file__).resolve().parents[1]
 BASE_SPEC = ROOT / "samples/minimal/single_component.spec"
@@ -147,7 +147,7 @@ def generate_project(package: SpecPackage, workspace_root: Path) -> Path:
         registry,
         "rtl.generate",
         ActivitySnapshot.create(revision, target.ref),
-        LocalActivityWorkspace(workspace_root),
+        LocalActivityScratchDirectory(workspace_root),
     )
     return workspace_root / result.report["output_path"]
 
@@ -170,7 +170,7 @@ def expected_tree(package: SpecPackage) -> dict[str, bytes]:
 
 
 def configured_project(package: SpecPackage, workspace_root: Path) -> Path:
-    """Resolve the generator-owned location for one example package."""
+    """Resolve the Activity-managed location for one example package."""
     revision = SpecRevision.from_package(package)
     target = revision.entry_designs()[0]
     return workspace_root / generated_path(revision, target.ref, "rtl")
@@ -186,8 +186,8 @@ def update_examples() -> None:
         legacy = f"rtl/{revision.document_id}/{target.entity_id}"
         current = generated_path(revision, target, "rtl")
         if (workspace_root / legacy).exists() and not (workspace_root / current).exists():
-            LocalActivityWorkspace(workspace_root).move_owned_directory(
-                legacy, current, generator_id="rtl.generate",
+            LocalActivityScratchDirectory(workspace_root).move_owned_directory(
+                legacy, current, activity_id="rtl.generate",
                 document_id=revision.document_id, design_id=target.entity_id,
             )
         package.save(str(example.spec_path))
@@ -224,7 +224,7 @@ def main() -> int:
     mode.add_argument(
         "--update",
         action="store_true",
-        help="rewrite packages and publish to the configured Activity workspace",
+        help="rewrite packages and publish to the configured Activity scratch directory",
     )
     arguments = parser.parse_args()
     if arguments.update:

@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import Any
-from pydantic import BaseModel, ConfigDict, Field
+
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from testplan_service.constants import (
     MAX_TAG_LENGTH,
@@ -30,7 +31,7 @@ class SourceLocator(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     snapshot_id: str
-    entity_ref: dict[str, str]
+    target_ref: dict[str, str] = Field(validation_alias=AliasChoices("target_ref", "entity_ref"))
     section_id: str
     text_range: tuple[int, int] | None = None
     quoted_text: str | None = None
@@ -172,7 +173,7 @@ class PlanHeader(BaseModel):
     description: str = Field(default="", max_length=MAX_TEXT_LENGTH)
     snapshot_id: str
     root_scope_id: str
-    owner_label: str | None = None
+    designer_label: str | None = Field(default=None, validation_alias=AliasChoices("designer_label", "owner_label"))
     tags: list[str] = Field(default_factory=list, max_length=MAX_TAGS_COUNT)
     source_audit: dict[str, SourceAuditEntry] = Field(default_factory=dict)
     schema_version: str = SCHEMA_VERSION_PLAN

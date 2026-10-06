@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from spec2gds.agent_spec.activities import ActivitySnapshot
-from spec2gds.agent_spec.spec_format.archive import SpecPackage
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.models import EntityRef, NarrativeBlock
+from spec2gds.spec.activities import ActivitySnapshot
+from spec2gds.spec.spec_format.archive import SpecPackage
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.models import EntityRef, NarrativeBlock
 
 _NS = "http://www.accellera.org/XMLSchema/IPXACT/1685-2022"
 

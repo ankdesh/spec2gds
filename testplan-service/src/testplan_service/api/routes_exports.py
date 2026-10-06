@@ -7,8 +7,8 @@ from typing import Callable, Literal
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel, ConfigDict
 
-from spec2gds.agent_spec.spec_format.naming import filename_stem
-from testplan_service.application.service import TestPlanService
+from spec2gds.spec.spec_format.naming import filename_stem
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.exceptions import PlanNotFoundError
 
 router = APIRouter()
@@ -19,7 +19,7 @@ class ExportPlanRequest(BaseModel):
     format: Literal["bundle", "markdown", "csv"] = "bundle"
 
 
-def create_exports_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_exports_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating plan export endpoints."""
     exports_router = APIRouter(tags=["Exports"])
 
@@ -27,7 +27,7 @@ def create_exports_router(get_service: Callable[[], TestPlanService]) -> APIRout
     def export_plan(
         plan_id: str,
         payload: ExportPlanRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Response:
         """Export plan as portable .vplan bundle, Markdown document, or CSV table."""
         try:

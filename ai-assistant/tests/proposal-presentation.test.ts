@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OwnerError } from "../src/owner-clients.js";
+import { ServiceError } from "../src/service-clients.js";
 import {
   changeSummaryFor,
   errorCodeForOwnerStatus,
@@ -12,10 +12,10 @@ import {
 import type { ProposalReview, SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit"): SessionBinding => ({
-  sessionId: "session-1", status: "active", preset: "focused", domain, ownerUrl: "http://owner", documentId: "doc-1", scope: "document",
+  sessionId: "session-1", status: "active", preset: "focused", domain, serviceUrl: "http://owner", documentId: "doc-1", scope: "document",
   entityKind: null, entityId: null, title: "Test", sourceName: "Test design", archived: false, createdAt: "", updatedAt: "",
   workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
-  workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",
+  workspaceDomain: domain, workspaceServiceUrl: "http://owner", workspaceDocumentId: "doc-1",
 });
 
 function review(domain: "spec" | "circuit", overrides: Partial<ProposalReview> = {}): ProposalReview {
@@ -24,7 +24,7 @@ function review(domain: "spec" | "circuit", overrides: Partial<ProposalReview> =
     artifact: domain === "spec"
       ? { operations: [{ type: "create_entity" }, { type: "create_entity" }], assumptions: ["Clock is synchronous."] }
       : { batch: { operations: [{ type: "add_instance" }, { type: "create_net" }] }, assumptions: [] },
-    artifactDigest: "sha256:test", preview: null, diagnostics: [], error: null, ownerResult: null,
+    artifactDigest: "sha256:test", preview: null, diagnostics: [], error: null, serviceResult: null,
     version: 1, createdAt: "", updatedAt: "", ...overrides,
   };
 }
@@ -63,7 +63,7 @@ test("owner diagnostics become stable issues without invented advice", () => {
       { code: "bad_width", message: "Widths differ.", suggested_actions: ["Choose equal-width endpoints."] },
     ],
   });
-  assert.equal(error.error_code, "OWNER_REJECTED");
+  assert.equal(error.error_code, "SERVICE_REJECTED");
   assert.equal(error.target, "design.nets[clock]");
   assert.equal(error.retryable, false);
   assert.deepEqual(error.suggested_actions, ["Choose equal-width endpoints."]);
@@ -76,11 +76,11 @@ test("owner diagnostics become stable issues without invented advice", () => {
 
 test("owner and exception classifications fail closed", () => {
   assert.deepEqual(errorCodeForOwnerStatus("conflict"), { code: "STALE_REVISION", retryable: true });
-  assert.deepEqual(errorCodeForOwnerStatus("locked"), { code: "OWNER_LOCKED", retryable: true });
-  assert.deepEqual(errorCodeForOwnerStatus("provider_failed"), { code: "OWNER_UNAVAILABLE", retryable: true });
-  assert.equal(errorFromException(binding("spec"), "p", new OwnerError(409, "stale")).error_code, "STALE_REVISION");
-  assert.equal(errorFromException(binding("spec"), "p", new OwnerError(503, "offline")).error_code, "OWNER_UNAVAILABLE");
-  assert.equal(errorFromException(binding("spec"), "p", new OwnerError(502, "Owner returned non-JSON content.")).error_code, "OWNER_CONTRACT_ERROR");
+  assert.deepEqual(errorCodeForOwnerStatus("locked"), { code: "SERVICE_LOCKED", retryable: true });
+  assert.deepEqual(errorCodeForOwnerStatus("provider_failed"), { code: "SERVICE_UNAVAILABLE", retryable: true });
+  assert.equal(errorFromException(binding("spec"), "p", new ServiceError(409, "stale")).error_code, "STALE_REVISION");
+  assert.equal(errorFromException(binding("spec"), "p", new ServiceError(503, "offline")).error_code, "SERVICE_UNAVAILABLE");
+  assert.equal(errorFromException(binding("spec"), "p", new ServiceError(502, "Service returned non-JSON content.")).error_code, "SERVICE_CONTRACT_ERROR");
   assert.equal(errorFromException(binding("spec"), "p", new Error("boom")).error_code, "INTERNAL_ERROR");
   assert.equal(proposalError(binding("spec"), "call", "UNSUPPORTED_REQUEST", "Cannot rename identity.").target, "Test design");
 });

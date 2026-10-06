@@ -94,14 +94,14 @@ def load_service_registry(path: Path | None = None) -> ServiceRegistry:
 
 
 def _activity_settings(payload: dict[str, Any], source: Path) -> ActivitySettings:
-    """Resolve the generated workspace and optional extension registrations."""
+    """Resolve the generated scratch directory and optional extension registrations."""
     value = payload.get("activities", {})
     if not isinstance(value, dict):
         raise ValueError("activities must be an object.")
-    configured_root = value.get("workspace_root", "../generated")
+    configured_root = value.get("scratch_root", value.get("workspace_root", "../generated"))
     extensions = value.get("extension_modules", [])
     if not isinstance(configured_root, str) or not configured_root.strip():
-        raise ValueError("activities.workspace_root must be a non-empty string.")
+        raise ValueError("activities.scratch_root must be a non-empty string.")
     if not isinstance(extensions, list) or any(
         not isinstance(item, str) or not item.strip() for item in extensions
     ):

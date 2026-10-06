@@ -4,16 +4,16 @@ import { readFileSync } from "node:fs";
 import { UNBOUND_SOURCE_PROMPT } from "../src/index.js";
 import { promptSectionsFor, shapeBoundContext } from "../src/domain-context.js";
 import { validateProposalEnvelope } from "../src/operation-schemas.js";
-import { parseOwnerOperationContract, validateOwnerOperations, verifyOwnerOperationContract } from "../src/owner-operation-schema.js";
+import { parseServiceOperationContract, validateServiceOperations, verifyServiceOperationContract } from "../src/service-operation-schema.js";
 import { proposalInputRequest, proposedComponentFields, structuredQuestionPrompt } from "../src/tools.js";
 import type { SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): SessionBinding => ({
-  sessionId: "session-1", status: "active", preset: "focused", domain, ownerUrl: "http://owner", documentId: "doc-1", scope,
+  sessionId: "session-1", status: "active", preset: "focused", domain, serviceUrl: "http://owner", documentId: "doc-1", scope,
   entityKind: scope === "entity" ? "component" : null, entityId: scope === "entity" ? "component-1" : null,
   title: "Test", archived: false, createdAt: "", updatedAt: "",
   workspaceKey: "test", workspaceTitle: "Test", workspacePath: "/tmp/test",
-  workspaceDomain: domain, workspaceOwnerUrl: "http://owner", workspaceDocumentId: "doc-1",
+  workspaceDomain: domain, workspaceServiceUrl: "http://owner", workspaceDocumentId: "doc-1",
 });
 
 const sectionText = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): string =>
@@ -63,7 +63,7 @@ test("structured-question policy is conditional and requires the interactive too
   assert.match(section.text, /cannot be derived from bound context/);
   assert.match(section.text, /When wait_for_event is available/);
   assert.match(section.text, /durable correlated human answer/);
-  assert.match(section.text, /do not burn continuation rounds polling/);
+  assert.match(section.text, /do not burn continuation turns polling/);
   assert.doesNotMatch(section.text, /durable event waiting is not available/);
 });
 
@@ -123,7 +123,7 @@ test("deterministic Circuit context lists exact endpoints and complete values", 
 });
 
 test("owner schema converts to a tool schema and validates operations", () => {
-  const contract = parseOwnerOperationContract({
+  const contract = parseServiceOperationContract({
     schema_version: 1, digest: `sha256:${"a".repeat(64)}`,
     operation_schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -132,9 +132,9 @@ test("owner schema converts to a tool schema and validates operations", () => {
           net_id: { type: "string", pattern: "^[a-z]+$" } } }],
     },
   });
-  assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "n" }]));
-  assert.throws(() => validateOwnerOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "BAD" }]), /owner's published schema/);
-  assert.throws(() => parseOwnerOperationContract({ schema_version: 1, digest: contract.digest,
+  assert.doesNotThrow(() => validateServiceOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "n" }]));
+  assert.throws(() => validateServiceOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "BAD" }]), /owner's published schema/);
+  assert.throws(() => parseServiceOperationContract({ schema_version: 1, digest: contract.digest,
     operation_schema: { $schema: "https://json-schema.org/draft/2020-12/schema", anyOf: [] } }), /Unsupported owner schema keyword/);
 });
 
@@ -154,7 +154,7 @@ test("canonical Circuit protocol assistant subset converts and rejects invalid o
     "CreateNetOperation", "UpdateNetOperation", "DeleteNetOperation",
     "ConnectEndpointOperation", "DisconnectEndpointOperation",
   ]);
-  const contract = parseOwnerOperationContract({
+  const contract = parseServiceOperationContract({
     schema_version: 1, digest: `sha256:${"b".repeat(64)}`,
     operation_schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -163,35 +163,35 @@ test("canonical Circuit protocol assistant subset converts and rejects invalid o
     },
   });
   assert.equal((contract.operation_schema.oneOf as unknown[]).length, 14);
-  assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "n1" }]));
-  assert.throws(() => validateOwnerOperations(contract, [{ operation_id: "delete", type: "set_instance_geometry", instance_id: "u1" }]), /owner's published schema/);
+  assert.doesNotThrow(() => validateServiceOperations(contract, [{ operation_id: "delete", type: "delete_net", net_id: "n1" }]));
+  assert.throws(() => validateServiceOperations(contract, [{ operation_id: "delete", type: "set_instance_geometry", instance_id: "u1" }]), /owner's published schema/);
 });
 
 
 test("published Spec document and entity schemas convert without fallback", () => {
-  const source = JSON.parse(readFileSync(new URL("../../spec2gds/agent_spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
+  const source = JSON.parse(readFileSync(new URL("../../spec2gds/spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
   for (const scope of ["document", "entity"] as const) {
     const branches = scope === "document" ? source.oneOf : source.oneOf.filter((branch: { properties: { type: { const: string } } }) =>
       branch.properties.type.const !== "create_entity");
-    const contract = parseOwnerOperationContract({ schema_version: 1, digest: `sha256:${"c".repeat(64)}`,
+    const contract = parseServiceOperationContract({ schema_version: 1, digest: `sha256:${"c".repeat(64)}`,
       operation_schema: { $schema: source.$schema, oneOf: branches } });
     assert.ok(contract.tool_schema);
     if (scope === "document") {
-      assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "create", type: "create_entity", kind: "component", name: "gate" }]));
-      assert.doesNotThrow(() => validateOwnerOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata",
+      assert.doesNotThrow(() => validateServiceOperations(contract, [{ operation_id: "create", type: "create_entity", kind: "component", name: "gate" }]));
+      assert.doesNotThrow(() => validateServiceOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata",
         entity: { document_id: "doc-1", entity_kind: "component", entity_id: "component-1" }, description: "Refined" }]));
-      assert.throws(() => validateOwnerOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata" }]), /owner's published schema/);
+      assert.throws(() => validateServiceOperations(contract, [{ operation_id: "edit", type: "set_entity_metadata" }]), /owner's published schema/);
     }
   }
 });
 
 
 test("changed owner schema digest requires fresh tool registration", () => {
-  const current = parseOwnerOperationContract({ schema_version: 1, digest: `sha256:${"a".repeat(64)}`,
+  const current = parseServiceOperationContract({ schema_version: 1, digest: `sha256:${"a".repeat(64)}`,
     operation_schema: { $schema: "https://json-schema.org/draft/2020-12/schema", type: "object", properties: {}, additionalProperties: false } });
-  assert.doesNotThrow(() => verifyOwnerOperationContract(current, { ...current }));
-  assert.throws(() => verifyOwnerOperationContract(current, { ...current, digest: `sha256:${"b".repeat(64)}` }), /Read get_bound_context again/);
-  assert.throws(() => verifyOwnerOperationContract(current, { ...current, schema_version: 2 }), /invalid operation schema contract/);
+  assert.doesNotThrow(() => verifyServiceOperationContract(current, { ...current }));
+  assert.throws(() => verifyServiceOperationContract(current, { ...current, digest: `sha256:${"b".repeat(64)}` }), /Read get_bound_context again/);
+  assert.throws(() => verifyServiceOperationContract(current, { ...current, schema_version: 2 }), /invalid operation schema contract/);
 });
 
 

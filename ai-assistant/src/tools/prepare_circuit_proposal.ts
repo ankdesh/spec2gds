@@ -6,9 +6,9 @@
 import { registeredTool, nativeTool, type ToolRunContext } from "../tool-registry.js";
 import type { ToolArguments } from "../tool-arguments.js";
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
-import { type OwnerClients } from "../owner-clients.js";
+import { type ServiceClients } from "../service-clients.js";
 import { validateProposalEnvelope } from "../operation-schemas.js";
-import { validateOwnerOperations, verifyOwnerOperationContract, type OwnerOperationContract } from "../owner-operation-schema.js";
+import { validateServiceOperations, verifyServiceOperationContract, type ServiceOperationContract } from "../service-operation-schema.js";
 import { buildCircuitArtifact, reviewStateForPreview } from "../proposal-pipeline.js";
 import { errorFromException, errorFromOwnerResult, logProposalFailure, proposalError } from "../proposal-presentation.js";
 import { type ProductState } from "../state.js";
@@ -18,8 +18,8 @@ export function registerCircuitProposalTool(
   agentContext: { tools: { register(tool: unknown): () => void } },
   binding: SessionBinding,
   state: ProductState,
-  owners: OwnerClients,
-  contract: OwnerOperationContract,
+  owners: ServiceClients,
+  contract: ServiceOperationContract,
   interactiveForms: boolean,
   onReviewPrepared?: (review: ProposalReview) => void | Promise<void>,
   onDomainToolUse?: () => Promise<void>,
@@ -30,7 +30,7 @@ export function registerCircuitProposalTool(
     async execute(args: ToolArguments["prepare_circuit_proposal"], exec: ToolRunContext) {
       await onDomainToolUse?.();
       try { validateProposalEnvelope(args.supported, args.unsupported_reason, args.operations);
-        if (args.supported) validateOwnerOperations(contract, args.operations); }
+        if (args.supported) validateServiceOperations(contract, args.operations); }
       catch (error) {
         const normalized = proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error));
         logProposalFailure(binding, normalized);
@@ -59,7 +59,7 @@ export function registerCircuitProposalTool(
       }
       const revision = snapshot.revision;
       if (typeof revision !== "string" || !revision) {
-        const normalized = proposalError(binding, callId(exec), "OWNER_CONTRACT_ERROR", "Circuit snapshot did not include a revision.");
+        const normalized = proposalError(binding, callId(exec), "SERVICE_CONTRACT_ERROR", "Circuit snapshot did not include a revision.");
         logProposalFailure(binding, normalized);
         return failureResult(normalized, instructions.text("result.16"));
       }
@@ -75,11 +75,11 @@ export function registerCircuitProposalTool(
       const batch = artifact.batch as Record<string, unknown>;
       state.createReview({
         proposalId, sessionId: binding.sessionId, callId: callId(exec), domain: "circuit",
-        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, ownerResult: null,
+        state: "previewing", baseRevision: revision, artifact, preview: null, diagnostics: [], error: null, serviceResult: null,
       });
       try {
         const latest = await owners.operationContract(binding, exec.signal);
-        verifyOwnerOperationContract(contract, latest);
+        verifyServiceOperationContract(contract, latest);
         const preview = await owners.previewCircuit(binding, batch, exec.signal);
         const next = reviewStateForPreview("circuit", preview.status);
         const normalized = next === "ready" ? null : errorFromOwnerResult(binding, proposalId, preview);

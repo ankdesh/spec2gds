@@ -16,7 +16,7 @@ There are three Python distributions:
    checkpoints, evidence and reference generation with its own SQLite/blob store.
 
 The optional `ai-assistant/` is a TypeScript/Node DeepSeek Harness product, not
-a Python distribution. It owns chats and review records but never owns
+a Python distribution. It manages conversations and review records but never manages
 specification or circuit source.
 
 The Circuit Designer service and browser applications are TypeScript. Python
@@ -26,18 +26,18 @@ integrates with them only through their versioned HTTP and JSON contracts.
 
 Read these modules in order:
 
-1. `spec2gds/agent_spec/api/__main__.py` parses bind settings and starts the
+1. `spec2gds/spec/api/__main__.py` parses bind settings and starts the
    server.
-2. `spec2gds/agent_spec/spec_format/v1_api.py` is the HTTP composition root. It
+2. `spec2gds/spec/spec_format/v1_api.py` is the HTTP composition root. It
    converts request models into reads or transactions and publishes browser
    events.
-3. `spec2gds/agent_spec/spec_format/ir.py` builds the immutable semantic view
+3. `spec2gds/spec/spec_format/ir.py` builds the immutable semantic view
    used after a package is loaded.
-4. `spec2gds/agent_spec/spec_format/transactions.py` is the revision-guarded
+4. `spec2gds/spec/spec_format/transactions.py` is the revision-guarded
    mutation boundary.
-5. `spec2gds/agent_spec/spec_format/archive.py` validates and atomically writes
+5. `spec2gds/spec/spec_format/archive.py` validates and atomically writes
    the deterministic `.spec` ZIP.
-6. `spec2gds/agent_spec/spec_format/document.py` derives the renderer-neutral
+6. `spec2gds/spec/spec_format/document.py` derives the renderer-neutral
    document projection consumed by the browser editor.
 
 The important invariant is that HTTP handlers and renderers do not mutate XML
@@ -56,12 +56,12 @@ worker host:
    artifacts, cancellation, and the constrained workspace capability.
 4. `activities/registry.py` validates extensions and performs direct
    invocation.
-5. `activities/workspace.py` atomically publishes only generator-owned relative
+5. `activities/scratch_directory.py` atomically publishes only Activity-managed relative
    directories.
 6. `spec_format/activity_jobs.py` provides the implemented persisted single-worker
    queue and immutable input recovery, outside the portable Activity contracts.
 
-The RTL and SystemC generators deliberately use two phases. Analysis traverses
+The RTL and SystemC Activities deliberately use two phases. Analysis traverses
 and validates the complete reachable source graph before output begins;
 normalization then converts accepted IR into simple template values. Jinja
 templates format text but make no topology or naming decisions.
@@ -77,7 +77,7 @@ read `command_handler.py` for candidate authoring, `review_engine.py` for frozen
 checkpoints, `coverage_service.py` and `domain/coverage_evaluator.py` for evidence,
 and `generation_runner.py` for synchronous reference artifact generation.
 `storage/sqlite_repo.py` owns final transaction/revision checks. These boundaries
-do not import live Spec mutation APIs. See [the Planner architecture](testplan-service-architecture.md).
+do not import live Spec mutation APIs. See [the Planner architecture](verification-planner-architecture.md).
 
 ## Verify a Python change
 

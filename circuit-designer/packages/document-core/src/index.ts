@@ -1,5 +1,5 @@
 /** Renderer-neutral specification document contracts and local projection helpers.
- * The Spec owner supplies source identity, cells and edit capabilities. Views
+ * The Spec service supplies source identity, cells and edit capabilities. Views
  * consume this projection without reinterpreting package XML or acquiring a
  * second mutation boundary; source edits return through host callbacks. */
 import type { CircuitDocument, CircuitSourceBindingV1 } from "@spec2gds/circuit-core";
@@ -72,7 +72,7 @@ export interface EntityContentSection {
   section_type: "text" | "ports" | "sv";
   type_version: number;
   title: string;
-  owner: EntityRef;
+  parent: EntityRef;
   payload: { content?: string; media_type?: string; source_path?: string; count?: number };
   editable: boolean;
   deletable: boolean;
@@ -85,7 +85,7 @@ export interface PersistedEntitySection {
   section_type: "sv";
   type_version: number;
   title: string;
-  owner: EntityRef;
+  parent: EntityRef;
   media_type: "text/x-systemverilog";
   source_path: string;
   source_sha256: string;
@@ -238,7 +238,7 @@ export type EditorTransactionOperation =
   }
   | {
     type: "upsert_entity_section";
-    owner: EntityRef;
+    parent: EntityRef;
     section_type: "sv";
     type_version: 1;
     section_id?: string;
@@ -246,7 +246,7 @@ export type EditorTransactionOperation =
   }
   | {
     type: "delete_entity_section";
-    owner: EntityRef;
+    parent: EntityRef;
     section_type: "sv";
     section_id?: string;
   };
@@ -400,17 +400,17 @@ function errorMessage(detail: unknown): string {
 }
 
 export class SpecEditorHttpClient {
-  private ownerDocumentKey: string | null = null;
+  private serviceDocumentKey: string | null = null;
   constructor(private readonly baseUrl = "") {}
 
-  bindDocument(key: string): void { this.ownerDocumentKey = key; }
+  bindDocument(key: string): void { this.serviceDocumentKey = key; }
 
-  private documentPath(path: string, key = this.ownerDocumentKey): string {
+  private documentPath(path: string, key = this.serviceDocumentKey): string {
     if (!key) return path;
     return `${path}${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(key)}`;
   }
 
-  getDocumentView(key = this.ownerDocumentKey): Promise<DocumentView> {
+  getDocumentView(key = this.serviceDocumentKey): Promise<DocumentView> {
     return this.request(this.documentPath("/documents/view", key));
   }
 

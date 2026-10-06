@@ -112,7 +112,7 @@ is unlocked.
 
 All movement and manual route edits snap to the circuit's grid. Independent
 changes remain in the private draft until **File → Save changes**. A bound
-design instead uses **File → Save to Specification**, which commits topology
+design instead uses **File → Save to Spec**, which commits topology
 and the displayed layout to the `.spec` source. **File → Cancel changes**
 discards either kind of private draft.
 

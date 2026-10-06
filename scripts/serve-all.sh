@@ -15,8 +15,8 @@ STATE_DIR="${PROJECT_ROOT}/logs/serve-all"
 SERVICES=(spec-editor circuit-designer ai-assistant)
 DEFAULT_PORTS=(6010 6011 6012 6013 6014)
 SPEC_EDITOR_OPTIONS=()
-if [[ "${2:-}" == "--require-human-approval" ]]; then
-  SPEC_EDITOR_OPTIONS+=(--require-human-approval)
+if [[ "${2:-}" == "--require-designer-approval" ]]; then
+  SPEC_EDITOR_OPTIONS+=(--require-designer-approval)
 elif [[ $# -gt 1 ]]; then
   echo "Unknown option: ${2}" >&2
   exit 2
@@ -27,7 +27,7 @@ if [[ $# -gt 2 ]]; then
 fi
 
 usage() {
-  echo "Usage: scripts/serve-all.sh {start|restart|stop} [--require-human-approval]"
+  echo "Usage: scripts/serve-all.sh {start|restart|stop} [--require-designer-approval]"
 }
 
 pid_file() {

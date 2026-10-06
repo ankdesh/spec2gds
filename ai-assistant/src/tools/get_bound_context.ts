@@ -6,17 +6,17 @@
 import { registeredTool, nativeTool, type ToolRunContext } from "../tool-registry.js";
 import type { ToolArguments } from "../tool-arguments.js";
 import { type InstructionBundle } from "../instructions.js";
-import { type OwnerClients } from "../owner-clients.js";
+import { type ServiceClients } from "../service-clients.js";
 import { shapeBoundContext } from "../domain-context.js";
-import { parseOwnerOperationContract, type OwnerOperationContract } from "../owner-operation-schema.js";
+import { parseServiceOperationContract, type ServiceOperationContract } from "../service-operation-schema.js";
 import { type ProductState } from "../state.js";
 import type { SessionBinding } from "../types.js";
 import { isRecord } from "../types.js";
 import { json } from "./shared.js";
 export function registerContextTool(
   agentContext: { tools: { register(tool: unknown): () => void } }, binding: SessionBinding,
-  state: ProductState, owners: OwnerClients, instructions: InstructionBundle,
-  readOnly: boolean, onDomainToolUse?: () => Promise<void>, refreshSpec?: (contract: OwnerOperationContract) => void,
+  state: ProductState, owners: ServiceClients, instructions: InstructionBundle,
+  readOnly: boolean, onDomainToolUse?: () => Promise<void>, refreshSpec?: (contract: ServiceOperationContract) => void,
 ): void {
   agentContext.tools.register(registeredTool({
     ...nativeTool("get_bound_context", instructions),
@@ -27,13 +27,13 @@ export function registerContextTool(
         binding.domain === "circuit" ? owners.circuitSvg(binding, exec.signal).catch(() => undefined) : Promise.resolve(undefined),
       ]);
       if (binding.domain === "spec" && !readOnly) {
-        if (typeof context.owner_document_key === "string" && !binding.ownerDocumentKey) {
-          state.pinOwnerDocument(binding.sessionId, context.owner_document_key);
-          binding.ownerDocumentKey = context.owner_document_key;
+        if (typeof context.owner_document_key === "string" && !binding.serviceDocumentKey) {
+          state.pinServiceDocument(binding.sessionId, context.owner_document_key);
+          binding.serviceDocumentKey = context.owner_document_key;
         }
         // Refresh tools between model steps, within the same conversation.
         try {
-          const latest = parseOwnerOperationContract(await owners.operationContract(binding, exec.signal));
+          const latest = parseServiceOperationContract(await owners.operationContract(binding, exec.signal));
           refreshSpec?.(latest);
         } catch {
           // Reading context remains available during a contract outage. The
@@ -83,7 +83,7 @@ export function registerContextTool(
           ] : []),
         ],
       };
-      if (binding.domain === "spec" && Buffer.byteLength(JSON.stringify(response)) >= 40 * 1024) throw new Error("Owner context exceeds 40 KiB. A paged context-capable Spec owner is required; no truncated or spill-file result was accepted.");
+      if (binding.domain === "spec" && Buffer.byteLength(JSON.stringify(response)) >= 40 * 1024) throw new Error("Owner context exceeds 40 KiB. A paged context-capable Spec service is required; no truncated or spill-file result was accepted.");
       return json(response);
     },
   }));

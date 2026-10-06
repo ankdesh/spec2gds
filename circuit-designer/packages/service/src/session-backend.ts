@@ -200,7 +200,7 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
     const record = this.record(documentId);
     const current = this.activeLease(record);
     if (current && current.owner_id !== ownerId) {
-      throw new CircuitBackendError("lock_conflict", `Document is locked by ${current.owner_id}.`);
+      throw new CircuitBackendError("lock_conflict", `Document is locked by client session ${current.owner_id}.`);
     }
     record.lease = {
       lease_id: current?.lease_id ?? this.nextId("lease"),

@@ -90,7 +90,7 @@ class SqlitePlanRepository:
                     description TEXT NOT NULL,
                     snapshot_id TEXT NOT NULL,
                     root_scope_id TEXT NOT NULL,
-                    owner_label TEXT,
+                    designer_label TEXT,
                     tags_json TEXT NOT NULL,
                     edit_revision INTEGER NOT NULL DEFAULT 1,
                     schema_version TEXT NOT NULL,
@@ -343,6 +343,9 @@ class SqlitePlanRepository:
                     FOREIGN KEY (plan_id) REFERENCES plans (id) ON DELETE CASCADE
                 );
             """)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(plans)")}
+            if "owner_label" in columns and "designer_label" not in columns:
+                conn.execute("ALTER TABLE plans RENAME COLUMN owner_label TO designer_label")
 
     # --- Snapshots ---
     def save_snapshot(self, view: SourceSnapshotView, blob_hash: str, created_at: str) -> None:
@@ -380,7 +383,7 @@ class SqlitePlanRepository:
             conn.execute(
                 """
                 INSERT INTO plans
-                (id, name, description, snapshot_id, root_scope_id, owner_label, tags_json, edit_revision, schema_version, created_at, updated_at)
+                (id, name, description, snapshot_id, root_scope_id, designer_label, tags_json, edit_revision, schema_version, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
@@ -389,7 +392,7 @@ class SqlitePlanRepository:
                     header.description,
                     header.snapshot_id,
                     header.root_scope_id,
-                    header.owner_label,
+                    header.designer_label,
                     json.dumps(header.tags),
                     header.edit_revision,
                     header.schema_version,
@@ -445,7 +448,7 @@ class SqlitePlanRepository:
                 description=row["description"],
                 snapshot_id=row["snapshot_id"],
                 root_scope_id=row["root_scope_id"],
-                owner_label=row["owner_label"],
+                designer_label=row["designer_label"],
                 tags=json.loads(row["tags_json"]),
                 source_audit=source_audit,
                 schema_version=row["schema_version"],
@@ -466,7 +469,7 @@ class SqlitePlanRepository:
                         description=row["description"],
                         snapshot_id=row["snapshot_id"],
                         root_scope_id=row["root_scope_id"],
-                        owner_label=row["owner_label"],
+                        designer_label=row["designer_label"],
                         tags=json.loads(row["tags_json"]),
                         source_audit={},
                         schema_version=row["schema_version"],
@@ -1025,7 +1028,7 @@ class SqlitePlanRepository:
                             profile_ids=op.get("profile_ids", []),
                             checkpoint_id=campaign.coverage_checkpoint_id,
                             reason=op["reason"],
-                            owner_label=op.get("owner_label", "author"),
+                            designer_label=op.get("designer_label", op.get("owner_label", "author")),
                             expires_at=op["expires_at"],
                             milestone_label=op.get("milestone_label"),
                             supporting_evidence_ids=op.get("supporting_evidence_ids", []),

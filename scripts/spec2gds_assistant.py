@@ -20,14 +20,14 @@ from urllib.request import Request, urlopen
 
 import uvicorn
 
-from spec2gds.agent_spec.spec_format.review_store import (
+from spec2gds.spec.spec_format.review_store import (
     _REPO_ROOT,
     list_spec_reviews,
     node_executable,
     review_bridge,
 )
-from spec2gds.agent_spec.spec_format.v1_api import create_app
-from spec2gds.agent_spec.spec_format.workspace_target import (
+from spec2gds.spec.spec_format.v1_api import create_app
+from spec2gds.spec.spec_format.workspace_target import (
     assistant_state_root,
     resolve_spec_target,
 )
@@ -44,12 +44,12 @@ def _request(url: str, path: str, payload: dict[str, Any] | None = None) -> dict
 
 
 @contextmanager
-def _private_owner(require_human_approval: bool = False) -> Iterator[str]:
+def _private_spec_service(require_designer_approval: bool = False) -> Iterator[str]:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     sock.listen()
     port = sock.getsockname()[1]
-    config = uvicorn.Config(create_app(require_human_approval), host="127.0.0.1", port=port, log_level="error", access_log=False)
+    config = uvicorn.Config(create_app(require_designer_approval), host="127.0.0.1", port=port, log_level="error", access_log=False)
     server = uvicorn.Server(config)
     worker = threading.Thread(target=lambda: asyncio.run(server.serve(sockets=[sock])), daemon=True)
     worker.start()
@@ -57,14 +57,14 @@ def _private_owner(require_human_approval: bool = False) -> Iterator[str]:
     try:
         for _ in range(100):
             if not worker.is_alive():
-                raise RuntimeError("Private Spec owner stopped during startup.")
+                raise RuntimeError("Private Spec service stopped during startup.")
             try:
                 if _request(url, "/health").get("status") == "ok":
                     break
             except (URLError, OSError):
                 time.sleep(0.1)
         else:
-            raise RuntimeError("Private Spec owner did not become ready.")
+            raise RuntimeError("Private Spec service did not become ready.")
         yield url
     finally:
         server.should_exit = True
@@ -77,12 +77,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("target", help="Workspace directory or exact .spec path")
     parser.add_argument("--architecture-review-id", help="Previously approved architecture for this exact specification and revision")
     parser.add_argument("--preset", default="focused", help="Assistant preset (currently focused only)")
-    parser.add_argument("--require-human-approval", action="store_true", help="leave valid submissions pending for an explicit Spec CLI decision")
+    parser.add_argument("--require-designer-approval", "--require-human-approval", dest="require_designer_approval", action="store_true", help="leave valid submissions pending for an explicit Spec CLI decision")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one focused request against a private owner for the selected package.
+    """Run one focused request against a private Spec service for the selected package.
 
     Persist native session/run output for later review and evaluation. Only the
     focused preset is admitted; longer-lived browser execution has another lifecycle.
@@ -110,7 +110,7 @@ def main(argv: list[str] | None = None) -> int:
         state_root = assistant_state_root(spec_path)
         state_root.mkdir(parents=True, exist_ok=True)
         identity_owner = f"spec2gds-cli:{spec_path}"
-        with _private_owner(args.require_human_approval) as owner_url:
+        with _private_spec_service(args.require_designer_approval) as owner_url:
             snapshot = _request(
                 owner_url,
                 "/documents/open" if spec_path.exists() else "/documents/create",
@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
             cwd.mkdir(parents=True, exist_ok=True)
             if args.architecture_review_id:
                 review = review_bridge(state_root, "architecture-require", args.architecture_review_id)["architecture_review"]
-                if review.get("documentId") != document_id or review.get("ownerDocumentKey") != snapshot["owner_document_key"]:
+                if review.get("documentId") != document_id or review.get("serviceDocumentKey") != snapshot["owner_document_key"]:
                     raise ValueError("Approved architecture does not belong to this exact specification.")
                 if review.get("sourceRevision") != snapshot["source_revision_hash"]:
                     raise ValueError("Approved architecture is stale. Prepare an updated review.")
@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
                 "SPEC2GDS_BINDING_JSON": json.dumps({
                     "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
                     "documentId": document_id, "scope": "document",
-                    "ownerDocumentKey": snapshot["owner_document_key"],
+                    "serviceDocumentKey": snapshot["owner_document_key"],
                 }),
                 "DSH_PRODUCT_RUN_CWD": str(cwd),
             }
@@ -169,7 +169,7 @@ def main(argv: list[str] | None = None) -> int:
             "schema_version": "spec2gds.assistant-workspace-run.v1",
             "spec_path": str(spec_path), "document_id": document_id,
             "session_id": session_id, "preset": "focused", "exit_code": result.returncode,
-            "approval_policy": "review" if args.require_human_approval else "automatic",
+            "approval_policy": "review" if args.require_designer_approval else "automatic",
             "answer": final, "events_path": str(event_path),
             "architecture_reviews": [item for item in architecture_reviews if item["sessionId"] == session_id],
             "proposals": [{"proposal_id": item["proposalId"], "state": item["state"]} for item in reviews],

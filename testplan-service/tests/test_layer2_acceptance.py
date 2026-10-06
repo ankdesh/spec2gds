@@ -11,10 +11,8 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
-
 from testplan_service.api.app import create_app
 from testplan_service.domain.enums import Priority
-
 
 # ---------------------------------------------------------------------------
 # Fixture Helpers
@@ -753,7 +751,7 @@ def test_l2_14_waiver_lifecycle_and_failure_precedence(client: TestClient, fifo_
                     "op": "waiver.create",
                     "intent_id": "int-rst-1",
                     "reason": "Known silicon waiver for early tapeout milestone",
-                    "owner_label": "arch-lead",
+                    "designer_label": "arch-lead",
                     "expires_at": "2099-01-01T00:00:00Z",
                 }
             ],

@@ -1,7 +1,7 @@
 # spec2gds
 
 `spec2gds` is a specification-first hardware design workspace. It combines a
-structured specification editor, an independent circuit editor, and an
+structured Spec Editor, an independent circuit editor, and an
 optional assistant with owner-validated submissions.
 
 The repository no longer ships a gallery of demos or benchmark corpora. New
@@ -12,7 +12,7 @@ then kept only when they remain useful and reproducible.
 
 ```mermaid
 flowchart LR
-    User["Designer"] --> SpecUI["Specification editor"]
+    User["Designer"] --> SpecUI["Spec Editor"]
     SpecUI --> SpecAPI["Spec API"]
     SpecAPI --> Package[".spec package<br/>IP-XACT + narrative + assets"]
     SpecAPI -->|"source-owned projection"| CircuitAPI["Circuit service"]
@@ -28,12 +28,12 @@ The two editors have different source-of-truth rules:
 
 - A `.spec` package is owned and saved by the Spec API.
 - A local circuit is owned by its client and saved as `.circuit.json`.
-- A source-bound circuit is an editable projection; **Save to Specification**
+- A source-bound circuit is an editable projection; **Save to Spec**
   commits validated topology and layout changes back to the `.spec` package.
 - Leaf-component previews and unsupported projections remain read-only.
 - Valid Spec assistant submissions save automatically by default. Launch with
   `--require-human-approval` to require review. On a source-bound Circuit,
-  Accept stages a private draft; **Save to Specification** writes the package.
+  Accept stages a private draft; **Save to Spec** writes the package.
 
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
@@ -70,7 +70,7 @@ The independent **Verification Planner** (`testplan-service`, port `6016`)
 provides snapshot-bound Test Plan, Coverage & Evidence, and recipe authoring
 with immutable reviewed checkpoints. Its built-in generator emits reference
 artifacts and synthetic fixture templates; executable test generation and
-simulation remain future work. See [architecture](docs/testplan-service-architecture.md)
+simulation remain future work. See [architecture](docs/verification-planner-architecture.md)
 and [remaining requirements](docs/verification-planner-backlog.md).
 
 Run it separately in the root uv environment:
@@ -208,7 +208,7 @@ required.
 The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
 uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
 chat already bound to the active circuit. Spec Editor opens
-a chat bound to the complete active specification, or an unbound chat when no
+a chat bound to the complete active Spec, or an unbound chat when no
 specification is open. A document chat can create and refine supported entities
 throughout its package. An entity's **Options → More actions… → Explore with AI
 Assistant** creates a narrower entity-bound conversation.
@@ -226,7 +226,7 @@ and [Assistant acceptance checks](docs/ai-assistant-operations.md#acceptance-mat
 Configuration and execution limits are defined once in
 [Assistant operations](docs/ai-assistant-operations.md#configuration-and-limits).
 
-## Run only the specification editor
+## Run only the Spec Editor
 
 Python development uses `uv` and the repository virtual environment.
 
@@ -235,12 +235,12 @@ uv sync
 uv run spec2gds-server
 ```
 
-Open `http://SERVER_IP:6010/editor`. Use **File → New Specification** or
-**File → Open Specification**. New asks for a human-readable specification
+Open `http://SERVER_IP:6010/editor`. Use **File → New Spec** or
+**File → Open Spec**. New asks for a human-readable specification
 name plus a server-local `.spec` path; Open asks only for the path. The visible
 name is editable from the document cover and is stored separately from the
 stable internal document ID. The File menu can also refresh the active package
-from disk; accepted changes are saved automatically. **New Specification**
+from disk; accepted changes are saved automatically. **New Spec**
 refuses to replace an existing path.
 
 Use the top-level **Components → Options → Add component** and **Designs →
@@ -276,7 +276,7 @@ Components and designs also expose **Options → Add section → SystemVerilog**
 The optional singleton is an IEEE 1800-2017 module body, edited with CodeMirror
 and validated with Verilator 5.x when available. Saved bodies render inline;
 Edit preserves rejected/stale drafts and Delete requires confirmation. See the
-[entity sections guide](docs/entity-sections.md) for package layout, API, limits,
+[entity sections guide](docs/component-sections.md) for package layout, API, limits,
 validation, and extension instructions.
 
 The **Circuit** menu lists available designs and components. Eligible document
@@ -331,7 +331,7 @@ source snapshot. Activity code selects information through the stable
 returns a validated report, artifacts, and optional review-gated source
 proposals. It never reads or mutates the live editor session.
 
-The public contracts live in `spec2gds.agent_spec.activities`. See the
+The public contracts live in `spec2gds.spec.activities`. See the
 [Activity Snapshot v1 format](docs/activity-snapshot-v1.md) and
 [Activity SDK guide](docs/activity-sdk.md). The SDK intentionally does not
 choose a queue, worker process, storage service, or monitoring mechanism.
@@ -388,7 +388,7 @@ source profile, report contract, invocation, and required Verilator 5.x lint
 workflow. The
 [one-cycle and two-cycle semantics examples](docs/rtl-semantics-examples.md)
 show the body-only source contract and can be generated under the configured
-Activity workspace with:
+Activity scratch directory with:
 
 ```bash
 uv run python scripts/generate_rtl_examples.py --check
@@ -436,7 +436,7 @@ Preferences → Actions and shortcuts** to configure shared keyboard and mouse
 inputs; right-click itself is reserved for context menus. See the
 [Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
 
-To use **Open circuit** from the specification editor, run both services. A
+To use **Open circuit** from the Spec Editor, run both services. A
 design projection supports **Edit → Begin Editing** and **Save to
 Specification**; the save validates and atomically updates IP-XACT topology and
 its semantic layout annotation. Leaf-component previews remain read-only. The
@@ -500,7 +500,7 @@ cd circuit-designer
 npm run generate:check
 npm test
 npm run test:e2e          # Circuit Designer only
-npm run test:e2e:editor   # specification editor only
+npm run test:e2e:editor   # Spec Editor only
 
 cd ../ai-assistant
 npm run typecheck

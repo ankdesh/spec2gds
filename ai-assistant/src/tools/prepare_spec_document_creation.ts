@@ -20,7 +20,7 @@ export function registerSourceCreationTool(
           architectureReviewId: args.architecture_review_id, empty: args.empty });
         if (creation.automatic === true) {
           const policy = await creations.owners.specPolicy(String(creation.serviceBaseUrl), exec.signal);
-          if (policy.approval_policy !== "automatic") throw new SourceCreationError(409, "The owner now requires human approval. Prepare a new creation request.");
+          if (policy.approval_policy !== "automatic") throw new SourceCreationError(409, "The Spec service now requires designer approval. Prepare a new creation request.");
           const reserved = await creations.create(String(creation.requestId), {
             documentId: String(creation.documentId), title: String(creation.title), serviceBaseUrl: String(creation.serviceBaseUrl),
           });

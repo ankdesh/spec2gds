@@ -1,7 +1,7 @@
 # Verification Planner remaining requirements
 
 These are unimplemented or partially implemented design requirements, not
-current service guarantees. [Architecture](testplan-service-architecture.md)
+current service guarantees. [Architecture](verification-planner-architecture.md)
 and the three layer references describe the delivered foundation. Keep only
 remaining work here; move proven behavior to those references when implemented.
 

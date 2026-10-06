@@ -263,7 +263,7 @@ export function App({
           setSourceConflict(false);
           setSourceDescription(binding?.writable
             ? binding.message ?? `Bound to ${binding.label}. Save commits topology and layout back to its authoritative source.`
-            : binding?.message ?? `Read-only projection owned by ${binding?.label ?? "an external source"}.`);
+            : binding?.message ?? `Read-only projection managed by ${binding?.label ?? "an external source"}.`);
           setMessage(binding?.writable
             ? `Opened ${next.document.label} for source editing.`
             : binding?.message ?? `Opened ${next.document.label}.`);
@@ -883,7 +883,7 @@ export function App({
 
   async function decideProposal(proposalId: string, decision: "accept" | "reject"): Promise<void> {
     if (!document || !backend || !snapshot) return;
-    // Source-bound Accept stages a leased private draft. Only Save to Specification
+    // Source-bound Accept stages a leased private draft. Only Save to Spec
     // runs owner preview/commit; accepting a proposal is not a durable source save.
     if (decision === "accept" && sourceBinding) {
       if (!sourceBinding.writable || lease || draftRef.current) {
@@ -906,7 +906,7 @@ export function App({
         setLease(nextLease);
         setStagedProposalId(proposalId);
         setDocument(draft.document);
-        setMessage("Proposal staged in a private draft. Save to Specification to persist it, or Cancel to discard the draft.");
+        setMessage("Proposal staged in a private draft. Save to Spec to persist it, or Cancel to discard the draft.");
       } catch (reason) {
         if (nextLease) await backend.releaseLease(document.document_id, nextLease.lease_id).catch(() => undefined);
         setMessage(reason instanceof Error ? reason.message : String(reason));
@@ -964,9 +964,9 @@ export function App({
   const selectionItemForTarget = (target: CircuitCanvasContextTarget): CircuitCanvasSelection[number] | undefined => {
     if (target.kind === "node") return { kind: "node", id: target.nodeId };
     if (target.kind === "boundary") return { kind: "boundary", id: target.terminalId };
-    if (target.kind === "terminal") return target.owner.kind === "node"
-      ? { kind: "node", id: target.owner.id }
-      : { kind: "boundary", id: target.owner.id };
+    if (target.kind === "terminal") return target.parent.kind === "node"
+      ? { kind: "node", id: target.parent.id }
+      : { kind: "boundary", id: target.parent.id };
     if (target.kind === "net" || target.kind === "route-segment" || target.kind === "route-vertex") return { kind: "net", id: target.netId };
     if (target.kind === "cycle-edge") return { kind: "cycle-edge", id: target.edgeId };
     return undefined;
@@ -1080,18 +1080,18 @@ export function App({
     if (!terminalKey || !graph || !layout) return undefined;
     const terminal = graph.terminals.find((item) => item.id === terminalKey);
     if (!terminal) return undefined;
-    const ownerTerminals = graph.terminals.filter((item) => terminal.node_id ? item.node_id === terminal.node_id : !item.node_id);
+    const parentTerminals = graph.terminals.filter((item) => terminal.node_id ? item.node_id === terminal.node_id : !item.node_id);
     const placement = layout.layout.terminal_placements[terminalKey];
-    const sameSide = ownerTerminals
+    const sameSide = parentTerminals
       .filter((item) => layout.layout.terminal_placements[item.id]?.side === placement?.side)
       .sort((left, right) => (layout.layout.terminal_placements[left.id]?.order ?? 0) - (layout.layout.terminal_placements[right.id]?.order ?? 0));
-    return { terminalKey, terminal, ownerTerminals, placement, sameSide, index: sameSide.findIndex((item) => item.id === terminalKey) };
+    return { terminalKey, terminal, parentTerminals, placement, sameSide, index: sameSide.findIndex((item) => item.id === terminalKey) };
   }
 
   function setTerminalSide(target: CircuitCanvasContextTarget | undefined, side: TerminalPlacement["side"]): boolean {
     const context = terminalContext(target);
     if (!context) return false;
-    const orders = context.ownerTerminals
+    const orders = context.parentTerminals
       .map((terminal) => layout?.layout.terminal_placements[terminal.id])
       .filter((placement): placement is TerminalPlacement => placement?.side === side)
       .map((placement) => placement.order);
@@ -1176,7 +1176,7 @@ export function App({
       || contextualRoute?.vertices.some((vertex) => vertex.locked));
     const terminal = terminalContext(invocation.target);
     const contextualInstanceId = invocation.target?.kind === "node" ? invocation.target.nodeId
-      : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
+      : invocation.target?.kind === "terminal" && invocation.target.parent.kind === "node" ? invocation.target.parent.id
         : selectedInstance?.id;
     const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
     const contextualCycleEdgeId = invocation.target?.kind === "cycle-edge" ? invocation.target.edgeId : selectedCycleEdge?.id;
@@ -1255,7 +1255,7 @@ export function App({
     const contextualNetId = targetNetId(invocation.target) ?? selectedNet?.id;
     const contextualRoute = contextualNetId ? layout?.layout.net_routes[contextualNetId] : undefined;
     const contextualInstanceId = invocation.target?.kind === "node" ? invocation.target.nodeId
-      : invocation.target?.kind === "terminal" && invocation.target.owner.kind === "node" ? invocation.target.owner.id
+      : invocation.target?.kind === "terminal" && invocation.target.parent.kind === "node" ? invocation.target.parent.id
         : selectedInstance?.id;
     const contextualInstance = document?.design.instances.find((instance) => instance.id === contextualInstanceId);
     const contextualCycleEdgeId = invocation.target?.kind === "cycle-edge" ? invocation.target.edgeId : selectedCycleEdge?.id;
@@ -1445,13 +1445,13 @@ export function App({
           const name = window.prompt("Document name", document.label);
           if (name?.trim()) mutate({ operation_id: operationId("rename_document"), type: "set_document_label", label: name }, "Document renamed.");
         }}>Rename</button>}
-        <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source-owned read only" : lease ? "private draft" : "saved circuit"}</small>
+        <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source read-only" : lease ? "private draft" : "saved circuit"}</small>
       </div>
       {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
         className="source-save-button"
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
         type="button"
-      >{sourceBinding.saveLabel ?? "Save to Source"}</button>}
+      >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}
     </header>
     <div className="notice">
       <span className="local-dot" />

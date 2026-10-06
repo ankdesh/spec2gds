@@ -73,7 +73,7 @@ Requirements: [AS-09](ai-assistant.md#as-09), [AS-18](ai-assistant.md#as-18).
 
 Evidence: [Spec proposal guard](../ai-assistant/src/tools.ts),
 [architecture prompt](../ai-assistant/src/architecture-review.ts), and
-[service schema](../spec2gds/agent_spec/spec_format/assistant_operation_schema.json).
+[service schema](../spec2gds/spec/spec_format/assistant_operation_schema.json).
 The guard has a structural operation allowlist. It does not include
 `upsert_entity_section` with `section_type=sv` or deletion of stored RTL.
 The prompt explicitly permits later RTL refinements through the ordinary flow.

@@ -313,7 +313,7 @@ const batch = {
               section_type: "sv",
               type_version: 1,
               title: "SystemVerilog",
-              owner: designRef,
+              parent: designRef,
               payload: { content: "logic saved_marker;\n", media_type: "text/x-systemverilog" },
               editable: true,
               deletable: true,
@@ -609,7 +609,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
 async function openSample(page: Page): Promise<void> {
   await page.goto("/");
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Open Specification/ }).click();
+  await page.getByRole("menuitem", { name: /Open Spec/ }).click();
   await page.getByLabel("Server-local package path").fill("/tmp/editor-test.spec");
   await page.getByRole("button", { name: "Open", exact: true }).click();
   await expect(page.locator(".spec-paper")).toBeVisible();
@@ -620,9 +620,9 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await page.goto("/");
 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: /New Specification/ }).click();
+  await page.getByRole("menuitem", { name: /New Spec/ }).click();
   await expect(page.getByText("visible to the server running spec2gds")).toBeVisible();
-  await page.getByLabel("Specification name").fill("New editor specification");
+  await page.getByLabel("Spec name").fill("New editor specification");
   await page.getByRole("button", { name: "Browse…" }).click();
   const specificationsFolder = page.getByRole("button", { name: /specifications/ });
   await specificationsFolder.dblclick();
@@ -726,7 +726,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
   await expect.poll(() => state.transactions.length).toBe(1);
   expect(state.transactions[0]?.operations).toEqual([{
     type: "upsert_entity_section",
-    owner: componentRef,
+    parent: componentRef,
     section_type: "sv",
     type_version: 1,
     payload: { content: "assign irq = 1'b0;\n" },
@@ -740,7 +740,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations).toEqual([{
     type: "upsert_entity_section",
-    owner: designRef,
+    parent: designRef,
     section_type: "sv",
     type_version: 1,
     section_id: "section_sv_design_top",
@@ -752,7 +752,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
   await expect.poll(() => state.transactions.length).toBe(3);
   expect(state.transactions[2]?.operations).toEqual([{
     type: "delete_entity_section",
-    owner: designRef,
+    parent: designRef,
     section_type: "sv",
     section_id: "section_sv_design_top",
   }]);
@@ -763,7 +763,7 @@ test("edits the persisted specification name without changing the stable identit
   await openSample(page);
 
   await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
-  await page.getByLabel("Specification name").fill("Timer Platform Specification");
+  await page.getByLabel("Spec name").fill("Timer Platform Specification");
   await page.getByRole("button", { name: "Save name" }).click();
   await expect.poll(() => state.transactions.length).toBe(1);
   expect(state.transactions[0]?.operations).toEqual([
@@ -835,7 +835,7 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   expect(svg).toContain("WRITEBACK");
 
   await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
-  await page.getByLabel("Specification name").fill("Updated topology source");
+  await page.getByLabel("Spec name").fill("Updated topology source");
   await page.getByRole("button", { name: "Save name" }).click();
   await expect.poll(async () => image.getAttribute("src")).not.toBe(firstImageUrl);
 });

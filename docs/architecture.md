@@ -42,7 +42,7 @@ flowchart TB
 | Action history | Spec API | package activity plus artifact sidecar | append/review operations |
 | Independent circuit | client | `.circuit.json` | private draft, then Save |
 | Circuit session | Circuit service | memory only | lease and revision checks |
-| Spec-derived circuit | specification source | `.spec` topology plus circuit-layout annotation | edit a private projection, then revision-checked Save to Specification |
+| Spec-derived circuit | specification source | `.spec` topology plus circuit-layout annotation | edit a private projection, then revision-checked Save to Spec |
 | AI Assistant suggestion | bound owner approval policy | proposal/review record | automatic validated Spec save or restricted review; explicit Circuit send/save |
 | Verification plan/evidence | Verification Planner | SQLite plus content-addressed blobs | revision-checked commands and immutable checkpoints |
 
@@ -88,7 +88,7 @@ revision hash prevents a stale client from overwriting newer work.
 
 Component/design content is projected through the typed section registry.
 Existing text and ports are IP-XACT adapters; optional SystemVerilog bodies are
-digest-indexed annotation files. See [Entity sections](entity-sections.md).
+digest-indexed annotation files. See [Entity sections](component-sections.md).
 
 ## Circuit document
 
@@ -137,7 +137,7 @@ clients; they do not mutate model objects directly.
 - One visible `.spec` document per editor; persistent owner keys allow existing
   bound chats to access other packages without changing their bindings.
 - Circuit service sessions disappear on restart.
-- The specification editor omits bus interfaces, interface connections, and
+- The Spec Editor omits bus interfaces, interface connections, and
   bus/abstraction definitions while retaining them in the `.spec` source.
 - The initial adapter projects direct physical ports and ad-hoc connections;
   bus interfaces remain in the specification source.

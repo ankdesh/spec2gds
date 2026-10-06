@@ -53,10 +53,10 @@ if (options["session-id"]) {
     const response = await fetch(`${options["service-url"].replace(/\/$/, "")}/documents/resolve?${query}`);
     const selected = await response.json();
     if (!response.ok) throw new Error(typeof selected.detail === "string" ? selected.detail : selected.detail?.message || selected.error?.message || "The owner could not resolve this name.");
-    if (typeof selected.document_id !== "string" || !selected.document_id) throw new Error("The owner returned no document identity for this name.");
+    if (typeof selected.document_id !== "string" || !selected.document_id) throw new Error("The service returned no document identity for this name.");
     if (options["document-id"] && options["document-id"] !== selected.document_id) throw new Error("The name and technical identity select different documents.");
     if (options["owner-document-key"] && options["owner-document-key"] !== selected.owner_document_key) throw new Error("The name and package binding select different documents.");
-    if (options["entity-name"] && (typeof selected.entity_id !== "string" || !selected.entity_id || typeof selected.entity_kind !== "string")) throw new Error("The owner returned no target identity for this name.");
+    if (options["entity-name"] && (typeof selected.entity_id !== "string" || !selected.entity_id || typeof selected.entity_kind !== "string")) throw new Error("The service returned no target identity for this name.");
     if (options["entity-id"] && selected.entity_id && options["entity-id"] !== selected.entity_id) throw new Error("The name and technical identity select different targets.");
     options["document-id"] = selected.document_id;
     if (selected.owner_document_key) options["owner-document-key"] = selected.owner_document_key;
@@ -66,7 +66,7 @@ if (options["session-id"]) {
     domain,
     serviceBaseUrl: options["service-url"],
     documentId: options["document-id"],
-    ...(options["owner-document-key"] ? { ownerDocumentKey: options["owner-document-key"] } : {}),
+    ...(options["owner-document-key"] ? { serviceDocumentKey: options["owner-document-key"] } : {}),
     scope: domain === "circuit" ? "document" : options.scope || "document",
     ...(options["entity-kind"] ? { entityKind: options["entity-kind"] } : {}),
     ...(options["entity-id"] ? { entityId: options["entity-id"] } : {}),
@@ -74,15 +74,15 @@ if (options["session-id"]) {
   env.SPEC2GDS_BINDING_JSON = JSON.stringify(binding);
   const service = new URL(binding.serviceBaseUrl);
   service.pathname = domain === "spec" ? "/" : service.pathname.replace(/\/$/, "");
-  let workspaceIdentity = { domain, ownerUrl: process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || service.toString().replace(/\/$/, ""), documentId: binding.documentId,
-    ...(domain === "spec" && binding.ownerDocumentKey && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY ? { ownerDocumentKey: binding.ownerDocumentKey } : {}) };
+  let workspaceIdentity = { domain, serviceUrl: process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY || service.toString().replace(/\/$/, ""), documentId: binding.documentId,
+    ...(domain === "spec" && binding.serviceDocumentKey && !process.env.SPEC2GDS_CLI_WORKSPACE_IDENTITY ? { serviceDocumentKey: binding.serviceDocumentKey } : {}) };
   if (domain === "circuit") {
     try {
-      const response = await fetch(`${workspaceIdentity.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`);
+      const response = await fetch(`${workspaceIdentity.serviceUrl}/documents/${encodeURIComponent(binding.documentId)}/source-binding`);
       if (response.ok) {
         const source = await response.json();
         if (source && typeof source.source_service_url === "string" && typeof source.source_document_id === "string") {
-          workspaceIdentity = { domain: "spec", ownerUrl: source.source_service_url.replace(/\/$/, ""), documentId: source.source_document_id, ...(source.source_owner_document_key ? { ownerDocumentKey: source.source_owner_document_key } : {}) };
+          workspaceIdentity = { domain: "spec", serviceUrl: source.source_service_url.replace(/\/$/, ""), documentId: source.source_document_id, ...(source.source_owner_document_key ? { serviceDocumentKey: source.source_owner_document_key } : {}) };
         }
       }
     } catch { /* The Circuit binding remains independently grouped when its optional source metadata is unavailable. */ }

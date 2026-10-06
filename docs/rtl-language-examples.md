@@ -1,9 +1,9 @@
 # SystemVerilog language examples
 
 These standalone modules illustrate language constructs; they are not bundled
-Activity output or evidence of generator feature support. Test each fenced block
+Activity output or evidence of Activity feature support. Test each fenced block
 independently, except `two_bit_mux`, which also needs the first gate-based `mux`.
-The Spec editor stores interfaces separately and accepts only module bodies; do
+The Spec Editor stores interfaces separately and accepts only SystemVerilog section content as module bodies; do
 not paste a full module into an SV section. Symbolic ranges and parameterized
 topology remain outside the current [RTL Activity profile](rtl-generation-activity.md).
 See [maintained RTL semantics samples](rtl-semantics-examples.md) for source packages.

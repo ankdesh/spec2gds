@@ -59,9 +59,9 @@ export function shapeBoundContext(binding: SessionBinding, context: Record<strin
 function shapeSpecContext(binding: SessionBinding, value: Record<string, unknown>, instructions: InstructionBundle): { text: string; warnings: string[] } {
   const documentId = expectString(value.document_id, "Spec context document_id");
   const revision = expectString(value.source_revision_hash, "Spec context source_revision_hash");
-  if (documentId !== binding.documentId) throw new Error("Spec owner context does not match the bound document.");
+  if (documentId !== binding.documentId) throw new Error("Spec service context does not match the bound document.");
   const scope = value.scope === "document" ? "document" : "entity";
-  if (scope !== binding.scope) throw new Error("Spec owner context scope does not match the conversation binding.");
+  if (scope !== binding.scope) throw new Error("Spec service context scope does not match the conversation binding.");
   const diagnostics = Array.isArray(value.diagnostics) ? value.diagnostics.map(String) : [];
   if (scope === "document") {
     if (!isRecord(value.rendered_context) || value.rendered_context.document_id !== documentId || value.rendered_context.source_revision_hash !== revision || value.rendered_context.target !== null || typeof value.rendered_context.text !== "string") {
@@ -76,7 +76,7 @@ function shapeSpecContext(binding: SessionBinding, value: Record<string, unknown
     ].join("\n") };
   }
   if (!isRecord(value.target) || !isRecord(value.writable) || !isRecord(value.read_only)) throw new Error("Entity Spec context is missing target or writable/read-only sections.");
-  if (value.target.entity_id !== binding.entityId || value.target.entity_kind !== binding.entityKind) throw new Error("Spec owner context target does not match the bound entity.");
+  if (value.target.entity_id !== binding.entityId || value.target.entity_kind !== binding.entityKind) throw new Error("Spec service context target does not match the bound entity.");
   return { warnings: diagnostics, text: [
     `Spec document: ${documentId}`, `Source revision: ${revision}`,
     `Selected target: ${json(value.target)}`, "",

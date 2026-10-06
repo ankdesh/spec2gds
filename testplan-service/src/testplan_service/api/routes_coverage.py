@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from testplan_service.application.service import TestPlanService
-from testplan_service.domain.evidence import EvaluationProfile, EvidenceCampaign, EvidenceReport, EvidenceRun
+from testplan_service.application.service import VerificationPlannerService
+from testplan_service.domain.evidence import (
+    EvaluationProfile,
+    EvidenceCampaign,
+    EvidenceReport,
+    EvidenceRun,
+)
 from testplan_service.exceptions import (
     CampaignFrozenError,
     CampaignNotFoundError,
@@ -68,7 +74,7 @@ class CreateEvidenceReportRequest(BaseModel):
     campaign_id: str
 
 
-def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_coverage_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating Layer 2 coverage and evidence routes."""
     router = APIRouter(tags=["Coverage & Evidence"])
 
@@ -82,7 +88,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
         campaign_id: str | None = Query(None, alias="campaign_id"),
         intent: str | None = Query(None, alias="intent"),
         status_filter: str | None = Query(None, alias="status"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Get computed coverage matrix and separate baseline and filtered summaries."""
         filtered_ids = {intent} if intent else None
@@ -103,7 +109,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
         checkpoint_id: str | None = Query(None, alias="checkpoint_id"),
         campaign: str | None = Query(None, alias="campaign"),
         campaign_id: str | None = Query(None, alias="campaign_id"),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Get typed deterministic coverage gaps per Section 5."""
         eff_campaign = campaign or campaign_id
@@ -119,7 +125,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def get_coverage_trace(
         plan_id: str,
         record_id: str = Query(...),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Get bounded relationship trace graph/table."""
         # Simple bounded trace for UI inspection
@@ -135,7 +141,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def create_profile(
         plan_id: str,
         payload: CreateProfileRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Register an immutable evaluation profile."""
         return service.create_profile(
@@ -155,7 +161,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     @router.get("/plans/{plan_id}/profiles")
     def list_profiles(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[EvaluationProfile]:
         return service.list_profiles(plan_id)
 
@@ -163,7 +169,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def get_profile(
         plan_id: str,
         profile_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> EvaluationProfile:
         prof = service.get_profile(plan_id, profile_id)
         if not prof:
@@ -175,7 +181,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def create_campaign(
         plan_id: str,
         payload: CreateCampaignRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Create an evidence campaign with required profiles."""
         return service.create_campaign(
@@ -190,7 +196,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     @router.get("/plans/{plan_id}/campaigns")
     def list_campaigns(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[EvidenceCampaign]:
         return service.list_campaigns(plan_id)
 
@@ -198,7 +204,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def get_campaign(
         plan_id: str,
         campaign_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> EvidenceCampaign:
         camp = service.get_campaign(plan_id, campaign_id)
         if not camp:
@@ -210,7 +216,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
         plan_id: str,
         campaign_id: str,
         payload: CampaignCommandBatchRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Apply revision-checked campaign operations."""
         return service.execute_campaign_commands(
@@ -226,7 +232,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     async def stage_result_import(
         plan_id: str,
         request: Request,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Stage and validate a normalized verification results JSON payload."""
         payload = await request.json()
@@ -237,7 +243,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
         plan_id: str,
         import_id: str,
         payload: CommitImportRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Commit staged results and optionally enroll in matching open campaign."""
         return service.commit_result_import(
@@ -252,7 +258,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def reprocess_result_import(
         plan_id: str,
         import_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Reprocess staged results using updated mappings."""
         return service.commit_result_import(plan_id=plan_id, staging_id=import_id)
@@ -262,7 +268,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def list_runs(
         plan_id: str,
         profile_id: str | None = Query(None),
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[EvidenceRun]:
         return service.list_runs(plan_id, profile_id=profile_id)
 
@@ -270,7 +276,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def get_run_observations(
         plan_id: str,
         run_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         obs = service.get_observations_for_run(run_id)
         return [o.model_dump() for o in obs]
@@ -280,7 +286,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def create_evidence_report(
         plan_id: str,
         payload: CreateEvidenceReportRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         return service.create_evidence_report(
             plan_id=plan_id,
@@ -292,7 +298,7 @@ def create_coverage_router(get_service: Callable[[], TestPlanService]) -> APIRou
     def get_evidence_report(
         plan_id: str,
         report_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> EvidenceReport:
         rep = service.get_evidence_report(plan_id, report_id)
         if not rep:

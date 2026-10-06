@@ -7,7 +7,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { OwnerClients } from "../src/owner-clients.js";
+import { ServiceClients } from "../src/service-clients.js";
 import { ProductState } from "../src/state.js";
 import { creationContinuation, registerSourceCreationTool, SourceCreations, specDestination } from "../src/source-creation.js";
 import type { BindingInput, SourceCreationRequest } from "../src/types.js";
@@ -62,13 +62,13 @@ async function fixture() {
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   const address = server.address(); assert.ok(address && typeof address === "object");
   const url = `http://127.0.0.1:${address.port}`;
-  const owners = new OwnerClients([url], [], 1_000);
+  const owners = new ServiceClients([url], [], 1_000);
   const reserve = async (input: BindingInput, sessionId = "unused") => {
     if (reservationFailure) throw new Error("Simulated chat setup failure");
-    const workspace = { key: input.documentId, title: input.title!, path: join(root, "workspace", input.documentId), domain: "spec" as const, ownerUrl: url, documentId: input.documentId };
-    const binding = state.createBinding(sessionId, { ...input, ownerUrl: url,
+    const workspace = { key: input.documentId, title: input.title!, path: join(root, "workspace", input.documentId), domain: "spec" as const, serviceUrl: url, documentId: input.documentId };
+    const binding = state.createBinding(sessionId, { ...input, serviceUrl: url,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
-      workspaceDomain: workspace.domain, workspaceOwnerUrl: url, workspaceDocumentId: input.documentId });
+      workspaceDomain: workspace.domain, workspaceServiceUrl: url, workspaceDocumentId: input.documentId });
     return { binding, workspace };
   };
   approvedArchitecture(state, "unbound-chat", comparatorRequest);
@@ -165,9 +165,9 @@ test("new tool-call IDs sharing an approved architecture retain one creation rec
 test("a source revision change while a creation card is pending requires renewed architecture approval", async () => {
   const f = await fixture();
   try {
-    f.state.createBinding("source", { domain: "spec", serviceBaseUrl: f.url, ownerUrl: f.url, documentId: "source-doc", scope: "document",
-      ownerDocumentKey: "source-package", workspaceKey: "source", workspaceTitle: "Source", workspacePath: f.root,
-      workspaceDomain: "spec", workspaceOwnerUrl: f.url, workspaceDocumentId: "source-doc" });
+    f.state.createBinding("source", { domain: "spec", serviceBaseUrl: f.url, serviceUrl: f.url, documentId: "source-doc", scope: "document",
+      serviceDocumentKey: "source-package", workspaceKey: "source", workspaceTitle: "Source", workspacePath: f.root,
+      workspaceDomain: "spec", workspaceServiceUrl: f.url, workspaceDocumentId: "source-doc" });
     const reviewId = approvedArchitecture(f.state, "source", comparatorRequest, "sha256:old");
     let revision = "sha256:old";
     f.owners.context = async () => ({ document_id: "source-doc", source_revision_hash: revision });
@@ -249,7 +249,7 @@ test("receipt-capable owners recover a lost creation response after restart", as
     f.reopen(); f.mode = "normal";
     await assert.rejects(f.creations.create(request.requestId, { ...f.values, title: "Changed" }), /exactly/);
     const result = await f.creations.create(request.requestId, f.values) as any;
-    assert.equal(result.session.ownerDocumentKey, "created-package");
+    assert.equal(result.session.serviceDocumentKey, "created-package");
     assert.equal(result.session.sessionId, request.destinationSessionId);
     assert.deepEqual(await readFile(request.destination), saved);
     assert.equal(f.creates, 2, "One original request and one receipt replay");
@@ -258,7 +258,7 @@ test("receipt-capable owners recover a lost creation response after restart", as
   } finally { await f.close(); }
 });
 
-test("available owner selection supports a preferred Spec owner and multiple configured services", async () => {
+test("available owner selection supports a preferred Spec service and multiple configured services", async () => {
   const f = await fixture(); const second = await fixture();
   try {
     f.owners.specAllowlist.unshift("http://127.0.0.1:9"); f.owners.specAllowlist.push(second.url);

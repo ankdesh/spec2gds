@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   A2UIDocumentSurface,
-  SPEC_ENTITY_ACTION_EVENT,
+  SPEC_HARDWARE_ACTION_EVENT,
   SPEC_LAUNCH_ACTIVITY_EVENT,
   SPEC_OPEN_CIRCUIT_EVENT,
   type SpecDocumentEditController,
@@ -160,7 +160,7 @@ export default function App() {
 
   const openDocument = useCallback(async (nextPath: string) => {
     if (!nextPath) return false;
-    if (editing.current) { setError("Save or cancel your draft before opening another specification."); return false; }
+    if (editing.current) { setError("Save or cancel your draft before opening another Spec."); return false; }
     const epoch = ++documentEpoch.current;
     setLoading(true);
     setError("");
@@ -241,7 +241,7 @@ export default function App() {
       setPath(nextPath);
       setView("document");
       setExternalChange(null);
-      setNotice("Created a new specification package.");
+      setNotice("Created a new .spec file.");
       browserLogger?.event("documents", "created", "Created specification", "info", { path: nextPath, title, snapshot: nextSnapshot });
       return true;
     } catch (caught) {
@@ -306,8 +306,8 @@ export default function App() {
           setError(caught instanceof Error ? caught.message : String(caught));
         });
     };
-    window.addEventListener(SPEC_ENTITY_ACTION_EVENT, onEntityAction);
-    return () => window.removeEventListener(SPEC_ENTITY_ACTION_EVENT, onEntityAction);
+    window.addEventListener(SPEC_HARDWARE_ACTION_EVENT, onEntityAction);
+    return () => window.removeEventListener(SPEC_HARDWARE_ACTION_EVENT, onEntityAction);
   }, [client]);
 
   const executeAction = async (action: EntityAction) => {
@@ -447,7 +447,7 @@ export default function App() {
     if (pendingWindow) {
       pendingWindow.opener = null;
       pendingWindow.document.title = "Opening AI Assistant…";
-      pendingWindow.document.body.textContent = "Creating a new entity-bound AI Assistant chat…";
+      pendingWindow.document.body.textContent = "Creating a new AI Assistant conversation for this Component or Design…";
     }
     setLaunchingAssistant(true);
     setError("");
@@ -456,7 +456,7 @@ export default function App() {
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
       setActionDialog(null);
-      setNotice(`Opened a new AI Assistant chat for ${referenceName(snapshot, target)}.`);
+      setNotice(`Opened a new AI Assistant conversation for ${referenceName(snapshot, target)}.`);
     } catch (caught) {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -472,7 +472,7 @@ export default function App() {
       pendingWindow.opener = null;
       pendingWindow.document.title = "Opening AI Assistant…";
       pendingWindow.document.body.textContent = snapshot
-        ? "Connecting to the active specification…"
+        ? "Connecting to the active Spec…"
         : "Opening the AI Assistant without a specification…";
     }
     setLaunchingAssistant(true);
@@ -567,7 +567,7 @@ export default function App() {
       async updateDocumentTitle(title: string) {
         await commitEditorOperations(
           [{ type: "set_document_title", title }],
-          `Specification name changed to ${title} and saved automatically.`,
+          `Spec name changed to ${title} and saved automatically.`,
         );
       },
       async createEntity(kind: "component" | "design", name: string) {
@@ -623,7 +623,7 @@ export default function App() {
         await commitEditorOperations(
           [{
             type: "upsert_entity_section",
-            owner: ref,
+            parent: ref,
             section_type: "sv",
             type_version: 1,
             section_id: sectionId,
@@ -634,7 +634,7 @@ export default function App() {
       },
       async deleteEntitySection(ref: EntityRef, sectionId?: string) {
         await commitEditorOperations(
-          [{ type: "delete_entity_section", owner: ref, section_type: "sv", section_id: sectionId }],
+          [{ type: "delete_entity_section", parent: ref, section_type: "sv", section_id: sectionId }],
           "SystemVerilog section deleted and saved automatically.",
         );
       },
@@ -656,7 +656,7 @@ export default function App() {
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
   const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
     result.diagnostics.map((item) =>
-      `${snapshot && snapshot.entity_sections.find(section => section.section_id === result.section_id) ? referenceName(snapshot, snapshot.entity_sections.find(section => section.section_id === result.section_id)!.owner) : "Document"} › ${snapshot?.entity_sections.find(section => section.section_id === result.section_id)?.section_type === "sv" ? "SystemVerilog" : "Section"} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
+      `${snapshot && snapshot.entity_sections.find(section => section.section_id === result.section_id) ? referenceName(snapshot, snapshot.entity_sections.find(section => section.section_id === result.section_id)!.parent) : "Document"} › ${snapshot?.entity_sections.find(section => section.section_id === result.section_id)?.section_type === "sv" ? "SystemVerilog" : "Section"} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
     ),
   ) ?? [];
 
@@ -683,7 +683,7 @@ export default function App() {
 
       {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
       {snapshot && <div className="app-notice" role="status">
-        Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "human approval required"} · {syncState}
+        Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"} · {syncState}
       </div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
@@ -730,7 +730,7 @@ export default function App() {
         {!loading && !batch && !error && (
           <div className="empty-state">
             <h1>Start a specification</h1>
-            <p>Use <strong>File → New Specification</strong> or <strong>File → Open Specification</strong> with a server-local <code>.spec</code> path.</p>
+            <p>Use <strong>File → New Spec</strong> or <strong>File → Open Spec</strong> with a server-local <code>.spec</code> path.</p>
           </div>
         )}
       </main>
@@ -779,13 +779,13 @@ function AssistantHistory({ client, documentKey, revision, onChanged }: {
     }
     catch (caught) { if (token === epoch.current) setError(String(caught)); }
   };
-  return <UtilityPanel title="Assistant submission history" count={page.items.length}>
+  return <UtilityPanel title="AI Assistant submission history" count={page.items.length}>
     {error && <p role="alert">{error}</p>}
     <button onClick={() => void fetchPage()}>Latest submissions</button>
     {page.items.map(item => <article className="activity-item" key={text(item.proposal_id)}>
       <strong>{text(item.title)}</strong><p>{text(item.summary)}</p>
       <p>{text(item.state)} · Proposal {String(item.ordinal)} · {text(item.created_at)}</p>
-      <details><summary>Technical details</summary><p>Proposal {text(item.proposal_id)} · session {text(item.session_id)}</p><small>Base {text(item.base_source_revision_hash)} → saved {text(record(item.owner_result).source_revision_hash)}</small></details>
+      <details><summary>Technical details</summary><p>Proposal {text(item.proposal_id)} · conversation {text(item.session_id)}</p><small>Base {text(item.base_source_revision_hash)} → saved {text(record((item.service_result ?? item.owner_result)).source_revision_hash)}</small></details>
       <button onClick={() => {
         const token = epoch.current;
         void client.getAssistantSubmission(text(item.proposal_id)).then(value => {
@@ -799,7 +799,7 @@ function AssistantHistory({ client, documentKey, revision, onChanged }: {
     </article>)}
     {details && <pre style={{ maxHeight: 400, overflow: "auto" }}>{JSON.stringify(details, null, 2)}</pre>}
     {page.next_cursor !== null && <button onClick={() => void fetchPage(page.next_cursor!)}>Older submissions</button>}
-    {!page.items.length && <p>No assistant submissions.</p>}
+    {!page.items.length && <p>No AI Assistant submissions.</p>}
   </UtilityPanel>;
 }
 
@@ -1093,7 +1093,7 @@ function ActionDialog({
         <article className="action-option action-option--assistant">
           <div>
             <strong>Explore with AI Assistant</strong>
-            <small>Creates a new chat bound to this entity</small>
+            <small>Creates a new conversation bound to this Component or Design</small>
             <p>Discuss ideas first, then request a typed proposal when ready.</p>
           </div>
           <button
@@ -1104,7 +1104,7 @@ function ActionDialog({
           </button>
         </article>
         {state.loading && <p>Checking available actions…</p>}
-        {!state.loading && !state.actions.length && <p>No actions target this entity kind.</p>}
+        {!state.loading && !state.actions.length && <p>No actions target this Component or Design.</p>}
         {state.actions.map((action) => (
           <article className="action-option" key={action.action_id}>
             <div>

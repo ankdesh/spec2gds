@@ -86,14 +86,14 @@ changing its source revision hash.
 ```python
 from pathlib import Path
 
-from spec2gds.agent_spec.activities import (
+from spec2gds.spec.activities import (
     ActivitySnapshot,
-    LocalActivityWorkspace,
+    LocalActivityScratchDirectory,
     SpecExtensionRegistry,
     invoke_activity,
 )
-from spec2gds.agent_spec.activities.rtl import register_extensions
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
+from spec2gds.spec.activities.rtl import register_extensions
+from spec2gds.spec.spec_format.ir import SpecRevision
 
 revision = SpecRevision.load("design.spec")
 target = revision.entry_designs()[0].ref
@@ -105,7 +105,7 @@ result = invoke_activity(
     registry,
     "rtl.generate",
     snapshot,
-    LocalActivityWorkspace(Path("generated")),
+    LocalActivityScratchDirectory(Path("generated")),
 )
 print(result.report["output_path"])
 ```
@@ -133,7 +133,7 @@ the generated tree digest. V3 manifests/reports include generic targets, emitted
 entity provenance and implementation status. Saved V2 reports and ownership
 manifests remain readable. Text explanations do not alter generated logic.
 
-The directory is fully generator-owned. A rerun atomically replaces it only
+The directory is fully Activity-managed. A rerun atomically replaces it only
 when its manifest matches the generator, document, and target. Do not add
 hand-written implementation code to this tree because regeneration discards
 manual edits.
@@ -159,5 +159,5 @@ Repository RTL tests invoke this target without a skip, so install Verilator
 5.x before running the Python suite:
 
 ```bash
-uv run python -m pytest tests/agent_spec/activities/rtl -q
+uv run python -m pytest tests/spec/activities/rtl -q
 ```

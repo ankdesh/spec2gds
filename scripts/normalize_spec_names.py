@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from spec2gds.agent_spec.spec_format.ir import SpecRevision
-from spec2gds.agent_spec.spec_format.naming import normalize_package_names, readable_name
-from spec2gds.agent_spec.spec_format.owner_store import OwnerBindings
-from spec2gds.agent_spec.spec_format.v1_api import V1Session
+from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.naming import normalize_package_names, readable_name
+from spec2gds.spec.spec_format.spec_service_store import SpecServiceBindings
+from spec2gds.spec.spec_format.v1_api import V1Session
 
 
-def normalize_sources(paths: list[Path], catalog: OwnerBindings) -> list[str]:
-    """Use the owner's validated save and service-wide naming reservation."""
+def normalize_sources(paths: list[Path], catalog: SpecServiceBindings) -> list[str]:
+    """Use the Spec service's validated save and service-wide naming reservation."""
     changed: list[str] = []
     for path in sorted({path.expanduser().resolve() for path in paths}):
         session = V1Session(str(path))
@@ -32,7 +32,7 @@ def main() -> None:
     parser.add_argument("--state-root", type=Path, help="Spec service catalog directory")
     parser.add_argument("--repository", action="store_true", help="Normalize repository samples and known packages")
     args = parser.parse_args()
-    catalog = OwnerBindings(args.state_root)
+    catalog = SpecServiceBindings(args.state_root)
     paths = [*args.paths, *(Path(row["path"]) for row in catalog.catalog())]
     if args.repository:
         paths.extend(Path("samples").rglob("*.spec"))

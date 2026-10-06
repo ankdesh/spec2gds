@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 import time
-from typing import Any
 import uuid
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +24,7 @@ from testplan_service.api.routes_meta import meta_router
 from testplan_service.api.routes_plans import create_plans_router
 from testplan_service.api.routes_plugins import create_plugins_router
 from testplan_service.api.routes_recipes import create_recipes_router
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.constants import (
     API_BASE_PATH,
     DEFAULT_PRODUCT_TITLE,
@@ -72,7 +72,7 @@ def create_app(
             resolved_storage,
         )
 
-    service = TestPlanService(resolved_storage)
+    service = VerificationPlannerService(resolved_storage)
 
     app = FastAPI(
         title=DEFAULT_PRODUCT_TITLE,
@@ -233,7 +233,7 @@ def create_app(
             content={"error": "StorageError", "message": exc.message},
         )
 
-    def get_service() -> TestPlanService:
+    def get_service() -> VerificationPlannerService:
         return app.state.service
 
     # Mount API routers at /api/verification/v1

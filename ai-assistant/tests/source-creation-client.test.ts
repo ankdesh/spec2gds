@@ -13,7 +13,7 @@ async function browserFixture(automatic = false) {
     services: [{ url: "http://spec", available: true }] };
   const continuation = { requestId: "stable-prompt-id", message: "The package exists. Original user request: A[2:0], B[2:0], A_greater, A_equal, A_less.", sent: false };
   const reservation = { session: { sessionId: "destination", preset: "focused" },
-    workspace: { key: "workspace-key", title: "Comparator", path: "/workspace/comparator", domain: "spec", ownerUrl: "http://spec", documentId: "comparator_3bit" },
+    workspace: { key: "workspace-key", title: "Comparator", path: "/workspace/comparator", domain: "spec", serviceUrl: "http://spec", documentId: "comparator_3bit" },
     creation_request: request, continuation };
   if (automatic) Object.assign(request, { automatic: true, status: "reserved", continuation,
     reservation: { session: reservation.session, workspace: reservation.workspace } });
@@ -151,7 +151,7 @@ test("architecture approval cards survive subsequent creation errors and replay"
   const tree = node.type(node.props);
   assert.equal(tree.children.filter((child: any) => child.type?.name === "ArchitectureReviewCard").length, 2);
   const latest = tree.children.at(-1);
-  assert.equal(latest.type(latest.props).children[0].children[0], "Specification creation unavailable");
+  assert.equal(latest.type(latest.props).children[0].children[0], "Spec creation unavailable");
   assert.equal(select(3).architectureReview.reviewId, "review-1", "Later results cannot appear before their sequence");
   assert.equal(select(3).earlierArchitectureReviews.length, 0, "Repeated results do not duplicate a review card");
   assert.equal(select(1), null);

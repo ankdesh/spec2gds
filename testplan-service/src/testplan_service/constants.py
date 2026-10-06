@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 # Service identification & networking defaults
-DEFAULT_SERVICE_NAME: str = "testplan-service"
+DEFAULT_SERVICE_NAME: str = "verification-planner"
 DEFAULT_PRODUCT_TITLE: str = "Verification Planner"
 DEFAULT_SERVICE_VERSION: str = "1.0.0"
 DEFAULT_SERVICE_HOST: str = os.getenv("VERIFICATION_HOST", "127.0.0.1")

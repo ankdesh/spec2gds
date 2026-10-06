@@ -3,11 +3,16 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from testplan_service.application.service import TestPlanService
-from testplan_service.exceptions import DomainValidationError, PlanNotFoundError, RecordNotFoundError
+from testplan_service.application.service import VerificationPlannerService
+from testplan_service.exceptions import (
+    DomainValidationError,
+    PlanNotFoundError,
+    RecordNotFoundError,
+)
 
 
 class GenerationPreviewRequest(BaseModel):
@@ -26,7 +31,7 @@ class GenerationSubmitRequest(BaseModel):
     plugin_version: str | None = None
 
 
-def create_generations_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_generations_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating backend generation and artifact inspection endpoints."""
     router = APIRouter(tags=["Generations & Artifacts"])
 
@@ -34,7 +39,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def preview_generation(
         plan_id: str,
         payload: GenerationPreviewRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Preview generation inputs, capabilities, and preflight diagnostics without modifying state."""
         try:
@@ -53,7 +58,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def submit_generation(
         plan_id: str,
         payload: GenerationSubmitRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Submit an idempotent generation job against an immutable Implementation Checkpoint (I1)."""
         try:
@@ -71,7 +76,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     @router.get("/plans/{plan_id}/generations")
     def list_generations(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """List all generation jobs for a plan."""
         return service.list_generation_jobs(plan_id)
@@ -80,7 +85,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def get_generation_job(
         plan_id: str,
         job_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Get status, diagnostics, and artifact handles for a specific generation job."""
         job = service.get_generation_job(plan_id, job_id)
@@ -92,7 +97,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def cancel_generation(
         plan_id: str,
         job_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Cancel a running or queued generation job."""
         try:
@@ -104,7 +109,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def retry_generation(
         plan_id: str,
         job_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Retry generation from the identical saved immutable request."""
         try:
@@ -116,7 +121,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def get_artifact(
         plan_id: str,
         artifact_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Response:
         """Stream or download a verified, immutable generated artifact."""
         artifact = service.get_generated_artifact(artifact_id)
@@ -147,7 +152,7 @@ def create_generations_router(get_service: Callable[[], TestPlanService]) -> API
     def get_producer_manifest(
         plan_id: str,
         digest: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Retrieve canonical verification.producer.v1 mapping authority manifest by digest."""
         manifest = service.get_producer_manifest(digest)

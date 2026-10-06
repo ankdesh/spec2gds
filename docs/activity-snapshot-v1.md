@@ -79,7 +79,7 @@ changing the format or Activity API.
 ## Python API
 
 ```python
-from spec2gds.agent_spec.activities import ActivitySnapshot
+from spec2gds.spec.activities import ActivitySnapshot
 
 snapshot = ActivitySnapshot.create(revision, target=design.ref)
 encoded = snapshot.to_bytes()

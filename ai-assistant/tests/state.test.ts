@@ -11,10 +11,10 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
   try {
     const state = new ProductState(join(root, "product.sqlite3"));
     state.createBinding("session-1", {
-      domain: "spec", serviceBaseUrl: "http://ignored", ownerUrl: "http://127.0.0.1:6010",
+      domain: "spec", serviceBaseUrl: "http://ignored", serviceUrl: "http://127.0.0.1:6010",
       documentId: "doc-1", scope: "document", title: "Spec: doc-1",
       workspaceKey: "workspace-1", workspaceTitle: "Spec: doc-1", workspacePath: join(root, "workspace-1"),
-      workspaceDomain: "spec", workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
+      workspaceDomain: "spec", workspaceServiceUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
     });
     assert.equal(state.getBinding("session-1")?.status, "creating");
     state.activateBinding("session-1");
@@ -29,7 +29,7 @@ test("persists immutable bindings and compare-and-swap review transitions", asyn
     const review = state.createReview({
       proposalId: "proposal-1", sessionId: "session-1", callId: "call-1", domain: "spec",
       state: "previewing", baseRevision: "rev-1", artifact: { proposal_id: "proposal-1" },
-      preview: null, diagnostics: [], error: null, ownerResult: null,
+      preview: null, diagnostics: [], error: null, serviceResult: null,
     });
     assert.match(review.artifactDigest, /^sha256:/);
     const ready = state.transitionReview("session-1", "proposal-1", ["previewing"], "ready", { preview: { status: "valid" } });
@@ -90,10 +90,10 @@ test("stores confirmed proposal details as structured session state", async () =
     const path = join(root, "product.sqlite3");
     const state = new ProductState(path);
     state.createBinding("session-1", {
-      domain: "spec", serviceBaseUrl: "http://ignored", ownerUrl: "http://127.0.0.1:6010",
+      domain: "spec", serviceBaseUrl: "http://ignored", serviceUrl: "http://127.0.0.1:6010",
       documentId: "doc-1", scope: "document", title: "Spec: doc-1",
       workspaceKey: "workspace-1", workspaceTitle: "Spec: doc-1", workspacePath: join(root, "workspace-1"),
-      workspaceDomain: "spec", workspaceOwnerUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
+      workspaceDomain: "spec", workspaceServiceUrl: "http://127.0.0.1:6010", workspaceDocumentId: "doc-1",
     });
     const inputId = state.createProposalInput("session-1", [{ name: "component_name" }, { name: "width" }]);
     assert.equal(state.confirmedProposalInput("session-1", inputId), null);
@@ -105,4 +105,20 @@ test("stores confirmed proposal details as structured session state", async () =
     assert.equal(reopened.confirmedProposalInput("another-session", inputId), null);
     reopened.close();
   } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+test("reads legacy service fields in saved creation records without changing source artifacts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "spec2gds-terminology-"));
+  const state = new ProductState(join(root, "product.sqlite3"));
+  try {
+    const legacy = { requestId: "request", sourceSessionId: "source", callId: "call", status: "prepared",
+      ownerDocumentKey: "original", destinationOwnerDocumentKey: "destination",
+      artifact: { ownerDocumentKey: "immutable source value" } };
+    state.database.prepare("INSERT INTO source_creation_requests(request_id,source_session_id,call_id,status,request_json,updated_at) VALUES(?,?,?,?,?,?)")
+      .run("request", "source", "call", "prepared", JSON.stringify(legacy), "2026-10-06");
+    const restored = state.getSourceCreation("request") as unknown as Record<string, any>;
+    assert.equal(restored.serviceDocumentKey, "original");
+    assert.equal(restored.destinationServiceDocumentKey, "destination");
+    assert.deepEqual(restored.artifact, legacy.artifact);
+  } finally { state.close(); await rm(root, { recursive: true, force: true }); }
 });

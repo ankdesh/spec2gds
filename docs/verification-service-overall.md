@@ -3,7 +3,7 @@
 `testplan-service` is a standalone Python/FastAPI service with a static browser
 UI. It imports immutable Activity Snapshot v1 containers and owns verification
 plans, checkpoints, evidence and generated reference artifacts. It does not
-modify live specifications or run simulators. Read [architecture](testplan-service-architecture.md),
+modify live specifications or run simulators. Read [architecture](verification-planner-architecture.md),
 [Test Plan](verification-layer-1-test-plan.md), [Coverage & Evidence](verification-layer-2-coverage.md)
 and [Implementation](verification-layer-3-implementation.md) for each boundary.
 Outstanding design requirements are in [the backlog](verification-planner-backlog.md).
@@ -64,7 +64,7 @@ is defined in `api/routes_events.py`; bounded event retention, fully replayable
 cursors and hidden-tab fallback polling remain backlog requirements.
 
 The service exposes its own operation catalog and command preview/commit API.
-It is not registered as an Assistant owner. The former `/api/v1/testplans`,
+It is not registered as an Assistant backend. The former `/api/v1/testplans`,
 JSON node repository, sample seeder and `/assistant/proposals/*` prototype are
 not the current contract. Future Assistant integration must preserve owner
 revision checks and reviewed command boundaries.

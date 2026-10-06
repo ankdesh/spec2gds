@@ -2,13 +2,13 @@
 
 A standalone FastAPI/static-browser service for snapshot-bound requirements,
 verification intents, coverage/evidence and implementation recipes. It owns
-SQLite records and content-addressed blobs independently of Spec/Circuit owners.
+SQLite records and content-addressed blobs independently of Spec/Circuit services.
 P1/C1/I1 checkpoints preserve reviewed plan, coverage and implementation inputs.
 
 The bundled `spec2gds.reference.bundle` backend emits reference artifacts and
 synthetic fixture result templates. It does not generate executable tests or
 run simulators. Test IR validation and generation recovery remain partial; see
-[architecture](../docs/testplan-service-architecture.md) and
+[architecture](../docs/verification-planner-architecture.md) and
 [remaining requirements](../docs/verification-planner-backlog.md).
 
 ## Run and test

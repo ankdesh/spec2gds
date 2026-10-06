@@ -2,7 +2,7 @@
 
 Reviewer path: validate container admission and source identity before deriving
 entity/occurrence views. Projection is read-only and intentionally avoids runtime
-imports from the live Spec owner; imported narrative remains untrusted content.
+imports from the live Spec service; imported narrative remains untrusted content.
 """
 
 from __future__ import annotations
@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from spec2gds.agent_spec.activities import ActivitySnapshot
-from spec2gds.agent_spec.spec_format.models import NarrativeDocument
-from spec2gds.agent_spec.spec_format.naming import document_name, entity_name
+from spec2gds.spec.activities import ActivitySnapshot
+from spec2gds.spec.spec_format.models import NarrativeDocument
+from spec2gds.spec.spec_format.naming import document_name, entity_name
 from testplan_service.domain.hash import sha256_digest
 from testplan_service.exceptions import SnapshotError
 from testplan_service.integrations.models import (
@@ -130,7 +130,7 @@ def decode_snapshot_bytes(data: bytes) -> SourceSnapshotView:
             try:
                 from lxml import etree
 
-                from spec2gds.agent_spec.spec_format.archive import SpecPackage
+                from spec2gds.spec.spec_format.archive import SpecPackage
                 pkg = SpecPackage.from_bytes(snapshot.source_package)
                 for entry in pkg.manifest.documents:
                     if entry.kind == "design":

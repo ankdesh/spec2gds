@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from typing import Any, Callable
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
-from testplan_service.application.service import TestPlanService
+from testplan_service.application.service import VerificationPlannerService
 from testplan_service.domain.models import PlanCheckpoint
 from testplan_service.exceptions import CheckpointBlockerError, PlanNotFoundError
 
@@ -31,7 +32,7 @@ class PreviewCheckpointRequest(BaseModel):
     upstream_checkpoint_id: str | None = None
 
 
-def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> APIRouter:
+def create_checkpoints_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating review checkpoint endpoints."""
     checkpoints_router = APIRouter(tags=["Checkpoints"])
 
@@ -41,7 +42,7 @@ def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> API
         payload: PreviewCheckpointRequest = PreviewCheckpointRequest(),
         layer: str | None = None,
         upstream_checkpoint_id: str | None = None,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> dict[str, Any]:
         """Preview review checklist, blockers, warnings, and candidate content digest."""
         target_layer = layer or (payload.layer if payload else "plan")
@@ -63,7 +64,7 @@ def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> API
     def create_checkpoint(
         plan_id: str,
         payload: CreateCheckpointRequest,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> Any:
         """Create an immutable Plan Checkpoint baseline (P1) or Coverage Checkpoint (C1)."""
         return service.create_checkpoint(
@@ -79,7 +80,7 @@ def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> API
     @checkpoints_router.get("/plans/{plan_id}/checkpoints")
     def list_checkpoints(
         plan_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[PlanCheckpoint]:
         """List all reviewed checkpoints for a plan."""
         return service.list_checkpoints(plan_id)
@@ -88,7 +89,7 @@ def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> API
     def get_checkpoint(
         plan_id: str,
         checkpoint_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> PlanCheckpoint:
         """Get complete immutable snapshot data for a specific checkpoint."""
         cp = service.get_checkpoint(plan_id, checkpoint_id)
@@ -103,7 +104,7 @@ def create_checkpoints_router(get_service: Callable[[], TestPlanService]) -> API
     def get_checkpoint_source_sections(
         plan_id: str,
         checkpoint_id: str,
-        service: TestPlanService = Depends(get_service),
+        service: VerificationPlannerService = Depends(get_service),
     ) -> list[dict[str, Any]]:
         """Get source sections as they existed when the checkpoint was reviewed."""
         cp = service.get_checkpoint(plan_id, checkpoint_id)

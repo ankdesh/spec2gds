@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+
 from fastapi import APIRouter
 
 from testplan_service.constants import (
@@ -22,7 +23,11 @@ from testplan_service.constants import (
     SCHEMA_VERSION_TEST_IR,
 )
 from testplan_service.domain.models import Intent, PlanCheckpoint, PlanHeader, Requirement, Section
-from testplan_service.domain.objectives import CoverageDimension, CoverageExclusion, CoverageObjective
+from testplan_service.domain.objectives import (
+    CoverageDimension,
+    CoverageExclusion,
+    CoverageObjective,
+)
 from testplan_service.domain.operations import CommandBatchRequest
 from testplan_service.domain.policies import IntentEvidencePolicy
 from testplan_service.domain.recipes import BackendConfiguration, Recipe, TargetBindingSet
@@ -72,7 +77,7 @@ def get_capabilities() -> dict[str, Any]:
 def get_operation_catalog() -> list[dict[str, Any]]:
     """Operation discovery endpoint cataloging all supported typed batch operations."""
     return [
-        {"op": "plan.update", "description": "Update plan header metadata (name, description, owner, tags)."},
+        {"op": "plan.update", "description": "Update plan header metadata (name, description, designer, tags)."},
         {"op": "source_section.assess", "description": "Set source section audit disposition, reason, and mapped requirement IDs."},
         {"op": "requirement.create", "description": "Capture new behavioral requirement cited from source."},
         {"op": "requirement.update", "description": "Update requirement statement, disposition, or notes."},

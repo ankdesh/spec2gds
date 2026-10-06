@@ -19,6 +19,7 @@ dev = [
 ]
 
 [project.scripts]
+verification-planner = "testplan_service.cli:main"
 testplan-service = "testplan_service.cli:main"
 
 [build-system]

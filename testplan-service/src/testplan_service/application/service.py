@@ -7,10 +7,10 @@ this coordinator has no capability to mutate a live Spec or execute a simulator.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-import uuid
 
 from testplan_service.application.command_handler import CommandHandler
 from testplan_service.application.coverage_service import CoverageService
@@ -19,7 +19,13 @@ from testplan_service.application.generation_runner import GenerationRunner
 from testplan_service.application.review_engine import ReviewEngine
 from testplan_service.domain.enums import SourceAuditDisposition
 from testplan_service.domain.hierarchy import build_hierarchy_tree
-from testplan_service.domain.models import Intent, PlanCheckpoint, PlanHeader, Section, SourceAuditEntry
+from testplan_service.domain.models import (
+    Intent,
+    PlanCheckpoint,
+    PlanHeader,
+    Section,
+    SourceAuditEntry,
+)
 from testplan_service.domain.recipe_validation import RecipeValidator
 from testplan_service.domain.recipes import BackendConfiguration, Recipe, TargetBindingSet
 from testplan_service.exceptions import PlanNotFoundError, RecordNotFoundError
@@ -29,7 +35,7 @@ from testplan_service.storage.blob_store import BlobStore
 from testplan_service.storage.sqlite_repo import SqlitePlanRepository
 
 
-class TestPlanService:
+class VerificationPlannerService:
     """Core application coordinator managing domain transactions, persistence, and jobs."""
 
     def __init__(self, storage_dir: Path | str) -> None:
@@ -59,7 +65,7 @@ class TestPlanService:
         snapshot_id: str,
         root_scope_id: str,
         description: str = "",
-        owner_label: str | None = None,
+        designer_label: str | None = None,
         tags: list[str] | None = None,
     ) -> PlanHeader:
         """Create a new plan bound to a validated snapshot, initializing audit entries."""
@@ -78,7 +84,7 @@ class TestPlanService:
                 disposition=SourceAuditDisposition.UNREVIEWED,
                 reason=None,
                 linked_requirement_ids=[],
-                reviewer_label=owner_label or "author",
+                reviewer_label=designer_label or "author",
                 source_digest=sec.content_digest,
                 updated_at=now_iso,
             )
@@ -89,7 +95,7 @@ class TestPlanService:
             description=description,
             snapshot_id=snapshot_id,
             root_scope_id=root_scope_id,
-            owner_label=owner_label,
+            designer_label=designer_label,
             tags=tags or [],
             source_audit=source_audit,
             edit_revision=1,

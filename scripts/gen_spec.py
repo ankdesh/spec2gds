@@ -9,8 +9,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from spec2gds.agent_spec.spec_format.archive import SpecPackage
-from spec2gds.agent_spec.spec_format.models import EntityRef
+from spec2gds.spec.spec_format.archive import SpecPackage
+from spec2gds.spec.spec_format.models import EntityRef
 
 # Usage:
 # python scripts/gen_spec.py output.spec top.xml component1.xml component2.xml

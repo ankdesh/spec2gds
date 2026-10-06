@@ -205,14 +205,14 @@ def main() -> int:
     project = args.project
     if args.spec:
         from scripts.run_rtl_activity import select_target
-        from spec2gds.agent_spec.activities import (
+        from spec2gds.spec.activities import (
             ActivitySnapshot,
-            LocalActivityWorkspace,
+            LocalActivityScratchDirectory,
             SpecExtensionRegistry,
             invoke_activity,
         )
-        from spec2gds.agent_spec.activities.rtl import register_extensions
-        from spec2gds.agent_spec.spec_format.ir import SpecRevision
+        from spec2gds.spec.activities.rtl import register_extensions
+        from spec2gds.spec.spec_format.ir import SpecRevision
 
         revision = SpecRevision.load(str(args.spec))
         target = select_target(revision, args.target)
@@ -222,7 +222,7 @@ def main() -> int:
             registry,
             "rtl.generate",
             ActivitySnapshot.create(revision, target.ref),
-            LocalActivityWorkspace(args.output.resolve() / "generated"),
+            LocalActivityScratchDirectory(args.output.resolve() / "generated"),
         )
         project = args.output.resolve() / "generated" / result.report["output_path"]
     result = evaluate_project(

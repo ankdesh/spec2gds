@@ -51,7 +51,7 @@ Independent circuit files store timing in the optional `timing` member of the
 version-1 Circuit document. Existing files without it behave as a one-domain,
 zero-marker design and need no migration.
 
-For a specification-owned circuit, **Save to Specification** persists a
+For a specification-owned circuit, **Save to Spec** persists a
 source-semantic `DesignCircuitTimingV1` annotation under
 `annotations/circuit-timing/<design-id>.json`. Instance, boundary, and net
 references use IP-XACT names rather than generated Circuit IDs. The namespace
@@ -60,8 +60,8 @@ references, finite unique marker positions, and a 2 MiB payload limit are
 validated with the rest of the atomic package transaction.
 
 SVG and PNG downloads include full-height markers, stage names, and path cycle
-labels. The Specification Editor's derived SVG preview uses the same exporter,
+labels. The Spec Editor's derived SVG preview uses the same exporter,
 so saved timing appears in the card, expanded view, downloaded SVG, and print
 output without storing an image in the `.spec` package. HDL and SystemC
-generators are unchanged: timing stages are design metadata, not inferred RTL
+Activities are unchanged: timing stages are design metadata, not inferred RTL
 behavior.

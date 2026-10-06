@@ -3,16 +3,16 @@
 ## Repository map
 
 ```text
-spec2gds/agent_spec/spec_format/   .spec model, SpecIR, transactions, actions, API
-spec2gds/agent_spec/activities/    Activity snapshots, read SDK, contracts, registry
-spec2gds/agent_spec/importers/     PDF, Word, and ODT import
+spec2gds/spec/spec_format/   .spec model, SpecIR, transactions, actions, API
+spec2gds/spec/activities/    Activity snapshots, read SDK, contracts, registry
+spec2gds/spec/importers/     PDF, Word, and ODT import
 circuit-designer/schema/           canonical Circuit Designer JSON Schema
 circuit-designer/packages/core/    contracts, validation, operations, drafts, export
 circuit-designer/packages/service/ REST sessions, leases, proposals, providers
 circuit-designer/packages/layout/  placement and orthogonal routing
 circuit-designer/packages/react/   canvas rendering and gestures
 circuit-designer/packages/app-react/ reusable application shell and host adapters
-circuit-designer/apps/editor/      specification editor frontend
+circuit-designer/apps/editor/      Spec Editor frontend
 circuit-designer/apps/standalone/  independent Circuit Designer frontend
 ai-assistant/                      DeepSeek Harness assistant product and web client
 testplan-service/                   snapshot-bound planning, evidence, reference generation
@@ -35,7 +35,7 @@ scripts/test-all.sh all
 | Tier | Coverage | Use |
 | --- | --- | --- |
 | Fundamental | Fast Python model, package, validation, transaction, projection, owner/API, Activity preflight, importer, runtime and Verification Planner tests; all Circuit Designer and Assistant unit tests | During development and for ordinary pull requests |
-| Extensive | Remaining Python RTL lint/compilation/simulation, SystemC/CIRCT compilation and Assistant CLI workflows; Harness integration; Circuit Designer, Spec Editor and Assistant browser suites | Before merging workflow, generator or UI changes, and for complete regression runs |
+| Extensive | Remaining Python RTL lint/compilation/simulation, SystemC/CIRCT compilation and Assistant CLI flows; Harness integration; Circuit Designer, Spec Editor and Assistant browser suites | Before merging flow, Activity or UI changes, and for complete regression runs |
 
 The tiers are disjoint. `all` runs both without repeating fundamental tests.
 Existing `npm test` and unfiltered Python test commands retain their full
@@ -69,7 +69,7 @@ uv run python -m pytest -q --strict-markers tests testplan-service/tests -m exte
 
 New fast tests enter fundamental automatically. Mark a test
 `@pytest.mark.extensive` when it compiles/simulates hardware or launches a complete
-Assistant workflow; use `pytestmark = pytest.mark.extensive` only for modules
+Assistant flow; use `pytestmark = pytest.mark.extensive` only for modules
 whose tests belong together. Keep fast structural/preflight tests fundamental
 even when they share a file with compiler tests. Marker names are checked by the
 runner. All current JavaScript unit tests remain fundamental; native Harness and
@@ -110,11 +110,11 @@ uv run spec2gds-import-document input.pdf -o output.spec
 Focused checks:
 
 ```bash
-uv run python -m pytest tests/agent_spec/spec_format -q
-uv run python -m pytest tests/agent_spec/activities -q
-uv run python -m pytest tests/agent_spec/activities/rtl -q
-uv run python -m pytest tests/agent_spec/importers -q
-uv run python -m py_compile spec2gds/agent_spec/spec_format/*.py spec2gds/agent_spec/activities/*.py
+uv run python -m pytest tests/spec/spec_format -q
+uv run python -m pytest tests/spec/activities -q
+uv run python -m pytest tests/spec/activities/rtl -q
+uv run python -m pytest tests/spec/importers -q
+uv run python -m py_compile spec2gds/spec/spec_format/*.py spec2gds/spec/activities/*.py
 ```
 
 ## TypeScript environment
@@ -142,7 +142,7 @@ cd circuit-designer
 npm run test:e2e
 ```
 
-The specification editor owns a separate browser-test configuration and dev
+The Spec Editor owns a separate browser-test configuration and dev
 server lifecycle:
 
 ```bash
@@ -151,7 +151,7 @@ npm run test:e2e:editor
 ```
 
 The two commands deliberately do not start each other's applications. A future
-combined workflow should be owned by the specification editor and delegate to
+combined flow should be managed by the Spec service and delegate to
 the existing Circuit Designer command rather than expanding Circuit Designer's
 default startup.
 
@@ -220,7 +220,7 @@ the longer-term service monitoring mechanism.
 - Keep generated artifacts out of source control unless they are required
   runtime assets, such as the packaged editor bundle.
 - Put reusable regression data in small programmatic test fixtures.
-- Add or update a document in `docs/` when architecture, a public workflow, or
+- Add or update a document in `docs/` when architecture, a public flow, or
   run instructions change.
 - Remove stale documents rather than preserving an in-repository archive.
 

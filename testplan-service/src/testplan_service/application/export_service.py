@@ -134,7 +134,7 @@ class ExportService:
             description=hdr.get("description", ""),
             snapshot_id=hdr["snapshot_id"],
             root_scope_id=hdr["root_scope_id"],
-            owner_label=hdr.get("owner_label"),
+            designer_label=hdr.get("designer_label", hdr.get("owner_label")),
             tags=hdr.get("tags", []),
             source_audit={},
             schema_version=hdr.get("schema_version", "verification.plan.v1"),

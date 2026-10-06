@@ -10,8 +10,8 @@ from __future__ import annotations
 import argparse
 import sys
 from typing import Any
-import httpx
 
+import httpx
 from testplan_service.domain.enums import AuthoringState, Priority
 from testplan_service.fixtures.fifo_snapshot import (
     get_fifo_snapshot_bytes,
@@ -70,7 +70,7 @@ def run_fixture_sequence(client: httpx.Client, base_path: str = "/api/verificati
             "snapshot_id": snapshot_id,
             "root_scope_id": "sync_fifo",
             "description": "Deterministic synthetic fixture verification plan for synchronous FIFO",
-            "owner_label": "verification-lead",
+            "designer_label": "verification-lead",
             "tags": ["fixture", "fifo", "layer-1"],
         },
     )
@@ -710,10 +710,11 @@ def main() -> None:
     except (httpx.ConnectError, httpx.TimeoutException):
         print(f"Notice: Live service at {args.base_url} is not currently running.")
         print("Running fixture-building sequence against in-process FastAPI TestClient...")
-        from fastapi.testclient import TestClient
-        from testplan_service.api.app import create_app
         import tempfile
         from pathlib import Path
+
+        from fastapi.testclient import TestClient
+        from testplan_service.api.app import create_app
 
         tmp_dir = Path(tempfile.mkdtemp()) / "fixture_verification_data"
         test_app = create_app(storage_dir=tmp_dir)

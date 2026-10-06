@@ -7,9 +7,9 @@ export interface SessionBinding {
   status: "creating" | "active";
   preset: AssistantPreset;
   domain: Domain;
-  ownerUrl: string;
+  serviceUrl: string;
   documentId: string;
-  ownerDocumentKey?: string | null;
+  serviceDocumentKey?: string | null;
   scope: BindingScope;
   entityKind: string | null;
   entityId: string | null;
@@ -19,7 +19,7 @@ export interface SessionBinding {
   workspaceTitle: string;
   workspacePath: string;
   workspaceDomain: Domain;
-  workspaceOwnerUrl: string;
+  workspaceServiceUrl: string;
   workspaceDocumentId: string;
   archived: boolean;
   createdAt: string;
@@ -41,10 +41,10 @@ export type ProposalErrorCode =
   | "UNSUPPORTED_REQUEST"
   | "INVALID_PROPOSAL"
   | "STALE_REVISION"
-  | "OWNER_REJECTED"
-  | "OWNER_LOCKED"
-  | "OWNER_UNAVAILABLE"
-  | "OWNER_CONTRACT_ERROR"
+  | "SERVICE_REJECTED"
+  | "SERVICE_LOCKED"
+  | "SERVICE_UNAVAILABLE"
+  | "SERVICE_CONTRACT_ERROR"
   | "INTERNAL_ERROR";
 
 export interface ProposalIssue {
@@ -85,7 +85,7 @@ export interface ProposalReview {
   preview: Record<string, unknown> | null;
   diagnostics: unknown;
   error: ProposalError | null;
-  ownerResult: unknown;
+  serviceResult: unknown;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -103,7 +103,7 @@ export interface BindingInput {
   eventTemplateRevision?: number;
   serviceBaseUrl: string;
   documentId: string;
-  ownerDocumentKey?: string;
+  serviceDocumentKey?: string;
   scope?: BindingScope;
   entityKind?: string;
   entityId?: string;
@@ -130,7 +130,7 @@ export interface WorkspaceDescriptor {
   title: string;
   path: string;
   domain: Domain;
-  ownerUrl: string;
+  serviceUrl: string;
   documentId: string;
 }
 
@@ -150,7 +150,7 @@ export interface SourceCreationRequest {
   destinationSessionId: string;
   continuationRequestId: string;
   sourceRevisionHash: string | null;
-  ownerDocumentKey?: string;
+  serviceDocumentKey?: string;
   automatic?: boolean;
   creationReceipts?: boolean;
   error: string | null;
