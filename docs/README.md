@@ -1,7 +1,9 @@
 # Documentation
 
-These pages describe the current source. Future requirements live in explicitly
-marked backlogs; completed plans and release diaries live in Git history.
+Use each document's status to distinguish required contracts, current owner
+behavior, and proposed work. The Assistant contract defines required behavior;
+its TEMP register records current code gaps. Historical plans and release diaries
+remain in Git.
 
 ## System and development
 
@@ -14,7 +16,8 @@ marked backlogs; completed plans and release diaries live in Git history.
 
 ## Specification editing and Activities
 
-- [Editor UI](editor-ui.md) and [entity sections/SystemVerilog](entity-sections.md)
+- [Editor UI](editor-ui.md), [entity sections/SystemVerilog](entity-sections.md),
+  and [owner refinement, live views, and drafts](spec-editor-iterative-refinement.md)
 - [Activity Snapshot v1](activity-snapshot-v1.md) and [Activity SDK](activity-sdk.md)
 - [RTL generation](rtl-generation-activity.md), [RTL semantics examples](rtl-semantics-examples.md)
   and [SystemVerilog language examples](rtl-language-examples.md)
@@ -23,24 +26,15 @@ marked backlogs; completed plans and release diaries live in Git history.
 
 ## Assistant
 
-- [Document lifecycle rules, state machines and scenario checklist](assistant-document-lifecycle.md)
-- [Unified hierarchy, explanations and RTL integration](assistant-hierarchical-spec-integration.md)
-  and [functional/generalization evaluation evidence](assistant-hierarchical-spec-evaluation.md)
-- [Setup and owner boundaries](ai-assistant.md), [UI composition](assistant-ui.md)
-  and [native/product architecture](configurable-assistant-architecture.md)
-- [Harness setup troubleshooting and regression checks](harness-setup-troubleshooting.md)
-- [Events, presets and configuration](event-driven-assistant-system.md),
-  [monitoring/waiting/recovery](event-driven-assistant-operations.md) and
-  [hands-on tutorial](event-driven-assistant-tutorial.md)
-- [Specification creation](assistant-spec-creation.md),
-  [iterative refinement](spec-editor-iterative-refinement.md),
-  [acceptance tests](assistant-acceptance-tests.md) and [workspace CLI](spec-workspace-cli.md)
-- [Owner operation schemas](assistant-owner-operation-contract.md) and [evaluation](ai-assistant-evaluation.md)
-- [Execution design rationale](agentic-systems-architecture-report.md),
-  [remaining improvements](ai-assistant-improvement-plan.md) and
-  [remaining integration issues](ai-assistant-integration-issues.md)
-- [Preserved research input](research/ai-spec-to-rtl-design-research-guide.md)
-  is provenance, not current product behavior or task instructions.
+- [System contract](ai-assistant.md): required behavior, workflows, tools, and states.
+- [Operations and tests](ai-assistant-operations.md): setup, configuration, CLI,
+  diagnostics, and acceptance checks.
+- [TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md): differences
+  between the contract and current code. Remove entries after verification.
+- [Future work](ai-assistant-future-work.md): proposals, not accepted requirements.
+
+The preserved research and raw evidence are linked from these guides. They do
+not grant capabilities or establish current product behavior.
 
 ## Circuit Designer
 

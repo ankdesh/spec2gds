@@ -574,7 +574,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     kind: "spec2gds-proposal-reviews",
     match(event) {
       if (event.type === "turn/start") return { id: String(event.data.turn), role: "start" };
-      if (event.type === "tool/call" || event.type === "tool/result") return { id: String(event.data.turn), role: "update" };
+      if (event.type === "tool/call" || event.type === "tool/result" || event.type === "turn/end") return { id: String(event.data.turn), role: "update" };
       return null;
     },
     start(_context, match) {
@@ -582,6 +582,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       return { turn: match.event.data.turn, calls: new Map(), results: [] };
     },
     update(context, match) {
+      if (match.event.type === "turn/end") return { ...context.state,
+        blockedSeq: match.event.data.reason?.kind === "blocked" ? match.event.seq : null };
       if (match.event.type === "tool/call") {
         if (!proposalToolNames.has(match.event.data.name)) return context.state;
         const calls = new Map(context.state.calls);
@@ -591,22 +593,29 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       if (match.event.type !== "tool/result") return context.state;
       const callId = String(match.event.data.message.source.callId);
       if (!context.state.calls.has(callId)) return context.state;
-      const value = resultContentValue(match.event.data.message.content[0]?.content);
+      const block = match.event.data.message.content[0];
+      const toolName = context.state.calls.get(callId);
+      const creationTool = ["prepare_architecture_review", "prepare_spec_document_creation"].includes(toolName);
+      const value = creationTool && block?.isError
+        ? { creation_error: (block.content || []).filter(item => item.type === "text").map(item => item.text).join("\n") || "Tool arguments were rejected." }
+        : resultContentValue(block?.content);
       if (!value?.review && !value?.error && !value?.required_input && !value?.source_creation && !value?.creation_error && !value?.architecture_review) return context.state;
-      const result = { callId, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null,
+      const result = { callId, toolName, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null,
         architectureReview: value.architecture_review || null, sourceCreation: value.source_creation || null, creationError: value.creation_error || null };
       return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
     },
     buildLocationData(context, scope, previous) {
       if (scope !== "turn" || !context.state) return null;
       if (previous?.kind === "turn" && previous.turn === context.state.turn
-        && previous.key === "spec2gds-proposal-reviews" && previous.value.results === context.state.results) return previous;
-      return { kind: "turn", turn: context.state.turn, key: "spec2gds-proposal-reviews", value: { results: context.state.results } };
+        && previous.key === "spec2gds-proposal-reviews" && previous.value.results === context.state.results
+        && previous.value.blockedSeq === context.state.blockedSeq) return previous;
+      return { kind: "turn", turn: context.state.turn, key: "spec2gds-proposal-reviews", value: { results: context.state.results, blockedSeq: context.state.blockedSeq } };
     },
   };
 
   function selectProposalReview(owner) {
-    const results = owner.turn.data.get("spec2gds-proposal-reviews")?.results || [];
+    const data = owner.turn.data.get("spec2gds-proposal-reviews");
+    const results = data?.results || [];
     const visible = results.filter(result => result.seq < owner.seq);
     const latest = visible.at(-1);
     if (!latest) return null;
@@ -616,7 +625,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       if (result.architectureReview) reviews.set(result.architectureReview.reviewId, result.architectureReview);
     }
     reviews.delete(latest.architectureReview?.reviewId);
-    return { ...latest, earlierArchitectureReviews: [...reviews.values()] };
+    return { ...latest, blocked: data?.blockedSeq != null && data.blockedSeq <= owner.seq,
+      earlierArchitectureReviews: [...reviews.values()] };
   }
 
   function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation }) {
@@ -625,7 +635,10 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       h(ProposalReviewTail, { matched: { ...matched, earlierArchitectureReviews: [] }, inputActions, onContinueCreation, onOpenCreation }));
     if (matched.architectureReview) return h(ArchitectureReviewCard, { key: matched.architectureReview.reviewId, request: matched.architectureReview, inputActions });
     if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
-    if (matched.creationError) return h("article", { className: "s2g-review" }, h("h4", null, "Specification creation unavailable"), h("p", { className: "s2g-error" }, matched.creationError));
+    if (matched.creationError) return h("article", { className: "s2g-review", role: "alert" },
+      h("h4", null, matched.toolName === "prepare_architecture_review" ? "Architecture review could not be prepared" : "Specification creation unavailable"),
+      h("p", { className: "s2g-error" }, matched.creationError),
+      matched.blocked ? h("p", null, "The turn stopped before this request completed. Correct the reported fields before retrying.") : null);
     if (matched.review) return h(ReviewCard, { review: matched.review });
     if (matched.requiredInput) return h(ProposalInputCard, { request: matched.requiredInput, inputActions });
     return h(ProposalErrorCard, { error: matched.error });

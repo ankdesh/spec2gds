@@ -39,7 +39,7 @@
 # spec2gds domain tools replace general-purpose coding and delegation tools.
 - id: compaction-basic
   config:
-    maxTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)
+    maxTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 16384)
 
 - id: tool-bash
   disabled: true
@@ -163,7 +163,7 @@
         circuitAllowlist: !!js process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
         maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
-        maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 1200)
+        maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 16384)
         interactiveForms: !!js (process.env.ASSISTANT_PROFILE || 'spec2gds-web') === 'spec2gds-web'
         execution:
           goal:

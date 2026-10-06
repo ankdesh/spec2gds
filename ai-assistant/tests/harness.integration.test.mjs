@@ -96,7 +96,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
           summary: "Adds a timer component.",
           rationale: "The design needs timing control.",
           assumptions: [],
-          operations: [{ operation_id: "create_timer", type: "create_entity", kind: "component", name: "timer", entity_id: "local-timer", instances: [] }, { operation_id: "explanation", type: "set_entity_metadata", entity: { document_id: "doc-test", entity_kind: "component", entity_id: "local-timer" }, description: "Timing control. Interface and functional RTL are not implemented yet." }],
+          operations: [{ operation_id: "create_timer", type: "create_entity", kind: "component", name: "timer", instances: [], entry_design: false }, { operation_id: "explanation", type: "set_entity_metadata", entity: { entity_kind: "component", entity_id: "create_timer" }, description: "Timing control. Interface and functional RTL are not implemented yet." }],
         }) } }] }
         : { content: "The bound specification contains one ALU. The timer proposal is ready for review." };
     response.writeHead(200, { "Content-Type": "text/event-stream" });
@@ -156,7 +156,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     assert.equal(previews, 1);
     const agentRequests = modelRequests.filter(request => Array.isArray(request.tools));
     assert.equal(agentRequests.length, 3);
-    assert.ok(agentRequests.every(request => (request.max_tokens ?? request.max_completion_tokens) === 1200),
+    assert.ok(agentRequests.every(request => (request.max_tokens ?? request.max_completion_tokens) === 16384),
       `Expected every agent request to use the product output cap: ${agentRequests.map(request => request.max_tokens ?? request.max_completion_tokens).join(", ")}`);
     const systemMessage = agentRequests[0].messages.find(message => message.role === "system");
     const system = String(systemMessage?.content);
@@ -191,6 +191,10 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       assert.equal(review.state, "ready");
       assert.equal(review.domain, "spec");
       assert.equal(JSON.parse(review.artifact_json).operations[0].type, "create_entity");
+      const artifact = JSON.parse(review.artifact_json);
+      assert.equal(artifact.operations[1].entity.entity_id, artifact.operations[0].entity_id);
+      assert.equal(artifact.operations[1].entity.document_id, "doc-test");
+      assert.equal(artifact.operations[0].entry_design, undefined);
       assert.equal(JSON.parse(review.preview_json).status, "valid");
     } finally {
       database.close();
@@ -211,6 +215,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
         ...process.env,
         HARNESS_SOURCE: harness,
         ASSISTANT_STATE: loopState,
+        ASSISTANT_MAX_OUTPUT_TOKENS: "4096",
         SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
         CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1",
         OPENAI_API_KEY: "fixture-key",
@@ -228,6 +233,8 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     const loopAgentRequests = modelRequests.slice(requestsBeforeLoop).filter(request => Array.isArray(request.tools));
     assert.equal(loopAgentRequests.length, 3,
       `The product must stop a repeated tool trajectory after three model steps.\n${loopOutput}`);
+    assert.ok(loopAgentRequests.every(request => (request.max_tokens ?? request.max_completion_tokens) === 4096),
+      "An explicit environment override must reach every model request.");
 
     const logs = await sessionLogs(state);
     assert.equal(logs.length, 1, `Expected one recorded Session log under ${state}, got ${logs.join(", ")}`);

@@ -7,6 +7,33 @@ import { registerArchitectureTool, validateArchitectureOperations } from "../src
 import { ProductState } from "../src/state.js";
 import { architecturePlan } from "./support/architecture.js";
 
+test("counter review rejects the failed model payload and accepts a concrete interface usable by creation", async () => {
+  const root = mkdtempSync(join(tmpdir(), "architecture-counter-"));
+  const state = new ProductState(join(root, "state.sqlite3"));
+  try {
+    let tool: any;
+    registerArchitectureTool({ id: "counter", ctx: { tools: { register: value => { tool = value; return () => {}; } } } },
+      state, {} as any, () => "Create a 16-bit up/down counter");
+    const ports = [{ name: "clk", direction: "in", width: 1 }, { name: "reset", direction: "in", width: 1 },
+      { name: "up_down", direction: "in", width: 1 }, { name: "count", direction: "out", width: 16 }];
+    const plan = { ...architecturePlan, components: [{ name: "up_down_counter", purpose: "16-bit counter" }],
+      designs: [{ name: "counter_design", purpose: "Entry composition" }],
+      interfaces: [{ component: "up_down_counter", ports }], concrete_configuration: { width: 16, reset: "synchronous active-high", overflow: "wrap" } };
+    await assert.rejects(tool.execute({ ...plan, components: [{ component: "up_down_counter", ports }] }, { callId: "invalid" }), /components\[0\]\.name/);
+    await assert.rejects(tool.execute({ ...plan, designs: [{ design: "counter_design" }] }, { callId: "invalid-design" }), /designs\[0\]\.name/);
+    await assert.rejects(tool.execute({ ...plan, interfaces: [{ component: "up_down_counter", ports: [{ name: "clk", direction: "input", width: 1 }] }] }, { callId: "invalid-direction" }), /interfaces\[0\]/);
+    assert.match((await tool.execute({ ...plan, interfaces: [] }, { callId: "empty-interfaces" })).creation_error, /interfaces must contain/);
+    assert.match((await tool.execute({ ...plan, concrete_configuration: {} }, { callId: "empty-config" })).creation_error, /concrete_configuration must contain/);
+    assert.match((await tool.execute({ ...plan, interfaces: [{ component: "unknown", ports }] }, { callId: "unknown" })).creation_error, /per named component/);
+    assert.match((await tool.execute({ ...plan, interfaces: [{ component: "up_down_counter", ports: [{ name: "count", direction: "out", width: 0 }] }] }, { callId: "zero-width" })).creation_error, /positive integer widths/);
+    const result = await tool.execute(plan, { callId: "corrected" });
+    assert.equal(result.architecture_review.status, "pending");
+    assert.equal(state.architectureReview(result.architecture_review.reviewId)?.originalRequest, "Create a 16-bit up/down counter");
+    validateArchitectureOperations(plan, [{ type: "create_entity", kind: "component", name: "up_down_counter",
+      ports: ports.map(({ width, ...port }) => ({ ...port, ...(width > 1 ? { range: `${width - 1}:0` } : {}) })) }]);
+  } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
 test("approved creation names and concrete interfaces constrain content", () => {
   const creation = { type: "create_entity", kind: "component", name: "leaf", ports: [{ name: "clk", direction: "in" }] };
   validateArchitectureOperations(architecturePlan, [creation]);

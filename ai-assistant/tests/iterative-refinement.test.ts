@@ -216,3 +216,43 @@ test("new components require explanations and text refinements leave RTL operati
     assert.deepEqual(f.submitted[0].artifact.operations.map((item: any) => item.type), ["set_entity_metadata"]);
   } finally { f.close(); }
 });
+
+for (const policy of ["automatic", "review"] as const) test(`operation-ID aliases bind component descriptions before ${policy} submission`, async () => {
+  const f = fixture(policy);
+  try {
+    const operations = structuredClone(f.args.operations);
+    delete operations[0].entity_id;
+    operations[0].entry_design = false;
+    operations[1].entity = { entity_id: operations[0].operation_id, entity_kind: "component" };
+    const args = { ...f.args, operations };
+    const original = structuredClone(args);
+    const result = await f.execute(args);
+    assert.equal(result.review.state, policy === "automatic" ? "applied" : "ready");
+    const submitted = f.submitted[0].artifact.operations;
+    assert.equal(submitted[1].entity.entity_id, submitted[0].entity_id);
+    assert.equal(submitted[1].entity.document_id, "document");
+    assert.equal(submitted[1].description, operations[1].description);
+    assert.equal(submitted[0].entry_design, undefined);
+    assert.deepEqual(args, original, "Frozen model arguments remain unchanged");
+    const replay = await f.execute(args);
+    assert.equal(replay.review.proposal_id, result.review.proposal_id);
+    assert.equal(f.submitted.length, 1, "Replaying the same call does not submit a second component");
+  } finally { f.close(); }
+});
+
+test("missing or unrelated component descriptions give the component name and cannot submit", async () => {
+  const f = fixture();
+  try {
+    for (const reference of [null,
+      { document_id: "other", entity_id: "create", entity_kind: "component" },
+      { document_id: "document", entity_id: "create", entity_kind: "design" }]) {
+      const creation = { ...f.args.operations[0] };
+      delete creation.entity_id;
+      const operations = [creation, ...(reference ? [{ ...f.args.operations[1], entity: reference }] : [])];
+      const result = await f.execute({ ...f.args, operations });
+      assert.match(result.error.details, /New component leaf \(alias create\)/);
+      assert.doesNotMatch(result.error.details, /undefined/);
+      assert.equal(f.submitted.length, 0);
+    }
+  } finally { f.close(); }
+});

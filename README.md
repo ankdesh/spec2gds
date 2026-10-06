@@ -38,40 +38,21 @@ The two editors have different source-of-truth rules:
 See [the documentation index](docs/README.md) for the architecture and flow
 details.
 
-The AI Assistant is implemented as a focused DeepSeek Harness product with
-deterministic domain context, strict proposal schemas, review diffs, and
-conversation archive/rename support. It owns the canonical `ai-assistant/`
-workspace and port `6013`; see the [AI Assistant guide](docs/ai-assistant.md).
+The AI Assistant uses DeepSeek Harness for its chat shell and runtime. Product
+adapters add permanent document bindings, owner tools, and review cards. Use these
+four guides:
 
-In a browser chat, ask **“Create a new spec document”** and include the circuit
-description. First approve the architecture card after resolving essential
-questions. In automatic mode the Assistant creates the package under
-`SPEC_DOCUMENT_ROOT` and continues the request in a new document-bound chat.
-Restricted owners show a creation card for review. No existing package needs
-to be open. Circuit changes retain their existing approval and save workflow.
-See [specification creation from chat](docs/assistant-spec-creation.md) for
-configuration and recovery. Architecture approval cards remain visible beside later
-creation errors; approve the intended review before continuing with its review ID.
+- [System contract](docs/ai-assistant.md) defines required behavior.
+- [Operations and tests](docs/ai-assistant-operations.md) gives run commands,
+  configuration, diagnostics, and acceptance checks.
+- [TEMP implementation gaps](docs/TEMP-ai-assistant-implementation-gaps.md) records
+  where the current code differs from the contract.
+- [Future work](docs/ai-assistant-future-work.md) keeps proposed improvements separate.
 
-For creating, editing, switching, and closing specifications, use the
-[Assistant lifecycle rules and state machines](docs/assistant-document-lifecycle.md).
-A chat keeps its original document binding when the editor opens another package.
-The guide covers editor/direct launches, pending work, recovery, and rules that
-still need implementation.
-
-Components support multiline explanations through **Edit text…** beside interfaces
-and RTL. Stored SV defines implemented behavior; structured designs define wiring,
-and text guides implementation. Generator `1.2.0` accepts component/design targets,
-reachable hierarchy and numeric slices. See the [unified integration guide](docs/assistant-hierarchical-spec-integration.md)
-and [evaluation commands and evidence](docs/assistant-hierarchical-spec-evaluation.md).
-
-The `orchestrated` preset uses persistent event agents; `goal` uses native
-single-agent continuation. Both support owner HTTP polling, correlated waits,
-bounded retries and human-reviewed visual templates. See [events and presets](docs/event-driven-assistant-system.md),
-[execution operations](docs/event-driven-assistant-operations.md) and
-[the tutorial](docs/event-driven-assistant-tutorial.md). Workflow execution remains
-future work; [design rationale](docs/agentic-systems-architecture-report.md)
-records the boundaries for a later policy.
+A chat keeps its document target when the editor opens another document. Architecture
+approval and content-save approval are separate decisions. Check TEMP for accepted
+rules that still need implementation. Stored RTL, structured wiring, and explanation
+text have different roles; see the contract and [RTL generator guide](docs/rtl-generation-activity.md).
 
 For a focused explanation of how the two editors cooperate, including launch,
 projection, save, refresh, conflict, and security diagrams, read
@@ -128,52 +109,13 @@ client bundle, so it is part of setup even when using the combined launcher.
 scripts/setup-all.sh
 ```
 
-See [AI Assistant](docs/ai-assistant.md) for Harness checkout setup, owner
-allowlists, tests, state, and packaging constraints.
+Use [Assistant operations](docs/ai-assistant-operations.md#setup-and-source-pin) for
+Harness checkout setup, source-pin checks, tests, state, and packaging. Rerun setup
+after replacing or moving the selected Harness checkout.
 
-Setup follows `DSH_BRANCH` (default `spec2gds/integration`) and uses the sibling
-`../deepseek-harness` checkout unless `HARNESS_SOURCE` selects another destination.
-It refreshes the Assistant's package and developer-tool links and saves the
-canonical checkout path in `ai-assistant/.env`, preserving other settings.
-Rerun setup after replacing or moving the Harness checkout. To verify or rebuild
-the Assistant afterward:
-
-```bash
-npm --prefix ai-assistant run typecheck
-npm --prefix ai-assistant run build
-npm --prefix ai-assistant test
-npm --prefix ai-assistant run test:harness
-```
-
-See [Harness setup troubleshooting](docs/harness-setup-troubleshooting.md) for
-the setup issue resolutions and Python verification commands.
-
-For a single focused Spec turn, the two Python CLIs live in
-[`scripts/spec2gds_assistant.py`](scripts/spec2gds_assistant.py) and
-[`scripts/spec2gds_spec.py`](scripts/spec2gds_spec.py). They use the root
-`uv`/`.venv` environment and the built internal Harness product:
-
-```bash
-uv sync
-scripts/setup-all.sh
-export OPENAI_API_KEY="..."
-uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer."
-uv run spec2gds-spec architecture-reviews ./work/timer
-uv run spec2gds-spec approve-architecture ./work/timer REVIEW_ID
-uv run spec2gds-assistant ./work/timer --architecture-review-id REVIEW_ID -- "Author the approved timer specification."
-# For a restricted turn, leave the proposal pending for an explicit decision:
-uv run spec2gds-assistant ./work/timer --require-human-approval -- "Refine the timer."
-uv run spec2gds-spec reviews ./work/timer
-uv run spec2gds-spec approve ./work/timer proposal_...
-# Or discard one pending proposal:
-uv run spec2gds-spec reject ./work/timer proposal_...
-```
-
-The assistant command creates or opens the workspace's `.spec` and saves valid
-submissions automatically unless `--require-human-approval` is set. The Spec
-command owns explicit review decisions and paginated history. See the
-[focused Spec workspace guide](docs/spec-workspace-cli.md) for exact-file targets,
-conflicts, saved run records, and future `agent_eval` integration.
+The focused Python CLIs use the root uv environment and the built internal Harness
+product. See [CLI workflows](docs/ai-assistant-operations.md#cli-workflows) for architecture
+approval, restricted content decisions, exact-file targets, conflicts, and run records.
 
 To enable model-backed Assistant replies, export an API key before launch.
 Without it, the Spec Editor and Circuit Designer still run and the Assistant
@@ -271,28 +213,18 @@ specification is open. A document chat can create and refine supported entities
 throughout its package. An entity's **Options → More actions… → Explore with AI
 Assistant** creates a narrower entity-bound conversation.
 
-Unbound Assistant conversations have no design context or proposal tools.
-They can discuss general questions and stage new Spec package creation;
-editing an existing source requires its exact document or entity binding. The
-browser offers focused, goal, and orchestrated presets;
-all preserve owner validation and revision checks. Spec owners save valid
-submissions automatically by default; restricted owners retain explicit review.
-Fully specified automatic requests skip confirmation cards and record defaults
-as assumptions. Missing required values still request clarification. Operation
-shapes come from the bound owner
-through the [owner schema contract](docs/assistant-owner-operation-contract.md).
+Unbound Assistant chats can discuss general hardware topics and create a new
+specification document. Editing an existing document requires its exact binding.
+The system contract defines approval, scope, and failure rules; the TEMP register
+records the remaining code changes.
 
 Use `uv run spec2gds-editor --require-human-approval` or
-`bash scripts/serve-all.sh start --require-human-approval` for restricted mode.
-Chats stay bound to their package when another specification opens. Idle views
-follow incoming changes, while inline drafts retain their text and original
-revision. See [iterative refinement](docs/spec-editor-iterative-refinement.md)
-and its [test plan](docs/assistant-acceptance-tests.md).
-Focused turns are capped at three model steps, with one additional step only
-after a visible structured-question call, and every model response is capped
-at 1,200 output tokens. Goal and orchestrated work use separate bounded
-execution budgets. See the Assistant guide for the full capability and limit
-matrix.
+`scripts/serve-all.sh start --require-human-approval` for restricted Spec content
+saves. Idle views follow incoming changes. Inline drafts retain their text and
+original revision. See [owner refinement](docs/spec-editor-iterative-refinement.md)
+and [Assistant acceptance checks](docs/ai-assistant-operations.md#acceptance-matrix).
+Configuration and execution limits are defined once in
+[Assistant operations](docs/ai-assistant-operations.md#configuration-and-limits).
 
 ## Run only the specification editor
 
@@ -575,7 +507,7 @@ npm run typecheck
 npm test
 npm run build
 npm run test:harness
-# Browser dependency setup and screenshot capture: docs/event-driven-assistant-tutorial.md
+# Browser dependency setup: docs/ai-assistant-operations.md#browser-checks
 npm run test:ui
 npm run eval -- --output /tmp/spec2gds-assistant-eval
 

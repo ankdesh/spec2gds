@@ -78,7 +78,7 @@ browser integration retain their separate existing commands in extensive.
 The named owner/editor scenarios under `tests/ui-scenarios`, Assistant evaluation
 reports and live-provider/generalization runs remain separately invoked. They
 have their own service lifecycle, artifacts or model-key requirements; see
-[Assistant acceptance](assistant-acceptance-tests.md). Lint, typechecking and
+[Assistant acceptance](ai-assistant-operations.md#acceptance-matrix). Lint, typechecking and
 schema generation checks also retain their existing commands below.
 
 ## Python environment
@@ -157,35 +157,17 @@ default startup.
 
 ## Optional AI Assistant
 
-The AI Assistant is a separate DeepSeek Harness Node workspace.
+The AI Assistant is a separate DeepSeek Harness Node workspace. Use the
+[Assistant operations guide](ai-assistant-operations.md) for source setup,
+configuration, build commands, and isolated tests. It is the single Assistant
+command reference.
 
-```bash
-scripts/setup-all.sh
-npm --prefix ai-assistant run typecheck
-npm --prefix ai-assistant test
-npm --prefix ai-assistant run build
-npm --prefix ai-assistant run test:harness
-```
-
-Native event packages are linked from the Harness source; they are not
-currently installed from published npm artifacts. `HARNESS_SOURCE` selects the
-checkout. The unified setup follows `DSH_BRANCH`; it does not enforce the
-`harness.lock.json` pin or offer `--update-harness`. Check the source revision
-against the lock before testing; packaging requires it to be clean and matching.
-
-Setup refreshes the local package, type and executable links and writes the
-canonical checkout path to `ai-assistant/.env`, preserving other developer
-settings. Relative `HARNESS_SOURCE` destinations are resolved from the repository
-root. Rerun setup after replacing or moving Harness. See
-[Harness setup troubleshooting](harness-setup-troubleshooting.md) for the five
-issue resolutions and isolated setup regressions.
-
-See [Assistant acceptance](assistant-acceptance-tests.md) for owner refinement
-and isolated browser scenarios. [The event tutorial](event-driven-assistant-tutorial.md)
-explains `test:ui` browser dependencies and optional screenshot capture. The
-three product browser tests use a minimal adapter shell with real React/native
-services and deterministic owner/model fixtures; full Harness-shell acceptance
-is a separate scope.
+Use the [system contract](ai-assistant.md) for required behavior and
+[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md) for known
+code differences. The acceptance matrix separates deterministic owner tests,
+native Harness tests, browser fixtures, and live-model evaluation. Browser
+fixtures that use the minimal adapter shell do not prove complete native-shell
+behavior.
 
 ## Verification Planner
 

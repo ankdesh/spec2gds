@@ -97,6 +97,7 @@ export function proposedComponentFields(operation: Record<string, unknown>): Pro
 }
 
 const SPEC_PROPOSAL_DESCRIPTION = `Prepare, owner-preview, and submit a typed Spec proposal after reading get_bound_context. Copy its exact source revision into base_source_revision_hash. The owner applies valid submissions automatically unless human approval is required.
+For new entities, provide a proposal-local entity_id alias and use that same alias in dependent references. If entity_id is omitted, the creation operation_id is its alias. Component explanations use set_entity_metadata with entity={document_id: bound_document_id,entity_kind:"component",entity_id: creation_alias} and a nonempty description. entry_design applies only to design creation.
 Use the operation types and field shapes in this binding's owner-published tool schema. Reuse existing IDs from context and use local aliases for new entities and their dependent references. Stay within the writable boundary. Complete replacements must copy unchanged fields. SystemVerilog content is module-body text only. New entities or architectural changes require an approved architecture_review_id; every new component needs an explanation in the same atomic proposal. Generate the approved concrete interfaces. The owner performs semantic validation.`;
 
 const CIRCUIT_PROPOSAL_DESCRIPTION = `Prepare and owner-preview a typed Circuit operation batch after reading get_bound_context. This never commits or submits it.
@@ -317,7 +318,7 @@ function registerSpecProposalTool(
       catch (error) {
         return failureResult(errorFromException(binding, callId(exec), error), "The owner approval policy could not be read. No change was submitted.");
       }
-      try { args = { ...args, operations: snapshotJsonValue(normalizeSpecFormatting(args.operations)) as typeof args.operations };
+      try { args = { ...args, operations: snapshotJsonValue(normalizeSpecFormatting(args.operations, binding.documentId)) as typeof args.operations };
         validateProposalEnvelope(args.supported, args.unsupported_reason, args.operations);
         if (args.supported) validateOwnerOperations(contract, args.operations); }
       catch (error) {
@@ -378,9 +379,10 @@ function registerSpecProposalTool(
         for (const operation of args.operations) {
           if (!isRecord(operation) || operation.type !== "create_entity" || operation.kind !== "component") continue;
           const explanation = args.operations.find(edit => isRecord(edit) && edit.type === "set_entity_metadata"
-            && isRecord(edit.entity) && edit.entity.entity_id === operation.entity_id);
+            && isRecord(edit.entity) && edit.entity.entity_id === operation.entity_id
+            && edit.entity.entity_kind === "component" && edit.entity.document_id === binding.documentId);
           if (!isRecord(explanation) || typeof explanation.description !== "string" || !explanation.description.trim()) {
-            throw new Error(`New component ${String(operation.entity_id)} needs set_entity_metadata.description in the same proposal.`);
+            throw new Error(`New component ${String(operation.name)} (alias ${String(operation.entity_id)}) needs set_entity_metadata.description in the same proposal, referencing this alias with entity_kind=component and document_id=${binding.documentId}.`);
           }
         }
       } catch (error) { return failureResult(proposalError(binding, callId(exec), "INVALID_PROPOSAL", error instanceof Error ? error.message : String(error)), "Resolve the architecture review or missing component explanation and retry."); }

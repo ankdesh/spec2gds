@@ -150,6 +150,41 @@ def test_compound_explanations_composition_and_narrative_are_atomic(tmp_path: Pa
     assert not original.components
 
 
+@pytest.mark.parametrize("display_name", ["16-bit Up/Down Counter", "Counter state"])
+def test_initial_rtl_validation_uses_stable_identity_after_atomic_display_rename(display_name):
+    revision = SpecRevision.from_package(SpecPackage.create("unified"))
+    operations = [
+        {
+            "operation_id": "create_counter",
+            "type": "create_entity",
+            "kind": "component",
+            "name": "up_down_counter",
+            "entity_id": "counter",
+            "ports": [
+                {"name": "d", "family": "wire", "direction": "in"},
+                {"name": "q", "family": "wire", "direction": "out"},
+            ],
+            "systemverilog": "assign q = d;",
+        },
+        {
+            "operation_id": "describe_counter",
+            "type": "set_entity_metadata",
+            "entity": ref("counter"),
+            "display_name": display_name,
+            "description": "Combinational passthrough with stored RTL.",
+        },
+    ]
+    result = preview_assistant_proposal(revision, proposal(revision, operations))
+    assert result["status"] == "valid", result
+    candidate = result["_revision"]
+    assert candidate.components[0].display_name == display_name
+    assert candidate.components[0].ref.entity_id == "counter"
+    sections = candidate.entity_sections_for(candidate.components[0].ref, "sv")
+    assert len(sections) == 1
+    assert [item["section_id"] for item in result["section_validation"]] == [sections[0].section_id]
+    assert not revision.components
+
+
 def test_reachable_component_generation_and_text_only_authority():
     _, revision, _ = hierarchy()
     parent = revision.by_vlnv("component", "spec2gds.local:work:parent:1.0")

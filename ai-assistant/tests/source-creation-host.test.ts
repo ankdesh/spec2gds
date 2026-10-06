@@ -113,6 +113,8 @@ test("browser root presets create from an unbound chat and attach execution syst
       const origin = await f.makeAgent(`origin-${preset}`, preset);
       assert.match(origin.sections.get("spec2gds:unbound-session").text, /Do not read get_bound_context first/,
         "The complete unbound prompt must retain the creation instructions");
+      assert.match(origin.sections.get("spec2gds:unbound-session").text, /ARCHITECTURE AND IMPLEMENTATION AUTHORITY/);
+      assert.match(origin.sections.get("spec2gds:unbound-session").text, /components=\[\{name,purpose\}\]/);
       await f.message(origin.id, original);
       assert.equal(f.executions.has(origin.id), false);
       const review = (await origin.tools.get("prepare_architecture_review").execute(architecturePlan, { callId: `arch-${preset}` })).architecture_review;

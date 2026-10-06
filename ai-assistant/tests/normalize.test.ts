@@ -72,3 +72,25 @@ test("creation aliases remap dependent and narrative references and retain indep
   assert.equal(ref.entity_id,"local");
   assert.throws(()=>normalizeSpecOperations([...operations,{type:"create_entity",kind:"component",name:"other",entity_id:"local"}],"first"),/Duplicate creation alias/);
 });
+
+test("creation operation IDs resolve partial bound references without rewriting another document", () => {
+  const operations = [
+    { type: "create_entity", kind: "component", operation_id: "create_counter", name: "up_down_counter", entry_design: false },
+    { type: "set_entity_metadata", operation_id: "describe_counter",
+      entity: { entity_id: "create_counter", entity_kind: "component" }, description: "Synchronous counter." },
+    { type: "set_entity_metadata", operation_id: "foreign",
+      entity: { document_id: "other", entity_id: "create_counter", entity_kind: "component" }, description: "Another document." },
+  ];
+  const original = structuredClone(operations);
+  const first = normalizeSpecOperations(operations, "proposal", "bound");
+  assert.deepEqual(first, normalizeSpecOperations(operations, "proposal", "bound"));
+  assert.equal((first[1]!.entity as any).entity_id, first[0]!.entity_id);
+  assert.equal((first[1]!.entity as any).document_id, "bound");
+  assert.deepEqual(first[2]!.entity, operations[2]!.entity);
+  assert.equal(first[0]!.entry_design, undefined);
+  assert.deepEqual(operations, original);
+  assert.throws(() => normalizeSpecOperations([...operations,
+    { type: "create_entity", kind: "component", name: "other", entity_id: "create_counter" }], "proposal", "bound"), /Duplicate creation alias/);
+  assert.throws(() => normalizeSpecOperations([operations[0],
+    { ...operations[1], entity: { entity_id: "create_counter", entity_kind: "design" } }], "proposal", "bound"), /different entity kind/);
+});

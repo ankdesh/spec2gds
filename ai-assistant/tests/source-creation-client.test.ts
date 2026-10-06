@@ -156,3 +156,41 @@ test("architecture approval cards survive subsequent creation errors and replay"
   assert.equal(select(3).earlierArchitectureReviews.length, 0, "Repeated results do not duplicate a review card");
   assert.equal(select(1), null);
 });
+
+test("architecture schema failures remain visible after a blocked turn and clear when a retry succeeds", async () => {
+  const f = await browserFixture();
+  let tracking = f.events.start({}, { event: { type: "turn/start", data: { turn: 2 } } });
+  tracking = f.events.update({ state: tracking }, { event: { type: "tool/call", data: {
+    turn: 2, callId: "invalid", name: "prepare_architecture_review",
+  } } });
+  const failure = 'invalid arguments: "components[0].name" is required';
+  tracking = f.events.update({ state: tracking }, { event: { type: "tool/result", seq: 3, data: {
+    turn: 2, message: { source: { callId: "invalid" }, content: [{ isError: true, content: [{ type: "text", text: failure }] }] },
+  } } });
+  const beforeEnd = f.events.buildLocationData({ state: tracking }, "turn", null);
+  assert.equal(f.events.match({ type: "turn/end", data: { turn: 2 } }).role, "update");
+  tracking = f.events.update({ state: tracking }, { event: { type: "turn/end", seq: 5, data: { turn: 2, reason: { kind: "blocked" } } } });
+  const afterEnd = f.events.buildLocationData({ state: tracking }, "turn", beforeEnd);
+  assert.notEqual(beforeEnd, afterEnd, "The footer updates when a turn becomes blocked");
+  const select = (seq: number, location = afterEnd) => f.tail.options.select({ seq, turn: { data: { get: () => location.value } } });
+  const matched = select(6);
+  assert.equal(matched.creationError, failure);
+  const node = f.tail.component({ matched });
+  const article = node.type(node.props);
+  assert.equal(article.props.role, "alert");
+  assert.equal(article.children[0].children[0], "Architecture review could not be prepared");
+  assert.match(article.children[2].children[0], /turn stopped/);
+  assert.equal(select(4).blocked, false, "Replay cannot show a block before its event");
+  assert.equal(select(5).blocked, true, "The completed-turn footer is anchored at the turn/end sequence");
+
+  tracking = f.events.start({}, { event: { type: "turn/start", data: { turn: 3 } } });
+  tracking = f.events.update({ state: tracking }, { event: { type: "tool/call", data: { turn: 3, callId: "valid", name: "prepare_architecture_review" } } });
+  tracking = f.events.update({ state: tracking }, { event: { type: "tool/result", seq: 8, data: {
+    turn: 3, message: { source: { callId: "valid" }, content: [{ isError: false,
+      content: [{ type: "text", text: JSON.stringify({ architecture_review: { reviewId: "corrected", status: "pending", plan: {} } }) }] }] },
+  } } });
+  const retried = select(9, f.events.buildLocationData({ state: tracking }, "turn", null));
+  assert.equal(retried.architectureReview.reviewId, "corrected");
+  assert.equal(retried.creationError, null);
+  assert.equal(retried.blocked, false);
+});

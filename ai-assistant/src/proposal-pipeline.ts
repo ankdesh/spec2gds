@@ -37,7 +37,7 @@ export function buildSpecArtifact(
     summary: input.summary,
     rationale: input.rationale,
     assumptions: input.assumptions,
-    operations: normalizeSpecOperations(input.operations, proposalId),
+    operations: normalizeSpecOperations(input.operations, proposalId, binding.documentId),
   };
 }
 

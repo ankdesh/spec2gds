@@ -24,7 +24,7 @@ import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, Works
 import { parseOwnerOperationContract } from "./owner-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
-import { registerArchitectureTool } from "./architecture-review.js";
+import { ARCHITECTURE_PROMPT, registerArchitectureTool } from "./architecture-review.js";
 import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
@@ -290,7 +290,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       name: "spec2gds:unbound-session",
       order: 150,
       complete: true,
-      text: UNBOUND_SOURCE_PROMPT + (config.interactiveForms ? `\n\n${SOURCE_CREATION_PROMPT}` : ""),
+      text: UNBOUND_SOURCE_PROMPT + `\n\n${ARCHITECTURE_PROMPT}`
+        + (config.interactiveForms ? `\n\n${SOURCE_CREATION_PROMPT}` : ""),
     }));
   };
 

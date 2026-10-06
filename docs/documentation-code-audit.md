@@ -23,24 +23,26 @@ or preserved research file does not establish current support.
 
 ## Consolidation destinations
 
-Completed report plans, event phase plans, the former UI migration, the duplicate
-configurable tutorial, the dated Spec evaluation report and the old refinement
-test plan have been removed. Their useful content now lives in:
+The Assistant guides were consolidated on 2026-10-05. Use these four documents:
 
-- [Execution design rationale](agentic-systems-architecture-report.md),
-  [event/preset reference](event-driven-assistant-system.md),
-  [operations](event-driven-assistant-operations.md) and [tutorial](event-driven-assistant-tutorial.md).
-- [Assistant UI](assistant-ui.md), [evaluation](ai-assistant-evaluation.md) and
-  [acceptance commands](assistant-acceptance-tests.md).
-- [Planner architecture](testplan-service-architecture.md), its
-  [layer references](README.md#verification-planner) and [remaining requirements](verification-planner-backlog.md).
+- [System contract](ai-assistant.md): required behavior and stable requirement IDs.
+- [Operations and tests](ai-assistant-operations.md): setup, commands, and evidence limits.
+- [TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md): code differences, acceptance criteria, and the explicit deletion list.
+- [Future work](ai-assistant-future-work.md): proposals that are not accepted requirements.
+
+The results below are historical evidence from the 2026-10-01 source audit. They
+do not prove that the later Assistant contract is fully implemented.
+
+Planner material remains in its [architecture](testplan-service-architecture.md),
+[layer references](README.md#verification-planner), and
+[remaining requirements](verification-planner-backlog.md).
 
 The former JSON-node Planner prototype document is superseded. Legacy Python
 modules remain in the tree but are not mounted by the current application.
 Future executable workflows, full Test IR semantics, native result collectors,
 Planner browser hardening and recovery requirements remain explicitly proposed.
-The [Assistant backlog](ai-assistant-improvement-plan.md),
-[integration issues](ai-assistant-integration-issues.md) and
+The [Assistant TEMP gaps](TEMP-ai-assistant-implementation-gaps.md),
+[Assistant future work](ai-assistant-future-work.md), and
 [Circuit gaps](circuit-designer-chipmind-gap-analysis.md) retain unresolved work.
 The former root RTL notes are now corrected [language examples](rtl-language-examples.md).
 The unimplemented generator-local SystemC timing proposal is retained in a short
@@ -66,7 +68,7 @@ missing `import.meta.main`. The Assistant engine range is corrected to Node
 replay cursor.
 
 Validation commands and their limits are in [development](development.md) and
-[Assistant acceptance](assistant-acceptance-tests.md). The event browser suite
+[Assistant acceptance](ai-assistant-operations.md#acceptance-matrix). The event browser suite
 uses a minimal Harness adapter shell with deterministic owner/model fixtures;
 it does not prove full native-shell browser behavior. The Planner reference
 backend does not execute DUT verification. Its existing import/unused lint

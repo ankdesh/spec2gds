@@ -49,16 +49,19 @@ export function cleanSystemVerilogBody(value: unknown): unknown {
   return body;
 }
 
-/** Formatting admission precedes owner-schema validation and does not allocate IDs. */
-export function normalizeSpecFormatting(input: unknown[]): Record<string, unknown>[] {
-  return input.map((item, index) => {
+/** Formatting admission resolves local aliases and bound references without allocating persistent IDs. */
+export function normalizeSpecFormatting(input: unknown[], documentId?: string): Record<string, unknown>[] {
+  const operations = input.map((item, index) => {
     if (!isRecord(item) || typeof item.type !== "string") {
       throw new Error(`Spec operation ${index} must be an object with a type.`);
     }
     const operation = structuredClone(item);
     if (operation.operation_id === undefined) operation.operation_id = `operation_${index + 1}`;
     if (operation.type === "create_entity") {
+      if (operation.entity_id === undefined) operation.entity_id = operation.operation_id;
       if (operation.instances === undefined) operation.instances = [];
+      // A false entry flag has no effect on components; only designs can be entries.
+      if (operation.kind === "component" && operation.entry_design === false) delete operation.entry_design;
       if (operation.kind === "component" && Array.isArray(operation.instances) && operation.instances.length) {
         throw new Error("Only designs contain instances. Create a component-owned internal design instead of placing instances on a component.");
       }
@@ -83,6 +86,21 @@ export function normalizeSpecFormatting(input: unknown[]): Record<string, unknow
     if (operation.type === "upsert_narrative_block") normalizeNarrativeBlock(operation.block);
     return operation;
   });
+  const aliases = new Set<string>();
+  for (const operation of operations) {
+    if (operation.type !== "create_entity" || typeof operation.entity_id !== "string") continue;
+    if (aliases.has(operation.entity_id)) throw new Error(`Duplicate creation alias: ${operation.entity_id}`);
+    aliases.add(operation.entity_id);
+  }
+  const bindReferences = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(bindReferences); return; }
+    if (!isRecord(value)) return;
+    if (documentId !== undefined && value.document_id === undefined
+      && typeof value.entity_id === "string" && typeof value.entity_kind === "string") value.document_id = documentId;
+    Object.values(value).forEach(bindReferences);
+  };
+  operations.forEach(bindReferences);
+  return operations;
 }
 
 function normalizePort(value: unknown, creating: boolean): void {
@@ -94,8 +112,8 @@ function normalizePort(value: unknown, creating: boolean): void {
   if (value.family === "wire" && typeof value.range === "string") value.range = compactWireRange(value.range);
 }
 
-export function normalizeSpecOperations(input: unknown[], proposalId?: string): Record<string, unknown>[] {
-  const operations = normalizeSpecFormatting(input);
+export function normalizeSpecOperations(input: unknown[], proposalId?: string, documentId?: string): Record<string, unknown>[] {
+  const operations = normalizeSpecFormatting(input, documentId);
   const aliases = new Map<string, { id: string; kind: unknown }>();
   operations.forEach((operation, index) => {
     const generatedId = (field: string) => proposalId ? createHash("sha256").update(`${proposalId}:${index}:${field}`).digest("hex").slice(0, 32) : randomUUID().replaceAll("-", "");
@@ -112,7 +130,8 @@ export function normalizeSpecOperations(input: unknown[], proposalId?: string): 
   const remap = (value: unknown): void => {
     if (Array.isArray(value)) { value.forEach(remap); return; }
     if (!isRecord(value)) return;
-    if (typeof value.document_id === "string" && typeof value.entity_id === "string") {
+    if (typeof value.document_id === "string" && typeof value.entity_id === "string"
+      && (documentId === undefined || value.document_id === documentId)) {
       const alias = aliases.get(value.entity_id);
       if (alias) {
         if (value.entity_kind !== alias.kind) throw new Error(`Creation alias ${value.entity_id} has a different entity kind.`);

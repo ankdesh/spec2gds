@@ -191,7 +191,7 @@ test("product policy bounds model steps and output tokens", () => {
   assert.match(source, /ctx\.on\("agent\/request"/);
   assert.match(source, /maxTokens: config\.maxOutputTokens/);
   assert.match(patch, /ASSISTANT_MAX_STEPS_PER_TURN \|\| 3/);
-  assert.match(patch, /ASSISTANT_MAX_OUTPUT_TOKENS \|\| 1200/);
+  assert.match(patch, /ASSISTANT_MAX_OUTPUT_TOKENS \|\| 16384/);
 });
 
 test("OpenAI route offers GPT-5.6 Luna without changing the configured default", () => {

@@ -1,4 +1,9 @@
-# Spec Editor support for iterative assistant refinement
+# Spec owner revisions, live views, and drafts
+
+This guide describes current Spec owner APIs and editor synchronization. The
+[Assistant system contract](ai-assistant.md) defines required chat behavior.
+[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md) records
+Assistant differences from that contract.
 
 Valid Spec assistant submissions apply and save automatically by default. The
 owner validates package identity, scope, references, supported operations, and
@@ -29,11 +34,6 @@ artifact and returns `approval_required`; explicit stored-ID `/approve` and
 The legacy `/apply` route cannot bypass restricted approval. Pending proposals
 imported through `/stage` remain subject to review even on an automatic owner.
 
-Fully specified components and automatic package creation continue without
-confirmation cards. Proposed defaults become recorded assumptions. Genuinely
-missing required inputs still request clarification. Restricted owners retain
-the details and creation cards. Creation request IDs and reserved continuation
-receipts prevent a completed creation from creating a second package.
 Owners advertise `creation_receipts` for recovery after an uncertain response;
 retries carry the same request ID and exact saved inputs.
 
@@ -102,8 +102,14 @@ restore controls in this phase.
 
 ## Verification
 
-[Assistant acceptance tests](assistant-acceptance-tests.md) lists deterministic
-owner, CLI, native integration and isolated UI commands. Event-preset browser
-coverage is described separately in [the event tutorial](event-driven-assistant-tutorial.md).
+The [Assistant operations guide](ai-assistant-operations.md#verification-commands)
+lists owner, CLI, native integration, browser, and live-model checks. Its
+[acceptance matrix](ai-assistant-operations.md#acceptance-matrix) maps required
+behavior to test evidence or a missing-test entry. Use the
+[system contract](ai-assistant.md) and
+[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md) to distinguish
+required behavior from current support. Adapter-shell browser fixtures do not
+prove complete native-shell behavior.
+
 Run the relevant source/build checks for a change; a historical release result
 or existing generated bundle is not verification of the current worktree.

@@ -410,9 +410,12 @@ class SpecEditTransaction:
         # Mutate a detached package. Validation failure returns no candidate revision,
         # leaving the immutable input usable by readers and other guarded transactions.
         package = revision.to_package()
+        created_sv_owners: set[EntityRef] = set()
         try:
             for operation in self.operations:
-                _apply_operation(package, operation)
+                created = _apply_operation(package, operation)
+                if isinstance(operation, CreateEntity) and operation.systemverilog is not None and created is not None:
+                    created_sv_owners.add(created)
             validate_package_names(package)
             next_revision = SpecRevision.from_package(package)
         except (KeyError, ValueError, SpecValidationError, etree.LxmlError) as exc:
@@ -423,11 +426,7 @@ class SpecEditTransaction:
             for operation in self.operations
             if isinstance(operation, UpsertEntitySection) and operation.section_type == "sv"
         }
-        updated_owners.update(
-            next(item.ref for item in next_revision.components if entity_name(item) == clean_name(operation.name))
-            for operation in self.operations
-            if isinstance(operation, CreateEntity) and operation.systemverilog is not None
-        )
+        updated_owners.update(created_sv_owners)
         updated_ids = {
             item.section_id for owner in updated_owners
             for item in next_revision.entity_sections_for(owner, "sv")
@@ -464,8 +463,8 @@ class EditResult:
         return self.revision is not None
 
 
-def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
-    """Apply a typed operation to a private package working copy."""
+def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRef | None:
+    """Apply a typed operation and return the stable reference for a creation."""
     if isinstance(operation, UpsertDocumentXml):
         package.add_document(operation.kind, operation.xml)
     elif isinstance(operation, DeleteDocument):
@@ -473,7 +472,7 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
             delete_design_layout(package, operation.ref.entity_id)
         _delete_document(package, operation.ref)
     elif isinstance(operation, CreateEntity):
-        _create_entity(package, operation)
+        return _create_entity(package, operation)
     elif isinstance(operation, SetDocumentTitle):
         if not operation.title.strip():
             raise ValueError("Specification name is required.")
@@ -622,6 +621,7 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> None:
         upsert_design_timing(package, operation.timing)
     else:  # pragma: no cover - protects this dispatcher when the union grows.
         raise TypeError(f"Unsupported edit operation: {type(operation).__name__}")
+    return None
 
 
 def _port_input_mapping(value: ComponentPortInput) -> dict[str, typing.Any]:
@@ -643,8 +643,8 @@ def _delete_document(package: SpecPackage, ref: EntityRef) -> None:
     )
 
 
-def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
-    """Create one valid IP-XACT document with optional atomic initial content."""
+def _create_entity(package: SpecPackage, operation: CreateEntity) -> EntityRef:
+    """Create an IP-XACT document and return its reference for content validation."""
     display_name = clean_name(operation.name)
     existing_revision = SpecRevision.from_package(package)
     require_unique_name(display_name, (entity_name(item) for item in (*existing_revision.components, *existing_revision.designs, *existing_revision.bus_definitions, *existing_revision.abstraction_definitions)))
@@ -696,6 +696,7 @@ def _create_entity(package: SpecPackage, operation: CreateEntity) -> None:
         package.manifest = package.manifest.model_copy(
             update={"entry_designs": [*package.manifest.entry_designs, reference]}
         )
+    return reference
 
 
 def _editable_entity_root(package: SpecPackage, ref: EntityRef) -> etree._Element:
