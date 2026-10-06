@@ -39,7 +39,7 @@ test("bound domain prompts use four typed composable sections", () => {
 test("composed domain prompts retain proposal and safety rules", () => {
   const spec = sectionText("spec", "entity");
   for (const phrase of [
-    "WRITABLE BOUNDARY", "exact entity IDs", "supported=false", "SystemVerilog", "component_vlnv",
+    "WRITABLE BOUNDARY", "exact Component and Design IDs", "supported=false", "SystemVerilog", "component_vlnv",
     "List every material assumption", "Do not emit XML", "claim that a change was applied",
   ]) assert.match(spec, new RegExp(phrase));
   const circuit = sectionText("circuit");
@@ -58,7 +58,7 @@ test("structured-question policy is conditional and requires the interactive too
   assert.equal(Object.hasOwn(section, "complete"), false);
   assert.match(section.text, /MUST call ask_user_question/);
   assert.match(section.text, /every missing value in required_fields/);
-  assert.match(section.text, /LLM-suggested default_value for every field/);
+  assert.match(section.text, /model-suggested default_value for every field/);
   assert.match(section.text, /Do not list missing proposal fields in an ordinary assistant response/);
   assert.match(section.text, /cannot be derived from bound context/);
   assert.match(section.text, /When wait_for_event is available/);
@@ -78,7 +78,7 @@ test("missing details use model-suggested defaults in both domains", () => {
 
 test("binding section names immutable entity and document targets and requires fresh context", () => {
   const entity = sectionText("spec", "entity");
-  assert.match(entity, /Owner: Spec Editor/);
+  assert.match(entity, /Service: Spec service/);
   assert.match(entity, /Document ID: doc-1/);
   assert.match(entity, /Scope: entity/);
   assert.match(entity, /Selected target: component component-1/);
@@ -86,7 +86,7 @@ test("binding section names immutable entity and document targets and requires f
   assert.match(entity, /Never ask the user which document or design they mean/);
 
   const document = sectionText("circuit");
-  assert.match(document, /Owner: Circuit Designer/);
+  assert.match(document, /Service: Circuit service/);
   assert.match(document, /Scope: document/);
   assert.match(document, /Selected target: the complete document/);
 });

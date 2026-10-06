@@ -1,3 +1,4 @@
+import { assistantActions, integrationMetadata, matchesAssistantAction } from "./assistant-integration";
 /** HTTP composition for Circuit operations, leases and source synchronization.
  * Generic operation preview validates Circuit semantics; source preview/commit
  * additionally call the authoritative owner. A source-bound proposal Accept
@@ -120,10 +121,13 @@ export class CircuitDesignerService {
       const context = this.routeContext(parts);
       const method = request.method ?? "GET";
 
-      if (method === "GET" && parts[0] === "health" && parts.length === 1) {
+      if (method === "GET" && url.pathname === `${prefix}/assistant/integration-metadata`) {
+        return this.jsonResponse(response, 200, integrationMetadata());
+      }
+      if (matchesAssistantAction("health", method, url.pathname.slice(prefix.length))) {
         return this.jsonResponse(response, 200, { status: "ok", service: "circuit_designer" });
       }
-      if (method === "GET" && parts[0] === "capabilities" && parts.length === 1) {
+      if (matchesAssistantAction("capabilities", method, url.pathname.slice(prefix.length))) {
         return this.jsonResponse(response, 200, {
           schema_version: 1,
           service: "circuit_designer",
@@ -138,7 +142,7 @@ export class CircuitDesignerService {
           },
         });
       }
-      if (method === "GET" && parts[0] === "assistant" && parts[1] === "operation-schema" && parts.length === 2) {
+      if (matchesAssistantAction("operation_schema", method, url.pathname.slice(prefix.length))) {
         if (url.searchParams.get("scope") !== "document" || !url.searchParams.get("document_id")) {
           throw new CircuitBackendError("validation_failed", "Circuit schema requires document_id and scope=document.");
         }
@@ -187,11 +191,11 @@ export class CircuitDesignerService {
         const body = await this.json(request) as { request_id: string; document: CircuitDocument };
         return this.change(response, await this.backend.create(body.document, body.request_id), body.document.document_id);
       }
-      if (method === "GET" && parts[0] === "documents" && parts.length === 1) {
+      if (matchesAssistantAction("list_documents", method, url.pathname.slice(prefix.length))) {
         const documents = await this.backend.listDocuments();
         return this.jsonResponse(response, 200, { documents });
       }
-      if (method === "GET" && parts[0] === "documents" && parts[1] === "resolve" && parts.length === 2) {
+      if (matchesAssistantAction("resolve_document", method, url.pathname.slice(prefix.length))) {
         const name = url.searchParams.get("name");
         if (!name) return this.error(response, 422, "invalid_name", "Select a document name.");
         const documents = await this.backend.listDocuments();
@@ -199,7 +203,7 @@ export class CircuitDesignerService {
         if (matches.length !== 1) return this.error(response, 422, "ambiguous_name", `Unknown or ambiguous document “${name}”. Choose: ${documents.map(item => item.label).join(", ")}.`);
         return this.jsonResponse(response, 200, matches[0]);
       }
-      if (method === "POST" && parts[0] === "documents" && parts[1] === "empty" && parts.length === 2) {
+      if (matchesAssistantAction("create_document", method, url.pathname.slice(prefix.length))) {
         const body = await this.json(request) as { document_id?: string; label?: string; request_id?: string };
         if (!body.document_id?.trim() || !body.label?.trim()) {
           return this.error(response, 422, "validation_failed", "document_id and label are required.");
@@ -219,7 +223,7 @@ export class CircuitDesignerService {
       const documentId = context.documentId;
       const tail = context.tail;
 
-      if (method === "GET" && tail.length === 0) return this.jsonResponse(response, 200, await this.backend.get(documentId));
+      if (matchesAssistantAction("context_document", method, url.pathname.slice(prefix.length))) return this.jsonResponse(response, 200, await this.backend.get(documentId));
       if (method === "PUT" && tail.length === 0) {
         this.requireIndependent(documentId);
         const body = await this.json(request) as { request_id: string; expected_revision: string; document: CircuitDocument };
@@ -227,7 +231,7 @@ export class CircuitDesignerService {
           documentId, body.document, body.expected_revision, body.request_id,
         ), documentId);
       }
-      if (method === "POST" && tail[0] === "operations" && tail[1] === "preview") {
+      if (matchesAssistantAction("preview_proposal", method, url.pathname.slice(prefix.length))) {
         const batch = await this.json(request);
         this.requireDefinition("CircuitOperationBatch", batch);
         return this.change(response, await this.backend.preview(documentId, batch as CircuitOperationBatch));
@@ -263,7 +267,7 @@ export class CircuitDesignerService {
         this.emit(documentId, "provider.requested");
         return this.jsonResponse(response, result.accepted ? 200 : 409, result);
       }
-      if (tail[0] === "source-binding") {
+      if (tail[0] === assistantActions.source_binding.path.split("/").at(-1)) {
         if (method === "GET" && tail.length === 1) {
           const stored = this.sourceBindings.get(documentId);
           if (!stored) return this.error(response, 404, "not_found", "Document has no source binding.");
@@ -300,7 +304,7 @@ export class CircuitDesignerService {
       if (method === "POST" && tail[0] === "queries" && tail[1] === "subgraph") {
         return this.jsonResponse(response, 200, await this.backend.subgraph(documentId, await this.json(request) as never));
       }
-      if (method === "POST" && tail[0] === "exports") {
+      if (matchesAssistantAction("export_svg", method, url.pathname.slice(prefix.length))) {
         const exportOptions = await this.json(request) as { format: "json" | "svg" | "png"; selection?: string[] };
         const exported = await this.backend.export(documentId, exportOptions);
         response.statusCode = 200;
@@ -309,7 +313,7 @@ export class CircuitDesignerService {
         response.end(exported.data);
         return;
       }
-      if (tail[0] === "proposals") return await this.proposalRoute(request, response, documentId, tail);
+      if (tail[0] === assistantActions.send_proposal.path.split("/").at(-1)) return await this.proposalRoute(request, response, documentId, tail);
       if (method === "PUT" && tail[0] === "provider") {
         const body = await this.json(request) as { callback_url: string; allow_non_loopback?: boolean };
         let callback: URL;

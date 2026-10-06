@@ -132,6 +132,15 @@ export class EventConfigurations {
     // keep their prompt, routing, permission and resource identity after edits.
     this.database.prepare("INSERT INTO binding_event_configuration VALUES(?,?,?,?)").run(sessionId, selected.template.key, selected.template.revision, selected.text);
   }
+  pinInstructions(sessionId: string, domain: EventConfiguration["domain"], preset: EventConfiguration["preset"],
+    definition: EventSystemDefinition, limits: ExecutionLimits, sourceSessionId?: string): void {
+    if (this.pinned(sessionId)) return;
+    const source = sourceSessionId ? this.pinned(sourceSessionId) : undefined;
+    const document = source?.document.domain === domain && source.document.preset === preset
+      ? source.document : { schemaVersion: 1 as const, domain, preset, definition: validateDefinition(definition), limits };
+    this.database.prepare("INSERT OR IGNORE INTO binding_event_configuration VALUES(?,?,?,?)")
+      .run(sessionId, source?.key ?? `${domain}.${preset}`, source?.revision ?? 0, configurationText(document));
+  }
   pinned(sessionId: string): { key: string; revision: number; document: EventConfiguration } | undefined {
     const row = this.database.prepare("SELECT * FROM binding_event_configuration WHERE session_id=?").get(sessionId) as { template_key: string; template_revision: number; text: string } | undefined;
     return row ? { key: row.template_key, revision: row.template_revision, document: JSON.parse(row.text) as EventConfiguration } : undefined;

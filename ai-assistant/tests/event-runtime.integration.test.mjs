@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 /** Real Loader, native agents/goals, trusted product catalogs, and HTTP owner integration. */
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -18,6 +19,7 @@ for(const preset of ['goal','orchestrated']) test(`${preset} composes native exe
   const contract=JSON.parse(await readFile(new URL('./fixtures/spec-document-operation-contract.json',import.meta.url),'utf8'));
   let previews=0,mutations=0,revision='sha256:test';
   const owner=createServer((request,response)=>{
+    if (serveIntegrationMetadata(request, response)) return;
     const path=new URL(request.url,'http://localhost').pathname;
     const send=value=>{response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify(value));};
     if(path==='/health')return send({status:'ok'});

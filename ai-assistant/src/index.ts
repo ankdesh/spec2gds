@@ -2,6 +2,7 @@
  * Startup reconciles reservations/reviews, validates catalogs and awaits native
  * storage before routes become ready. Agent membership determines immutable
  * binding/capability scope; model arguments never choose a different owner. */
+import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type EventSystemService from "@deepseek-ai/dsh-event-system";
 import type { EventSystemSnapshot } from "@deepseek-ai/dsh-event-system";
@@ -24,8 +25,8 @@ import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, Works
 import { parseOwnerOperationContract } from "./owner-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
-import { ARCHITECTURE_PROMPT, registerArchitectureTool } from "./architecture-review.js";
-import { registerSourceCreationTool, SOURCE_CREATION_PROMPT, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
+import { registerArchitectureTool } from "./architecture-review.js";
+import { registerSourceCreationTool, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
 export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals"];
@@ -163,9 +164,7 @@ export function maxModelStepsForTurn(
   return preset === "focused" ? focusedBase + (clarified ? 1 : 0) : 8;
 }
 
-export const UNBOUND_SOURCE_PROMPT = `This conversation is not bound to a design source.
-Do not answer questions about an existing document, component, design, or requested edit without a binding. Do not claim that work was completed and do not create a goal.
-If prepare_spec_document_creation is available and the user requests a new specification document with contents, first call prepare_architecture_review and wait for human approval. Then call prepare_spec_document_creation with the approved architecture_review_id. Only an explicitly empty specification may use empty=true without a review. No existing package or context read is needed. Otherwise tell the user to start a new conversation and choose a Spec Editor document or entity, or a Circuit Designer document.`;
+export const UNBOUND_SOURCE_PROMPT = defaultInstructions.text("unbound");
 
 export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void {
   const config: ServiceConfig = {
@@ -177,9 +176,17 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     interactiveForms: Boolean(rawConfig.interactiveForms),
   };
   const state = new ProductState(resolve(config.stateRoot, "assistant.sqlite3"));
+  const snapshots = new InstructionSnapshots(state.database);
+  const blockedInstructions = new Map<string, string>();
+  const instructionsFor = (id: string) => {
+    const instructions = snapshots.get(String(id));
+    if (!instructions) throw new Error("This conversation has no instruction snapshot. Start a new conversation.");
+    return instructions;
+  };
+  const storedConversations = new Set<string>();
   const configurations = new EventConfigurations(state.database, config);
   const owners = new OwnerClients(config.specAllowlist, config.circuitAllowlist, config.requestTimeoutMs);
-  const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve);
+  const creations = new SourceCreations(state, owners, config.specDocumentRoot, reserve, snapshots);
   const attached = new Set<string>();
   const legacyExecutions = new Set<string>();
   const unboundGuards = new Map<string, () => void>();
@@ -194,6 +201,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     await mkdir(resolve(config.scratchRoot, "unbound"), { recursive: true, mode: 0o700 });
     await mkdir(config.specDocumentRoot, { recursive: true, mode: 0o700 });
     const stored = new Set((await ctx.sessionPersistence.list()).map(item => String(item.header.id)));
+    for (const id of stored) { storedConversations.add(id); if (!snapshots.has(id)) legacyExecutions.add(id); }
     // Reservation and native session creation can be interrupted between stores.
     // A persisted transcript proves creation; an orphan reservation grants no tools.
     for (const binding of state.listCreatingBindings()) stored.has(binding.sessionId) ? state.activateBinding(binding.sessionId) : state.deleteBinding(binding.sessionId);
@@ -204,7 +212,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     for (const domain of ["spec", "circuit"] as const) {
       ctx.promptCatalog.get({ id: `spec2gds.${domain}`, version: "1.0.0" });
       for (const preset of ["goal", "orchestrated"] as const) {
-        configurations.addBuiltin(domain, preset, ctx.eventSystems.definition(`spec2gds.${domain}.${preset}`, "1.0.0"), limits[preset]);
+        configurations.addBuiltin(domain, preset, defaultInstructions.eventDefinition(domain, preset), limits[preset]);
       }
     }
     ctx.promptCatalog.seal();
@@ -219,13 +227,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   })();
 
   const attach = async (agent: ProductAgent, binding: SessionBinding): Promise<void> => {
-    if (attached.has(agent.id)) return;
+    if (attached.has(agent.id) || blockedInstructions.has(String(agent.id))) return;
     if (legacyExecutions.has(String(agent.id))) {
       agent.ctx.systemPrompt?.section({ name: "spec2gds:legacy-execution", order: 150, complete: true,
-        text: "This conversation is retained as readable history. Start a new bound conversation to use the updated preset." });
+        text: defaultInstructions.text("host.31") });
       attached.add(agent.id);
       return;
     }
+    agent.ctx.systemPrompt?.section({ name: "spec2gds:persona", order: 50, text: instructionsFor(agent.id).text("persona") });
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
     owners.assertStoredBinding(binding);
@@ -238,8 +247,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const policy = await owners.specPolicy(binding.ownerUrl);
         agent.ctx.systemPrompt?.section({ name: "spec2gds:approval-policy", order: 205,
           text: policy.approval_policy === "automatic"
-            ? "The Spec owner currently allows automatic validated submissions. Await its saved receipt and describe the saved changes using source names. Record defaults as assumptions; clarify genuinely missing inputs."
-            : "The Spec owner currently requires human approval. Keep submissions pending until an explicit stored-proposal decision." });
+            ? instructionsFor(agent.id).text("host.32")
+            : instructionsFor(agent.id).text("host.33") });
       }
       if (binding.domain === "spec" && !binding.ownerDocumentKey) {
         const context = await owners.context(binding);
@@ -256,14 +265,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     // selects the primary conversation binding and read-only capability boundary.
     const membership = ctx.eventSystems.membership(SessionId(agent.id));
     const specialist = membership !== undefined && !membership.primary;
-    registerDomainTools(agent.ctx, binding, state, owners, ctx.promptCatalog,
+    registerDomainTools(agent.ctx, binding, state, owners, instructionsFor(agent.id),
       review => publishPreparedReview(binding, review),
       () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms && !specialist,
-      operationContract, schemaError, undefined, specialist);
+      operationContract, schemaError, undefined, specialist, instructionsFor(agent.id));
     if (binding.preset !== "focused" && !specialist) {
       const pinned = configurations.pinned(binding.sessionId)?.document;
       await ctx.eventSystems.attach(agent as unknown as Agent, binding.preset,
-        pinned?.definition ?? ctx.eventSystems.definition(`spec2gds.${binding.domain}.${binding.preset}`, "1.0.0"), pinned?.limits ?? limits[binding.preset]);
+        pinned?.definition ?? instructionsFor(agent.id).eventDefinition(binding.domain, binding.preset), pinned?.limits ?? limits[binding.preset]);
     }
     if (binding.preset !== "focused") {
       const native = agent as unknown as Agent;
@@ -290,8 +299,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       name: "spec2gds:unbound-session",
       order: 150,
       complete: true,
-      text: UNBOUND_SOURCE_PROMPT + `\n\n${ARCHITECTURE_PROMPT}`
-        + (config.interactiveForms ? `\n\n${SOURCE_CREATION_PROMPT}` : ""),
+      text: instructionsFor(agent.id).text("persona") + "\n\n" + instructionsFor(agent.id).text("unbound") + "\n\n" + instructionsFor(agent.id).text("architecture")
+        + (config.interactiveForms ? "\n\n" + instructionsFor(agent.id).text("source-creation") : ""),
     }));
   };
 
@@ -310,7 +319,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     next: () => Promise<unknown>,
   ) => {
     await ready;
-    if (legacyExecutions.has(String(agent.id))) return { kind: "reject" };
+    if (legacyExecutions.has(String(agent.id))) throw new Error(defaultInstructions.text("host.31"));
+    if (blockedInstructions.has(String(agent.id))) throw new Error(blockedInstructions.get(String(agent.id)));
+    instructionsFor(agent.id);
     if (!state.getBinding(String(agent.id)) && !ctx.eventSystems.membership(SessionId(agent.id)) && agentPreset(agent) === "goal" && step === 1) {
       const goal = ctx.goals.get(agent as unknown as Agent);
       if (goal?.phase === "active") ctx.goals.pause(agent as unknown as Agent, goal);
@@ -328,6 +339,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     payload: { agent: ProductAgent; turn: number; step: number },
     next: () => Promise<Record<string, unknown>>,
   ) => {
+    await ready;
+    if (legacyExecutions.has(String(payload.agent.id))) throw new Error("Start a new conversation to use the updated Assistant.");
+    instructionsFor(payload.agent.id);
     const options = await next();
     const membership = ctx.eventSystems.membership(SessionId(payload.agent.id));
     const member = membership && ctx.eventSystems.get(membership.conversationId)?.definition.agents.find(item => item.id === membership.member);
@@ -336,9 +350,16 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
 
   ctx.on("agent/created", async ({ agent }: { agent: ProductAgent }) => {
     await ready;
+    if (legacyExecutions.has(String(agent.id))) return;
     let binding = state.getBinding(String(agent.id));
     const parentSession = agent.session?.header.parentSession;
     const membership = ctx.eventSystems.membership(SessionId(agent.id));
+    try {
+      if (membership && !membership.primary) snapshots.pin(String(agent.id), String(membership.conversationId));
+      else if (!storedConversations.has(String(agent.id))) snapshots.pin(String(agent.id));
+      instructionsFor(agent.id);
+    }
+    catch (error) { blockedInstructions.set(String(agent.id), error instanceof Error ? error.message : String(error)); return; }
     if (!binding && membership && !membership.primary) {
       const parentBinding = state.getBinding(String(membership.conversationId));
       if (!parentBinding) throw new Error("Event agent has no immutable owner binding.");
@@ -383,12 +404,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         await ctx.eventSystems.wait(agent as unknown as Agent, { kind: "review", reason: "Architecture approval pending",
           eventType: "architecture.decided", matchKey: "review_id", matchValue: review.reviewId });
       }
-    });
+    }, instructionsFor(agent.id));
     if (config.interactiveForms && !parentSession) {
       registerSourceCreationTool(agent, creations, () => ({
         sourceSessionId: String(agent.id), originalRequest: latestUserRequests.get(String(agent.id)) ?? "",
         preset: binding?.preset ?? agentPreset(agent), preferredOwner: binding?.domain === "spec" ? binding.ownerUrl : undefined,
-      }));
+      }), instructionsFor(agent.id));
     }
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
@@ -414,7 +435,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     unboundGuards.delete(String(agent.id));
   });
 
-  async function reserve(input: BindingInput, requestedId?: string): Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }> {
+  async function reserve(input: BindingInput, requestedId?: string, sourceSessionId?: string): Promise<{ binding: SessionBinding; workspace: WorkspaceDescriptor }> {
     await ready;
     if (input.preset && input.preset !== "focused") {
       try { configurations.selection(input.domain, input.preset, input.eventTemplateKey, input.eventTemplateRevision); }
@@ -444,12 +465,18 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       ownerDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.ownerDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
       workspaceDomain: workspace.domain, workspaceOwnerUrl: workspace.ownerUrl, workspaceDocumentId: workspace.documentId });
+    snapshots.pin(sessionId, sourceSessionId);
     if (binding.preset !== "focused") {
       // Do not leave a usable reservation when its selected configuration fails
       // to pin. Native session creation happens only after this reservation returns.
-      try { configurations.pin(sessionId, binding.domain, binding.preset, input.eventTemplateKey, input.eventTemplateRevision); }
+      try {
+        if (input.eventTemplateKey) configurations.pin(sessionId, binding.domain, binding.preset, input.eventTemplateKey, input.eventTemplateRevision);
+        else configurations.pinInstructions(sessionId, binding.domain, binding.preset,
+          instructionsFor(sessionId).eventDefinition(binding.domain, binding.preset), limits[binding.preset], sourceSessionId);
+      }
       catch (error) { state.deleteBinding(sessionId); throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
     }
+    snapshots.pin(sessionId);
     return { binding, workspace };
   }
 
@@ -629,7 +656,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const requestUrl = new URL(request.url ?? "/", "http://localhost");
         const path = requestUrl.pathname;
         if (path === "/spec2gds-api/capabilities" && request.method === "GET") return writeJson(response, 200, { model: config.model, provider: config.provider, owners: await owners.capabilities() });
-        if (path === "/spec2gds-api/event-templates" && request.method === "GET") return writeJson(response, 200, { templates: configurations.list(), route: { provider: config.provider, model: config.model } });
+        if (path === "/spec2gds-api/event-templates" && request.method === "GET") return writeJson(response, 200, { templates: configurations.list(), default_member_prompt: defaultInstructions.text("event-member.default"), route: { provider: config.provider, model: config.model } });
         const templateMatch = path.match(/^\/spec2gds-api\/event-templates\/([^/]+)\/(preview|save)$/);
         if (templateMatch && request.method === "POST") {
           const body = await readBody(request, 262144);
@@ -660,7 +687,11 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
               const execution = ctx.eventSystems.get(SessionId(review.sessionId));
               if (execution?.definition?.events?.["architecture.decided"]) await ctx.eventSystems.publishHost(SessionId(review.sessionId), {
                 type: "architecture.decided", payload: { review_id: id, decision }, producer: "owner", dedupeKey: `architecture:${id}:${decision}` });
-              return writeJson(response, 200, { architecture_review: review });
+              const instructions = snapshots.get(review.sessionId) ?? defaultInstructions;
+              return writeJson(response, 200, { architecture_review: review,
+                continuation: `Architecture review ${review.reviewNumber || ""} · ${review.plan.title || "Architecture"}: ${review.status}. `
+                  + (decision === "approved" ? instructions.text("architecture.approved") : instructions.text("architecture.revised"))
+                  + (body.feedback ? ` Feedback: ${body.feedback}` : "") });
             } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
           }
         }
@@ -718,7 +749,11 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             if (!binding) throw new HttpError(404, "Unknown binding.");
             try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
             catch { /* Retain the last source name while the owner is unavailable. */ }
-            return writeJson(response, 200, { session: binding });
+            return writeJson(response, 200, { session: binding, instruction_release: (() => {
+              if (!snapshots.has(sessionId)) return { status: "legacy", reason: defaultInstructions.text("host.31") };
+              try { const release = snapshots.get(sessionId)!.snapshot; return { status: "pinned", version: release.version, hash: release.hash }; }
+              catch (error) { return { status: "incompatible", reason: error instanceof Error ? error.message : String(error) }; }
+            })() });
           }
           if (resource === "activate" && request.method === "POST") return writeJson(response, 200, { session: await activate(sessionId) });
           if (resource === "abandon" && request.method === "POST") { if (state.getBinding(sessionId)?.status === "creating") state.deleteBinding(sessionId); return writeJson(response, 200, { abandoned: true }); }

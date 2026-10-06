@@ -416,7 +416,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
 
   function requiredInputMessage(request, values) {
     return JSON.stringify({ kind: "confirmed_proposal_input", input_id: request.input_id, values,
-      instruction: "Use these confirmed values as authoritative. Pass confirmed_input_id and confirmed_values to the proposal tool." });
+      instruction: request.confirmation_instruction });
   }
 
   function ProposalInputCard({ request, inputActions }) {
@@ -470,7 +470,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const result = await api(`/architecture-reviews/${encodeURIComponent(value.reviewId)}/${action}`, { feedback });
         setValue(result.architecture_review);
         if (action !== "cancel") {
-          inputActions.setDraft(`Architecture review ${value.reviewNumber || ""} · ${record(value.plan).title || "Architecture"}: ${result.architecture_review.status}. ${action === "approve" ? "Continue with the approved architecture. Read current context before creating its contents." : "Prepare a revised architecture incorporating this feedback and await approval."}${feedback ? ` Feedback: ${feedback}` : ""}`);
+          inputActions.setDraft(result.continuation);
           queueMicrotask(() => inputActions.submit());
         }
       } catch (caught) { setError(caught.message); }
@@ -714,7 +714,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           const remove = node.querySelector("[data-remove-agent]"); if(remove) remove.onclick = () => { draft.definition.agents.splice(Number(node.dataset.agent),1); render(); };
         }
         visual.querySelector("[data-add-role]").onchange = event => { const agent = base.definition.agents.find(item=>item.id===event.target.value); if(agent) draft.definition.agents.push(JSON.parse(JSON.stringify(agent))); render(); };
-        visual.querySelector("[data-add-agent]").onclick=()=>{const name=visual.querySelector("[data-agent-name]").value.normalize("NFKC").trim();const baseName=name.normalize("NFKD").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").toLowerCase().slice(0,40);let id=baseName;for(let number=2;draft.definition.agents.some(agent=>agent.id===id);number++)id=`${baseName}_${number}`;if(draft.preset!=="orchestrated"||!/^[a-z][a-z0-9_-]{0,47}$/.test(id)||draft.definition.agents.some(agent=>agent.id===id)){field("[data-error]").textContent="Choose a readable role name in orchestrated.";return;}draft.definition.agents.push({id,prompt:"Observe approved events and publish declared observations. Do not prepare owner proposals.",tools:["get_bound_context","publish_event","get_event_system"],publishes:[]});render();};
+        visual.querySelector("[data-add-agent]").onclick=()=>{const name=visual.querySelector("[data-agent-name]").value.normalize("NFKC").trim();const baseName=name.normalize("NFKD").replace(/[^a-zA-Z0-9]+/g,"_").replace(/^_+|_+$/g,"").toLowerCase().slice(0,40);let id=baseName;for(let number=2;draft.definition.agents.some(agent=>agent.id===id);number++)id=`${baseName}_${number}`;if(draft.preset!=="orchestrated"||!/^[a-z][a-z0-9_-]{0,47}$/.test(id)||draft.definition.agents.some(agent=>agent.id===id)){field("[data-error]").textContent="Choose a readable role name in orchestrated.";return;}draft.definition.agents.push({id,prompt:catalog.default_member_prompt,tools:["get_bound_context","publish_event","get_event_system"],publishes:[]});render();};
         for (const node of visual.querySelectorAll("[data-edge]")) {
           const edge = draft.definition.subscriptions[Number(node.dataset.edge)];
           for (const [selector,key] of [["[data-edge-id]","id"],["[data-edge-event]","event"],["[data-edge-target]","target"]]) node.querySelector(selector).onchange = event => { edge[key] = event.target.value; syncText(); };

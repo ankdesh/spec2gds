@@ -1,3 +1,5 @@
+import { specAdapter } from "./service-adapters/spec.js";
+import { circuitAdapter } from "./service-adapters/circuit.js";
 /** Bound owner HTTP capabilities and immutable document context.
  * Recheck stored owner URLs against current deployment approval before reads or
  * submissions. Transport uncertainty and domain rejection have different retry
@@ -295,11 +297,12 @@ export class OwnerClients {
   async circuitSvg(binding: SessionBinding, signal?: AbortSignal): Promise<string> {
     this.assertStoredBinding(binding);
     if (binding.domain !== "circuit") throw new Error("SVG context is only available for Circuit bindings.");
+    await this.integrationMetadata("circuit", binding.ownerUrl, signal);
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
     let response: Response;
     try {
-      response = await fetch(`${binding.ownerUrl}/documents/${encodeURIComponent(binding.documentId)}/exports`, {
+      response = await fetch(circuitAdapter.requestUrl(binding.ownerUrl, "export_svg", { document_id: binding.documentId }), {
         method: "POST", redirect: "error", signal: combined,
         headers: { Accept: "image/svg+xml", "Content-Type": "application/json" }, body: JSON.stringify({ format: "svg" }),
       });
@@ -353,13 +356,47 @@ export class OwnerClients {
     return { spec, circuit };
   }
 
+  async integrationMetadata(domain: "spec" | "circuit", value: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
+    const base = domain === "spec" ? normalizeSpecUrl(value, this.specAllowlist) : normalizeCircuitUrl(value, this.circuitAllowlist);
+    const adapter = domain === "spec" ? specAdapter : circuitAdapter;
+    try {
+      const metadata = await this.request("GET", `${base}/assistant/integration-metadata`, undefined, signal, false, true);
+      adapter.validate(metadata);
+      return metadata;
+    } catch (error) {
+      throw new OwnerError(502, `The selected ${domain} service integration metadata is unavailable or incompatible: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  private async validateServiceRequest(method: string, url: string, signal?: AbortSignal): Promise<string> {
+    const parsed = new URL(url);
+    for (const [domain, bases, adapter] of [["spec", this.specAllowlist, specAdapter], ["circuit", this.circuitAllowlist, circuitAdapter]] as const) {
+      const base = bases.find(item => url.startsWith(item + "/"));
+      if (!base) continue;
+      const path = parsed.pathname.slice(new URL(base).pathname.replace(/\/$/, "").length);
+      const action = adapter.match(method, path);
+      // Liveness probes remain available for service setup. All design API actions require metadata.
+      if (!action) throw new OwnerError(502, "Unknown service API action. No request was submitted.");
+      if (action !== "health") await this.integrationMetadata(domain, base, signal);
+      const declaration = adapter.actions[action]!;
+      const pathValues: Record<string, string> = {};
+      declaration.path.split("/").forEach((segment, index) => {
+        if (segment.startsWith("{")) pathValues[segment.slice(1, -1)] = decodeURIComponent(path.split("/")[index]!);
+      });
+      return adapter.requestUrl(base, action, pathValues) + parsed.search;
+    }
+    return url; // Explicit connection probes can precede allowlist registration.
+  }
+
   private async request(
     method: "GET" | "POST",
     url: string,
     body?: unknown,
     signal?: AbortSignal,
     mutation = false,
+    metadataRead = false,
   ): Promise<Record<string, unknown>> {
+    if (!metadataRead) url = await this.validateServiceRequest(method, url, signal);
     const timeout = AbortSignal.timeout(this.timeoutMs);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
     let response: Response;

@@ -1,0 +1,23 @@
+{
+  "name": "prepare_spec_document_creation",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "architecture_review_id": {
+        "type": "string"
+      },
+      "empty": {
+        "type": "boolean"
+      }
+    }
+  },
+  "output_schema": {},
+  "timeout_ms": 35000,
+  "version": "1.0.0",
+  "handler_key": "prepare_spec_document_creation",
+  "instruction_ref": "tool.prepare_spec_document_creation",
+  "availability": "interactive-primary"
+}

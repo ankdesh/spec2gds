@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 import { approvedArchitecture } from "./support/architecture.js";
 import assert from "node:assert/strict";
 import { once } from "node:events";
@@ -26,6 +27,7 @@ async function fixture() {
   let mode: "normal" | "reject" | "drop" | "invalid" | "offline" = "normal";
   let creationGate: Promise<void> | undefined;
   const server = createServer(async (request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     paths.push(`${request.method} ${request.url}`);
     if (request.url === "/assistant/capabilities") {
       response.writeHead(200, { "Content-Type": "application/json" });
@@ -103,7 +105,7 @@ test("unbound creation stages a durable card without accessing bound context or 
     assert.equal(result.session.scope, "document");
     assert.notEqual(result.session.sessionId, "unbound-chat");
     assert.ok(result.continuation.message.includes(comparatorRequest));
-    assert.match(result.continuation.message, /Do not create another package/);
+    assert.match(result.continuation.message, /Do not create another Spec/);
     assert.equal(f.state.getBinding("unbound-chat"), null);
     f.state.activateBinding(result.session.sessionId);
     f.creations.continued(request.requestId);
@@ -280,7 +282,7 @@ test("model tool captures the host request and supplies safe empty-spec defaults
     assert.match(result.source_creation.documentId, /^spec_[a-f0-9]{32}$/);
     assert.equal(f.creates, 0);
     assert.match(sections[0].text, /Do not read get_bound_context first/);
-    assert.match(creationContinuation(result.source_creation), /only asked for an empty specification/);
+    assert.match(creationContinuation(result.source_creation), /only asked for an empty Spec/);
     assert.throws(() => specDestination(f.root, "../escape"), /Document ID/);
   } finally { await f.close(); }
 });

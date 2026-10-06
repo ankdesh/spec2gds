@@ -1,0 +1,377 @@
+{
+  "get_bound_context": {
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": "string"
+        },
+        "entity_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "output_schema": {}
+  },
+  "prepare_spec_proposal": {
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "base_source_revision_hash": {
+          "type": "string"
+        },
+        "unsupported_reason": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "items": {}
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "default_value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "description",
+              "default_value"
+            ]
+          }
+        },
+        "confirmed_input_id": {
+          "type": "string"
+        },
+        "confirmed_values": {},
+        "architecture_review_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "supported",
+        "base_source_revision_hash",
+        "unsupported_reason",
+        "title",
+        "summary",
+        "rationale",
+        "assumptions",
+        "operations"
+      ]
+    },
+    "output_schema": {}
+  },
+  "prepare_circuit_proposal": {
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "supported": {
+          "type": "boolean"
+        },
+        "unsupported_reason": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "operations": {
+          "type": "array",
+          "items": {}
+        },
+        "required_fields": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "default_value": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "description",
+              "default_value"
+            ]
+          }
+        },
+        "confirmed_input_id": {
+          "type": "string"
+        },
+        "confirmed_values": {}
+      },
+      "required": [
+        "supported",
+        "unsupported_reason",
+        "title",
+        "summary",
+        "rationale",
+        "assumptions",
+        "operations"
+      ]
+    },
+    "output_schema": {}
+  },
+  "prepare_architecture_review": {
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "components": {
+          "type": "array",
+          "description": "One or more components, each with name. Names must be nonempty and unique.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Distinct nonempty entity name. Use name, not component or design."
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "designs": {
+          "type": "array",
+          "description": "Composition designs, each with name. Use [] for a leaf without composition.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Distinct nonempty entity name. Use name, not component or design."
+              },
+              "purpose": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        },
+        "interfaces": {
+          "type": "array",
+          "description": "Use {component, ports:[{name,direction,width}]} for each component. Flat port descriptors are supported only for a single component. Directions are in/out/inout.",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "component": {
+                    "type": "string",
+                    "description": "Exact name from components."
+                  },
+                  "ports": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string"
+                        },
+                        "direction": {
+                          "type": "string",
+                          "description": "Spec port direction: in, out or inout.",
+                          "enum": [
+                            "in",
+                            "out",
+                            "inout"
+                          ]
+                        },
+                        "width": {
+                          "type": "integer",
+                          "description": "Positive concrete width in bits; use 1 for a scalar."
+                        }
+                      },
+                      "required": [
+                        "name",
+                        "direction",
+                        "width"
+                      ]
+                    }
+                  }
+                },
+                "required": [
+                  "component",
+                  "ports"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "description": "Spec port direction: in, out or inout.",
+                    "enum": [
+                      "in",
+                      "out",
+                      "inout"
+                    ]
+                  },
+                  "width": {
+                    "type": "integer",
+                    "description": "Positive concrete width in bits; use 1 for a scalar."
+                  }
+                },
+                "required": [
+                  "name",
+                  "direction",
+                  "width"
+                ]
+              }
+            ]
+          }
+        },
+        "clocks_resets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "decomposition_rationale": {
+          "type": "string"
+        },
+        "assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "open_questions": {
+          "type": "array",
+          "description": "Essential unresolved requirements that must block approval. Use [] when requirements and stated assumptions suffice.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "concrete_configuration": {
+          "type": "object",
+          "description": "Nonempty object containing approved concrete values, e.g. {width:16,reset:'synchronous active-high',overflow:'wrap'}.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "title",
+        "components",
+        "designs",
+        "interfaces",
+        "clocks_resets",
+        "decomposition_rationale",
+        "assumptions",
+        "open_questions",
+        "concrete_configuration"
+      ]
+    },
+    "output_schema": {}
+  },
+  "prepare_spec_document_creation": {
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "architecture_review_id": {
+          "type": "string"
+        },
+        "empty": {
+          "type": "boolean"
+        }
+      }
+    },
+    "output_schema": {}
+  }
+}

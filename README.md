@@ -114,7 +114,7 @@ Harness checkout setup, source-pin checks, tests, state, and packaging. Rerun se
 after replacing or moving the selected Harness checkout.
 
 The focused Python CLIs use the root uv environment and the built internal Harness
-product. See [CLI workflows](docs/ai-assistant-operations.md#cli-workflows) for architecture
+product. See [CLI workflows](docs/ai-assistant-operations.md#cli-flows) for architecture
 approval, restricted content decisions, exact-file targets, conflicts, and run records.
 
 To enable model-backed Assistant replies, export an API key before launch.

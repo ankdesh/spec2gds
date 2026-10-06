@@ -1,3 +1,4 @@
+import { assistantActions, integrationMetadata } from "../src/assistant-integration";
 import { afterEach, describe, expect, it } from "vitest";
 import { CircuitDraft, simpleDocumentFixture } from "@spec2gds/circuit-core";
 import { CircuitDesignerService } from "../src/server";
@@ -16,6 +17,26 @@ afterEach(async () => {
 });
 
 describe("Circuit Designer REST service", () => {
+  it("exports integration metadata without an open document or Spec service", async () => {
+    service = new CircuitDesignerService();
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1`;
+    const response = await fetch(`${base}/assistant/integration-metadata`);
+    expect(response.status).toBe(200);
+    const metadata = await response.json();
+    expect(metadata).toEqual(integrationMetadata());
+    expect(metadata.service_kind).toBe("circuit");
+    const fixture = JSON.parse(readFileSync(new URL("../../../../ai-assistant/tests/fixtures/circuit-integration-metadata.json", import.meta.url), "utf8"));
+    expect(metadata).toEqual(fixture);
+    for (const action of Object.values(assistantActions)) {
+      const path = action.path.replace(/\{\w+\}/g, "missing");
+      const result = await fetch(base + path, { method: action.method,
+        ...(action.method === "POST" ? { headers: { "Content-Type": "application/json" }, body: "{}" } : {}) });
+      const body = await result.text();
+      expect(body).not.toContain("Unknown endpoint.");
+    }
+  });
+
   it("resolves document names through this owner and rejects unknown choices", async () => {
     const document = simpleDocumentFixture();
     document.label = "Straße timer";

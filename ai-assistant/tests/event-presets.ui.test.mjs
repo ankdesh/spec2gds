@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 /** Browser clicks use the shipped product plugin and real Loader/goals/event services.
  * Only the model and external owner are deterministic; the tiny shell implements
  * Harness's session/workspace/slot adapters rather than mocking product requests. */
@@ -38,6 +39,7 @@ async function fixture() {
   const contract=JSON.parse(await readFile(new URL('./fixtures/spec-document-operation-contract.json',import.meta.url),'utf8'));
   let revision='sha256:test', mutations=0, previews=0;
   const owner=createServer((request,response)=>{
+    if (serveIntegrationMetadata(request, response)) return;
     const path=new URL(request.url,'http://localhost').pathname;
     const send=value=>{response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify(value));};
     if(path==='/health')return send({status:'ok'});
@@ -57,6 +59,7 @@ async function fixture() {
   const plugin=await readFile(new URL('client/index.js',root),'utf8');
   const assets=new Map([['/product.js',plugin],['/react.js',await readFile(resolve(dependencies.resolve('react/package.json'),'../umd/react.development.js'),'utf8')],['/react-dom.js',await readFile(resolve(dependencies.resolve('react-dom/package.json'),'../umd/react-dom.development.js'),'utf8')]]);
   const app=createServer(async(request,response)=>{
+    if (serveIntegrationMetadata(request, response)) return;
     try {
       if(request.url.startsWith('/spec2gds-api'))return runtime.routes.find(route=>route.kind==='prefix').handler(request,response);
       if(assets.has(request.url)){response.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8'});return response.end(assets.get(request.url));}
@@ -77,7 +80,7 @@ async function fixture() {
     }catch(error){response.writeHead(500,{'Content-Type':'application/json'});response.end(JSON.stringify({error:error.message}));}
   });
   app.listen(0,'127.0.0.1');await once(app,'listening');
-  const browser=await chromium.launch({headless:true});const page=await browser.newPage();
+  const browser=await chromium.launch({headless:true,...(process.env.ASSISTANT_UI_BROWSER_PATH ? {executablePath:process.env.ASSISTANT_UI_BROWSER_PATH} : {})});const page=await browser.newPage();
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
   await page.goto(`http://127.0.0.1:${app.address().port}`);
   await page.waitForFunction(() => typeof document.querySelector('#new')?.onclick === 'function');

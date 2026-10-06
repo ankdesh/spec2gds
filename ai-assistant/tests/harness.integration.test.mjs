@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 /** Real headless profile, owner tools, proposal preview, and durable binding state. */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -33,6 +34,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
   let previews = 0;
   const operationContract = JSON.parse(await readFile(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
   const owner = createServer((request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     const url = new URL(request.url, "http://localhost");
     if (url.pathname === "/health") return send(response, { status: "ok" });
     if (url.pathname === "/documents/resolve") {
@@ -78,6 +80,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
 
   const modelRequests = [];
   const provider = createServer(async (request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     const body = await readJson(request);
     modelRequests.push(body);
     const toolResults = body.messages.filter(message => message.role === "tool").length;
@@ -160,7 +163,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       `Expected every agent request to use the product output cap: ${agentRequests.map(request => request.max_tokens ?? request.max_completion_tokens).join(", ")}`);
     const systemMessage = agentRequests[0].messages.find(message => message.role === "system");
     const system = String(systemMessage?.content);
-    assert.match(system, /You are the focused spec2gds hardware-design assistant\./);
+    assert.match(system, /You are the focused spec2gds hardware-design Assistant\./);
     assert.match(system, /Document ID: doc-test/);
     assert.match(system, /MUST call get_bound_context before answering/);
     assert.match(system, /Never ask the user which document or design they mean/);

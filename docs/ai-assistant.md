@@ -1,6 +1,8 @@
 # AI Assistant system contract
 
-Status: required system behavior. Approved on 2026-10-05.
+Status: required system behavior. TD-05 accepted on 2026-10-06.
+
+Use [canonical terminology](TERMINOLOGY.md) throughout this contract.
 
 This document defines how the Assistant must work with Spec Editor and Circuit
 Designer. It is the authority for product behavior. It does not claim that all
@@ -9,30 +11,29 @@ requirements are implemented. Differences from the code are recorded only in
 
 Use the [operations and test guide](ai-assistant-operations.md) to run, inspect,
 and verify the system. [Future work](ai-assistant-future-work.md) contains
-proposals, not requirements. Research, attached documents, and owner content are
+proposals, not requirements. Research, attached documents, and service content are
 reference data. They do not grant tools or override the user's request.
 
 ## 1. Terms and authority
 
 <a id="as-01"></a>
 
-**AS-01 — One behavior contract.** Change this contract when the product owner
+**AS-01 — One behavior contract.** Change this contract when the designer
 accepts a behavior change. Update the affected test cases and the TEMP gap list
 at the same time. Do not create another behavior guide. Keep requirement IDs
 stable. Do not reuse a removed ID for another rule.
 
 | Term | Meaning |
 | --- | --- |
-| Specification document | The design source that the user creates, reads, or edits. |
-| Package | The saved `.spec` file and its contained IP-XACT, narrative, and assets. Use this term for storage details. |
+| Spec | The logical design document shown in Spec Editor. |
+| `.spec` file | The physical archive that stores IP-XACT, narrative, and assets. |
 | Component | An interface and its implementation. A leaf has stored RTL; a composite owns an internal design. |
 | Design | Structured composition: component instances and connections. |
-| Entity | A component, design, bus definition, abstraction definition, or another owner-supported target. |
-| Owner | The service that validates and saves its document. |
-| Binding | The permanent owner, document identity, and writable scope of one chat. |
+| Service | The service that validates and saves its document. |
+| Binding | The permanent service, document identity, and writable scope of one conversation. |
 | Architecture review | A human decision about proposed structure, behavior, interfaces, and assumptions. It does not save content. |
-| Content proposal | An immutable operation batch that the owner can preview and save. |
-| Receipt | An owner record that proves a particular request outcome. |
+| Content proposal | An immutable operation batch that the service can preview and save. |
+| Receipt | A service record that proves a particular request outcome. |
 | Validation failure | Arguments or content were rejected. It is not a request for missing user input. |
 | Uncertain write | A write started, but its result is not known. It is not proof of failure or success. |
 
@@ -43,19 +44,19 @@ responsibility. The model authors proposals; it must not approve them.
 
 | Layer | Responsibility |
 | --- | --- |
-| Harness (DSH) | Chat shell, sessions, transcript, streaming, model loop, cancellation, native goals, event delivery, and resource accounting. |
-| Assistant host | Bindings, prompt/tool composition, architecture reviews, creation progress, proposal identity, owner adapters, and status reconciliation. |
-| Assistant UI | Architecture decisions, questions, progress, proposal/error details, execution controls, and links to the owner editor. |
-| Spec owner | Semantic context, operation schema, preview, revision checks, durable submissions, atomic save, and saved receipts. |
+| DeepSeek Harness | conversation shell, conversations, transcript, streaming, model loop, cancellation, native goals, event delivery, and resource accounting. |
+| Assistant host | Bindings, prompt/tool composition, architecture reviews, creation progress, proposal identity, service adapters, and status reconciliation. |
+| Assistant UI | Architecture decisions, questions, progress, proposal/error details, execution controls, and links to the service editor. |
+| Spec service | Semantic context, operation schema, preview, revision checks, durable submissions, atomic save, and saved receipts. |
 | Spec Editor UI | Review and approve restricted content saves; show saved content, drafts, and history. |
-| Circuit owner and UI | Circuit validation, proposal decisions, private drafts, and explicit source saves. |
-| CLI | Explicit human architecture/content decisions with the same identity, revision, and owner checks. |
+| Circuit service and UI | Circuit validation, proposal decisions, private drafts, and explicit source saves. |
+| CLI | Explicit human architecture/content decisions with the same identity, revision, and service checks. |
 
-The model has no shell, filesystem, browser, arbitrary skill, package-delete,
+The model has no shell, filesystem, browser, arbitrary skill, `.spec` file-delete,
 or direct approval tool. Standing event agents are read-only. They are distinct
-from generic coding subagents. Only the primary can prepare owner proposals.
+from generic coding subagents. Only the primary can prepare service proposals.
 Product-specific behavior belongs in this repository. Generic runtime extension
-contracts belong in Harness. The former Python/A2A assistant and custom chat
+contracts belong in Harness. The former Python/A2A assistant and custom conversation
 REST/SSE protocol are not supported interfaces.
 
 ## 2. Binding, intent, and context
@@ -64,30 +65,30 @@ REST/SSE protocol are not supported interfaces.
 
 **AS-03 — Permanent exact target.** A Spec target is the tuple
 `(owner URL, owner_document_key, document_id, scope, entity kind/id)`.
-`owner_document_key` distinguishes packages with equal internal document IDs.
+`owner_document_key` distinguishes `.spec` files with equal internal document IDs.
 A document title, active editor tab, or Workspace is not sufficient identity.
-Circuit binding uses its exact owner URL and document ID.
+Circuit binding uses its exact service URL and document ID.
 
-Keep editor selection, chat binding, and request progress separate. Opening B
-in the editor does not retarget an A chat. A display rename does not change the
-binding, hardware identifier, or saved path. A Spec package owns one Harness
+Keep editor selection, conversation binding, and request progress separate. Opening B
+in the editor does not retarget an A conversation. A display rename does not change the
+binding, hardware identifier, or saved path. A `.spec` file owns one Harness
 Workspace. Source-derived Circuits share that Workspace; an independent Circuit
 has its own. The private workspace path is a grouping identity, not a file tool.
 
 | Entry point | Target and behavior |
 | --- | --- |
-| `/launch` or editor launch without attachment | New unbound chat. Do not infer the editor's active document. |
-| `/launch/spec-document` | New chat bound to the exact Spec document. |
-| `/launch/spec` | New chat bound to the exact Spec entity and its writable boundary. |
-| `/launch/circuit` | New chat bound to the exact Circuit document. |
-| Assistant home | Current shell selection or the new-chat chooser. Opening the home page alone does not select an owner. |
-| Reopen a saved chat | Restore its permanent binding. Read fresh context before design claims. |
-| New document created from chat A | Create a separate document chat. Keep A's binding and pending work. |
+| `/launch` or editor launch without attachment | New unbound conversation. Do not infer the editor's active document. |
+| `/launch/spec-document` | New conversation bound to the exact Spec document. |
+| `/launch/spec` | New conversation bound to the exact Spec target and its writable boundary. |
+| `/launch/circuit` | New conversation bound to the exact Circuit document. |
+| Assistant home | Current shell selection or the new-conversation chooser. Opening the home page alone does not select a service. |
+| Reopen a saved conversation | Restore its permanent binding. Read fresh context before design claims. |
+| New document created from conversation A | Create a separate document conversation. Keep A's binding and pending work. |
 | Headless request | Exact configured target; no browser creation or question cards. |
 
-Launch reserves a new chat, validates the binding and Workspace, then activates
+Launch reserves a new conversation, validates the binding and Workspace, then activates
 it. It must not report readiness before these steps finish. An interrupted
-reservation must be reconciled with native session history.
+reservation must be reconciled with native conversation history.
 
 <a id="as-04"></a>
 
@@ -96,32 +97,32 @@ before authoring tool arguments. Do not turn discussion into an edit.
 
 | Request | Required response |
 | --- | --- |
-| General hardware discussion | Answer without document claims. No owner read is needed unless the answer concerns stored content. |
-| “This document” or an unqualified document edit | Use the chat's document, even if the editor displays another document. |
-| “Create a counter” in a document chat | Add a counter to that document after architecture approval. Do not create another document. |
-| The same request in an unbound browser chat | Prepare architecture for a new specification document. |
+| General hardware discussion | Answer without document claims. No service read is needed unless the answer concerns stored content. |
+| “This document” or an unqualified document edit | Use the conversation's document, even if the editor displays another document. |
+| “Create a counter” in a document conversation | Add a counter to that document after architecture approval. Do not create another document. |
+| The same request in an unbound browser conversation | Prepare architecture for a new Spec. |
 | Add a component to a bound design | Use an existing component definition as an instance when that is the clear intent. Ask if creation versus reuse is unclear. |
-| Explicit request for new document B | Use the separate creation workflow. Preserve A. |
-| Explicit request to edit document B from chat A | Explain the target mismatch and stop. Tell the user to open a B chat manually. Do not read or edit B through A's tools. |
+| Explicit request for new document B | Use the separate creation flow. Preserve A. |
+| Explicit request to edit document B from conversation A | Explain the target mismatch and stop. Tell the user to open a B conversation manually. Do not read or edit B through A's tools. |
 | “Edit the document open in the editor” | Verify that it is the bound target. If this cannot be established, explain the ambiguity and stop. |
 | Compare stored A and B | Explain the single-binding limit. Do not invent B's context. |
-| Target or requested scope is unclear | Ask a focused question. Do not choose another package by title alone. |
+| Target or requested scope is unclear | Ask a focused question. Do not choose another `.spec` file by title alone. |
 
 <a id="as-05"></a>
 
-**AS-05 — Writable scope is an owner boundary.** Document scope can use the
-supported operation vocabulary across its document. Entity scope can edit only
-its published writable entities and narrative. Surrounding references remain
-read-only. Creating a top-level entity requires document scope. Do not widen a
-chat's scope. If the exact owner, package, or entity is unavailable, stop that
-work. Do not substitute another service, visible document, or copied package.
+**AS-05 — Writable scope is a service boundary.** Document scope can use the
+supported operation vocabulary across its document. Component or Design scope can edit only
+its published writable targets and narrative. Surrounding references remain
+read-only. Creating a top-level target requires document scope. Do not widen a
+conversation's scope. If the exact service, `.spec` file, or target is unavailable, stop that
+work. Do not substitute another service, visible document, or copied `.spec` file.
 
 <a id="as-06"></a>
 
 **AS-06 — Read fresh, complete context.** Call `get_bound_context` before facts
 about stored designs and before each edit. Use its revision to author the
-proposal. A previous turn's read is not sufficient. An owner read failure must
-produce an owner/context error, not a request to restate the design.
+proposal. A previous turn's read is not sufficient. A service read failure must
+produce a service/context error, not a request to restate the design.
 
 Spec context is one semantic representation. A page has
 `schema_version=spec2gds.assistant-context-page.v1`, document identity, revision,
@@ -131,7 +132,7 @@ values. Follow `next_cursor` with the same `entity_ids` selection before replaci
 an incomplete field. Do not truncate values or use a hidden spill file.
 
 Every model-facing Spec reply must be below 40 KiB. Cursors are bound to revision
-and selection. Invalid/stale cursors and missing entities fail explicitly.
+and selection. Invalid/stale cursors and missing targets fail explicitly.
 Selection filters reads; it never widens writes. Circuit semantic context is
 authoritative; SVG is a visual aid. A failed optional SVG fetch must not be
 reported as lost semantic context.
@@ -140,26 +141,26 @@ reported as lost semantic context.
 
 <a id="as-07"></a>
 
-**AS-07 — Use the live owner schema.** Read the binding-specific operation
-contract from the owner at attachment and before proposal preview. A missing or
+**AS-07 — Use the live service schema.** Read the binding-specific operation
+contract from the service at attachment and before proposal preview. A missing or
 unsupported contract disables proposals. It must not activate a bundled fallback.
 Context reads can remain available.
 
 Spec publishes `GET /assistant/operation-schema` with `document_id`,
-`owner_document_key`, and `scope`. Entity scope also supplies `entity_kind` and
+`owner_document_key`, and `scope`. Component or Design scope also supplies `entity_kind` and
 `entity_id`. Circuit publishes the same relative endpoint under its configured
 `/api/circuit-designer/v1` base and supports document scope.
 
 The response contains `schema_version=1`, `digest`, and `operation_schema`.
 The schema describes one operation. The digest is `sha256:` plus the SHA-256 of
 canonical schema JSON: sorted keys, no added whitespace. A supported proposal
-has a nonempty operation array with unique `operation_id` values. The owner
+has a nonempty operation array with unique `operation_id` values. The service
 still validates scope, references, and semantics.
 
 The converter supports local `$defs`/`$ref`, `oneOf`, object `allOf`, properties,
 required fields, additional properties, arrays/items, primitive types, const,
 enum, string length/pattern, numeric bounds, `minItems`, and `uniqueItems`.
-Arbitrary maps use general JSON admission, then strict owner validation.
+Arbitrary maps use general JSON admission, then strict service validation.
 Unsupported constructs must reject the contract. A changed Spec digest needs a
 fresh context read and tool refresh. Ordinary source edits do not change the
 schema digest.
@@ -184,7 +185,7 @@ state, not as an untracked replacement proposal.
 
 **AS-09 — Architecture approval for Spec content.** Require human architecture
 approval before new hardware content is added, structural changes are made, or
-stored RTL is changed. This includes entity creation/deletion, ports, parameters that affect
+stored RTL is changed. This includes target creation/deletion, ports, parameters that affect
 interfaces or behavior, bus interfaces, channels, internal designs, instances,
 and connections. It also includes initial RTL and RTL-only refinement.
 
@@ -196,15 +197,15 @@ not include an unsolicited RTL rewrite. Mixed proposals require architecture
 approval for the structure/RTL portion.
 
 Architecture approval is required under both Spec save policies. It is separate
-from content-save approval. Circuit retains the workflow in AS-26.
+from content-save approval. Circuit retains the flow in AS-26.
 
 <a id="as-10"></a>
 
 **AS-10 — Review contents and validity.** The review must identify the intended
-document action, destination name/owner for new documents, affected entities,
+document action, destination name/service for new documents, affected targets,
 interfaces, clocks/reset, intended behavior, hierarchy, concrete configuration,
 assumptions, and essential unresolved questions. For an existing document, capture
-the exact owner key, scope, source revision, and requested change. For a new
+the exact service key, scope, source revision, and requested change. For a new
 independent document, do not depend on an unrelated bound document. A derived
 request must identify the source it actually depends on.
 
@@ -216,7 +217,7 @@ the exact stored plan; the model cannot edit the approved record.
 
 After approval, read the relevant current context again. A changed dependent
 source revision invalidates approval. Obtain a new review; do not relabel old
-operations. Reuse requires the exact owner/document/scope, or the recorded
+operations. Reuse requires the exact service/document/scope, or the recorded
 creation destination. A plan must match all affected structure and declared
 behavior, not only the names of newly created components. Automatic checking
 must cover typed structure; behavioral correspondence is also a model/reviewer
@@ -230,7 +231,7 @@ a leaf. Give each component one interface group; portless components use
 integers. Legacy flat port descriptors are accepted only for one component.
 
 Example A is a schema-valid architecture argument. The requested behavior is a
-concrete unsigned counter. The name/owner/action must also be visible in the
+concrete unsigned counter. The name/service/action must also be visible in the
 review context; do not invent new tool fields that are absent from its schema.
 
 ```json
@@ -257,19 +258,19 @@ review context; do not invent new tool fields that are absent from its schema.
 <a id="as-11"></a>
 
 **AS-11 — Create after approval, without another confirmation.** Browser root
-chats in all presets can request a new Spec document. Contentful creation needs
+conversations in all presets can request a new Spec document. Contentful creation needs
 an approved `architecture_review_id`. Then `prepare_spec_document_creation`
-creates the document and starts its separate chat without another creation
+creates the document and starts its separate conversation without another creation
 confirmation under either save policy. Restricted policy applies to the later
 content save. An explicitly empty document may use `empty=true` without an
 architecture review; it can finish as empty and ready.
 
-Use the approved readable name and selected owner. Derive the filename under
-`SPEC_DOCUMENT_ROOT`; the owner reserves the internal identity and destination.
-Readable collision suffixes are allowed; never overwrite an existing package.
+Use the approved readable name and selected service. Derive the filename under
+`SPEC_DOCUMENT_ROOT`; the service reserves the internal identity and destination.
+Readable collision suffixes are allowed; never overwrite an existing `.spec` file.
 A display rename does not move the saved file. Follow the shared
-[naming rules](naming-and-identifiers.md). An explicitly selected offline owner
-must not be replaced with another available owner.
+[naming rules](naming-and-identifiers.md). An explicitly selected offline service
+must not be replaced with another available service.
 
 Examples of creation arguments, used in separate requests:
 
@@ -283,16 +284,16 @@ Examples of creation arguments, used in separate requests:
 
 The review ID must be an actual approved record, not the example string. The
 browser creation tool is unavailable to headless requests and standing agents.
-The new-chat chooser creates empty sources; it does not bypass architecture for
+The new-conversation chooser creates empty sources; it does not bypass architecture for
 contentful requests.
 
 <a id="as-12"></a>
 
 **AS-12 — Creation has separate outcomes.** Persist the original request,
-owner, reserved destination, creation request ID, destination session ID, and
+service, reserved destination, creation request ID, destination conversation ID, and
 continuation request ID before side effects. Preserve the execution preset.
-Package save, chat activation, request admission, and content save are separate
-outcomes. `continued` means the request entered the destination chat. It does
+`.spec` file save, conversation activation, request admission, and content save are separate
+outcomes. `continued` means the request entered the destination conversation. It does
 not mean its content was saved.
 
 ```mermaid
@@ -314,20 +315,20 @@ stateDiagram-v2
     ContentPending --> Incomplete: Content fails or awaits Editor approval
 ```
 
-If the package exists but content fails, show **Document created; content not
+If the `.spec` file exists but content fails, show **Document created; content not
 saved** and the failure stage. Continue population only after an explicit user
-retry. Do not create another document. A failed chat setup retries chat setup,
-not package creation. Cancel creation only before its write starts. A saved
-package is not rolled back by cancelling a card.
+retry. Do not create another document. A failed conversation setup retries conversation setup,
+not `.spec` file creation. Cancel creation only before its write starts. A saved
+`.spec` file is not rolled back by cancelling a card.
 
 <a id="as-13"></a>
 
-**AS-13 — Content-save policy and UI.** Discover the owner's approval policy;
+**AS-13 — Content-save policy and UI.** Discover the service's approval policy;
 do not infer it from prompts or browser controls. Spec defaults to `automatic`.
 `--require-human-approval` selects `review`. Never default to automatic when policy
 retrieval fails.
 
-| Change | Automatic owner | Restricted owner |
+| Change | Automatic service | Restricted service |
 | --- | --- | --- |
 | New content, structure, or RTL | Approve architecture in Assistant; valid content saves automatically. | Approve architecture in Assistant; valid content remains pending until approved in Spec Editor. |
 | Text-only change | Valid content saves automatically. | Valid content remains pending until approved in Spec Editor. |
@@ -336,7 +337,7 @@ retrieval fails.
 
 The Assistant must not offer **Approve and apply** for Spec content. It shows
 the exact pending proposal and an **Open Spec Editor** link. The Editor approves
-the stored proposal ID after revalidation. Both UIs must then show the same owner
+the stored proposal ID after revalidation. Both UIs must then show the same service
 outcome. The existing explicit `approve-architecture` and `approve` CLI commands
 are a supported non-UI exception. They retain the same checks. Circuit send and
 accept controls are unchanged.
@@ -345,16 +346,16 @@ accept controls are unchanged.
 
 **AS-14 — Immutable atomic proposal.** The model supplies title, summary,
 rationale, assumptions, authored revision, and typed operations. The host creates
-an immutable artifact/digest. The owner compiles creations before dependent
+an immutable artifact/digest. The service compiles creations before dependent
 edits into a private candidate, previews it, and saves the complete valid batch
 atomically. A rejected batch leaves saved content unchanged.
 
 Existing references use authoritative IDs from context. New Spec `entity_id`
 values are proposal-local aliases. If omitted, the creation `operation_id` is the
-alias. The Assistant host allocates persistent entity IDs from proposal identity
-and operation position, then remaps matching typed references together. The owner
+alias. The Assistant host allocates persistent target IDs from proposal identity
+and operation position, then remaps matching typed references together. The service
 derives hardware names once. Later display renames do not change those identities.
-Duplicate aliases or an alias with the wrong entity kind must fail.
+Duplicate aliases or an alias with the wrong target kind must fail.
 
 A typed reference contains `document_id`, `entity_kind`, and `entity_id`.
 Formatting admission may fill an omitted document ID from the binding when kind
@@ -371,10 +372,10 @@ correct typed reference. Do not use a separate description store.
 | Wire range `[15:0]` | Store `15:0`; scalar ports can omit range. |
 | Outer RTL code fence | Remove only the fence. Preserve the body. |
 | Component `entry_design=false` | Omit this ineffective field. Entry flags belong to designs. |
-| Metadata/bus `clear_fields` | Convert requested clears into the owner's null representation. Null unchanged fields must not erase data. |
+| Metadata/bus `clear_fields` | Convert requested clears into the service's null representation. Null unchanged fields must not erase data. |
 | Narrative options and Circuit map entries | Convert admitted key/value lists; reject duplicate keys. |
 
-Formatting admission runs before strict owner-schema validation. It is distinct
+Formatting admission runs before strict service-schema validation. It is distinct
 from repairing a failed call. Never strip `module`/`endmodule`, external `include`,
 or user `line` directives from invalid RTL. Reject them. Nonempty component
 `instances` are invalid; create a component-owned design instead. Complete
@@ -432,7 +433,7 @@ reread and regenerate; it must not restamp old operations.
 A repeated identical request returns its stored receipt without another save.
 Changed content under the same ID fails. An uncertain write enters reconciliation.
 Read the exact receipt and compare artifact identity. An explicit recovery retry
-may use only the same ID and saved inputs where the owner supports durable
+may use only the same ID and saved inputs where the service supports durable
 receipts. Without that support, inspect the destination and keep the outcome
 uncertain. Do not issue a fresh write as recovery.
 
@@ -472,12 +473,12 @@ between implementation and text; preserve both until the user requests a change.
 Explain purpose, interface behavior, timing, reset, state, corner cases, and
 assumptions. Composite descriptions explain child responsibilities. Link authored
 requirements, behavior, architecture, assumptions, and verification criteria to
-the relevant entities. Preserve unrelated authored text and paragraph breaks.
+the relevant targets. Preserve unrelated authored text and paragraph breaks.
 
 Generation must not interpret prose or silently synchronize RTL. Text-only edits
 leave generated SV bytes unchanged, although provenance can change. No functional
 stored RTL means unimplemented. A compile-safe scaffold is not a functional
-implementation. Validation must follow stable entity identity even if metadata
+implementation. Validation must follow stable target identity even if metadata
 changes the display name in the same batch.
 
 <a id="as-17"></a>
@@ -486,7 +487,7 @@ changes the display name in the same batch.
 and connections for composition. Do not hide hierarchy only in SV. Internal
 designs use `entry_design=false`; ordinary design creation defaults to an entry
 design. One composite component owns its internal design. Composite ports remain
-subject to the owner's read-only restrictions; architecture approval does not
+subject to the service's read-only restrictions; architecture approval does not
 remove them.
 
 The RTL generator accepts component/design targets, emits only reachable hierarchy,
@@ -497,9 +498,9 @@ Symbolic/ascending slices, sliced bidirectional ports, and bus or transactional
 port generation remain unsupported. Parameterized RTL generation is not supported;
 store configurable intent but generate approved concrete widths/depths.
 
-CLI generation targets use exact entity IDs or full VLNVs. Unknown/ambiguous targets
+CLI generation targets use exact target IDs or full VLNVs. Unknown/ambiguous targets
 fail. An omitted target requires one entry design. Reports retain target,
-implementation status, consumed-section/entity provenance, and source revision.
+implementation status, consumed-section/target provenance, and source revision.
 V3 reports/manifests and saved V2 records remain distinct. Use the
 [RTL generation reference](rtl-generation-activity.md) for the generator API.
 
@@ -508,25 +509,25 @@ V3 reports/manifests and saved V2 records remain distinct. Use the
 <a id="as-18"></a>
 
 **AS-18 — Prompt/tool agreement.** Trusted, exact-version prompt bundles supply
-product identity, domain persona, immutable binding/context rules, owner operation
+product identity, domain persona, immutable binding/context rules, service operation
 constraints, architecture rules, and output rules. Prompts must agree with tool
 schemas and host guards. An unbound complete prompt must include the architecture
 and creation guidance it needs; suppressed sections must not be assumed active.
-A model cannot grant capabilities through a prompt or owner content. Runtime
-rules must not rely only on model obedience where a host/owner check is possible.
+A model cannot grant capabilities through a prompt or service content. Runtime
+rules must not rely only on model obedience where a host/service check is possible.
 
 <a id="as-19"></a>
 
 **AS-19 — Stop on first validation failure.** Stop the affected request after
 native tool-argument rejection, formatting rejection, architecture rejection,
-owner-schema rejection, or owner-preview validation failure. Do not call the
+service-schema rejection, or service-preview validation failure. Do not call the
 failed tool again with corrected arguments in the same request. Do not start a
 goal continuation or event activation to repair it. Report failure even when no
 proposal record was created. An explicit new user retry can start new authoring.
 
 Read-only transport delivery retries and unchanged polling are separate from
 model validation repair. They can keep their bounded replay-safe transport policy.
-They must not retry a request that was stopped for validation. An uncertain owner
+They must not retry a request that was stopped for validation. An uncertain service
 write requires receipt inspection, not model repair or a new write identity.
 
 <a id="as-20"></a>
@@ -537,29 +538,29 @@ label a suspected root cause as proven.
 
 | Stage | Details needed |
 | --- | --- |
-| Target/binding | Expected owner/document/scope and observed mismatch. |
-| Context | Owner response status, identity/revision, selection, and cursor failure. |
+| Target/binding | Expected service/document/scope and observed mismatch. |
+| Context | Service response status, identity/revision, selection, and cursor failure. |
 | Native tool arguments | Tool name, rejected field path, expected shape, and native diagnostic. |
-| Formatting/owner schema | Operation ID/type, field path, formatting applied before rejection, and schema digest. |
+| Formatting/service schema | Operation ID/type, field path, formatting applied before rejection, and schema digest. |
 | Architecture | Review ID/status, dependent revision, and plan mismatch or missing approval. |
-| Owner preview/save | Owner status, diagnostics, base revision, proposal ID/digest, and whether a write began. |
-| Creation/chat continuation | Creation request ID, saved destination if known, and last confirmed phase. |
+| Service preview/save | Service status, diagnostics, base revision, proposal ID/digest, and whether a write began. |
+| Creation/conversation continuation | Creation request ID, saved destination if known, and last confirmed phase. |
 | Model/execution limit | Provider stop reason, effective token/step limit, and last confirmed tool outcome. |
 
 Use one error envelope across proposal, architecture, creation, and native schema
-failures. Retain existing error codes, issue details, owner diagnostics, correlation
+failures. Retain existing error codes, issue details, service diagnostics, correlation
 ID, and suggested actions. Add the stage and mutation outcome when missing. Link
-technical details to session/turn/call identity, prompt bundle/version, operation
+technical details to conversation/turn/call identity, prompt bundle/version, operation
 schema digest, and relevant receipt. `retryable` describes a later manual recovery
 option; it never authorizes automatic validation repair. Remove credentials and
 secrets from exported diagnostics.
 
 <a id="as-29"></a>
 
-**AS-29 — Visible UI state.** Show the bound source name and document/entity scope.
-Do not call a writable document chat read-only. Keep architecture decisions,
+**AS-29 — Visible UI state.** Show the bound source name and document/Component or Design scope.
+Do not call a writable document conversation read-only. Keep architecture decisions,
 proposal state, and errors visible after tool traces collapse and after reload.
-A later error must not hide a pending architecture card. Use owner-derived change
+A later error must not hide a pending architecture card. Use service-derived change
 summaries and exact stored artifacts for diffs. Put internal IDs/hashes in technical
 details; keep useful hardware names visible. A model's success sentence is not a
 saved-state indicator.
@@ -571,7 +572,7 @@ saved-state indicator.
 **AS-21 — Presets and bounds.** A conversation pins `focused`, `goal`, or
 `orchestrated`; there is no silent complexity router. Focused performs a bounded
 single turn. Goal uses native single-agent continuation. Orchestrated keeps
-read-only analyst/reviewer sessions and a proposal-owning primary. Only the primary
+read-only analyst/reviewer conversations and a proposal-owning primary. Only the primary
 can create questions/proposals; specialists cannot approve changes or edit execution
 configuration. The [operations guide](ai-assistant-operations.md#configuration-and-limits)
 records defaults once. Token limits, model steps, and aggregate requests/rounds are
@@ -587,7 +588,7 @@ review cannot authorize a newer input. Event delivery acceptance is not successf
 activation completion. Agent review is not human architecture approval.
 
 Goal continuation uses its native driver, not the analyst/reviewer chain. A required
-architecture or owner decision blocks continuation using a correlated wait. Match
+architecture or service decision blocks continuation using a correlated wait. Match
 the exact review/wait identity and execution revision. Applying, sending, or
 discarding a proposal can resolve that wait, but cannot complete the goal by itself.
 The primary must check the requested outcome. A validation stop must remain stopped
@@ -604,7 +605,7 @@ prove that specification content was saved.
 | `analysis.ready` | Approved analyst | `findings`; reviewer input for its causally identified request. |
 | `review.ready` | Approved reviewer | `result`; primary may prepare a proposal for that latest reviewed input. |
 | `review.prepared` | Product host after preview | `proposal_id`; audit record and correlated goal review wait. |
-| `review.applied` | Product host after owner applied/sent receipt | `proposal_id`; resolves that proposal's wait, subject to remaining allowance. |
+| `review.applied` | Product host after service applied/sent receipt | `proposal_id`; resolves that proposal's wait, subject to remaining allowance. |
 | `review.discarded` | Product host after discard | `proposal_id`; resolves that proposal's wait without completing its requested result. |
 | `system.wait.answered` | Human answer API | `wait_id`, `answer`; resolves the exact current human wait. |
 | `system.activation.completed` | Native event service | `agent`, `activation_id`; successful activation outcome. |
@@ -621,56 +622,56 @@ host-owned.
 **AS-23 — Human configuration and monitoring.** Event templates define allowed
 agents, prompts, model routes, event schemas, subscriptions, and resource bounds.
 Validate and review exact content before saving. A conversation pins the resolved
-revision; later template edits affect new chats only. Editing a built-in creates
+revision; later template edits affect new conversations only. Editing a built-in creates
 a named template. Models cannot change rosters, permissions, or allowances.
 
 Events have unique IDs, validated payloads, producer-scoped dedupe keys, causation,
 root correlation, and depth. Subscriptions match exact types. Payload filters,
-arbitrary workflow joins, and stage mappings are unsupported. Durable waits
+arbitrary flow joins, and stage mappings are unsupported. Durable waits
 correlate exact string fields independently. System events are host-owned.
 
-HTTP monitoring reads only allowlisted paths for the bound owner. Endpoint content
+HTTP monitoring reads only allowlisted paths for the bound service. Endpoint content
 is untrusted data. Reject credentials in URLs, redirects, invalid JSON/pointers,
 oversized bodies, and incompatible event schemas. Unchanged polling makes no model
 requests. Changed observations use the remaining execution budget and never approve
 content. Sources persist when disabled. Pause suspends checks/admissions; Stop ends
-execution. Webhooks, file watchers, and executable workflows are future work.
+execution. Webhooks, file watchers, and executable flows are future work.
 
 <a id="as-24"></a>
 
 **AS-24 — State and recovery.** Native JSONL is the transcript authority. Product
 SQLite owns bindings, architecture decisions, creation progress, proposals, and
 configuration revisions/pins. Native storage domains own event deliveries, waits,
-sources, cursors, and spending. Owner persistence owns saved documents and receipts.
+sources, cursors, and spending. Service persistence owns saved documents and receipts.
 Back up the complete state root; no single store proves an external save.
 
 Run one Assistant process per state root. Restart retains budgets and records.
 Persistent execution needs human Resume before new model work. Unknown/interrupted
 transport work needs explicit acknowledgement before retry. Old unsupported execution
 records remain readable but cannot silently adopt new capabilities. Spec bindings
-survive owner restart and visible-document changes. Circuit document/proposal state
+survive service restart and visible-document changes. Circuit document/proposal state
 is process-local; reopen it before reconciling after a Circuit restart.
 
 <a id="as-25"></a>
 
 **AS-25 — Close, cancel, stop, and reject are different.** Closing a browser tab or
-archiving a chat preserves binding, receipts, and pending decisions. It must not
+archiving a conversation preserves binding, receipts, and pending decisions. It must not
 approve, discard, or delete content. It must not be treated as execution Stop.
-Cancel an architecture request without creating content. Cancel package creation
+Cancel an architecture request without creating content. Cancel `.spec` file creation
 only before its write starts. Reject a pending proposal without changing saved
 content. Pause/Stop prevent future execution; an in-flight write still requires
 outcome reconciliation. Saved changes need a new explicit edit to undo them.
-No model tool deletes a specification document.
+No model tool deletes a Spec.
 
 <a id="as-26"></a>
 
 **AS-26 — Circuit handoff and save.** Circuit proposal preview checks logical
 Circuit rules. The Assistant's explicit **Send to Circuit Designer** action records
-`sent` only after owner receipt. Independent Circuit acceptance keeps its owner
+`sent` only after service receipt. Independent Circuit acceptance keeps its service
 behavior. For a source-bound Circuit, **Accept** takes an edit lease and stages a
 private draft; it does not save the specification.
 
-**Save to Specification** performs Circuit preview, Spec preview, Spec commit, and
+**Save to Spec** performs Circuit preview, Spec preview, Spec commit, and
 Circuit re-projection. Carry the staged `proposal_id`; resolve it only after successful
 save. A failed save retains the draft/proposal. Cancel discards the draft. A reload
 with unchanged source revision/projection preserves the proposal for staging again.
@@ -685,11 +686,11 @@ acceptance. Additional source preflight is a future proposal, not a requirement.
 
 | User requested | Evidence needed before claiming completion |
 | --- | --- |
-| Empty specification document | Creation receipt and correct destination chat; explicitly report empty content. |
-| Specification content saved | Applied owner receipt for the exact artifact and saved revision. |
+| Empty Spec | Creation receipt and correct destination conversation; explicitly report empty content. |
+| Specification content saved | Applied service receipt for the exact artifact and saved revision. |
 | Proposal for review | Valid stored preview; clearly say content is pending. |
 | Circuit proposal handoff | Circuit receipt; report sent, not accepted or saved. |
-| Source-bound Circuit saved | Successful Spec save receipt/revision from the Circuit owner workflow. |
+| Source-bound Circuit saved | Successful Spec save receipt/revision from the Circuit service flow. |
 | RTL functionality | Relevant executed functional tests, in addition to source/generation/lint results. |
 
 ## 8. Verification and maintenance
@@ -698,7 +699,7 @@ acceptance. Additional source preflight is a future proposal, not a requirement.
 
 **AS-28 — Reproducible composition.** Use the source setup and supported runtimes.
 Verify the Harness revision against `harness.lock.json` before supported integration
-or packaging. Package only a clean matching Harness checkout. Rebuild product/editor
+or packaging. Package releases only from a clean matching Harness checkout. Rebuild product/editor
 assets from source. Copied bundles and stale builds are not evidence of source changes.
 
 <a id="as-30"></a>
@@ -711,3 +712,53 @@ replay, lint, simulation, and manual document review are separate outcomes. Miss
 credentials/tools mean unverified, not passed. Numeric quality thresholds remain
 proposals until approved. Remove a TEMP gap only after its required tests and this
 contract agree with the implementation.
+
+## 11. Native tool contracts and instruction releases
+
+<a id="as-31"></a>
+
+**AS-31 — One static instruction source.** The Assistant loads its five native
+JSON tool contracts and static instructions from one versioned catalogue. Each
+contract names its handler, availability rule, schemas, and instruction reference.
+Generate argument types from these contracts. Reject unsupported native schema
+keywords, missing references, or unknown handlers before model execution.
+Service operation schemas remain live and authoritative. Keep their strict
+validation after formatting admission and before semantic preview.
+
+<a id="as-32"></a>
+
+**AS-32 — Independent service metadata.** Each service exports
+`GET <service-base>/assistant/integration-metadata`, even with no document open.
+Circuit service bases include `/api/circuit-designer/v1`. Metadata declares the
+format version, service kind, interface version, digest, and named API actions.
+Actions declare methods, relative paths, parameter names, and response kinds.
+The Assistant uses separate service adapters. They accept known actions only.
+Missing or incompatible metadata stops the service call. Metadata cannot grant
+permissions or change a conversation target. No other service is selected silently.
+The services do not import Assistant handlers or each other's implementation.
+Save to Spec retains its explicit Spec service dependency.
+
+<a id="as-33"></a>
+
+**AS-33 — Immutable conversation snapshots.** Pin a release before the first model
+execution, including in an unbound conversation. Store the static contracts,
+instruction templates, release version, content hash, and handler compatibility
+version. Persist the resolved event configuration separately. Members and a new
+Spec continuation inherit the source release. Reload must retain those pins.
+Context, revisions, permissions, service schemas, and service metadata remain fresh.
+Reject changed content under an existing release version. Incompatible pinned
+handlers stop execution; they do not trigger instruction replacement.
+For the TD-05 rollout, conversations without snapshots remain readable history.
+Require a fresh conversation for model execution. Preserve Specs, receipts,
+proposals, approvals, and uncertain-write records. Receipt inspection and explicit
+approval commands remain available.
+
+<a id="as-34"></a>
+
+**AS-34 — Extension and evidence.** Add native tools through a JSON contract,
+catalogue instructions, a registered handler, capability checks, and deterministic
+checks. Add services through independent metadata and adapter declarations.
+Keep single-user operation for this change. Do not add MCP or change UI-02.
+Validate schema, instruction, state, and flow regressions with fixed responses.
+These results establish deterministic boundaries. They do not establish model
+accuracy. Live-model comparison remains deferred.

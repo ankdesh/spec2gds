@@ -53,7 +53,7 @@ for (const recover of [true, false]) test(`unbound architecture ${recover ? 'rec
     const system = request.messages.filter(message => message.role === 'system')
       .flatMap(message => message.content.filter(block => block.type === 'text').map(block => block.text)).join('\n');
     assert.match(system, /ARCHITECTURE AND IMPLEMENTATION AUTHORITY/);
-    assert.match(system, /NEW SPECIFICATION PACKAGES/);
+    assert.match(system, /NEW SPECS/);
     assert.match(system, /components=\[\{name,purpose\}\]/);
     const schema = request.tools.find(tool => tool.name === 'prepare_architecture_review').parameters;
     assert.deepEqual(schema.properties.components.items.required, ['name']);

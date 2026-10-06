@@ -17,8 +17,7 @@
   config:
     includeHarnessIdentity: false
     includeRuntimeContext: false
-    personaPrefix: >-
-      You are the focused spec2gds hardware-design assistant.
+    personaPrefix: ""
 
 - id: sandbox-policy
   config:

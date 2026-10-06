@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
@@ -20,6 +21,7 @@ test("Spec policy discovery is explicit and bound requests carry the package key
   let policy: unknown = "automatic";
   let status = 200;
   const server = createServer((request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     const url = new URL(request.url!, "http://localhost"); urls.push(url);
     response.writeHead(status, { "Content-Type": "application/json" });
     response.end(JSON.stringify(url.pathname === "/assistant/capabilities"
@@ -35,7 +37,7 @@ test("Spec policy discovery is explicit and bound requests carry the package key
     assert.deepEqual(await clients.specPolicy(ownerUrl), { approval_policy: "automatic", submissions: true });
     await clients.context(binding);
     await clients.submitSpec(binding, {});
-    assert.ok(urls.filter(url => url.pathname !== "/assistant/capabilities").every(url => url.searchParams.get("owner_document_key") === "package-A"));
+    assert.ok(urls.filter(url => !["/assistant/capabilities", "/assistant/integration-metadata"].includes(url.pathname)).every(url => url.searchParams.get("owner_document_key") === "package-A"));
     assert.equal(urls.at(-1)!.searchParams.get("session_id"), "chat");
     policy = undefined;
     await assert.rejects(clients.specPolicy(ownerUrl), /valid approval policy/);
@@ -48,6 +50,7 @@ test("Spec policy discovery is explicit and bound requests carry the package key
 
 test("Spec target discovery uses canonical entity references", async () => {
   const server = createServer((_request, response) => {
+    if (serveIntegrationMetadata(_request, response)) return;
     response.writeHead(200, { "Content-Type": "application/json" });
     response.end(JSON.stringify({
       document_id: "doc-1",
@@ -76,6 +79,7 @@ test("Spec target discovery uses canonical entity references", async () => {
 test("Circuit client uses the public snapshot, preview, and proposal routes", async () => {
   const requests: Array<{ method: string; path: string; body?: Record<string, unknown> }> = [];
   const server = createServer(async (request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     const path = new URL(request.url ?? "/", "http://localhost").pathname;
     let body: Record<string, unknown> | undefined;
     if (request.method === "POST") {
@@ -138,6 +142,7 @@ test("fetches binding-specific owner operation contracts and reports retrieval f
   const paths: string[] = [];
   let available = true;
   const server = createServer((request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     paths.push(request.url ?? "");
     response.writeHead(available ? 200 : 503, { "Content-Type": "application/json" });
     response.end(JSON.stringify(available
@@ -166,4 +171,30 @@ test("fetches binding-specific owner operation contracts and reports retrieval f
   } finally {
     await new Promise<void>(resolve => server.close(() => resolve()));
   }
+});
+
+test("missing or incompatible metadata stops before a write and never selects another service", async () => {
+  let writes = 0; let kind = "missing";
+  const valid = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("./fixtures/spec-integration-metadata.json", import.meta.url), "utf8"));
+  const server = createServer((request, response) => {
+    if (request.url === "/assistant/integration-metadata") {
+      response.writeHead(kind === "missing" ? 404 : 200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(kind === "missing" ? { detail: "No metadata export" } : { ...valid, service_kind: "circuit" }));
+    } else {
+      if (request.method === "POST") writes++;
+      response.writeHead(200, { "Content-Type": "application/json" }); response.end('{"status":"applied"}');
+    }
+  });
+  server.listen(0, "127.0.0.1"); await once(server, "listening");
+  const address = server.address(); assert.ok(address && typeof address === "object");
+  const base = `http://127.0.0.1:${address.port}`;
+  const clients = new OwnerClients([base], ["http://127.0.0.1:9/api/circuit-designer/v1"], 1_000);
+  try {
+    const binding = { domain: "spec", ownerUrl: base, documentId: "same", scope: "document", sessionId: "one" } as SessionBinding;
+    for (kind of ["missing", "incompatible"]) {
+      await assert.rejects(clients.submitSpec(binding, {}), /integration metadata is unavailable or incompatible/);
+      await assert.rejects(clients.context(binding), /integration metadata is unavailable or incompatible/);
+      assert.equal(writes, 0);
+    }
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
 });

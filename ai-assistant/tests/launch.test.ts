@@ -353,7 +353,7 @@ test("unbound sessions receive a product guard instead of design-editing claims"
   const guard = source.match(/name: "spec2gds:unbound-session",[\s\S]*?\}\)\);/)?.[0];
   assert.ok(guard, "Expected the unbound prompt guard registration.");
   assert.match(guard, /complete: true/);
-  assert.match(guard, /text: UNBOUND_SOURCE_PROMPT/);
+  assert.match(guard, /instructionsFor\(agent.id\)\.text\("unbound"\)/);
   assert.match(UNBOUND_SOURCE_PROMPT, /Do not claim that work was completed and do not create a goal/);
   for (const name of ["domain-persona", "binding-context", "operation-constraints", "output-contract"]) {
     assert.doesNotMatch(guard, new RegExp(name));
@@ -362,7 +362,7 @@ test("unbound sessions receive a product guard instead of design-editing claims"
 
 test("deployment persona contains identity only", () => {
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
-  assert.match(patch, /personaPrefix: >-\n      You are the focused spec2gds hardware-design assistant\./);
+  assert.match(patch, /personaPrefix: ""/);
   assert.doesNotMatch(patch, /Every useful conversation is permanently bound/);
 });
 

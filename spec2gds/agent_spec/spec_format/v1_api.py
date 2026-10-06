@@ -62,6 +62,7 @@ from spec2gds.agent_spec.spec_format.assistant import (
 )
 from spec2gds.agent_spec.spec_format.assistant_context_pages import build_context_page
 from spec2gds.agent_spec.spec_format.assistant_operation_contract import operation_contract
+from spec2gds.agent_spec.spec_format.assistant_integration import ASSISTANT_ACTIONS, integration_metadata
 from spec2gds.agent_spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
     CircuitDesignerConnectionError,
@@ -638,12 +639,16 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             "section_validation": [item.as_json() for item in result.section_validation],
         })
 
-    @app.get("/health")
+    @app.get("/assistant/integration-metadata")
+    def assistant_integration_metadata() -> dict[str, typing.Any]:
+        return integration_metadata()
+
+    @app.get(ASSISTANT_ACTIONS["health"]["path"])
     def health() -> dict[str, str]:
         """Report server liveness and the source-format generation it serves."""
         return {"status": "ok", "format": "spec2gds-v1"}
 
-    @app.get("/assistant/capabilities")
+    @app.get(ASSISTANT_ACTIONS["capabilities"]["path"])
     def assistant_capabilities() -> dict[str, typing.Any]:
         return {"schema_version": 1, "approval_policy": approval_policy,
                 "stable_package_bindings": True, "document_refinement": True,
@@ -765,7 +770,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             raise fastapi.HTTPException(status_code=422, detail="Browser log events must be a list of at most 100 items.")
         logger.browser_events(str(payload.get("session_id", "unknown")), [item for item in events if isinstance(item, dict)])
 
-    @app.post("/documents/create")
+    @app.post(ASSISTANT_ACTIONS["create_document"]["path"])
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
         """Create, validate, activate, and return a new package snapshot."""
         try:
@@ -800,7 +805,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/documents")
+    @app.get(ASSISTANT_ACTIONS["list_documents"]["path"])
     def named_documents() -> dict[str, typing.Any]:
         from spec2gds.agent_spec.spec_format.naming import document_name, entity_name
         documents = []
@@ -816,7 +821,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
                                  *session.revision.bus_definitions, *session.revision.abstraction_definitions)]})
         return {"documents": documents}
 
-    @app.get("/documents/resolve")
+    @app.get(ASSISTANT_ACTIONS["resolve_document"]["path"])
     def resolve_named_target(name: str | None = None, owner_document_key: str | None = None,
                              document_id: str | None = None, entity_name: str | None = None,
                              entity_kind: str | None = None) -> dict[str, typing.Any]:
@@ -846,12 +851,12 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/documents/snapshot")
+    @app.get(ASSISTANT_ACTIONS["snapshot"]["path"])
     def document_snapshot(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return the complete editor-facing immutable source projection."""
         return _snapshot(bound_session(owner_document_key))
 
-    @app.get("/documents/names")
+    @app.get(ASSISTANT_ACTIONS["names"]["path"])
     def document_names(owner_document_key: str | None = None, document_id: str | None = None,
                        entity_kind: str | None = None, entity_id: str | None = None) -> dict[str, typing.Any]:
         from spec2gds.agent_spec.spec_format.naming import document_name, reference_name
@@ -1150,7 +1155,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         projection = build_document_projection(bound_session(owner_document_key).revision)
         return build_a2ui_batch(projection).model_dump(mode="json")
 
-    @app.get("/assistant/context")
+    @app.get(ASSISTANT_ACTIONS["context_entity"]["path"])
     def assistant_context(
         document_id: str,
         entity_kind: str,
@@ -1173,7 +1178,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except (TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/assistant/context/document")
+    @app.get(ASSISTANT_ACTIONS["context_document"]["path"])
     def assistant_document_context(document_id: str, owner_document_key: str | None = None,
                                    paged: bool = False, entity_ids: str | None = None, cursor: str | None = None) -> dict[str, typing.Any]:
         """Return document-wide context and supported refinement boundaries."""
@@ -1185,7 +1190,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except (TypeError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/assistant/operation-schema")
+    @app.get(ASSISTANT_ACTIONS["operation_schema"]["path"])
     def assistant_operation_schema(
         document_id: str,
         scope: str,
@@ -1212,7 +1217,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.post("/assistant/proposals/preview")
+    @app.post(ASSISTANT_ACTIONS["preview_proposal"]["path"])
     def assistant_proposal_preview(proposal: SpecChangeProposal, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Validate and project an assistant proposal without persisting a draft."""
         try:
@@ -1275,7 +1280,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             raise fastapi.HTTPException(status_code=409 if preview["status"] == "stale" else 422, detail=preview)
         return session, session.journal.update(proposal.proposal_id, state="ready", preview=preview, diagnostics=[])
 
-    @app.post("/assistant/proposals/stage")
+    @app.post(ASSISTANT_ACTIONS["stage_proposal"]["path"])
     def assistant_proposal_stage(proposal: SpecChangeProposal, owner_document_key: str | None = None, session_id: str | None = None) -> dict[str, typing.Any]:
         """Import a reviewed legacy artifact without automatically applying it."""
         session = bound_session(owner_document_key, proposal.document_id)
@@ -1285,7 +1290,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
                 record = session.journal.update(proposal.proposal_id, requires_review=True)
             return record
 
-    @app.post("/assistant/proposals/submit")
+    @app.post(ASSISTANT_ACTIONS["submit_proposal"]["path"])
     def assistant_proposal_submit(proposal: SpecChangeProposal, owner_document_key: str | None = None, session_id: str | None = None) -> dict[str, typing.Any]:
         """Apply automatically or persist a review, according to owner policy."""
         session = bound_session(owner_document_key, proposal.document_id)
@@ -1302,7 +1307,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
             return {**commit_proposal(session, proposal, "automatic", session_id),
                     "review_number": session.journal.get(proposal.proposal_id)["ordinal"]}
 
-    @app.post("/assistant/proposals/apply")
+    @app.post(ASSISTANT_ACTIONS["apply_proposal"]["path"])
     def assistant_proposal_apply(proposal: SpecChangeProposal, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Compatibility route; restricted owners require the stored-ID action."""
         if approval_policy == "review":
@@ -1316,14 +1321,14 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         except ValueError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
-    @app.get("/assistant/proposals/{proposal_id}")
+    @app.get(ASSISTANT_ACTIONS["proposal_receipt"]["path"])
     def assistant_submission(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         record = bound_session(owner_document_key).journal.get(proposal_id)
         if record is None:
             raise fastapi.HTTPException(status_code=404, detail="Unknown assistant submission.")
         return record
 
-    @app.post("/assistant/proposals/{proposal_id}/approve")
+    @app.post(ASSISTANT_ACTIONS["approve_proposal"]["path"])
     def assistant_submission_approve(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         session = bound_session(owner_document_key)
         with session.lock:
@@ -1337,7 +1342,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
                 raise fastapi.HTTPException(status_code=409, detail=f"Proposal is {record['state']}; reread context and submit a new proposal.")
             return commit_proposal(session, SpecChangeProposal.model_validate(record["artifact"]), "review", record["session_id"])
 
-    @app.post("/assistant/proposals/{proposal_id}/reject")
+    @app.post(ASSISTANT_ACTIONS["reject_proposal"]["path"])
     def assistant_submission_reject(proposal_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         session = bound_session(owner_document_key)
         with session.lock:
@@ -1718,7 +1723,7 @@ def create_app(require_human_approval: bool | None = None) -> typing.Any:
         """List review-gated change proposals for the active package."""
         return {"proposals": [_jsonable(item) for item in active().activity.state.proposals]}
 
-    @app.get("/assistant/changes")
+    @app.get(ASSISTANT_ACTIONS["changes"]["path"])
     def assistant_changes(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """List accepted assistant decisions stored in package activity."""
         return {

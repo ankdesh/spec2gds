@@ -1,3 +1,4 @@
+import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 import { architecturePlan } from "./support/architecture.js";
 import assert from "node:assert/strict";
 import { once } from "node:events";
@@ -10,13 +11,14 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { apply } from "../src/index.js";
 
-async function hostFixture(interactiveForms = true) {
+async function hostFixture(interactiveForms = true, storedIds: string[] = []) {
   const root = await mkdtemp(join(tmpdir(), "spec2gds-creation-host-"));
   const contract = JSON.parse(await readFile(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
   let active: string | null = null;
   let creates = 0;
   let contextReads = 0;
   const owner = createServer(async (request, response) => {
+    if (serveIntegrationMetadata(request, response)) return;
     const path = new URL(request.url!, "http://local").pathname;
     const send = (value: unknown, status = 200) => { response.writeHead(status, { "Content-Type": "application/json" }); response.end(JSON.stringify(value)); };
     if (path === "/health") return send({ status: "ok" });
@@ -51,7 +53,7 @@ async function hostFixture(interactiveForms = true) {
   const ctx: any = {
     eventHttpSources: { list: () => [] },
     agents: { get: (id: string) => agents.get(id) },
-    sessionPersistence: { list: async () => [] },
+    sessionPersistence: { list: async () => storedIds.map(id => ({ header: { id } })) },
     promptCatalog: { get: () => ({}), seal: () => {}, bind: () => ({ sections: ["domain-persona", "binding-context", "operation-constraints", "output-contract"].map((id, index) => ({ id, order: 100 + index * 50, text: id })) }) },
     eventSystems: {
       ready: Promise.resolve(), definition: (id: string) => {
@@ -187,4 +189,19 @@ test("headless and specialist agents do not acquire the creation tool", async ()
     assert.equal(child.tools.has("prepare_spec_document_creation"), false);
     assert.equal(child.tools.has("get_bound_context"), true);
   } finally { await headless.close(); await web.close(); }
+});
+
+
+test("legacy conversations retain history and cannot run the model or domain tools", async () => {
+  const f = await hostFixture(true, ["legacy"]);
+  try {
+    const agent = await f.makeAgent("legacy");
+    assert.equal(agent.tools.size, 0);
+    let entered = false;
+    await assert.rejects(f.emit("agent/pre-step", { agent, turn: 1, step: 1 }, async () => { entered = true; }), /Start a new bound conversation/);
+    assert.equal(entered, false);
+    await assert.rejects(f.emit("agent/request", { agent, turn: 1, step: 1 }, async () => ({})), /Start a new conversation/);
+    const fresh = await f.makeAgent("fresh");
+    assert.ok(fresh.tools.has("prepare_architecture_review"));
+  } finally { await f.close(); }
 });
