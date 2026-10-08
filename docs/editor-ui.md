@@ -1,5 +1,32 @@
 # Spec Editor UI
 
+## Appearance and navigation
+
+Spec Editor uses a light surface, a restrained green accent, and one system
+sans-serif font. The document header and Section headings use compact sizes.
+Hardware IDs and SystemVerilog use monospace text. Hardware IDs retain their
+exact case.
+
+The Contents list shows the current Section as the designer scrolls. Its
+position and anchor targets account for the measured toolbar height. Below
+800 px, use **Contents** to open the Section list. Selecting a Section closes
+the list and moves focus to its heading. Escape closes the list and returns
+focus to Contents. Below 620 px, **Menu** provides the application menus.
+
+The status area below the toolbar shows synchronization state and Assistant
+approval mode. Notices that require action appear in the page layout. They do
+not cover document controls or draft fields.
+
+Tables retain their columns and use horizontal scrolling when space is limited.
+Port Edit controls stay available at the table edge. An active port draft fits
+the visible table container and uses one column on narrow screens. Use
+**Save to Spec** to submit a private draft, or **Cancel** to discard it.
+
+Document and Section identifiers remain available under **Technical details**.
+Activity and Diagnostics use the same typography and controls as the document.
+
+## Application bar
+
 The Spec Editor uses a sticky application bar so document operations
 remain available while the unified specification scrolls. The active package
 name appears in the bar; hover it to inspect the full server-local path.

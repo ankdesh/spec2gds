@@ -242,8 +242,11 @@ function Modal({
     });
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      if (previousFocus?.isConnected && previousFocus !== document.body) previousFocus.focus();
-      else document.getElementById(restoreFocusId)?.focus();
+      if (previousFocus?.isConnected && previousFocus !== document.body && previousFocus.getClientRects().length) previousFocus.focus();
+      else {
+        const trigger = document.getElementById(restoreFocusId);
+        (trigger?.getClientRects().length ? trigger : document.getElementById("editor-mobile-menu-trigger"))?.focus();
+      }
     };
   }, [restoreFocusId]);
 
@@ -587,8 +590,20 @@ export default function EditorMenuBar({
 }: EditorMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
   const [dialog, setDialog] = useState<DialogId>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [canCopy, setCanCopy] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const header = rootRef.current;
+    const shell = header?.closest<HTMLElement>(".app-shell");
+    if (!header || !shell) return;
+    const measure = () => shell.style.setProperty("--spec-toolbar-height", `${header.getBoundingClientRect().height}px`);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, []);
 
   const entryIds = useMemo(
     () => new Map(snapshot?.entry_designs.map((entry, index) => [entry.ref.entity_id, index]) ?? []),
@@ -609,12 +624,16 @@ export default function EditorMenuBar({
 
   const openPathDialog = (mode: "new" | "open") => {
     setOpenMenu(null);
+    setMobileMenuOpen(false);
     setDialog(mode);
   };
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpenMenu(null);
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setOpenMenu(null);
+        setMobileMenuOpen(false);
+      }
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
@@ -653,6 +672,7 @@ export default function EditorMenuBar({
 
   const activate = (callback: () => void) => () => {
     setOpenMenu(null);
+    setMobileMenuOpen(false);
     callback();
   };
 
@@ -682,13 +702,30 @@ export default function EditorMenuBar({
 
   return (
     <>
-      <header className="app-header" ref={rootRef}>
+      <header className="app-header" ref={rootRef} onKeyDown={(event) => {
+        if (event.key === "Escape" && !openMenu && mobileMenuOpen) {
+          setMobileMenuOpen(false);
+          document.getElementById("editor-mobile-menu-trigger")?.focus();
+        }
+      }}>
         <div className="app-header__primary">
-          <a className="brand" href="#" onClick={(event) => { event.preventDefault(); onViewChange("document"); }}>
+          <a className="brand" aria-label="Spec Editor" href="#" onClick={(event) => { event.preventDefault(); onViewChange("document"); }}>
             <span className="brand__mark" aria-hidden="true">S</span>
-            <span><strong>spec2gds</strong><small>Spec document</small></span>
+            <span><strong>spec2gds</strong><small>Spec Editor</small></span>
           </a>
-          <nav aria-label="Application menu" className="editor-menubar" role="menubar">
+          <button
+            className="editor-mobile-menu-trigger"
+            id="editor-mobile-menu-trigger"
+            aria-controls="editor-application-menu"
+            aria-expanded={mobileMenuOpen}
+            type="button"
+            onClick={() => {
+              setMobileMenuOpen(!mobileMenuOpen);
+              setOpenMenu(null);
+              if (!mobileMenuOpen) requestAnimationFrame(() => document.getElementById("editor-file-menu-trigger")?.focus());
+            }}
+          >Menu</button>
+          <nav id="editor-application-menu" aria-label="Application menu" className={`editor-menubar${mobileMenuOpen ? " editor-menubar--open" : ""}`} role="menubar">
             <TopMenu id="file" label="File" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Spec…</MenuAction>
               <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Spec…</MenuAction>
@@ -752,6 +789,7 @@ export default function EditorMenuBar({
           {(["document", "activity", "diagnostics"] as EditorView[]).map((item) => (
             <button
               className={view === item ? "active" : ""}
+              aria-current={view === item ? "page" : undefined}
               key={item}
               onClick={() => onViewChange(item)}
               type="button"

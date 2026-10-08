@@ -212,6 +212,73 @@ function shortHash(value: string): string {
   return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
+function DocumentContents({ entries }: { entries: TocEntry[] }) {
+  const [activeId, setActiveId] = useState(entries[0]?.section_id ?? "");
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const ids = entries.map(entry => entry.section_id).join("\0");
+
+  useEffect(() => {
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const sections = ids.split("\0").map(id => document.getElementById(id)).filter((section): section is HTMLElement => Boolean(section));
+      if (!sections.length) return;
+      const offset = (document.querySelector(".app-header")?.getBoundingClientRect().height ?? 0) + 32;
+      let current = sections[0];
+      for (const section of sections) {
+        if (section.getBoundingClientRect().top <= offset) current = section;
+      }
+      if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 1) current = sections[sections.length - 1];
+      setActiveId(current.id);
+    };
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    window.addEventListener("hashchange", schedule);
+    const observer = new ResizeObserver(schedule);
+    const paper = rootRef.current?.parentElement?.querySelector(".spec-paper");
+    if (paper) observer.observe(paper);
+    schedule();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      window.removeEventListener("hashchange", schedule);
+    };
+  }, [ids]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+
+  return <aside className={`spec-toc${open ? " spec-toc--open" : ""}`} aria-label="Document contents" ref={rootRef} onKeyDown={event => {
+    if (event.key === "Escape" && open) { setOpen(false); triggerRef.current?.focus(); }
+  }}>
+    <button className="spec-toc__trigger" type="button" aria-controls="spec-contents-navigation" aria-expanded={open} ref={triggerRef} onClick={() => setOpen(!open)}>Contents</button>
+    <div className="spec-toc__sticky">
+      <p className="spec-toc__label">Contents</p>
+      <nav id="spec-contents-navigation" aria-label="Spec Sections">
+        {entries.map(entry => <a className={`spec-toc__link spec-toc__link--level-${entry.level}`} aria-current={activeId === entry.section_id ? "location" : undefined} href={`#${entry.section_id}`} key={entry.section_id} onClick={() => {
+          setActiveId(entry.section_id);
+          setOpen(false);
+          requestAnimationFrame(() => {
+            const section = document.getElementById(entry.section_id);
+            const heading = section?.querySelector<HTMLElement>("h2, h3");
+            heading?.focus({ preventScroll: true });
+            section?.scrollIntoView({ block: "start" });
+          });
+        }}>{entry.title}</a>)}
+      </nav>
+    </div>
+  </aside>;
+}
+
 const SpecDocument = createComponentImplementation(
   SpecDocumentApi,
   ({ props, buildChild }) => {
@@ -257,31 +324,10 @@ const SpecDocument = createComponentImplementation(
 
     return (
       <div className="spec-document">
-        <aside className="spec-toc" aria-label="Document contents">
-          <div className="spec-toc__sticky">
-            <p className="spec-kicker">Contents</p>
-            <nav>
-              {(props.toc as TocEntry[]).map((entry) => (
-                <a
-                  className={`spec-toc__link spec-toc__link--level-${entry.level}`}
-                  href={`#${entry.section_id}`}
-                  key={entry.section_id}
-                >
-                  {entry.title}
-                </a>
-              ))}
-            </nav>
-            <details><summary>Technical details</summary><dl className="spec-toc__meta">
-              <div><dt>Document</dt><dd>{props.documentId}</dd></div>
-              <div title={props.sourceRevisionHash}>
-                <dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd>
-              </div>
-            </dl><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ document_id: props.documentId, revision: props.sourceRevisionHash }))}>Copy identifiers</button></details>
-          </div>
-        </aside>
+        <DocumentContents entries={props.toc as TocEntry[]} />
         <article className="spec-paper">
           <header className="spec-cover">
-            <p className="spec-kicker">Unified hardware specification</p>
+
             {editingTitle ? (
               <form className="spec-title-editor" onSubmit={saveTitle}>
                 <label htmlFor="specification-title">Spec name</label>
@@ -294,7 +340,7 @@ const SpecDocument = createComponentImplementation(
                 />
                 {titleError && <p className="spec-edit-error" role="alert">{titleError}</p>}
                 <div className="spec-edit-actions">
-                  <button disabled={titleBusy} type="submit">{titleBusy ? "Saving…" : "Save name"}</button>
+                  <button disabled={titleBusy} type="submit">{titleBusy ? "Saving…" : "Save to Spec"}</button>
                   <button disabled={titleBusy} onClick={finishTitleEdit} type="button">Cancel</button>
                 </div>
               </form>
@@ -319,6 +365,10 @@ const SpecDocument = createComponentImplementation(
               </div>
             )}
             <p>{props.summary}</p>
+            <details className="spec-document-details"><summary>Technical details</summary><dl className="spec-toc__meta">
+              <div><dt>Document</dt><dd>{props.documentId}</dd></div>
+              <div title={props.sourceRevisionHash}><dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd></div>
+            </dl><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ document_id: props.documentId, revision: props.sourceRevisionHash }))}>Copy identifiers</button></details>
           </header>
           {renderChildren(props.children, buildChild)}
         </article>
@@ -859,7 +909,7 @@ function HardwareMetadataForm({ state }: { state: SectionEditState }) {
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions spec-edit-field-wide">
-        <button disabled={busy} type="submit">{busy ? "Saving…" : "Save changes"}</button>
+        <button disabled={busy} type="submit">{busy ? "Saving…" : "Save to Spec"}</button>
         <button disabled={busy} onClick={state.cancel} type="button">Cancel</button>
       </div>
     </form>
@@ -1003,8 +1053,8 @@ const SpecSection = createComponentImplementation(
         >
           <header className="spec-section__header">
             <div>
-              {section.eyebrow && <p className="spec-kicker">{section.eyebrow}</p>}
-              <Heading>{section.title}</Heading>
+              <Heading tabIndex={-1}>{section.title}</Heading>
+              {section.entity_ref && <span className="spec-section-type">{section.eyebrow || titleCase(section.entity_ref.entity_kind)}</span>}
             </div>
             <SectionOptionsMenu
               instanceAvailability={instanceAvailability}
@@ -1115,7 +1165,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
                 setEditing(true);
               }
             }} type="button">Edit</button>
-            <button disabled={busy} onClick={() => void remove()} type="button">Delete</button>
+            <button className="spec-delete-button" disabled={busy} onClick={() => void remove()} type="button">Delete</button>
           </div>
         )}
       </header>
@@ -1123,7 +1173,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
         <div className="spec-sv-editor-form">
           <SystemVerilogCodeEditor diagnostics={section.diagnostics} onChange={setDraft} value={draft} />
           <div className="spec-edit-actions">
-            <button disabled={busy} onClick={() => void save()} type="button">{busy ? "Validating…" : "Save"}</button>
+            <button className="spec-save-button" disabled={busy} onClick={() => void save()} type="button">{busy ? "Validating…" : "Save to Spec"}</button>
             <button disabled={busy} onClick={cancel} type="button">Cancel</button>
           </div>
         </div>
@@ -1212,7 +1262,7 @@ export function DocumentTableView({
           <h4 id={`${table.table_id}-title`}>{table.title}</h4>
           <span>{table.rows.length} {table.rows.length === 1 ? "entry" : "entries"}</span>
         </div>
-        <div className="spec-table-scroll">
+        <div className="spec-table-scroll" role="group" aria-labelledby={`${table.table_id}-title`} tabIndex={0}>
           <table>
             <thead>
               <tr>
@@ -1341,7 +1391,7 @@ function ComponentPortsTable({
         <h4 id={`${table.table_id}-title`}>Ports</h4>
         <span>{table.rows.length} {table.rows.length === 1 ? "port" : "ports"}</span>
       </div>
-      <div className="spec-table-scroll">
+      <div className="spec-table-scroll" role="group" aria-labelledby={`${table.table_id}-title`} tabIndex={0}>
         <table>
           <thead>
             <tr>
@@ -1630,7 +1680,7 @@ function PortEditorCard({
       </div>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-port-actions">
-          <button disabled={busy} type="submit">{busy ? "Saving…" : "Save"}</button>
+          <button disabled={busy} type="submit">{busy ? "Saving…" : "Save to Spec"}</button>
           <button disabled={busy} onClick={finish} type="button">Cancel</button>
       </div>
     </form>
@@ -1674,7 +1724,7 @@ function RenameForm({ id, name, onSave, finish }: {
   }}>
     <label htmlFor={id}>Name</label><input autoFocus id={id} maxLength={200} required value={draft} onChange={event => setDraft(event.target.value)} />
     {error && <p role="alert">{error}</p>}
-    <button disabled={busy} type="submit">Save</button><button disabled={busy} type="button" onClick={finish}>Cancel</button>
+    <button disabled={busy} type="submit">Save to Spec</button><button disabled={busy} type="button" onClick={finish}>Cancel</button>
   </form>;
 }
 
@@ -1763,7 +1813,7 @@ export function DocumentSectionView({
       <header className="spec-section__header">
         <div>
           {label && <p className="spec-kicker">{label}</p>}
-          <Heading>{section.title}</Heading>
+          <Heading tabIndex={-1}>{section.title}</Heading>
         </div>
       </header>
       <FactList section={section} changedPaths={changedPaths} />

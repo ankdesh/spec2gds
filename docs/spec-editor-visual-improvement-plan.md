@@ -1,6 +1,7 @@
 # Spec Editor visual improvement plan
 
-Prepared on 8 October 2026. Status: rendered baseline reviewed; changes planned.
+Prepared on 8 October 2026. Status: implemented. See the
+[implementation and verification record](spec-editor-visual-implementation.md).
 
 ## Design direction
 
@@ -254,5 +255,5 @@ Use Better Design's copy and spacing checks on the after renders, then inspect
 each screenshot. Resolve confirmed serious issues before calling the visual
 change complete.
 
-These screenshots establish the current baseline. They do not verify a future
-implementation. The requested work in this change is the render and plan.
+These screenshots establish the original baseline. The implementation record
+contains the matching after renders and verification results.

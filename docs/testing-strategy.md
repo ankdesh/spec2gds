@@ -139,7 +139,11 @@ map when evidence is added. Do not infer coverage from a filename or a pass coun
 - For each confirmed defect, add protection at the lowest effective layer. Add
   browser protection when the fault depends on browser behaviour.
 
-Each run writes `summary.json` and per-suite `command.log` files. Python suites
+Each run presents `summary.html`, a standalone report with tables for check names,
+results, times, and plain-language explanations. The report updates as checks
+finish. It contains no commands, source hashes, stack traces, or raw metadata.
+The final console message links to this HTML report. `summary.json` remains
+available for automated diagnostics, with per-suite `command.log` files. Python suites
 also write JUnit XML, including skips. Existing browser and scenario runners
 retain their traces, screenshots, saved Specs, and functional reports.
 Fixture browser failures retain screenshots and traces under the suite's

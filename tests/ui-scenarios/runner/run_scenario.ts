@@ -438,7 +438,7 @@ async function run(): Promise<void> {
           const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
           await expect(component.getByLabel("Component explanation")).toHaveValue("Preserve this exact draft.");
           await expect(editor.getByText(/Saved updates are pending/)).toBeVisible();
-          await component.getByRole("button", { name: "Save changes" }).click();
+          await component.getByRole("button", { name: "Save to Spec" }).click();
           await expect(component.getByRole("alert")).toContainText("preserved draft");
           await component.getByRole("button", { name: "Cancel", exact: true }).click();
           await expect(editor.locator(".spec-paper")).toContainText("15:0", { timeout: 5_000 });

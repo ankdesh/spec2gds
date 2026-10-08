@@ -1,15 +1,30 @@
+/* Shared Spec Editor tokens. Circuit Designer keeps its own visual system. */
 :root {
-  color: #252c29;
-  background: #ecefeb;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #202925;
+  background: #f3f5f4;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-synthesis: none;
+  --spec-font: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --spec-font-mono: ui-monospace, "SFMono-Regular", Consolas, monospace;
+  --spec-font-body: 0.875rem;
+  --spec-font-small: 0.8125rem;
   --spec-accent: #246b5a;
   --spec-paper: #fff;
-  --spec-muted: #626b66;
-  --spec-line: #d8ddd9;
-  --spec-line-strong: #b7bdb9;
-  --spec-table-head: #f0f3ef;
+  --spec-muted: #58645f;
+  --spec-line: #d8dedd;
+  --spec-line-strong: #b7c1bc;
+  --spec-table-head: #f5f7f6;
+  --spec-radius: 0.375rem;
+  --spec-control-height: 2.25rem;
+  --spec-toolbar-height: 4rem;
+  --spec-space-1: 0.25rem;
+  --spec-space-2: 0.5rem;
+  --spec-space-3: 0.75rem;
+  --spec-space-4: 1rem;
+  --spec-space-6: 1.5rem;
+  --spec-space-8: 2rem;
 }
+
 
 * {
   box-sizing: border-box;
@@ -47,14 +62,13 @@ a:focus-visible {
   z-index: 40;
   top: 0;
   display: grid;
-  grid-template-columns: minmax(27rem, 1fr) auto minmax(13rem, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  gap: 1rem;
+  gap: var(--spec-space-4);
   min-height: 4rem;
-  padding: 0.55rem 1.1rem;
-  border-bottom: 1px solid #ced4cf;
-  background: rgba(250, 251, 249, 0.94);
-  backdrop-filter: blur(12px);
+  padding: var(--spec-space-2) var(--spec-space-4);
+  border-bottom: 0.0625rem solid var(--spec-line);
+  background: var(--spec-paper);
 }
 
 .app-header__primary {
@@ -74,17 +88,16 @@ a:focus-visible {
 
 .assistant-launch {
   flex: 0 0 auto;
-  padding: 0.48rem 0.68rem;
-  border: 1px solid #246b5a;
-  border-radius: 0.38rem;
-  background: #246b5a;
-  color: #fff;
+  border: 0.0625rem solid var(--spec-line-strong);
+  border-radius: var(--spec-radius);
+  background: var(--spec-paper);
+  color: #263d34;
   cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 750;
+  font-size: var(--spec-font-body);
+  font-weight: 500;
 }
 
-.assistant-launch:hover { background: #195345; }
+.assistant-launch:hover { background: #edf3f0; }
 
 .assistant-launch:disabled {
   border-color: #b9c8c3;
@@ -111,7 +124,7 @@ a:focus-visible {
   border-radius: 0.45rem;
   background: #173d34;
   color: #fff;
-  font-family: Georgia, serif;
+  font-family: var(--spec-font);
   font-size: 1.2rem;
 }
 
@@ -121,7 +134,7 @@ a:focus-visible {
 
 .brand small {
   color: var(--spec-muted);
-  font-size: 0.68rem;
+  font-size: var(--spec-font-small);
 }
 
 .editor-menubar {
@@ -141,7 +154,7 @@ a:focus-visible {
   background: transparent;
   color: #35413c;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--spec-font-small);
 }
 
 .editor-menu > button:hover,
@@ -182,7 +195,7 @@ a:focus-visible {
   background: transparent;
   color: #27332e;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: var(--spec-font-small);
   text-align: left;
   white-space: nowrap;
 }
@@ -201,7 +214,7 @@ a:focus-visible {
 
 .editor-menu__panel small {
   color: #737c77;
-  font-size: 0.68rem;
+  font-size: var(--spec-font-small);
   font-weight: 500;
 }
 
@@ -214,7 +227,7 @@ a:focus-visible {
 .editor-menu__group {
   padding: 0.62rem 0.65rem 0.25rem;
   color: #68716c;
-  font-size: 0.67rem;
+  font-size: var(--spec-font-small);
   font-weight: 750;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -222,10 +235,11 @@ a:focus-visible {
 
 .app-nav {
   display: flex;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  border-radius: 999px;
-  background: #e7ebe7;
+  align-items: center;
+  gap: var(--spec-space-1);
+  padding: var(--spec-space-1);
+  border-radius: var(--spec-radius);
+  background: #f1f4f2;
 }
 
 .app-nav button {
@@ -233,12 +247,12 @@ a:focus-visible {
   align-items: center;
   gap: 0.45rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: var(--spec-radius);
   padding: 0.5rem 0.8rem;
   background: transparent;
   color: #59615d;
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: var(--spec-font-small);
   font-weight: 650;
 }
 
@@ -254,9 +268,9 @@ a:focus-visible {
   min-width: 1.1rem;
   height: 1.1rem;
   padding: 0 0.25rem;
-  border-radius: 999px;
+  border-radius: var(--spec-radius);
   background: #d9e2dc;
-  font-size: 0.62rem;
+  font-size: var(--spec-font-small);
 }
 
 .active-document {
@@ -276,7 +290,7 @@ a:focus-visible {
 
 .active-document small {
   color: #717a75;
-  font-size: 0.64rem;
+  font-size: var(--spec-font-small);
   text-transform: uppercase;
   letter-spacing: 0.07em;
 }
@@ -284,7 +298,7 @@ a:focus-visible {
 .active-document strong {
   max-width: 17rem;
   overflow: hidden;
-  font-size: 0.78rem;
+  font-size: var(--spec-font-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -292,7 +306,7 @@ a:focus-visible {
 .active-document__status {
   width: 0.55rem;
   height: 0.55rem;
-  border-radius: 999px;
+  border-radius: var(--spec-radius);
   background: #2e8b70;
   box-shadow: 0 0 0 3px rgba(46, 139, 112, 0.13);
 }
@@ -337,7 +351,7 @@ a:focus-visible {
 
 .editor-dialog h2 {
   margin: 0;
-  font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  font-family: var(--spec-font);
   font-size: 1.55rem;
   font-weight: 500;
 }
@@ -350,7 +364,7 @@ a:focus-visible {
 
 .editor-dialog label {
   color: #35413c;
-  font-size: 0.78rem;
+  font-size: var(--spec-font-small);
   font-weight: 700;
 }
 
@@ -381,7 +395,7 @@ a:focus-visible {
   color: #354b43;
   cursor: pointer;
   font: inherit;
-  font-size: 0.76rem;
+  font-size: var(--spec-font-small);
   font-weight: 700;
 }
 
@@ -407,13 +421,13 @@ a:focus-visible {
 }
 
 .directory-browser > header strong {
-  font-size: 0.78rem;
+  font-size: var(--spec-font-small);
 }
 
 .directory-browser > header code {
   overflow: hidden;
   color: #59635e;
-  font-size: 0.72rem;
+  font-size: var(--spec-font-small);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -473,7 +487,7 @@ a:focus-visible {
   margin: 0;
   padding: 0.65rem;
   color: #68716c;
-  font-size: 0.75rem;
+  font-size: var(--spec-font-small);
 }
 
 .directory-browser__error {
@@ -493,7 +507,7 @@ a:focus-visible {
 .editor-dialog__hint {
   margin: 0;
   color: #68716c;
-  font-size: 0.76rem;
+  font-size: var(--spec-font-small);
   line-height: 1.5;
 }
 
@@ -514,7 +528,7 @@ a:focus-visible {
   background: #246b5a;
   color: #fff;
   cursor: pointer;
-  font-size: 0.76rem;
+  font-size: var(--spec-font-small);
   font-weight: 700;
 }
 
@@ -552,7 +566,7 @@ a:focus-visible {
 .shortcut-list dt,
 .shortcut-list dd {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--spec-font-small);
 }
 
 .shortcut-list kbd {
@@ -562,7 +576,7 @@ a:focus-visible {
   border-radius: 0.25rem;
   background: #f5f7f5;
   font-family: inherit;
-  font-size: 0.7rem;
+  font-size: var(--spec-font-small);
 }
 
 button:disabled {
@@ -572,40 +586,33 @@ button:disabled {
 
 .app-notice,
 .app-error {
-  position: fixed;
-  z-index: 90;
-  right: 1rem;
-  top: 5.25rem;
   display: flex;
   align-items: center;
-  gap: 1rem;
-  max-width: 32rem;
-  padding: 0.8rem 1rem;
-  border: 1px solid #80a99d;
-  border-radius: 0.45rem;
-  background: #e9f5f0;
-  box-shadow: 0 0.7rem 2rem rgba(23, 35, 30, 0.16);
+  justify-content: space-between;
+  gap: var(--spec-space-4);
+  margin: var(--spec-space-3) var(--spec-space-6);
+  padding: var(--spec-space-3) var(--spec-space-4);
+  border: 0.0625rem solid #80a99d;
+  border-radius: var(--spec-radius);
+  background: #eef6f2;
   color: #204a3f;
-  font-size: 0.82rem;
+  font-size: var(--spec-font-body);
+  overflow-wrap: anywhere;
 }
 
 .app-refresh-notice {
-  position: fixed;
-  z-index: 91;
-  left: 50%;
-  top: 5.25rem;
   display: flex;
   align-items: center;
-  gap: 0.8rem;
-  max-width: calc(100vw - 2rem);
-  padding: 0.75rem 0.9rem;
-  transform: translateX(-50%);
-  border: 1px solid #d3ad5f;
-  border-radius: 0.45rem;
+  flex-wrap: wrap;
+  gap: var(--spec-space-3);
+  margin: var(--spec-space-3) var(--spec-space-6);
+  padding: var(--spec-space-3) var(--spec-space-4);
+  border: 0.0625rem solid #d3ad5f;
+  border-radius: var(--spec-radius);
   background: #fff5d9;
-  box-shadow: 0 0.7rem 2rem rgba(23, 35, 30, 0.16);
   color: #684b13;
-  font-size: 0.82rem;
+  font-size: var(--spec-font-body);
+  overflow-wrap: anywhere;
 }
 
 .app-refresh-notice button {
@@ -665,9 +672,9 @@ button:disabled {
 }
 
 .utility-page {
-  max-width: 86rem;
+  max-width: 92rem;
   margin: 0 auto;
-  padding: 3rem 2rem;
+  padding: var(--spec-space-6);
 }
 
 .utility-page--narrow {
@@ -682,16 +689,17 @@ button:disabled {
 }
 
 .utility-heading h1 {
-  margin: 0.25rem 0 0;
-  font-family: Georgia, serif;
-  font-size: 2.7rem;
-  font-weight: 500;
+  margin: 0;
+  font-family: var(--spec-font);
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.25;
 }
 
 .utility-kicker {
   margin: 0;
   color: var(--spec-accent);
-  font-size: 0.7rem;
+  font-size: var(--spec-font-small);
   font-weight: 800;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -728,9 +736,9 @@ button:disabled {
   place-items: center;
   min-width: 1.45rem;
   height: 1.45rem;
-  border-radius: 999px;
+  border-radius: var(--spec-radius);
   background: #e3e9e4;
-  font-size: 0.7rem;
+  font-size: var(--spec-font-small);
 }
 
 .utility-panel > div {
@@ -756,7 +764,7 @@ button:disabled {
 
 .activity-item p {
   margin: 0.2rem 0 0;
-  font-size: 0.78rem;
+  font-size: var(--spec-font-small);
   line-height: 1.45;
 }
 
@@ -765,7 +773,7 @@ button:disabled {
   padding: 0.15rem 0.4rem;
   border-radius: 0.2rem;
   background: #e7ebe8;
-  font-size: 0.65rem;
+  font-size: var(--spec-font-small);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -838,10 +846,10 @@ button:disabled {
 
 .health {
   padding: 0.45rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--spec-radius);
   background: #dff0e7;
   color: #276b4a;
-  font-size: 0.72rem;
+  font-size: var(--spec-font-small);
   font-weight: 750;
 }
 
@@ -881,7 +889,7 @@ button:disabled {
 
 .action-dialog h2 {
   margin: 0.25rem 0 0;
-  font-family: Georgia, serif;
+  font-family: var(--spec-font);
   font-weight: 500;
 }
 
@@ -918,86 +926,109 @@ button:disabled {
 .action-option small,
 .action-option p {
   color: var(--spec-muted);
-  font-size: 0.76rem;
+  font-size: var(--spec-font-small);
 }
 
 .action-option p {
   margin: 0.25rem 0 0;
 }
 
-@media (max-width: 1050px) {
-  .app-header {
-    grid-template-columns: 1fr auto;
-  }
 
-  .app-nav {
-    order: 3;
-    grid-column: 1 / -1;
-    justify-self: center;
-  }
-
-  .active-document {
-    justify-self: end;
-  }
-
-  .app-header__utilities { justify-self: end; }
-
-  .activity-grid {
-    grid-template-columns: 1fr;
-  }
+.app-shell { font-size: var(--spec-font-body); }
+.app-shell :is(button, input, select, textarea) { font: inherit; }
+.app-shell button {
+  min-height: var(--spec-control-height);
+  padding: var(--spec-space-2) var(--spec-space-3);
+  border-radius: var(--spec-radius);
+  font-size: var(--spec-font-body);
+  font-weight: 500;
+  line-height: 1.25;
+  white-space: nowrap;
 }
-
+.app-shell :is(input, select) { min-height: var(--spec-control-height); padding: var(--spec-space-2) var(--spec-space-3); }
+.app-shell :is(input, select, textarea) { border-radius: var(--spec-radius); }
+.app-shell :is(h1, h2, h3) { font-family: var(--spec-font); }
+.app-shell :is(code, pre) { font-family: var(--spec-font-mono); }
+.app-shell :is(button, input, select, textarea, a, summary, [tabindex]):focus-visible {
+  outline: 0.125rem solid var(--spec-accent);
+  outline-offset: 0.125rem;
+}
+.app-shell button:disabled { cursor: not-allowed; }
+.app-shell summary { min-height: 2.75rem; padding-block: var(--spec-space-2); cursor: pointer; }
+.brand__mark { font-family: var(--spec-font); font-size: 1rem; font-weight: 600; }
+.brand small, .active-document small { font-size: var(--spec-font-small); letter-spacing: normal; text-transform: none; }
+.active-document strong { font-size: var(--spec-font-body); }
+.active-document small { max-width: 12rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--spec-muted); }
+.editor-menu__panel { max-width: calc(100vw - 2rem); border-radius: var(--spec-radius); }
+.app-shell .editor-menu__panel > button { white-space: normal; }
+.editor-menu__panel small { white-space: nowrap; }
+.editor-mobile-menu-trigger { display: none; }
+.app-nav button { color: var(--spec-muted); }
+.app-nav button.active { background: #e2eee8; color: #183f32; box-shadow: none; }
+.app-nav button span { font-size: var(--spec-font-small); background: #e0e7e3; }
+.spec-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--spec-space-2) var(--spec-space-6);
+  padding: var(--spec-space-2) var(--spec-space-6);
+  border-bottom: 0.0625rem solid var(--spec-line);
+  background: #f8faf9;
+  color: var(--spec-muted);
+  font-size: var(--spec-font-small);
+}
+.spec-status-bar > span:first-child { color: #294b3d; }
+.app-shell .app-notice button, .app-shell .app-error button { flex: 0 0 auto; }
+.app-error { border-color: #d2a09a; background: #fff0ee; color: #802d25; }
+.utility-heading { align-items: center; gap: var(--spec-space-4); margin-bottom: var(--spec-space-6); }
+.utility-panel { min-width: 0; border-radius: var(--spec-radius); }
+.utility-panel > header h2 { font-size: 1rem; font-weight: 600; }
+.utility-panel > header, .utility-panel > div { padding: var(--spec-space-3) var(--spec-space-4); }
+.utility-panel > div > button, .activity-item button { border: 0.0625rem solid var(--spec-line-strong); background: white; color: #294137; }
+.activity-history { margin-bottom: var(--spec-space-6); }
+.activity-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spec-space-4); }
+.activity-item p, .empty-copy, .diagnostic, .action-option p, .action-option small { font-size: var(--spec-font-body); line-height: 1.5; }
+.activity-item code { font-size: var(--spec-font-small); }
+.activity-item details pre, .activity-history pre, .app-refresh-notice pre { max-width: 100%; overflow: auto; white-space: pre-wrap; }
+.status, .health { font-size: var(--spec-font-small); text-transform: none; font-weight: 500; }
+.button-row { flex-wrap: wrap; gap: var(--spec-space-2); }
+.action-dialog h2, .editor-dialog h2 { font-size: 1.5rem; font-weight: 600; }
+.editor-dialog, .action-dialog { border-radius: var(--spec-radius); }
+@media (max-width: 1100px) {
+  .app-header { grid-template-columns: minmax(0, 1fr) auto; gap: var(--spec-space-2); }
+  .app-nav { grid-row: 2; grid-column: 1 / -1; justify-self: center; }
+  .activity-grid { grid-template-columns: 1fr; }
+  .app-header__primary { gap: var(--spec-space-2); }
+}
 @media (max-width: 620px) {
-  .app-header {
-    grid-template-columns: 1fr;
-    gap: 0.55rem;
+  .app-header { padding: var(--spec-space-2) var(--spec-space-3); }
+  .brand > span:last-child, .active-document { display: none; }
+  .brand__mark { width: 2.75rem; height: 2.75rem; }
+  .editor-mobile-menu-trigger { display: block; border: 0.0625rem solid var(--spec-line-strong); background: white; color: #263d34; }
+  .editor-menubar { display: none; }
+  .editor-menubar--open {
+    position: absolute; top: calc(100% + 0.25rem); left: var(--spec-space-3); right: var(--spec-space-3);
+    display: flex; padding: var(--spec-space-2); gap: var(--spec-space-2);
+    border: 0.0625rem solid var(--spec-line); border-radius: var(--spec-radius);
+    background: white; box-shadow: 0 0.75rem 2rem rgb(23 35 30 / 16%);
   }
-
-  .app-header__primary {
-    flex-wrap: wrap;
-    gap: 0.45rem 0.8rem;
-  }
-
-  .editor-menubar {
-    order: 3;
-    width: 100%;
-  }
-
-  .editor-menu__panel--circuit,
-  .editor-menu__panel--help {
-    right: 0;
-    left: auto;
-  }
-
-  .app-nav {
-    grid-column: 1;
-    justify-self: stretch;
-  }
-
-  .app-nav button {
-    flex: 1;
-    justify-content: center;
-  }
-
-  .active-document {
-    justify-self: stretch;
-    justify-content: flex-start;
-  }
-
-  .app-header__utilities {
-    justify-self: stretch;
-    justify-content: space-between;
-  }
-
-  .active-document > span:last-child {
-    text-align: left;
-  }
-
-  .brand small {
-    display: none;
-  }
-
-  .utility-page {
-    padding: 2rem 0.75rem;
-  }
+  .editor-menubar--open .editor-menu { flex: 1; }
+  .editor-menubar--open .editor-menu > button { width: 100%; }
+  .editor-menu__panel { position: fixed; top: calc(var(--spec-toolbar-height) + 4rem); left: var(--spec-space-3); right: var(--spec-space-3); min-width: 0; max-width: none; }
+  .app-nav { justify-self: stretch; padding: 0; background: transparent; }
+  .app-nav button { flex: 1; justify-content: center; gap: var(--spec-space-1); padding-inline: var(--spec-space-2); }
+  .app-header__utilities { justify-content: flex-end; }
+  .spec-status-bar { padding-inline: var(--spec-space-3); }
+  .app-notice, .app-error, .app-refresh-notice { margin-inline: var(--spec-space-3); }
+  .utility-page { padding: var(--spec-space-4) var(--spec-space-3); }
+  .action-option { flex-wrap: wrap; gap: var(--spec-space-3); }
+}
+@media (max-width: 620px), (pointer: coarse) {
+  :root { --spec-control-height: 2.75rem; }
+  .app-shell summary { min-height: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .loading-state span { animation: none; }
 }

@@ -23,6 +23,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+if __package__:
+    from .test_report import render_report
+else:
+    from test_report import render_report
+
 ROOT = Path(__file__).resolve().parents[1]
 SCOPES = {"spec", "circuit", "assistant", "verification", "activities", "shared"}
 SMOKE_CASES = ("description", "wire-range", "restricted-description")
@@ -88,7 +93,8 @@ def suite_catalogue() -> dict[str, Suite]:
     python("activity-api", ["tests/spec/activities"], ["spec", "activities"])
     python("shared-api", ["tests/test_service_registry.py", "tests/test_observability.py",
                            "tests/test_log_viewer.py", "tests/test_terminology_compatibility.py",
-                           "tests/test_test_tiers.py", "tests/test_test_profiles.py"], ["shared"])
+                           "tests/test_test_tiers.py", "tests/test_test_profiles.py",
+                           "tests/test_test_report.py"], ["shared"])
     for package in ("service", "client-http"):
         add(f"circuit-{package}-api", ["npm", "run", "test", "--workspace",
                                       f"@spec2gds/circuit-{package}"], ["spec", "circuit"],
@@ -369,15 +375,23 @@ def execute(suites: list[Suite], output: Path, env: dict[str, str], report: dict
             print(f"    Log: {output / suite.id / 'command.log'}", flush=True)
         report["suites"] = list(outcomes.values())
         report["status"] = "running"
-        (output / "summary.json").write_text(redact(json.dumps(report, indent=2), env) + "\n")
+        write_reports(report, output, env)
     states = {outcome["status"] for outcome in outcomes.values()}
     report["status"] = "failed" if "failed" in states else "incomplete" if "unverified" in states else "passed"
     report["incomplete"] = "unverified" in states
     report["counts"] = {state: sum(item["status"] == state for item in outcomes.values())
                         for state in ("passed", "failed", "unverified")}
-    (output / "summary.json").write_text(redact(json.dumps(report, indent=2), env) + "\n")
-    print(f"{report['profile']}: {report['status']}. Report: {output / 'summary.json'}", flush=True)
+    write_reports(report, output, env)
+    print(f"{report['profile']}: {report['status']}. Report: {output / 'summary.html'}", flush=True)
     return 130 if interrupted else 1 if states != {"passed"} else 0
+
+
+def write_reports(report: dict, output: Path, env: dict[str, str]) -> None:
+    """Keep structured diagnostics and make the human report the primary result."""
+    safe_json = redact(json.dumps(report, indent=2), env)
+    (output / "summary.json").write_text(safe_json + "\n", encoding="utf-8")
+    safe_report = json.loads(safe_json)
+    (output / "summary.html").write_text(redact(render_report(safe_report, output), env), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

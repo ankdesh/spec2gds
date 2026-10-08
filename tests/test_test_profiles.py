@@ -76,6 +76,9 @@ def test_failed_build_blocks_consumers_but_runs_independent_checks(tmp_path):
     assert summary["incomplete"] is True
     assert not (tmp_path / "consumer").exists()
     assert "independent check ran" in (tmp_path / "independent/command.log").read_text()
+    html = (tmp_path / "summary.html").read_text()
+    assert "A required earlier check did not pass." in html
+    assert "This run is incomplete." in html
 
 
 def test_missing_live_key_continues_other_checks_and_returns_incomplete(tmp_path, monkeypatch):

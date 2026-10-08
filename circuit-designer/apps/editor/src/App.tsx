@@ -681,9 +681,10 @@ export default function App() {
         view={view}
       />
 
-      {notice && <div className="app-notice" role="status">{notice}<button onClick={() => setNotice("")}>×</button></div>}
-      {snapshot && <div className="app-notice" role="status">
-        Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"} · {syncState}
+      {notice && <div className="app-notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}
+      {snapshot && <div className="spec-status-bar" aria-label="Spec status">
+        <span role="status">{syncState}</span>
+        <span>Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"}</span>
       </div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
@@ -703,7 +704,7 @@ export default function App() {
           setNotice("Current source reviewed. Save your draft to resubmit against that revision, or cancel to load it.");
         }}>Use reviewed revision for next save</button>
       </aside>}
-      {error && <div className="app-error" role="alert">{error}<button onClick={() => setError("")}>×</button></div>}
+      {error && <div className="app-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div>}
 
       <main>
         {loading && <LoadingState />}
@@ -715,14 +716,14 @@ export default function App() {
           />
         </div>}
         {!loading && view === "activity" && (
-          <><AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />
           <ActivityView
+            history={<AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />}
             activity={activity}
             snapshot={snapshot}
             onCancel={cancelActivity}
             onRefresh={refreshActivity}
             onReview={reviewProposal}
-          /></>
+          />
         )}
         {!loading && view === "diagnostics" && (
           <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} sections={sectionDiagnostics} />
@@ -835,12 +836,14 @@ function LoadingState() {
 }
 
 function ActivityView({
+  history,
   activity,
   snapshot,
   onCancel,
   onRefresh,
   onReview,
 }: {
+  history: React.ReactNode;
   activity: ActivityState;
   snapshot: DocumentSnapshot | null;
   onCancel: (id: string) => Promise<void>;
@@ -850,9 +853,10 @@ function ActivityView({
   return (
     <div className="utility-page">
       <header className="utility-heading">
-        <div><p className="utility-kicker">Immutable provenance</p><h1>Activity</h1></div>
+        <h1>Activity</h1>
         <button type="button" onClick={onRefresh}>Refresh</button>
       </header>
+      <div className="activity-history">{history}</div>
       <div className="activity-grid">
         <UtilityPanel title="Action executions" count={activity.executions.length}>
           {activity.executions.slice().reverse().map((value) => {
@@ -1040,7 +1044,7 @@ function DiagnosticsView({
   return (
     <div className="utility-page utility-page--narrow">
       <header className="utility-heading">
-        <div><p className="utility-kicker">Validation status</p><h1>Diagnostics</h1></div>
+        <h1>Diagnostics</h1>
         <span className={count ? "health health--warning" : "health"}>
           {count ? "Needs attention" : "Source valid"}
         </span>

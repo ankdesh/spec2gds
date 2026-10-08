@@ -608,6 +608,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
 
 async function openSample(page: Page): Promise<void> {
   await page.goto("/");
+  const menu = page.getByRole("button", { name: "Menu", exact: true });
+  if (await menu.isVisible()) await menu.click();
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();
   await page.getByLabel("Server-local package path").fill("/tmp/editor-test.spec");
@@ -736,7 +738,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
   await design.getByRole("button", { name: "Edit", exact: true }).click();
   const savedEditor = design.locator(".cm-content");
   await savedEditor.fill("logic edited_marker;\n");
-  await design.getByRole("button", { name: "Save", exact: true }).click();
+  await design.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations).toEqual([{
     type: "upsert_entity_section",
@@ -764,7 +766,7 @@ test("edits the persisted specification name without changing the stable identit
 
   await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
   await page.getByLabel("Spec name").fill("Timer Platform Specification");
-  await page.getByRole("button", { name: "Save name" }).click();
+  await page.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(1);
   expect(state.transactions[0]?.operations).toEqual([
     { type: "set_document_title", title: "Timer Platform Specification" },
@@ -777,7 +779,7 @@ test("edits the persisted specification name without changing the stable identit
   await component.getByRole("menuitem", { name: "Rename", exact: true }).click();
   await expect(component.getByLabel("Name", { exact: true })).toBeFocused();
   await component.getByLabel("Name", { exact: true }).fill("Programmable Timer");
-  await component.getByRole("button", { name: "Save", exact: true }).click();
+  await component.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations).toEqual([{
     type: "set_entity_metadata", entity: componentRef,
@@ -836,7 +838,7 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
 
   await page.locator(".spec-cover").getByRole("button", { name: "Edit name" }).click();
   await page.getByLabel("Spec name").fill("Updated topology source");
-  await page.getByRole("button", { name: "Save name" }).click();
+  await page.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(async () => image.getAttribute("src")).not.toBe(firstImageUrl);
 });
 
@@ -992,7 +994,7 @@ test("creates entities and edits all three port families inline", async ({ page 
   await component.getByRole("button", { name: "Options" }).click();
   await component.getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill("A programmable timer.");
-  await component.getByRole("button", { name: "Save changes" }).click();
+  await component.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.operations[0]).toEqual({
     type: "set_entity_metadata",
@@ -1010,7 +1012,7 @@ test("creates entities and edits all three port families inline", async ({ page 
   await draftCard.getByLabel("Direction").selectOption("out");
   await draftCard.getByLabel("Range").fill("31:0");
   await draftCard.getByLabel("Description").fill("Current counter value");
-  await draftCard.getByRole("button", { name: "Save" }).click();
+  await draftCard.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(3);
   expect(state.transactions[2]?.operations[0]).toEqual({
     type: "add_component_port",
@@ -1032,7 +1034,7 @@ test("creates entities and edits all three port families inline", async ({ page 
   await editCard.getByLabel("Display name").fill("Interrupt request line");
   await editCard.getByLabel("Direction").selectOption("inout");
   await editCard.getByLabel("Description").fill("Bidirectional interrupt");
-  await editCard.getByRole("button", { name: "Save" }).click();
+  await editCard.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(4);
   expect(state.transactions[3]?.operations[0]).toEqual({
     type: "update_component_port",
@@ -1057,7 +1059,7 @@ test("creates entities and edits all three port families inline", async ({ page 
   await transactionalDraft.getByLabel("Custom kind name").fill("timer_service");
   await transactionalDraft.getByLabel("Bus width").fill("DATA_WIDTH");
   await transactionalDraft.getByLabel("Description").fill("Transaction-level timer service");
-  await transactionalDraft.getByRole("button", { name: "Save" }).click();
+  await transactionalDraft.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(5);
   expect(state.transactions[4]?.operations[0]).toEqual({
     type: "add_component_port",
@@ -1082,7 +1084,7 @@ test("creates entities and edits all three port families inline", async ({ page 
   await structuredDraft.getByLabel("Direction").selectOption("out");
   await expect(structuredDraft).toContainText("Packed struct");
   await structuredDraft.getByLabel("Description").fill("Packed response fields");
-  await structuredDraft.getByRole("button", { name: "Save" }).click();
+  await structuredDraft.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(6);
   expect(state.transactions[5]?.operations[0]).toEqual({
     type: "add_component_port",
@@ -1108,7 +1110,7 @@ test("validates port drafts, enforces one active editor, and restores focus", as
   const draft = component.locator(".spec-port-editor");
   await draft.getByLabel("Port name").fill("invalid_range");
   await draft.getByLabel("Range").fill("31::0");
-  await draft.getByRole("button", { name: "Save" }).click();
+  await draft.getByRole("button", { name: "Save to Spec" }).click();
   await expect(draft.getByRole("alert")).toContainText("left:right expression pair");
 
   await component.locator(".spec-port-row", { hasText: "irq" }).getByRole("button", { name: "Edit" }).click();
@@ -1128,12 +1130,12 @@ test("preserves an inline draft when the optimistic revision is stale", async ({
   await component.getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill("Keep this draft after refresh.");
   state.staleNextTransaction = true;
-  await component.getByRole("button", { name: "Save changes" }).click();
+  await component.getByRole("button", { name: "Save to Spec" }).click();
 
   await expect(component.getByLabel("Component explanation")).toHaveValue("Keep this draft after refresh.");
   await expect(component.getByRole("alert")).toContainText("preserved draft");
   await page.getByRole("button", { name: "Use reviewed revision for next save" }).click();
-  await component.getByRole("button", { name: "Save changes" }).click();
+  await component.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
   expect(state.transactions[1]?.expected_source_revision_hash).toBe("sha256:external-change");
 });
@@ -1143,11 +1145,102 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
   await mockEditorApi(page);
   await openSample(page);
 
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Help", exact: true }).click();
   await page.getByRole("menuitem", { name: "Getting Started" }).click();
   await expect(page.getByRole("dialog", { name: "Getting started" })).toContainText("persisted automatically");
   await page.getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("button", { name: "Menu", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "File", exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Document", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("keeps mixed-family tables contained, IDs exact, and row actions readable", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  const component = page.locator("#component-component_timer");
+  for (const width of [390, 620, 800, 1024, 1100, 1440, 1728]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const id = component.locator(".spec-port-row").first().locator("th");
+    await expect(id).toHaveText("irq");
+    await expect(id).toHaveCSS("text-transform", "none");
+    const button = component.locator(".spec-port-row").first().getByRole("button", { name: "Edit", exact: true });
+    await expect(button).toHaveCSS("white-space", "nowrap");
+    const scroll = component.getByRole("group", { name: "Ports", exact: true });
+    await expect(scroll).toHaveAttribute("tabindex", "0");
+    const box = await scroll.boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await component.locator(".spec-port-row").first().getByRole("button", { name: "Edit", exact: true }).click();
+  const draft = component.locator(".spec-port-editor");
+  await expect(draft).toBeVisible();
+  for (const control of [draft.getByLabel("Display name"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
+    const box = await control.boundingBox();
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(390);
+  }
+  await draft.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(component.locator(".spec-port-row").first().getByRole("button", { name: "Edit", exact: true })).toBeFocused();
+});
+
+test("tracks the visible Section and keeps Contents and anchor targets below the toolbar", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  const section = page.locator("#component-component_timer");
+  await section.evaluate(el => el.scrollIntoView({ behavior: "instant", block: "start" }));
+  await expect(page.locator('.spec-toc a[aria-current="location"]')).toHaveText("Timer");
+  const header = await page.locator(".app-header").boundingBox();
+  const contents = await page.locator(".spec-toc__sticky").boundingBox();
+  const target = await section.boundingBox();
+  expect(contents!.y).toBeGreaterThanOrEqual(header!.height);
+  expect(target!.y).toBeGreaterThanOrEqual(header!.height);
+  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+  await expect(page.locator('.spec-toc a[aria-current="location"]')).toHaveText("Overview");
+});
+
+test("provides narrow Contents navigation, focus restoration, and unobstructed status", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const trigger = page.getByRole("button", { name: "Contents", exact: true });
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("navigation", { name: "Spec Sections" }).getByRole("link", { name: "Timer", exact: true }).focus();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
+  await page.getByRole("navigation", { name: "Spec Sections" }).getByRole("link", { name: "Timer", exact: true }).click();
+  await expect(page.locator("#component-component_timer h3")).toBeFocused();
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  const header = await page.locator(".app-header").boundingBox();
+  expect(header!.height).toBeLessThanOrEqual(120);
+  await expect(page.locator(".spec-status-bar")).toHaveCSS("position", "static");
+  await expect(page.locator(".spec-status-bar")).toContainText("automatic submission");
+  await expect(page.locator(".assistant-launch")).toBeVisible();
+});
+
+test("keeps a long Spec name and its edit action reachable at narrow widths", async ({ page }) => {
+  await mockEditorApi(page);
+  const name = "Timing interface specification ".repeat(6).trim();
+  await page.goto("/");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /New Spec/ }).click();
+  await page.getByLabel("Spec name").fill(name);
+  await page.getByLabel("Server-local package path").fill("/tmp/long-name.spec");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.locator(".spec-cover h1")).toHaveText(name);
+  for (const width of [390, 720, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const action = page.locator(".spec-cover").getByRole("button", { name: "Edit name", exact: true });
+    await expect(action).toBeVisible();
+    const box = await action.boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(width);
+  }
 });
