@@ -80,3 +80,58 @@ for (const recover of [true, false]) test(`unbound architecture ${recover ? 'rec
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('structured decisions retain older review intent and recover a lost delivery acknowledgement', { timeout: 30000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'architecture-continuation-'));
+  let ctx;
+  try {
+    const runtime = await boot(directory, 'http://127.0.0.1:9', {}, true); ctx = runtime.ctx;
+    runtime.adapter.stream = async function* (options) {
+      this.requests.push(options);
+      if (options.messages.at(-1)?.source.kind === 'tool') {
+        yield { type: 'block-start', index: 0, blockType: 'text' };
+        yield { type: 'block-end', index: 0, block: { type: 'text', text: 'Architecture is ready.' } };
+        yield { type: 'finish', reason: { kind: 'stop' } };
+      } else {
+        yield { type: 'block-start', index: 0, blockType: 'tool-call' };
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: ToolCallId(`review-${this.requests.length}`), name: 'prepare_architecture_review', arguments: JSON.stringify(counter) } };
+        yield { type: 'finish', reason: { kind: 'tool-calls' } };
+      }
+    };
+    const primary = await ctx.agents.create({ sessionId: SessionId('decisions'), agentOptions: { provider: 'mock', model: 'mock' }, meta: { agentPreset: 'focused' } });
+    const state = new ProductState(join(directory, 'assistant.sqlite3'));
+    try {
+      for (const request of ['Original designer intent', 'Independent second request']) {
+        primary.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: request }] }));
+        await primary.agent.whenIdle();
+      }
+      const [older, newer] = state.listArchitectureReviews();
+      assert.notEqual(older.originalRequest, newer.originalRequest);
+      assert.equal((await runtime.api(`/architecture-reviews/${older.reviewId}/revise`, { feedback: 'Use active-low reset' })).status, 200);
+      assert.equal((await runtime.api(`/architecture-reviews/${older.reviewId}/continue`, { sessionId: 'decisions' })).status, 200);
+      await primary.agent.whenIdle();
+      const revised = state.listArchitectureReviews().at(-1);
+      assert.equal(revised.originalRequest, 'Original designer intent');
+      assert.equal(state.listArchitectureReviews().length, 3);
+      const delivered = state.architectureReview(older.reviewId);
+      // Simulate losing the product acknowledgement after the native log committed.
+      state.storeArchitecture({ ...delivered, continuationSent: false });
+      assert.equal((await runtime.api(`/architecture-reviews/${older.reviewId}/continue`, { sessionId: 'decisions' })).status, 200);
+      await primary.agent.whenIdle();
+      assert.equal(state.listArchitectureReviews().length, 3);
+      assert.equal((await runtime.api(`/architecture-reviews/${revised.reviewId}/revise`, { feedback: 'Keep the approved interface' })).status, 200);
+      assert.equal((await runtime.api(`/architecture-reviews/${revised.reviewId}/continue`, { sessionId: 'decisions' })).status, 200);
+      await primary.agent.whenIdle();
+      assert.equal(state.listArchitectureReviews().at(-1).originalRequest, 'Original designer intent');
+      await ctx.sessions.flush(primary.agent.session);
+      const handle = await ctx.sessionPersistence.open(SessionId('decisions'), 'read');
+      try {
+        const events = (await handle.read()).events;
+        const messages = events.filter(event => event.type === 'user/message' && event.data.source.plugin === 'spec2gds.architecture');
+        assert.equal(messages.length, 2);
+        assert.equal(messages[0].data.source.form, 'notice');
+        assert.equal(JSON.parse(messages[0].data.content[0].text).architecture_review_id, older.reviewId);
+      } finally { await handle.close(); }
+    } finally { state.close(); }
+  } finally { if (ctx) await ctx.fiber.dispose(); await rm(directory, { recursive: true, force: true }); }
+});

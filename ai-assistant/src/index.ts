@@ -11,6 +11,9 @@ import type { HttpSourceInput, HttpSourceId } from "@deepseek-ai/dsh-event-syste
 import type { GoalService } from "@deepseek-ai/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { EventConfigurations } from "./event-configuration.js";
+import { freezeMessage, MessageId } from "@deepseek-ai/dsh-llm";
+import { architectureDecision } from "./architecture-decision.js";
+import type { SessionPersistence } from "@deepseek-ai/dsh-session-persistence";
 import { randomUUID } from "node:crypto";
 import { sourceName } from "./naming.js";
 import { mkdir } from "node:fs/promises";
@@ -29,7 +32,7 @@ import { registerArchitectureTool } from "./architecture-review.js";
 import { registerSourceCreationTool, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
-export const inject = ["agents", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals"];
+export const inject = ["agents", "sessions", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals"];
 export const Config = z.object({
   provider: z.string().min(1).required(),
   model: z.string().min(1).required(),
@@ -59,7 +62,8 @@ type PromptCatalogService = {
 };
 type AppContext = {
   agents: { get(id: unknown): ProductAgent | undefined };
-  sessionPersistence: { list(): Promise<Array<{ header: { id: string } }>> };
+  sessionPersistence: Pick<SessionPersistence, "list" | "open">;
+  sessions?: { flush(session: Agent["session"]): Promise<boolean> };
   promptCatalog: PromptCatalogService;
   eventSystems: EventSystemService;
   goals: GoalService;
@@ -196,6 +200,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     orchestrated: executionLimits("orchestrated", executionConfig.orchestrated, config.maxOutputTokens) };
   const clarifiedTurns = new Map<string, number>();
   const latestUserRequests = new Map<string, string>();
+  const continuationLocks = new Set<string>();
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(resolve(config.scratchRoot, "unbound"), { recursive: true, mode: 0o700 });
@@ -360,6 +365,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       instructionsFor(agent.id);
     }
     catch (error) { blockedInstructions.set(String(agent.id), error instanceof Error ? error.message : String(error)); return; }
+    storedConversations.add(String(agent.id));
     if (!binding && membership && !membership.primary) {
       const parentBinding = state.getBinding(String(membership.conversationId));
       if (!parentBinding) throw new Error("Event agent has no immutable owner binding.");
@@ -419,7 +425,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
-    if (event.type !== "user/message" || event.data?.source?.kind !== "user") return;
+    if (event.type !== "user/message" || (event.data?.source?.kind !== "user"
+      && event.data?.source?.plugin !== "spec2gds.architecture")) return;
     const objective = Array.isArray(event.data.content)
       ? event.data.content.filter((item: unknown) => isRecord(item) && item.type === "text" && typeof item.text === "string")
         .map((item: Record<string, unknown>) => String(item.text)).join("\n").trim()
@@ -671,7 +678,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           } catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
         }
         const sourceRequestMatch = path.match(/^\/spec2gds-api\/source-requests\/([^/]+)(?:\/(cancel|continued))?$/);
-        const architectureMatch = path.match(/^\/spec2gds-api\/architecture-reviews\/([^/]+)(?:\/(approve|revise|cancel))?$/);
+        const architectureMatch = path.match(/^\/spec2gds-api\/architecture-reviews\/([^/]+)(?:\/(approve|revise|cancel|continue))?$/);
         if (architectureMatch) {
           const id = decodeURIComponent(architectureMatch[1]!);
           if (request.method === "GET" && !architectureMatch[2]) {
@@ -682,16 +689,44 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           if (request.method === "POST" && architectureMatch[2]) {
             const body = await readBody(request);
             try {
+              if (architectureMatch[2] === "continue") {
+                let review = state.architectureReview(id);
+                if (!review || !["approved", "revised"].includes(review.status)) throw new Error("This review has no continuation.");
+                if (body.sessionId !== review.sessionId) throw new Error("Architecture continuation requires the exact conversation.");
+                if (continuationLocks.has(id)) throw new Error("Continuation delivery is in progress. Retry this card.");
+                continuationLocks.add(id);
+                try {
+                  const agent = ctx.agents.get(SessionId(review.sessionId)) as Agent | undefined;
+                  if (!agent || !ctx.sessions) throw new Error("The conversation is not ready. Retry this card.");
+                  review.continuationId ||= randomUUID();
+                  state.storeArchitecture(review);
+                  if (!(await ctx.sessions.flush(agent.session))) throw new Error("Native continuation cannot be persisted. Retry this card.");
+                  const handle = await ctx.sessionPersistence.open(SessionId(review.sessionId), "read");
+                  const continuationId = review.continuationId;
+                  let delivered: boolean;
+                  try {
+                    const { events } = await handle.read();
+                    delivered = events.some(event => event.type === "agent/inbox/spliced"
+                      && event.data.inserted.some(message => message.id === continuationId));
+                  } finally { await handle.close(); }
+                  if (!delivered) {
+                    agent.followup(freezeMessage({ id: MessageId(review.continuationId), role: "user",
+                      source: { kind: "plugin", plugin: "spec2gds.architecture", form: "notice",
+                        summary: `Architecture review ${review.reviewNumber}: ${review.status}.` },
+                      content: [{ type: "text", text: JSON.stringify(architectureDecision(review)) }] }));
+                    if (!(await ctx.sessions.flush(agent.session))) throw new Error("Native continuation cannot be persisted. Retry this card.");
+                  }
+                  review = { ...state.architectureReview(id), continuationSent: true };
+                  state.storeArchitecture(review);
+                  return writeJson(response, 200, { architecture_review: review });
+                } finally { continuationLocks.delete(id); }
+              }
               const decision = architectureMatch[2] === "approve" ? "approved" : architectureMatch[2] === "revise" ? "revised" : "cancelled";
               const review = state.decideArchitecture(id, decision, typeof body.feedback === "string" ? body.feedback : "");
               const execution = ctx.eventSystems.get(SessionId(review.sessionId));
               if (execution?.definition?.events?.["architecture.decided"]) await ctx.eventSystems.publishHost(SessionId(review.sessionId), {
                 type: "architecture.decided", payload: { review_id: id, decision }, producer: "owner", dedupeKey: `architecture:${id}:${decision}` });
-              const instructions = snapshots.get(review.sessionId) ?? defaultInstructions;
-              return writeJson(response, 200, { architecture_review: review,
-                continuation: `Architecture review ${review.reviewNumber || ""} · ${review.plan.title || "Architecture"}: ${review.status}. `
-                  + (decision === "approved" ? instructions.text("architecture.approved") : instructions.text("architecture.revised"))
-                  + (body.feedback ? ` Feedback: ${body.feedback}` : "") });
+              return writeJson(response, 200, { architecture_review: review, continuation: architectureDecision(review) });
             } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
           }
         }
@@ -746,7 +781,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const resource = bindingMatch[2];
           if (!resource && request.method === "GET") {
             let binding = state.getBinding(sessionId);
-            if (!binding) throw new HttpError(404, "Unknown binding.");
+            if (!binding) {
+              if (requestUrl.searchParams.get("optional") === "true" && (ctx.agents.get(SessionId(sessionId)) || storedConversations.has(sessionId))) {
+                return writeJson(response, 200, { session: null });
+              }
+              throw new HttpError(404, "Unknown binding.");
+            }
             try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
             catch { /* Retain the last source name while the owner is unavailable. */ }
             return writeJson(response, 200, { session: binding, instruction_release: (() => {
@@ -834,6 +874,13 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
             }
             return writeJson(response, 200, { execution: next });
           } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
+        }
+        const scopedReview = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/reviews\/([^/]+)$/);
+        if (scopedReview && request.method === "GET") {
+          const sessionId = decodeURIComponent(scopedReview[1]!);
+          const review = state.getReview(sessionId, decodeURIComponent(scopedReview[2]!));
+          if (!state.getBinding(sessionId) || !review) throw new HttpError(404, "Unknown proposal review in this conversation.");
+          return writeJson(response, 200, { review: publicReview(review) });
         }
         const reviewMatch = path.match(/^\/spec2gds-api\/reviews\/([^/]+)\/actions$/);
         if (reviewMatch && request.method === "POST") {

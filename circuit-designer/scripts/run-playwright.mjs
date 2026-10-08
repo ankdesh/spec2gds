@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const environment = { ...process.env };
-environment.PLAYWRIGHT_BROWSERS_PATH = fileURLToPath(new URL("../.playwright-browsers", import.meta.url));
+environment.PLAYWRIGHT_BROWSERS_PATH ||= fileURLToPath(new URL("../.playwright-browsers", import.meta.url));
 if (process.platform !== "win32") {
   environment.TMPDIR = "/tmp";
   environment.TMP = "/tmp";

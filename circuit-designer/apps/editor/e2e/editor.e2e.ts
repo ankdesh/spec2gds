@@ -876,7 +876,8 @@ test("adds an available top-level component instance to the entry design", async
 });
 
 test("keeps Edit state-aware and provides working Copy and Select All", async ({ context, page }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: "http://127.0.0.1:6015" });
+  const editorOrigin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: editorOrigin });
   await mockEditorApi(page);
   await openSample(page);
 

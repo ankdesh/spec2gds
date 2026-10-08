@@ -69,19 +69,20 @@ export function calculateMetrics(events: Record<string, unknown>[], caseCount: n
     }
     if (event.type === "tool/result") {
       const payload = resultPayload(event);
-      if (!payload || !("success" in payload)) continue;
+      const metadata = isRecord(data.meta) && data.meta.kind === "spec2gds.review" ? data.meta : null;
+      if ((!payload || !("success" in payload)) && !metadata) continue;
       metrics.schemaValidProposalCalls += 1;
-      const review = isRecord(payload.review) ? payload.review : null;
-      if (review) {
-        const artifact = isRecord(review.artifact) ? review.artifact : {};
-        const batch = isRecord(artifact.batch) ? artifact.batch : {};
-        const operations = Array.isArray(artifact.operations) ? artifact.operations : Array.isArray(batch.operations) ? batch.operations : [];
-        metrics.proposedOperations += operations.length;
-        if (review.state === "applied" || review.state === "sent") metrics.appliedOrSentOperations += operations.length;
-        if (!firstResultSeen.has(turn)) {
-          firstResultSeen.add(turn);
-          if (review.state === "ready") metrics.firstPreviewReadyCases += 1;
-        }
+      const review = payload && isRecord(payload.review) ? payload.review : null;
+      const artifact = review && isRecord(review.artifact) ? review.artifact : {};
+      const batch = isRecord(artifact.batch) ? artifact.batch : {};
+      const operations = Array.isArray(artifact.operations) ? artifact.operations : Array.isArray(batch.operations) ? batch.operations : [];
+      const count = review ? operations.length : Number(metadata?.operationCount ?? payload?.operation_count ?? 0);
+      const state = review?.state ?? metadata?.state ?? payload?.state;
+      metrics.proposedOperations += count;
+      if (state === "applied" || state === "sent") metrics.appliedOrSentOperations += count;
+      if (typeof state === "string" && !firstResultSeen.has(turn)) {
+        firstResultSeen.add(turn);
+        if (state === "ready") metrics.firstPreviewReadyCases += 1;
       }
     }
     if (event.type === "assistant/message") {

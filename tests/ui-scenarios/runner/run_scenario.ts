@@ -9,7 +9,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
-import { modelFixture } from "./model_fixture.js";
+import { expectedBrowserFailure } from "./browser_failures.js";
+import { modelFixture, componentDescription } from "./model_fixture.js";
+import { runSmoke, smokeCases, type SmokeCase } from "./smoke_flow.js";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 if (!process.env.PLAYWRIGHT_BROWSERS_PATH) process.env.PLAYWRIGHT_BROWSERS_PATH = join(root, "circuit-designer/.playwright-browsers");
@@ -23,10 +25,17 @@ function option(name: string, fallback: string): string {
   return value;
 }
 const scenario = option("--scenario", "automatic");
-assert.ok(["automatic", "restricted", "live", "binding", "repeated", "architecture", "generalization"].includes(scenario), "Unknown named scenario");
-const approval = option("--approval-mode", scenario === "restricted" ? "review" : "automatic");
-assert.equal(approval, scenario === "restricted" ? "review" : "automatic", "Scenario requires its matching approval mode");
+assert.ok(["automatic", "restricted", "live", "binding", "repeated", "architecture", "generalization", "smoke"].includes(scenario), "Unknown named scenario");
+const smokeCase = scenario === "smoke" ? option("--smoke-case", "") : "";
+if (scenario === "smoke" && !smokeCases.includes(smokeCase as SmokeCase)) throw new Error("Choose one of the three smoke cases.");
+const restricted = scenario === "restricted" || smokeCase === "restricted-description";
+const presentation = args.includes("--presentation");
+assert.ok(!presentation || scenario === "automatic", "Presentation capture uses the automatic scenario.");
+const documentTitle = presentation ? "IRQ signal pipeline" : scenario === "architecture" ? "Architecture lifecycle" : "Iterative scenario";
+const approval = option("--approval-mode", restricted ? "review" : "automatic");
+assert.equal(approval, restricted ? "review" : "automatic", "Scenario requires its matching approval mode");
 const liveModel = args.includes("--live-model");
+if (scenario === "smoke" && !liveModel) throw new Error("Smoke checks require --live-model; fixture responses do not establish live inference.");
 if (scenario === "generalization" && !liveModel) throw new Error("Generalization requires --live-model; fixture responses cannot measure inference quality.");
 const evalCases = JSON.parse(readFileSync(join(root, "tests/evaluation/rtl/cases.json"), "utf8")).cases;
 const evalCase = scenario === "generalization" ? evalCases.find((item: any) => item.id === option("--eval-case", "")) : null;
@@ -37,7 +46,7 @@ const output = resolve(option("--output", join(root, "tests/ui-scenarios/results
 mkdirSync(output, { recursive: true });
 const isolated = mkdtempSync(join(tmpdir(), "spec2gds-ui-"));
 const documentId = `scenario_${Date.now()}`;
-const packagePath = join(isolated, "packages", `${documentId}.spec`);
+let packagePath = join(isolated, "packages", `${documentId}.spec`);
 mkdirSync(dirname(packagePath), { recursive: true });
 const children = new Set<ChildProcess>();
 const failures: any[] = [], records: any[] = [];
@@ -95,9 +104,25 @@ async function prompt(page: Page, message: string): Promise<void> {
   await page.getByRole("button", { name: "Send message", exact: true }).click();
 }
 function savedSnapshot(path: string): any {
-  const saved = spawnSync("uv", ["run", "--project", root, "python", "-c",
+  const saved = spawnSync("uv", ["run", "--no-sync", "--project", root, "python", "-c",
     "import json,sys; from spec2gds.spec.spec_format.v1_api import V1Session,_snapshot; print(json.dumps(_snapshot(V1Session(sys.argv[1]))))", path], { cwd: root, encoding: "utf8" });
   assert.equal(saved.status, 0, saved.stderr); return JSON.parse(saved.stdout);
+}
+async function savedCreationReceipt(): Promise<any> {
+  let receipt: any;
+  await expect.poll(() => {
+    const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
+    try {
+      const matches = database.prepare("SELECT request_json FROM source_creation_requests").all()
+        .map((row: any) => JSON.parse(row.request_json)).filter((item: any) => item.documentId === documentId);
+      assert.ok(matches.length <= 1, "One saved creation receipt must identify this Spec.");
+      receipt = matches[0];
+      return receipt && ["created", "reserved", "continued"].includes(receipt.status);
+    } finally { database.close(); }
+  }).toBe(true);
+  assert.equal(receipt.title, documentTitle);
+  records.push({ saved_creation_receipt: receipt });
+  return receipt;
 }
 
 async function run(): Promise<void> {
@@ -116,57 +141,92 @@ async function run(): Promise<void> {
   config.activities.scratch_root = join(isolated, "generated");
   config.circuit_designer.preferences_file = join(isolated, "circuit-preferences.json");
   const configPath = join(isolated, "services.json"); writeFileSync(configPath, JSON.stringify(config));
-  const fixture = liveModel ? null : await modelFixture(documentId);
+  const fixture = liveModel ? null : await modelFixture(documentId, { title: documentTitle, largeProposal: args.includes("--large-proposal"), presentation });
   const env = { ...process.env, SPEC2GDS_SERVICE_CONFIG: configPath, SPEC2GDS_PUBLIC_HOST: "127.0.0.1",
     SPEC_EDITOR_STATE_ROOT: join(isolated, "owner-state"), ASSISTANT_STATE: join(isolated, "assistant-state"),
     SPEC2GDS_SCRATCH_ROOT: join(isolated, "workspaces"), SPEC_DOCUMENT_ROOT: dirname(packagePath),
+    CIRCUIT_DESIGNER_HOST: "127.0.0.1", CIRCUIT_DESIGNER_PORT: String(circuitPort), CIRCUIT_DESIGNER_UI_HOST: "127.0.0.1", CIRCUIT_DESIGNER_UI_PORT: String(circuitUiPort),
+    CIRCUIT_DESIGNER_PREFERENCES_FILE: join(isolated, "circuit-preferences.json"),
+    CIRCUIT_DESIGNER_SERVICE_ORIGIN: `http://127.0.0.1:${circuitPort}`,
     ASSISTANT_HOST: "127.0.0.1", ASSISTANT_PORT: String(assistantPort), ASSISTANT_PROFILE: "spec2gds-web",
     SPEC_SERVICE_ALLOWLIST: owner, CIRCUIT_SERVICE_ALLOWLIST: `http://127.0.0.1:${circuitPort}/api/circuit-designer/v1`,
-    SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
-    ASSISTANT_MAX_OUTPUT_TOKENS: process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
+    SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: scenario === "smoke" ? "6" : process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
+    ASSISTANT_MAX_OUTPUT_TOKENS: scenario === "smoke" ? "4096" : process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
     ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini" } : {}) };
-  const ownerArgs = ["run", "spec2gds-server", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
+  const ownerArgs = ["run", "--no-sync", "spec2gds-spec-service", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
   let ownerProcess = start("owner", "uv", ownerArgs, root, env);
   const assistantProcess = start("assistant", process.execPath, ["scripts/dev.mjs", "--no-open"], join(root, "ai-assistant"), env);
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     await Promise.all([healthy(`${owner}/health`, ownerProcess), healthy(`${assistant}/readyz`, assistantProcess)]);
+    if (presentation) {
+      const circuitService = start("circuit-service", "npm", ["run", "service"], join(root, "circuit-designer"), env);
+      await healthy(`http://127.0.0.1:${circuitPort}/api/circuit-designer/v1/health`, circuitService);
+      const circuitUi = start("circuit-ui", "npm", ["run", "dev:standalone"], join(root, "circuit-designer"), env);
+      await healthy(`http://127.0.0.1:${circuitUiPort}/api/circuit-designer/v1/health`, circuitUi);
+    }
     assert.equal((await json(`${owner}/assistant/capabilities`)).approval_policy, approval);
     if (!process.env.PLAYWRIGHT_BROWSERS_PATH) process.env.PLAYWRIGHT_BROWSERS_PATH = join(root, "circuit-designer/.playwright-browsers");
     browser = await chromium.launch({ headless: !args.includes("--headed"), args: ["--no-sandbox"] });
-    const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const context = await browser.newContext({ viewport: { width: presentation ? 1600 : 1440, height: 900 }, deviceScaleFactor: presentation ? 1.5 : 1, colorScheme: "light" });
     await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
     const conversation = await context.newPage(), editor = await context.newPage();
+    const captures: Array<{ file: string; app: string; caption: string }> = [];
+    const capture = async (page: Page, file: string, app: string, caption: string) => {
+      if (!presentation) return;
+      await page.screenshot({ path: join(output, file), fullPage: false });
+      captures.push({ file, app, caption });
+    };
+    const architectureCapture = async (file: string, caption: string) => {
+      if (!presentation) return;
+      const card = conversation.locator('[data-s2g-architecture-review="pending"]').last();
+      await expect(card).toBeVisible();
+      for (const detail of await card.locator("details").all()) {
+        const label = (await detail.locator("summary").innerText()).trim();
+        if (await detail.getAttribute("open") !== null && label !== "concrete configuration") await detail.locator("summary").click();
+      }
+      await card.getByRole("button", { name: "Approve architecture", exact: true }).evaluate(element => element.scrollIntoView({ block: "center" }));
+      await capture(conversation, file, "AI Assistant", caption);
+    };
     const confirmations: string[] = [];
-    for (const page of [conversation, editor]) {
+    const observePage = (page: Page) => {
       page.setDefaultTimeout(60_000);
       page.on("pageerror", error => failures.push({ type: "pageerror", message: String(error) }));
       page.on("console", message => {
         if (message.type() !== "error") return;
         const url = message.location().url;
-        const expected = (stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url))
-          || (scenario === "live" && url.startsWith(owner) && /\/transactions(?:\?|$)/.test(url) && /409/.test(message.text()));
+        const expected = expectedBrowserFailure("console", url, message.text(), { stopping, serviceUrl: owner, scenario });
         failures.push({ type: "console", message: message.text(), url, expected });
       });
       page.on("requestfailed", request => {
         const url = request.url(), message = request.failure()?.errorText ?? "";
-        const expected = (stopping && url.startsWith(owner) && /\/(events|activity-events|documents\/view)(?:\?|$)/.test(url))
-          || (/\/(events|activity-events)(?:\?|$)/.test(url) && /ERR_ABORTED|AbortError/.test(message));
+        const expected = expectedBrowserFailure("network", url, message, { stopping, serviceUrl: owner, scenario });
         failures.push({ type: "network", url, message, expected });
       });
-    }
+    };
+    [conversation, editor].forEach(observePage);
     await conversation.exposeFunction("recordConfirmation", (text: string) => confirmations.push(text));
     await conversation.addInitScript(() => document.addEventListener("click", event => {
       const target = (event.target as Element).closest("button");
       if (target && /Approve architecture|Approve and apply|Continue proposal|Create specification and continue/.test(target.textContent ?? "")) void (window as any).recordConfirmation(target.textContent);
     }));
     try {
+      if (scenario === "smoke") {
+        records.push({ runtime: { model: env.OPENAI_MODEL || "gpt-4o-mini",
+          output_token_limit: 4096, step_limit: 6, evidence: "live-model/real-services" } });
+        await runSmoke({ caseId: smokeCase as SmokeCase, serviceUrl: owner, assistantUrl: assistant,
+          packagePath, documentId, conversation, editor, records, json, openEditor, prompt, savedSnapshot });
+        await conversation.screenshot({ path: join(output, "assistant.png"), fullPage: true });
+        await editor.screenshot({ path: join(output, "editor.png"), fullPage: true });
+        assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected browser failures must fail smoke checks.");
+        return;
+      }
       if (scenario === "architecture") {
         await conversation.goto(`${assistant}/launch`);
         const request = `Create a new spec document ${documentId} titled Architecture lifecycle. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n.`;
         await prompt(conversation, request);
         await expect(conversation.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false, "No package before architecture approval.");
+        assert.deepEqual(readdirSync(dirname(packagePath)).filter(name => name.endsWith(".spec")), [], "No package before architecture approval.");
         await conversation.reload();
         const pending = conversation.locator('[data-s2g-architecture-review="pending"]').last();
         await expect(pending).toBeVisible();
@@ -174,16 +234,22 @@ async function run(): Promise<void> {
         await pending.getByRole("button", { name: "Revise architecture", exact: true }).click();
         await expect(conversation.locator('[data-s2g-architecture-review="revised"]')).toBeVisible();
         await expect(conversation.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false);
+        assert.deepEqual(readdirSync(dirname(packagePath)).filter(name => name.endsWith(".spec")), []);
         await conversation.locator('[data-s2g-architecture-review="pending"]').getByRole("button", { name: "Cancel", exact: true }).click();
         await expect(conversation.locator('[data-s2g-architecture-review="cancelled"]')).toBeVisible();
-        assert.equal(existsSync(packagePath), false, "Cancellation creates no content.");
+        assert.deepEqual(readdirSync(dirname(packagePath)).filter(name => name.endsWith(".spec")), [], "Cancellation creates no content.");
         await prompt(conversation, request);
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => {
           try { return (await json(`${owner}/documents/snapshot`)).components.length; }
           catch { return 0; }
         }).toBe(1);
+        const created = await json(`${owner}/documents/snapshot`);
+        packagePath = (await savedCreationReceipt()).destination;
+        assert.equal(packagePath, created.source_path);
+        assert.equal(created.document_id, documentId);
+        assert.equal(created.name, "Architecture lifecycle");
+        assert.ok(existsSync(packagePath));
         const snapshot = savedSnapshot(packagePath);
         const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
         try {
@@ -193,6 +259,7 @@ async function run(): Promise<void> {
           records.push({ architecture_reviews: reviews, snapshot });
         } finally { database.close(); }
         await conversation.screenshot({ path: join(output, "assistant.png"), fullPage: true });
+        assert.deepEqual(fixture?.failures || [], []);
         assert.deepEqual(failures.filter(failure => !failure.expected), []);
         return;
       }
@@ -270,9 +337,10 @@ async function run(): Promise<void> {
       let initial: any;
       if (scenario === "automatic") {
         await conversation.goto(`${assistant}/launch`);
-        await prompt(conversation, `Create a new spec document ${documentId} titled Iterative scenario. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n combinationally.`);
+        await prompt(conversation, `Create a new spec document ${documentId} titled ${documentTitle}. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n combinationally.${presentation ? " Add irq_pipeline as an entry Design with stage_a and stage_b instances of timer_core. Connect stage_a.irq[0] to stage_b.clk." : ""}`);
+        if (presentation) await expect(conversation.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
+        await architectureCapture("01_ai_assistant_architecture.png", "Review the Components, Design, concrete widths, and signal connection before creating the Spec.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
-        await expect.poll(() => existsSync(packagePath)).toBe(true);
         await expect.poll(async () => {
           try { initial = await json(`${owner}/documents/snapshot`); return true; }
           catch { return false; }
@@ -284,12 +352,29 @@ async function run(): Promise<void> {
         await prompt(conversation, "Create timer_core with scalar clk and rst_n inputs and an 8-bit irq output that replicates clk & rst_n combinationally.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
       }
+      packagePath = scenario === "automatic" ? (await savedCreationReceipt()).destination : initial.source_path;
+      assert.equal(packagePath, initial.source_path);
+      assert.equal(initial.document_id, documentId);
+      assert.equal(initial.name, documentTitle);
+      assert.ok(existsSync(packagePath));
       const key = initial.owner_document_key;
       const scoped = (path: string) => `${owner}${path}${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(key)}`;
       const snapshot = () => json(scoped("/documents/snapshot"));
       const history = () => json(scoped("/assistant/history?limit=25"));
       if (scenario === "restricted") {
         await expect(conversation.getByRole("button", { name: "Save to Spec", exact: true })).toBeVisible();
+        if (args.includes("--large-proposal")) {
+          await conversation.reload();
+          await expect(conversation.getByRole("button", { name: "Save to Spec", exact: true })).toBeVisible();
+          await expect(conversation.locator(".s2g-review pre").filter({ hasText: "Large proposal complete." }).first()).toContainText("Large proposal complete.");
+          await conversation.screenshot({ path: join(output, "large-pending-review.png"), fullPage: true });
+          const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
+          try {
+            const review = database.prepare("SELECT preview_json FROM reviews ORDER BY rowid DESC LIMIT 1").get() as any;
+            assert.ok(Buffer.byteLength(review.preview_json) > 50_000, "The stored preview must exceed the spill limit.");
+            records.push({ large_preview_bytes: Buffer.byteLength(review.preview_json) });
+          } finally { database.close(); }
+        }
         assert.equal((await snapshot()).source_revision_hash, initial.source_revision_hash);
         await conversation.getByRole("button", { name: "Save to Spec", exact: true }).click();
       }
@@ -297,9 +382,24 @@ async function run(): Promise<void> {
       const componentId = (await snapshot()).components[0].ref.entity_id;
       assert.match(componentId, /^component_timer_core_/);
       if (approval === "automatic") await expect(conversation.getByText("Applied automatically", { exact: true }).last()).toBeVisible();
-      let current = await snapshot(); records.push({ snapshot: current, history: await history() });
+      assert.equal((await history()).items.length, 1, "Creation must submit exactly once.");
+      let current = await snapshot();
+      if (args.includes("--large-proposal")) {
+        const saved = spawnSync("uv", ["run", "--no-sync", "--project", root, "python", "-c",
+          "import json,sys,zipfile,xml.etree.ElementTree as E; z=zipfile.ZipFile(sys.argv[1]); print(json.dumps([e.text or '' for n in z.namelist() if n.startswith('ipxact/components/') and n.endswith('.xml') for e in E.fromstring(z.read(n)).iter() if e.tag.rsplit('}',1)[-1]=='description']))", packagePath], { cwd: root, encoding: "utf8" });
+        assert.equal(saved.status, 0, saved.stderr);
+        assert.ok(JSON.parse(saved.stdout).includes(componentDescription(true)), "The complete IP-XACT description must be saved.");
+      }
+      records.push({ snapshot: current, history: await history() });
+      await capture(conversation, "02_ai_assistant_saved_proposal.png", "AI Assistant", "AI Assistant prepares typed changes; the Spec service applies the approved proposal automatically.");
       await openEditor(editor, owner, packagePath);
       await expect(editor.locator(`#component-${componentId.replaceAll("_", "-")}`)).toBeVisible();
+      await editor.evaluate(() => window.scrollTo(0, 0));
+      await capture(editor, "03_spec_editor_initial_spec.png", "Spec Editor", "The saved Spec has a readable document overview and a Contents list for the reusable Component and two-stage Design.");
+      if (presentation) {
+        await editor.locator(`#component-${componentId.replaceAll("_", "-")}`).evaluate(element => element.scrollIntoView({ block: "start" }));
+        await capture(editor, "03b_spec_editor_component.png", "Spec Editor", "The Component combines an 8-bit IRQ interface, an explanation, and its SystemVerilog content in one Spec.");
+      }
       assert.equal(current.components[0].ports.find((port: any) => port.name === "irq").range, "7:0");
       assert.equal(current.entity_sections[0].content, "assign irq = {8{clk & rst_n}};");
       if (scenario === "restricted") {
@@ -329,7 +429,8 @@ async function run(): Promise<void> {
           const b = await json(`${owner}/documents/open`, { path: copied }); bKey = b.owner_document_key;
           assert.notEqual(key, bKey); await openEditor(editor, owner, copied);
         }
-        await prompt(conversation, "Refine timer_core irq to 16 bits and update its SystemVerilog section to assign irq = {16{clk & rst_n}};");
+        await prompt(conversation, `Refine timer_core irq to 16 bits and update its SystemVerilog section to assign irq = {16{clk & rst_n}};${presentation ? " Update its explanation to match the 16-bit interface." : ""}`);
+        await architectureCapture("04_ai_assistant_refinement.png", "Review the proposed refinement from an 8-bit IRQ interface to a 16-bit interface.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => (await snapshot()).components[0].ports.find((port: any) => port.name === "irq").range).toBe("15:0");
         current = await snapshot(); assert.equal(current.entity_sections[0].content, "assign irq = {16{clk & rst_n}};");
@@ -351,6 +452,39 @@ async function run(): Promise<void> {
           await openEditor(editor, owner, packagePath);
           await expect(editor.locator(".spec-paper")).toContainText("15:0", { timeout: 5_000 });
         } else await expect(editor.locator(".spec-paper")).toContainText("15:0", { timeout: 5_000 });
+        if (presentation) {
+          await editor.getByRole("button", { name: "Document", exact: true }).click();
+          await editor.locator(`#component-${componentId.replaceAll("_", "-")}`).evaluate(element => element.scrollIntoView({ block: "start" }));
+          await capture(editor, "05_spec_editor_refined_spec.png", "Spec Editor", "The saved Component now has a 16-bit IRQ port and matching SystemVerilog content.");
+          assert.equal(current.designs.length, 1);
+          const designId = current.designs[0].ref.entity_id;
+          const designCard = editor.locator(`#design-${designId.replaceAll("_", "-")}`);
+          await designCard.scrollIntoViewIfNeeded();
+          await capture(editor, "06_spec_editor_topology.png", "Spec Editor", "Spec Editor derives a circuit preview from two instances and the declared bit-zero connection.");
+          const popup = context.waitForEvent("page");
+          await designCard.getByRole("button", { name: "Options" }).click();
+          await designCard.getByRole("menuitem", { name: "Open circuit", exact: true }).click();
+          const circuit = await popup;
+          observePage(circuit);
+          await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
+          await expect(circuit.locator(".react-flow__node")).toHaveCount(2);
+          await circuit.getByRole("menuitem", { name: "View", exact: true }).click();
+          await circuit.getByRole("menuitem", { name: "Fit circuit", exact: true }).click();
+          await circuit.getByTestId("circuit-canvas").locator(".react-flow__viewport").evaluate(async element => {
+            let previous = "";
+            for (let frame = 0; frame < 40; frame++) {
+              await new Promise(requestAnimationFrame);
+              const current = element.getAttribute("style") ?? "";
+              if (frame > 15 && current === previous) return;
+              previous = current;
+            }
+          });
+          await capture(circuit, "07_circuit_designer_bound_design.png", "Circuit Designer", "Circuit Designer opens the exact Design from the Spec, including two Component instances and the selected wire connection.");
+          await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
+          await circuit.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
+          await expect(circuit.locator(".document-status")).toContainText("Specification draft");
+          await capture(circuit, "08_circuit_designer_private_draft.png", "Circuit Designer", "Begin editing creates a private Circuit draft while keeping the saved Spec as its source.");
+        }
         if (scenario === "repeated") {
           for (let index = 2; index < 100; index++) {
             current = await snapshot();
@@ -373,6 +507,7 @@ async function run(): Promise<void> {
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
       await component.getByRole("button", { name: "Options" }).click();
       await component.getByRole("menuitem", { name: "Launch activity…", exact: true }).click();
+      await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
       const activity = editor.locator(".action-option").filter({ hasText: "rtl.generate" });
       await activity.getByRole("button", { name: "Run", exact: true }).click();
       let launched: any;
@@ -398,6 +533,18 @@ async function run(): Promise<void> {
       if (approval === "automatic") assert.ok(confirmations.every(label => label === "Approve architecture"), "Automatic owner must require only architecture decisions, with no final save confirmation");
       await conversation.screenshot({ path: join(output, "assistant.png"), fullPage: true });
       await editor.screenshot({ path: join(output, "editor.png"), fullPage: true });
+      if (presentation) {
+        await editor.getByRole("button", { name: /Activity/ }).click();
+        await editor.getByRole("button", { name: "Refresh", exact: true }).click();
+        await expect(editor.getByText("succeeded", { exact: true })).toBeVisible();
+        await editor.getByRole("heading", { name: "Action executions" }).evaluate(element => element.scrollIntoView({ block: "start" }));
+      }
+      await capture(editor, "10_spec_editor_activity_result.png", "Spec Editor", "The Activity succeeds and records the source revision and generated RTL artifacts.");
+      if (presentation) {
+        writeFileSync(join(output, "screenshots.json"), JSON.stringify(captures, null, 2));
+        writeFileSync(join(output, "screenshots.md"), "# IRQ signal pipeline: UI capture\n\nThis run uses a deterministic model fixture. The UI, services, Spec, Circuit projection, and Activity execution are real.\n\n" + captures.map(item => `- [${item.file}](${item.file}) — **${item.app}:** ${item.caption}`).join("\n") + "\n");
+      }
+      assert.deepEqual(fixture?.failures || [], [], "The model fixture must not hide malformed results.");
       assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected console, page, process, and network failures must fail the scenario");
     } catch (error) {
       await Promise.allSettled([conversation.screenshot({ path: join(output, "failed-assistant.png"), fullPage: true }), editor.screenshot({ path: join(output, "failed-editor.png"), fullPage: true })]);
@@ -408,7 +555,7 @@ async function run(): Promise<void> {
     }
   } finally {
     await browser?.close(); stopping = true; await Promise.all([...children].map(stop));
-    if (fixture) { writeFileSync(join(output, "model-requests.json"), JSON.stringify(fixture.requests, null, 2)); await fixture.close(); }
+    if (fixture) { writeFileSync(join(output, "model-fixture-failures.json"), JSON.stringify(fixture.failures, null, 2)); writeFileSync(join(output, "model-requests.json"), JSON.stringify(fixture.requests, null, 2)); await fixture.close(); }
     if (existsSync(dirname(packagePath))) cpSync(dirname(packagePath), join(output, "packages"), { recursive: true });
     rmSync(isolated, { recursive: true, force: true });
   }

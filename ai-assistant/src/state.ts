@@ -139,10 +139,13 @@ export class ProductState {
   decideArchitecture(id: string, decision: "approved" | "revised" | "cancelled", feedback: string): Record<string, any> {
     const record = this.architectureReview(id);
     if (!record) throw new Error("Unknown architecture review.");
-    if (record.status === decision) return record;
+    if (record.status === decision) {
+      if ((record.feedback || "") !== feedback) throw new Error("This decision has different saved feedback.");
+      return record;
+    }
     if (record.status !== "pending") throw new Error("This review has already been decided. Prepare a new review to change its architecture.");
     if (decision === "approved" && record.plan.open_questions.length) throw new Error("Resolve essential open questions in a revised architecture before approval.");
-    const updated = { ...record, status: decision, feedback, decidedAt: now() };
+    const updated = { ...record, status: decision, feedback, continuationId: randomUUID(), continuationSent: false, decidedAt: now() };
     const result = this.database.prepare(`UPDATE architecture_reviews SET status=?,record_json=? WHERE review_id=? AND status='pending'`)
       .run(decision, JSON.stringify(updated), id);
     if (Number(result.changes) !== 1) throw new Error("Architecture decision changed concurrently; reload the card.");

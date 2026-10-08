@@ -16,7 +16,7 @@ export function registerSourceCreationTool(
     ...nativeTool("prepare_spec_document_creation", instructions),
     async execute(args: ToolArguments["prepare_spec_document_creation"], exec: ToolRunContext) {
       try {
-        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title,
+        const creation = await creations.prepare({ ...currentRequest(), callId: String(exec.callId), title: args.title, documentId: args.document_id,
           architectureReviewId: args.architecture_review_id, empty: args.empty });
         if (creation.automatic === true) {
           const policy = await creations.owners.specPolicy(String(creation.serviceBaseUrl), exec.signal);

@@ -1,0 +1,434 @@
+"""Select local regression suites and report their evidence without hiding gaps.
+
+The legacy shell tiers remain separate. This runner builds a dependency graph
+from existing commands, uses isolated browser configuration, and writes one
+report for each invocation. Model credentials are never part of the report.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import shutil
+import signal
+import socket
+import subprocess
+import tempfile
+import time
+import xml.etree.ElementTree as ET
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
+
+ROOT = Path(__file__).resolve().parents[1]
+SCOPES = {"spec", "circuit", "assistant", "verification", "activities", "shared"}
+SMOKE_CASES = ("description", "wire-range", "restricted-description")
+SCENARIOS = ("automatic", "restricted", "live", "binding", "repeated", "architecture")
+
+
+@dataclass(frozen=True)
+class Suite:
+    """A command's selection, dependencies, prerequisites, and evidence type."""
+
+    id: str
+    command: tuple[str, ...]
+    scopes: tuple[str, ...]
+    layer: str
+    evidence: str
+    cwd: str = "."
+    dependencies: tuple[str, ...] = ()
+    requirements: tuple[str, ...] = ()
+    timeout: int = 900
+    risks: tuple[str, ...] = ()
+
+
+def suite_catalogue() -> dict[str, Suite]:
+    """Keep selection metadata together with the command that supplies evidence."""
+    suites: dict[str, Suite] = {}
+
+    def add(id, command, scopes, layer, evidence, **kwargs):
+        risk_map = {"spec": ("source integrity", "revision control"),
+                    "circuit": ("source boundary", "topology"),
+                    "assistant": ("approval", "binding", "model outcome"),
+                    "verification": ("snapshot identity", "review checkpoints"),
+                    "activities": ("determinism", "source boundary"),
+                    "shared": ("configuration", "process isolation")}
+        kwargs["risks"] = tuple(dict.fromkeys(risk for scope in scopes for risk in risk_map[scope]))
+        suites[id] = Suite(id, tuple(command), tuple(scopes), layer, evidence, **kwargs)
+
+    def python(id, paths, scopes, marker="not extensive", dependencies=(), tools=()):
+        add(id, ["uv", "run", "--no-sync", "python", "-m", "pytest", "-q",
+                 "--strict-markers", *paths, "-m", marker, "-ra",
+                 "--junitxml={output}/pytest.xml"], scopes, "service/API", "isolated",
+            dependencies=dependencies, requirements=("python", *tools))
+
+    python("python-fast", ["tests", "testplan-service/tests"], sorted(SCOPES))
+    add("circuit-units", ["npm", "test"], ["spec", "circuit", "shared"],
+        "unit/component/API", "isolated", cwd="circuit-designer", requirements=("circuit",))
+    add("assistant-units", ["npm", "test"], ["assistant"], "unit/contract", "isolated",
+        cwd="ai-assistant", requirements=("assistant",))
+    add("scenario-units", ["npm", "run", "test:fixture"], ["spec", "assistant"],
+        "test infrastructure", "isolated", cwd="tests/ui-scenarios", requirements=("scenarios",))
+    add("build-assistant", ["npm", "run", "build"], ["assistant"], "build", "build",
+        cwd="ai-assistant", requirements=("assistant",))
+    add("build-circuit", ["npm", "run", "build"], ["spec", "circuit"], "build", "build",
+        cwd="circuit-designer", requirements=("circuit",))
+    add("schema-check", ["npm", "run", "generate:check"], ["spec", "circuit", "shared"],
+        "contract", "generated-contract", cwd="circuit-designer", requirements=("circuit",))
+    python("python-extensive", ["tests/spec/spec_format"], ["spec", "assistant"],
+           marker="extensive", dependencies=("build-assistant",))
+    python("hardware-extensive", ["tests/spec/activities"], ["spec", "activities"],
+           marker="extensive", tools=("hardware",))
+    python("spec-api", ["tests/spec/spec_format", "tests/spec/importers"],
+           ["spec", "circuit", "assistant", "activities"])
+    python("verification-api", ["testplan-service/tests"], ["spec", "verification", "activities"])
+    python("activity-api", ["tests/spec/activities"], ["spec", "activities"])
+    python("shared-api", ["tests/test_service_registry.py", "tests/test_observability.py",
+                           "tests/test_log_viewer.py", "tests/test_terminology_compatibility.py",
+                           "tests/test_test_tiers.py", "tests/test_test_profiles.py"], ["shared"])
+    for package in ("service", "client-http"):
+        add(f"circuit-{package}-api", ["npm", "run", "test", "--workspace",
+                                      f"@spec2gds/circuit-{package}"], ["spec", "circuit"],
+            "service/client integration", "isolated", cwd="circuit-designer",
+            requirements=("circuit",))
+    add("harness", ["npm", "run", "test:harness"], ["spec", "circuit", "assistant"],
+        "integration", "real-Harness/fixture-services-model", cwd="ai-assistant",
+        dependencies=("build-assistant",), requirements=("harness",))
+    for id, command, scopes, cwd, deps in (
+        ("spec-browser", ["npm", "run", "test:e2e:editor"], ["spec"], "circuit-designer",
+         ("build-circuit",)),
+        ("circuit-browser", ["npm", "run", "test:e2e"], ["circuit"], "circuit-designer",
+         ("build-circuit",)),
+        ("assistant-browser", ["npm", "run", "test:ui"], ["assistant"], "ai-assistant",
+         ("build-assistant",)),
+    ):
+        add(id, command, scopes, "browser", "fixture-browser", cwd=cwd,
+            dependencies=deps, requirements=("browser",))
+    for scenario in SCENARIOS:
+        add(f"scenario-{scenario}", ["bash", "tests/ui-scenarios/run-test.sh", "--scenario",
+                                    scenario, "--output", "{output}"],
+            ["spec", "assistant", "activities"], "end-to-end", "real-services/fixture-model",
+            dependencies=("build-assistant", "build-circuit"),
+            requirements=("python", "browser", "harness", "scenarios"), timeout=600)
+    # The presentation flow also starts Circuit service/UI and saves back to Spec.
+    add("spec-circuit-flow", ["bash", "tests/ui-scenarios/run-test.sh", "--scenario", "automatic",
+                              "--presentation", "--output", "{output}"], ["spec", "circuit"],
+        "end-to-end", "real-services/fixture-model", dependencies=("build-assistant", "build-circuit"),
+        requirements=("python", "browser", "harness", "scenarios"), timeout=600)
+    for case in SMOKE_CASES:
+        add(f"live-{case}", ["bash", "tests/ui-scenarios/run-test.sh", "--scenario", "smoke",
+                             "--smoke-case", case, "--live-model", "--output", "{output}"],
+            ["spec", "assistant"], "end-to-end", "live-model/real-services",
+            dependencies=("build-assistant", "build-circuit"),
+            requirements=("python", "browser", "harness", "scenarios", "live"), timeout=180)
+    add("live-generalization", ["node", "--import", "tsx", "runner/run_generalization.ts",
+                                 "--output", "{output}"], ["spec", "assistant", "activities"],
+        "quality evaluation", "live-model/hardware-simulation", cwd="tests/ui-scenarios",
+        dependencies=("build-assistant", "build-circuit"),
+        requirements=("python", "browser", "harness", "scenarios", "live", "hardware"),
+        timeout=21_600)
+    add("evaluation-catalogue", ["npm", "run", "eval", "--", "--output", "{output}"],
+        ["assistant"], "catalogue validation", "catalogued-only", cwd="ai-assistant",
+        dependencies=("build-assistant",), requirements=("assistant",))
+    return suites
+
+
+def select_suites(profile: str, scopes: set[str]) -> list[Suite]:
+    """Expand prerequisites once; integration includes consumers of Spec contracts."""
+    catalogue = suite_catalogue()
+    fundamentals = ["python-fast", "circuit-units", "assistant-units", "scenario-units", "schema-check"]
+    live = [f"live-{case}" for case in SMOKE_CASES]
+    if profile == "fast":
+        selected = fundamentals + live
+    elif profile == "regression":
+        selected = fundamentals + ["python-extensive", "hardware-extensive", "harness", "spec-browser", "circuit-browser",
+                                   "assistant-browser", "evaluation-catalogue", "spec-circuit-flow"]
+        selected += [f"scenario-{scenario}" for scenario in SCENARIOS] + live + ["live-generalization"]
+    else:
+        if "shared" in scopes:
+            scopes = SCOPES.copy()
+        candidates = ["spec-api", "verification-api", "activity-api", "shared-api",
+                      "circuit-service-api", "circuit-client-http-api", "schema-check", "harness",
+                      "spec-browser", "circuit-browser", "assistant-browser", "spec-circuit-flow"]
+        candidates += [f"scenario-{scenario}" for scenario in SCENARIOS]
+        if "activities" in scopes:
+            candidates.append("hardware-extensive")
+        if scopes.intersection({"spec", "assistant"}):
+            candidates.append("python-extensive")
+        selected = [id for id in candidates if scopes.intersection(catalogue[id].scopes)]
+    ordered: dict[str, Suite] = {}
+
+    def include(id):
+        for dependency in catalogue[id].dependencies:
+            include(dependency)
+        ordered[id] = catalogue[id]
+
+    for id in selected:
+        include(id)
+    return list(ordered.values())
+
+
+def tool_version(command: list[str], env: dict[str, str]) -> str:
+    try:
+        result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, text=True, timeout=10)
+        return result.stdout.strip() if result.returncode == 0 else "unavailable"
+    except (OSError, subprocess.TimeoutExpired):
+        return "unavailable"
+
+
+def prerequisite_errors(requirements: tuple[str, ...], env: dict[str, str]) -> list[str]:
+    """Inspect availability, without installing packages or contacting a provider."""
+    errors = []
+    paths = {"python": ".venv/bin/python", "circuit": "circuit-designer/node_modules",
+             "assistant": "ai-assistant/node_modules", "scenarios": "tests/ui-scenarios/node_modules"}
+    for requirement in requirements:
+        if requirement in paths and not (ROOT / paths[requirement]).exists():
+            errors.append(f"Missing {paths[requirement]}; run scripts/setup-all.sh.")
+        if requirement == "python" and not shutil.which("uv", path=env.get("PATH")):
+            errors.append("uv is unavailable.")
+        if requirement in {"circuit", "assistant", "scenarios", "harness", "browser"}:
+            version = tool_version(["node", "--version"], env)
+            parsed = re.match(r"^v(\d+)\.(\d+)\.", version)
+            if not parsed or (int(parsed[1]), int(parsed[2])) < (24, 2):
+                errors.append("Profiles require Node.js 24.2 or newer on PATH.")
+            if not shutil.which("npm", path=env.get("PATH")):
+                errors.append("npm is unavailable.")
+        if requirement == "harness":
+            harness = Path(env.get("HARNESS_SOURCE", str(ROOT.parent / "deepseek-harness")))
+            if not any((base / "scripts/product-runtime.mjs").exists()
+                       for base in (harness, harness / "deepseek-harness")):
+                errors.append("DeepSeek Harness source is unavailable; set HARNESS_SOURCE.")
+        if requirement == "browser":
+            if env.get("SPEC2GDS_TEST_PORT_ERROR"):
+                errors.append(env["SPEC2GDS_TEST_PORT_ERROR"])
+            directory = Path(env["PLAYWRIGHT_BROWSERS_PATH"])
+            if not directory.exists() or not list(directory.glob("chromium*")):
+                errors.append("Playwright Chromium is unavailable; run scripts/setup-all.sh.")
+        if requirement == "live" and not env.get("OPENAI_API_KEY", "").strip():
+            errors.append("OPENAI_API_KEY is unavailable; no live inference was performed.")
+        if requirement == "hardware":
+            for tool in ("verilator", "make", "c++"):
+                if not shutil.which(tool, path=env.get("PATH")):
+                    errors.append(f"Required hardware tool {tool} is unavailable.")
+            if shutil.which("verilator", path=env.get("PATH")):
+                if not tool_version(["verilator", "--version"], env).startswith("Verilator 5."):
+                    errors.append("Verilator 5.x is required.")
+    return list(dict.fromkeys(errors))
+
+
+def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[str, str]:
+    """Separate local browser checks from any running designer environment."""
+    env = dict(os.environ)
+    env.setdefault("UV_CACHE_DIR", str(output / "uv-cache"))
+    env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(ROOT / "circuit-designer/.playwright-browsers"))
+    env["AI_ASSISTANT_UI_TEST_DEPS"] = env.get("AI_ASSISTANT_UI_TEST_DEPS", str(ROOT / "circuit-designer"))
+    env["SPEC2GDS_TEST_ISOLATED"] = "1"
+    config = json.loads((ROOT / "config/services.json").read_text())
+    config["public_host"] = "127.0.0.1"
+    sockets = []
+    try:
+        for name in ("spec_editor", "circuit_designer", "ai_assistant"):
+            for surface in ("service", "ui"):
+                config[name][surface]["host"] = "127.0.0.1"
+                if allocate_ports:
+                    listener = socket.socket()
+                    sockets.append(listener)
+                    listener.bind(("127.0.0.1", 0))
+                    config[name][surface]["port"] = listener.getsockname()[1]
+    except OSError as error:
+        env["SPEC2GDS_TEST_PORT_ERROR"] = f"Isolated browser ports are unavailable: {error}"
+    finally:
+        for listener in sockets:
+            listener.close()
+    config["logging"]["enabled"] = False
+    config["logging"]["file"] = str(output / "events.jsonl")
+    config["activities"]["scratch_root"] = str(output / "generated")
+    config["circuit_designer"]["preferences_file"] = str(output / "preferences.json")
+    config_path = output / "services.json"
+    config_path.write_text(json.dumps(config, indent=2) + "\n")
+    env.update(SPEC2GDS_SERVICE_CONFIG=str(config_path), SPEC2GDS_PUBLIC_HOST="127.0.0.1",
+               SPEC_EDITOR_STATE_ROOT=str(output / "spec-state"),
+               SPEC_EDITOR_E2E_UI_URL=f"http://127.0.0.1:{config['spec_editor']['ui']['port']}",
+               CIRCUIT_DESIGNER_E2E_UI_URL=f"http://127.0.0.1:{config['circuit_designer']['ui']['port']}",
+               CIRCUIT_DESIGNER_E2E_API_URL=f"http://127.0.0.1:{config['circuit_designer']['service']['port']}/api/circuit-designer/v1",
+               CIRCUIT_DESIGNER_HOST="127.0.0.1",
+               CIRCUIT_DESIGNER_PORT=str(config["circuit_designer"]["service"]["port"]),
+               CIRCUIT_DESIGNER_UI_HOST="127.0.0.1",
+               CIRCUIT_DESIGNER_UI_PORT=str(config["circuit_designer"]["ui"]["port"]),
+               CIRCUIT_DESIGNER_PREFERENCES_FILE=str(output / "preferences.json"),
+               CIRCUIT_DESIGNER_SERVICE_ORIGIN=f"http://127.0.0.1:{config['circuit_designer']['service']['port']}",
+               ASSISTANT_STATE=str(output / "assistant-state"),
+               SPEC_DOCUMENT_ROOT=str(output / "spec-documents"),
+               SPEC2GDS_SCRATCH_ROOT=str(output / "scratch"))
+    return env
+
+
+def redact(text: str, env: dict[str, str]) -> str:
+    """Prevent configured secret values from reaching runner logs or reports."""
+    for name, value in env.items():
+        if value and len(value) >= 4 and any(part in name.upper() for part in ("KEY", "TOKEN", "SECRET", "PASSWORD")):
+            text = text.replace(value, "[REDACTED]")
+    text = re.sub(r"([?&](?:token|access_token|api_key|key|auth)=)[^&\s\"'<>]+",
+                  r"\1[REDACTED]", text, flags=re.IGNORECASE)
+    return text
+
+
+def stop_process(process: subprocess.Popen) -> None:
+    """Give the scenario harness time to stop its own isolated service groups."""
+    if process.poll() is not None:
+        return
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        process.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid, signal.SIGKILL)
+        process.wait()
+
+
+def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
+    """Bound execution and retain the original outcome; do not retry failures."""
+    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
+    command = [argument.replace("{output}", str(destination)) for argument in suite.command]
+    result = {**asdict(suite), "command": command, "output": str(destination),
+              "status": "failed", "duration_seconds": 0.0}
+    started = time.monotonic()
+    raw_log = destination / ".command.raw"
+    command_env = dict(env)
+    command_env["SPEC2GDS_TEST_OUTPUT_DIR"] = str(destination / "playwright")
+    if suite.evidence in {"isolated", "generated-contract", "catalogued-only"}:
+        # Unit/API fixtures control their own registry. Browser configuration
+        # must not change the tracked-default contract that those suites verify.
+        command_env.pop("SPEC2GDS_SERVICE_CONFIG", None)
+        command_env.pop("SPEC2GDS_PUBLIC_HOST", None)
+    try:
+        with raw_log.open("w") as stream:
+            process = subprocess.Popen(command, cwd=ROOT / suite.cwd, env=command_env, stdout=stream,
+                                       stderr=subprocess.STDOUT, start_new_session=True)
+            try:
+                result["exit_code"] = process.wait(timeout=suite.timeout)
+                result["status"] = "passed" if result["exit_code"] == 0 else "failed"
+            except subprocess.TimeoutExpired:
+                stop_process(process)
+                result["reason"] = f"Exceeded the {suite.timeout}-second execution limit."
+            except KeyboardInterrupt:
+                stop_process(process)
+                raise
+    except OSError as error:
+        result.update(status="unverified", reason=str(error))
+    finally:
+        result["duration_seconds"] = round(time.monotonic() - started, 3)
+        log = redact(raw_log.read_text(errors="replace") if raw_log.exists() else "", env)
+        (destination / "command.log").write_text(log)
+        raw_log.unlink(missing_ok=True)
+        for path in destination.rglob("*"):
+            if path.is_file() and path.suffix in {".log", ".json", ".jsonl", ".xml"}:
+                text = path.read_text(errors="replace")
+                cleaned = redact(text, env)
+                if cleaned != text:
+                    path.write_text(cleaned)
+    junit = destination / "pytest.xml"
+    if junit.exists():
+        try:
+            skipped = [item.attrib for item in ET.parse(junit).iter("skipped")]
+            result["skipped"] = skipped
+            if skipped:
+                result["coverage_note"] = "Skipped checks are outside the executed coverage; see pytest.xml."
+        except ET.ParseError:
+            result.update(status="failed", reason="The Python evidence report is incomplete or malformed.")
+    return result
+
+
+def execute(suites: list[Suite], output: Path, env: dict[str, str], report: dict) -> int:
+    """Continue independent checks and report blocked consumers as unverified."""
+    outcomes: dict[str, dict] = {}
+    interrupted = False
+    for suite in suites:
+        print(f">>> {suite.id} [{suite.evidence}]", flush=True)
+        blocked = [id for id in suite.dependencies if outcomes[id]["status"] != "passed"]
+        errors = prerequisite_errors(suite.requirements, env)
+        if interrupted or blocked or errors:
+            reasons = (["Run interrupted."] if interrupted else [])
+            reasons += [f"Prerequisite check {id} did not pass." for id in blocked] + errors
+            outcome = {**asdict(suite), "status": "unverified", "reason": " ".join(reasons),
+                       "duration_seconds": 0.0}
+        else:
+            try:
+                outcome = run_suite(suite, output / suite.id, env)
+            except KeyboardInterrupt:
+                interrupted = True
+                outcome = {**asdict(suite), "status": "unverified", "reason": "Run interrupted."}
+        outcomes[suite.id] = outcome
+        print(f"    {outcome['status']}: {outcome.get('reason', '')}", flush=True)
+        if outcome["status"] == "failed":
+            print(f"    Log: {output / suite.id / 'command.log'}", flush=True)
+        report["suites"] = list(outcomes.values())
+        report["status"] = "running"
+        (output / "summary.json").write_text(redact(json.dumps(report, indent=2), env) + "\n")
+    states = {outcome["status"] for outcome in outcomes.values()}
+    report["status"] = "failed" if "failed" in states else "incomplete" if "unverified" in states else "passed"
+    report["incomplete"] = "unverified" in states
+    report["counts"] = {state: sum(item["status"] == state for item in outcomes.values())
+                        for state in ("passed", "failed", "unverified")}
+    (output / "summary.json").write_text(redact(json.dumps(report, indent=2), env) + "\n")
+    print(f"{report['profile']}: {report['status']}. Report: {output / 'summary.json'}", flush=True)
+    return 130 if interrupted else 1 if states != {"passed"} else 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("profile", choices=("fast", "integration", "regression"))
+    parser.add_argument("--scope", default="all", help="Comma-separated integration scopes; default: all.")
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--output", type=Path, help="New, empty report directory; default: private /tmp directory.")
+    args = parser.parse_args(argv)
+    scopes = set(args.scope.split(","))
+    if scopes != {"all"} and (not scopes or not scopes <= SCOPES):
+        parser.error("Use all or comma-separated scopes: " + ", ".join(sorted(SCOPES)))
+    if args.profile != "integration" and args.scope != "all":
+        parser.error("--scope is only supported by integration.")
+    scopes = SCOPES.copy() if scopes == {"all"} else scopes
+    suites = select_suites(args.profile, scopes)
+    if args.dry_run:
+        for suite in suites:
+            print(json.dumps(asdict(suite)))
+        print("Dry run complete; no checks executed, reports written, or provider calls made.")
+        return 0
+    output = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix="spec2gds-tests-"))
+    if output.exists() and any(output.iterdir()):
+        parser.error("--output must be a new or empty directory; existing evidence is not replaced.")
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    output.chmod(0o700)
+    env = isolated_environment(output, allocate_ports=any(
+        suite.id in {"spec-browser", "circuit-browser"} for suite in suites))
+    env.setdefault("OPENAI_MODEL", "gpt-4o-mini")
+    env.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    endpoint = urlsplit(env.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
+    host = endpoint.hostname or ""
+    if ":" in host:
+        host = f"[{host}]"
+    if endpoint.port:
+        host += f":{endpoint.port}"
+    safe_endpoint = urlunsplit((endpoint.scheme, host, endpoint.path, "", ""))
+    report = {"schema_version": "spec2gds.test-run.v1", "profile": args.profile,
+              "scopes": sorted(scopes), "started_at": datetime.now(UTC).isoformat(),
+              "source_revision": tool_version(["git", "rev-parse", "HEAD"], env),
+              "source_dirty": bool(tool_version(["git", "status", "--porcelain"], env)),
+              "versions": {name: tool_version([name, "--version"], env)
+                           for name in ("python3", "node", "npm", "uv", "verilator")},
+              "model": {"name": env.get("OPENAI_MODEL", "gpt-4o-mini"), "endpoint": safe_endpoint,
+                        "smoke_step_limit": 6, "smoke_output_token_limit": 4096},
+              "optional_toolchains": {name: "configured" if env.get(name) else "not configured; not claimed"
+                                      for name in ("SYSTEMC_PREFIX", "CIRCT_PREFIX")},
+              "coverage_gaps": ["Verification Planner browser flows", "automated visual baselines",
+                                "system-wide performance and accessibility thresholds"], "suites": []}
+    return execute(suites, output, env, report)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

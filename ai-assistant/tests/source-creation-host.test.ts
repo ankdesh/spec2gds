@@ -15,6 +15,7 @@ async function hostFixture(interactiveForms = true, storedIds: string[] = []) {
   const root = await mkdtemp(join(tmpdir(), "spec2gds-creation-host-"));
   const contract = JSON.parse(await readFile(new URL("./fixtures/spec-document-operation-contract.json", import.meta.url), "utf8"));
   let active: string | null = null;
+  let durability = true;
   let creates = 0;
   let contextReads = 0;
   const owner = createServer(async (request, response) => {
@@ -53,7 +54,8 @@ async function hostFixture(interactiveForms = true, storedIds: string[] = []) {
   const ctx: any = {
     eventHttpSources: { list: () => [] },
     agents: { get: (id: string) => agents.get(id) },
-    sessionPersistence: { list: async () => storedIds.map(id => ({ header: { id } })) },
+    sessions: { flush: async () => durability },
+    sessionPersistence: { open: async (id: string) => ({ read: async () => ({ events: agents.get(id)?.events || [] }), close: async () => {} }), list: async () => storedIds.map(id => ({ header: { id } })) },
     promptCatalog: { get: () => ({}), seal: () => {}, bind: () => ({ sections: ["domain-persona", "binding-context", "operation-constraints", "output-contract"].map((id, index) => ({ id, order: 100 + index * 50, text: id })) }) },
     eventSystems: {
       ready: Promise.resolve(), definition: (id: string) => {
@@ -86,7 +88,8 @@ async function hostFixture(interactiveForms = true, storedIds: string[] = []) {
   const emit = async (event: string, ...args: any[]) => { for (const listener of listeners.get(event) ?? []) await listener(...args); };
   const makeAgent = async (id: string, preset = "focused", parentSession?: string) => {
     const tools = new Map<string, any>(); const sections = new Map<string, any>();
-    const agent = { id, session: { header: { agentPreset: preset, parentSession, delegationDepth: parentSession ? 1 : 0 } },
+    const events: any[] = [];
+    const agent = { id, events, followup: (input: any) => { events.push({ type: "agent/inbox/spliced", data: { inserted: [input] } }); }, session: { header: { agentPreset: preset, parentSession, delegationDepth: parentSession ? 1 : 0 } },
       ctx: { tools: { register: (tool: any) => { tools.set(tool.name, tool); return () => tools.delete(tool.name); }, get: (name: string) => tools.get(name), guard: () => () => {} },
         systemPrompt: { section: (section: any) => { sections.set(section.name, section); return () => sections.delete(section.name); } } }, tools, sections };
     agents.set(id, agent); await emit("agent/created", { agent }); return agent;
@@ -102,6 +105,7 @@ async function hostFixture(interactiveForms = true, storedIds: string[] = []) {
     return { status, value };
   };
   return { root, url, makeAgent, emit, message, api, starts, executions, members,
+    set durability(value: boolean) { durability = value; },
     get creates() { return creates; }, get contextReads() { return contextReads; },
     async close() { await emit("dispose"); await new Promise<void>(resolve => owner.close(() => resolve())); await rm(root, { recursive: true, force: true }); },
   };
@@ -203,5 +207,48 @@ test("legacy conversations retain history and cannot run the model or domain too
     await assert.rejects(f.emit("agent/request", { agent, turn: 1, step: 1 }, async () => ({})), /Start a new conversation/);
     const fresh = await f.makeAgent("fresh");
     assert.ok(fresh.tools.has("prepare_architecture_review"));
+  } finally { await f.close(); }
+});
+
+
+test("unbound optional lookups and scoped review lookups preserve error detection", async () => {
+  const f = await hostFixture();
+  try {
+    await f.makeAgent("unbound");
+    assert.equal((await f.api("/bindings/unbound?optional=true")).status, 200);
+    assert.equal((await f.api("/bindings/unbound?optional=true")).value.session, null);
+    assert.equal((await f.api("/bindings/unbound")).status, 404);
+    assert.equal((await f.api("/bindings/missing?optional=true")).status, 404);
+    assert.equal((await f.api("/bindings/unbound/reviews/missing")).status, 404);
+  } finally { await f.close(); }
+});
+
+test("architecture continuation retries queue one structured readable native message", async () => {
+  const f = await hostFixture();
+  try {
+    const agent = await f.makeAgent("decision");
+    await f.message("decision", "Original designer request");
+    const prepared = await agent.tools.get("prepare_architecture_review").execute(architecturePlan, { callId: "review" });
+    const id = prepared.architecture_review.reviewId;
+    const decided = await f.api(`/architecture-reviews/${id}/revise`, { feedback: "Use active-low reset" });
+    assert.equal(decided.status, 200);
+    assert.equal(decided.value.continuation.architecture_review_id, id);
+    assert.equal((await f.api(`/architecture-reviews/${id}/continue`, { sessionId: "foreign" })).status, 409);
+    f.durability = false;
+    assert.equal((await f.api(`/architecture-reviews/${id}/continue`, { sessionId: "decision" })).status, 409);
+    assert.equal(agent.events.length, 0);
+    assert.equal((await f.api(`/architecture-reviews/${id}`)).value.architecture_review.continuationSent, false);
+    f.durability = true;
+    const followup = agent.followup;
+    agent.followup = () => { throw new Error("Temporary native delivery failure"); };
+    assert.equal((await f.api(`/architecture-reviews/${id}/continue`, { sessionId: "decision" })).status, 409);
+    agent.followup = followup;
+    assert.equal((await f.api(`/architecture-reviews/${id}/continue`, { sessionId: "decision" })).status, 200);
+    assert.equal((await f.api(`/architecture-reviews/${id}/continue`, { sessionId: "decision" })).status, 200);
+    assert.equal(agent.events.length, 1);
+    const message = agent.events[0].data.inserted[0];
+    assert.equal(message.source.form, "notice");
+    assert.match(message.source.summary, /revised/);
+    assert.deepEqual(JSON.parse(message.content[0].text), { kind: "architecture_decision", architecture_review_id: id, decision: "revised", feedback: "Use active-low reset" });
   } finally { await f.close(); }
 });

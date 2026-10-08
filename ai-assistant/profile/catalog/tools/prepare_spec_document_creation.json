@@ -11,6 +11,9 @@
       },
       "empty": {
         "type": "boolean"
+      },
+      "document_id": {
+        "type": "string"
       }
     }
   },

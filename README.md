@@ -469,9 +469,26 @@ top-level creation or to one existing entity for focused edits. See
 
 ## Verify changes
 
-Use the fundamental tier while developing and the extensive tier before
-merging changes that affect workflows, hardware generation, or browser behavior.
-The two tiers are complementary; `all` runs each once.
+After implementation, run the local fast profile and relevant integration
+scopes. Run full regression for broad or high-risk changes and release preparation.
+
+```bash
+scripts/test-all.sh fast
+scripts/test-all.sh integration --scope spec,assistant
+scripts/test-all.sh regression
+scripts/test-all.sh regression --dry-run
+```
+
+Fast includes exactly three short live model browser checks. Full regression
+includes broader live evaluation. Use Node.js 24.2+ and set `OPENAI_API_KEY` in
+the invoking environment. Missing required prerequisites produce an incomplete
+result and nonzero exit status. Each run writes a report to a private `/tmp`
+directory; `--output` selects a new or empty directory. See
+[the software testing strategy](docs/testing-strategy.md) for scope selection,
+coverage limits, and coding-agent instructions.
+
+The legacy fundamental and extensive tiers remain available. The two tiers
+are complementary; `all` retains its legacy meaning and runs each once.
 
 ```bash
 scripts/test-all.sh fundamental       # default: fast Python and JS unit/API checks
@@ -487,7 +504,7 @@ SystemC/CIRCT tests retain their configuration-based skips. Browser dependencies
 come from Circuit Designer setup, including the Assistant's browser checks.
 Both tiers use deterministic model fixtures and require no model API key.
 See [the test-tier guide](docs/development.md#test-tiers) for selection rules,
-prerequisites, and the separately invoked owner/editor scenarios and evaluations.
+prerequisites, and separately invoked Spec service/Spec Editor scenarios and evaluations.
 
 The existing focused and full-suite commands remain available:
 

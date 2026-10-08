@@ -23,6 +23,27 @@ docs/                              current architecture and workflows
 
 ## Test tiers
 
+For implementation checks, use the local profiles described in
+[the software testing strategy](testing-strategy.md):
+
+```bash
+scripts/test-all.sh fast
+scripts/test-all.sh integration --scope spec,assistant
+scripts/test-all.sh regression
+scripts/test-all.sh regression --dry-run
+```
+
+Run fast and relevant integration profiles after implementation. Run full
+regression for broad or high-risk changes and release preparation. Fast requires
+exactly three short live model browser checks. Full regression also runs broader
+live evaluation. Set `OPENAI_API_KEY` in the invoking environment and use Node.js
+24.2+. Missing required prerequisites produce an incomplete result and nonzero
+exit status while independent checks continue. Reports use a private `/tmp`
+directory by default; `--output` selects a new or empty evidence directory.
+
+The legacy tiers below retain their previous behaviour and do not call a live
+provider. `all` retains its legacy meaning; use `regression` for the full profile.
+
 After `scripts/setup-all.sh`, run these commands from the repository root:
 
 ```bash

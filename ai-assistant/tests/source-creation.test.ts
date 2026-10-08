@@ -294,10 +294,16 @@ test("automatic creation returns a saved receipt and continuation with no confir
     let tool: any;
     registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } } } }, f.creations,
       () => ({ sourceSessionId: "chat", originalRequest: comparatorRequest, preset: "focused" }));
+    const invalid = await tool.execute({ document_id: "not a valid ID", title: "3-bit comparator", architecture_review_id: "architecture-chat" }, { callId: "invalid-id" });
+    assert.match(invalid.creation_error, /Document ID/);
+    assert.equal(f.creates, 0);
     const result = await tool.execute({ document_id: "comparator_3bit", title: "3-bit comparator", architecture_review_id: "architecture-chat" }, { callId: "automatic-call" });
     assert.ok(result.source_creation, JSON.stringify(result));
     assert.equal(result.source_creation.status, "reserved");
     assert.equal(result.source_creation.automatic, true);
+    assert.equal(result.source_creation.documentId, "comparator_3bit");
+    assert.equal(result.source_creation.title, "3-bit comparator");
+    assert.equal(result.source_creation.destination, join(f.root, "3-bit-comparator.spec"));
     assert.equal(f.creates, 1);
     assert.ok(result.source_creation.continuation.message.includes(comparatorRequest));
     const retry = await tool.execute({}, { callId: "automatic-call" });

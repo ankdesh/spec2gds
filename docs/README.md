@@ -13,6 +13,7 @@ remain in Git.
   and [documentation/code audit](documentation-code-audit.md)
 - [Service configuration](service-configuration.md) and [logging](logging.md)
 - [Sample application method](sample-apps.md)
+- [Software testing strategy and local regression profiles](testing-strategy.md)
 
 ## Specification editing and Activities
 

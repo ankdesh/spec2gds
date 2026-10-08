@@ -5,6 +5,7 @@ import { defaultInstructions, type InstructionBundle } from "../instructions.js"
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import { artifactDigest, ProductState } from "../state.js";
 import type { ServiceClients } from "../service-clients.js";
+import { decisionReview } from "../architecture-decision.js";
 import { isRecord } from "../types.js";
 export function registerArchitectureTool(
   agent: { id: string; ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } } },
@@ -57,13 +58,8 @@ export function registerArchitectureTool(
             throw new Error("Architecture review requires a fresh service context with the exact document identity and source revision.");
           }
           let originalRequest = currentRequest();
-          if (originalRequest.trim().startsWith("{")) {
-            try {
-              const decision = JSON.parse(originalRequest);
-              const previous = isRecord(decision) && typeof decision.architecture_review_id === "string" ? state.architectureReview(decision.architecture_review_id) : null;
-              if (previous?.sessionId === String(agent.id)) originalRequest = previous.originalRequest;
-            } catch { /* An ordinary user request can contain non-JSON prose. */ }
-          }
+          const previous = decisionReview(state, String(agent.id), originalRequest);
+          if (previous) originalRequest = previous.originalRequest;
           record = { reviewId: randomUUID(), sessionId: String(agent.id), callId: String(exec.callId), status: "pending",
             plan: args, digest: artifactDigest(args), originalRequest,
             documentId: binding?.documentId ?? null, serviceDocumentKey: context?.owner_document_key ?? binding?.serviceDocumentKey ?? null,

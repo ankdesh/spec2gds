@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --import tsx runner/run_scenario.ts",
-    "test:headed": "node --import tsx runner/run_scenario.ts --headed"
+    "test:headed": "node --import tsx runner/run_scenario.ts --headed",
+    "test:fixture": "node --import tsx --test runner/*.test.ts"
   },
   "dependencies": {
     "@playwright/test": "1.61.1",

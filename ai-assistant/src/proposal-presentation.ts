@@ -203,7 +203,8 @@ export function changeSummaryFor(review: ProposalReview): ProposalChangeSummary 
 export function publicReview(review: ProposalReview): PublicProposalReview {
   const { artifactDigest: _digest, ...value } = review;
   const result = isRecord(review.serviceResult) ? review.serviceResult : {};
-  return { ...value, changeSummary: changeSummaryFor(review),
+  const { preview: _preview, ...receipt } = result;
+  return { ...value, serviceResult: isRecord(review.serviceResult) ? receipt : review.serviceResult, changeSummary: changeSummaryFor(review),
     ...(typeof result.review_number === "number" ? { reviewNumber: result.review_number } : {}) };
 }
 

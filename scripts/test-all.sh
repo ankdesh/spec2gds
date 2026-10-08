@@ -5,6 +5,13 @@ set -euo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
+# Keep the legacy tiers unchanged. Profiles use a dependency-aware local runner.
+case "${1:-}" in
+  fast|integration|regression)
+    exec python3 "${PROJECT_ROOT}/scripts/test_profiles.py" "$@"
+    ;;
+esac
+
 tier="fundamental"
 dry_run=false
 browser_tests=true
@@ -19,6 +26,15 @@ for option in "$@"; do
     --help|-h)
       cat <<'HELP'
 Usage: scripts/test-all.sh [fundamental|extensive|all] [--no-browser] [--dry-run]
+       scripts/test-all.sh fast|regression [--dry-run] [--output DIRECTORY]
+       scripts/test-all.sh integration --scope spec,circuit [--dry-run] [--output DIRECTORY]
+
+fast: deterministic fundamentals and exactly three short live model browser checks.
+integration: affected real-service/API, Harness, browser and Activity checks.
+regression: full deterministic regression and broader repeated live evaluation.
+Scopes: spec, circuit, assistant, verification, activities, shared, all.
+Profiles report incomplete prerequisites as unverified and return nonzero.
+See docs/testing-strategy.md for profile selection, evidence and coding-agent rules.
 
 fundamental (default): fast Python and all Circuit/Assistant unit/API tests.
 extensive: remaining Python toolchain/CLI tests, Harness integration and browser tests.

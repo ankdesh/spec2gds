@@ -1,6 +1,7 @@
 /** Native registration consumes contracts; handlers retain service authority. */
 import { assertObjectJsonSchema, validateJsonSchemaValue, valueSchemaSpecToJsonSchema, type ToolRunContext, type ValueSchemaSpec, type JsonSchemaNode } from "@deepseek-ai/dsh-tools";
 import { defaultInstructions, type InstructionBundle } from "./instructions.js";
+import { modelProposalResult, proposalPresentation } from "./review-transport.js";
 import type { ToolName } from "./tool-arguments.js";
 
 export function nativeTool(name: ToolName, instructions: InstructionBundle = defaultInstructions, operationSchema?: ValueSchemaSpec, unavailable = false) {
@@ -13,7 +14,10 @@ export function nativeTool(name: ToolName, instructions: InstructionBundle = def
   }
   assertObjectJsonSchema(parameters);
   return { name, description: instructions.text(unavailable ? contract.unavailable!.instruction_ref : contract.instruction_ref), parameters,
-    output: { schema: contract.output_schema, render: (_args: unknown, value: unknown) => [{ type: "text" as const, text: JSON.stringify(value) }] },
+    output: { schema: contract.output_schema,
+      render: (_args: unknown, value: unknown) => [{ type: "text" as const, text: name === "prepare_spec_proposal" || name === "prepare_circuit_proposal" ? modelProposalResult(value) : JSON.stringify(value) }],
+      ...(["prepare_spec_proposal", "prepare_circuit_proposal"].includes(name) ? { presentationMeta: (_args: unknown, value: unknown) => proposalPresentation(value) } : {}),
+    },
     ...(contract.timeout_ms === undefined ? {} : { timeoutMs: contract.timeout_ms }) };
 }
 export type { ToolRunContext };

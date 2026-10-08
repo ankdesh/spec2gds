@@ -652,8 +652,8 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
         ),
     ]
     output = capsys.readouterr().out
-    assert "spec2gds server: http://design-host.test:8080" in output
-    assert "spec2gds editor: http://design-host.test:8765/editor" in output
+    assert "spec2gds Spec service: http://design-host.test:8080" in output
+    assert "spec2gds Spec Editor: http://design-host.test:8765/editor" in output
 
 
 def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path) -> None:

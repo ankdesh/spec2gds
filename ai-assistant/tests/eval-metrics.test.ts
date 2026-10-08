@@ -29,3 +29,12 @@ test("metrics count proposal retries and non-proposal clarification turns", () =
   assert.equal(metrics.retries, 1);
   assert.equal(metrics.clarificationTurns, 1);
 });
+
+test("durable metadata preserves operation metrics when model text is spilled", () => {
+  const metrics = calculateMetrics([{ type: "tool/result", data: { turn: 1,
+    meta: { kind: "spec2gds.review", version: 1, proposalId: "p", state: "ready", operationCount: 2 },
+    message: { content: [{ type: "tool-result", content: [{ type: "text", text: "Spilled text" }] }] } } }], 1);
+  assert.equal(metrics.schemaValidProposalCalls, 1);
+  assert.equal(metrics.firstPreviewReadyCases, 1);
+  assert.equal(metrics.proposedOperations, 2);
+});

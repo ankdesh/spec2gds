@@ -100,3 +100,28 @@ test("essential questions block approval and revised reviews retain original int
     assert.notEqual(second.architecture_review.reviewId,first.architecture_review.reviewId);
   }finally{state.close();rmSync(root,{recursive:true,force:true});}
 });
+
+test("structured decisions preserve selected review lineage and reject foreign or inconsistent records", async () => {
+  const root = mkdtempSync(join(tmpdir(), "architecture-decision-"));
+  const state = new ProductState(join(root, "state.sqlite3"));
+  try {
+    let tool: any, request = "Original designer intent";
+    registerArchitectureTool({ id: "source", ctx: { tools: { register(value: any) { tool = value; return () => {}; } } } }, state, {} as any, () => request);
+    const older = (await tool.execute(architecturePlan, { callId: "older" })).architecture_review;
+    request = "Another independent request";
+    const newer = (await tool.execute(architecturePlan, { callId: "newer" })).architecture_review;
+    state.decideArchitecture(older.reviewId, "revised", "Use active-low reset");
+    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: older.reviewId, decision: "revised", feedback: "Use active-low reset" });
+    const revised = (await tool.execute(architecturePlan, { callId: "revised" })).architecture_review;
+    assert.equal(revised.originalRequest, "Original designer intent");
+    assert.notEqual(revised.originalRequest, newer.originalRequest);
+    state.decideArchitecture(revised.reviewId, "revised", "Keep the interface");
+    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: revised.reviewId, decision: "revised", feedback: "Keep the interface" });
+    assert.equal((await tool.execute(architecturePlan, { callId: "again" })).architecture_review.originalRequest, "Original designer intent");
+    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: older.reviewId, decision: "approved", feedback: "" });
+    assert.match((await tool.execute(architecturePlan, { callId: "inconsistent" })).creation_error, /does not match/);
+    state.storeArchitecture({ ...older, reviewId: "foreign", sessionId: "other", status: "approved", feedback: "" });
+    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: "foreign", decision: "approved", feedback: "" });
+    assert.match((await tool.execute(architecturePlan, { callId: "foreign" })).creation_error, /does not match/);
+  } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
+});

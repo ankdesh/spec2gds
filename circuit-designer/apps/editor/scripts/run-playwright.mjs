@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const editorRoot = fileURLToPath(new URL("../", import.meta.url));
 const environment = { ...process.env };
-environment.PLAYWRIGHT_BROWSERS_PATH = fileURLToPath(
+environment.PLAYWRIGHT_BROWSERS_PATH ||= fileURLToPath(
   new URL("../../../.playwright-browsers", import.meta.url),
 );
 if (process.platform !== "win32") {

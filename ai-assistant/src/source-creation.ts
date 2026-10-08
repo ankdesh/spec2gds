@@ -71,14 +71,14 @@ export class SourceCreations {
       }
     }
     if (!input.originalRequest.trim()) throw new SourceCreationError(400, "The original designer request is unavailable. Submit the request again in this conversation.");
+    if (input.documentId !== undefined) specDestination(this.root, input.documentId.trim());
     const capabilities = await this.owners.capabilities();
     const services = capabilities.spec as Array<{ url: string; available: boolean }>;
     const selected = services.find(item => item.url === input.preferredOwner && item.available)
       ?? services.find(item => item.available) ?? services[0];
     const policy = selected ? await this.owners.specPolicy(selected.url) : { approval_policy: "review", creationReceipts: false };
     const suggested = input.documentId?.trim();
-    const documentId = suggested && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(suggested)
-      ? suggested : `spec_${randomUUID().replaceAll("-", "").slice(0, 32)}`;
+    const documentId = suggested || `spec_${randomUUID().replaceAll("-", "").slice(0, 32)}`;
     const request: SourceCreationRequest = {
       requestId: randomUUID(), sourceSessionId: input.sourceSessionId, callId: input.callId,
       originalRequest: architecture?.originalRequest || input.originalRequest, preset: input.preset, status: "pending",

@@ -371,6 +371,32 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h("div", null, h("p", null, counts), base && candidate ? h("div", { className: "s2g-diff" }, h(CircuitGraph, { document: base, diff, side: "Before" }), h(CircuitGraph, { document: candidate, diff, side: "After" })) : null);
   }
 
+  function StoredReviewCard({ reference, sessionId, callId }) {
+    const [review, setReview] = React.useState(null);
+    const [error, setError] = React.useState("");
+    const [attempt, setAttempt] = React.useState(0);
+    React.useEffect(() => {
+      let active = true;
+      setReview(null); setError("");
+      const load = async () => {
+        const id = reference?.sessionId || sessionId;
+        if (!id) throw new Error("The review conversation is unavailable.");
+        const result = reference?.proposalId
+          ? await api(`/bindings/${encodeURIComponent(id)}/reviews/${encodeURIComponent(reference.proposalId)}`)
+          : await api(`/bindings/${encodeURIComponent(id)}/reviews`);
+        const found = result.review || result.reviews?.find(item => item.callId === callId);
+        if (!found) throw new Error("No stored review matches this tool call.");
+        if (active) setReview(found);
+      };
+      void load().catch(caught => { if (active) setError(caught.message); });
+      return () => { active = false; };
+    }, [reference?.sessionId, reference?.proposalId, sessionId, callId, attempt]);
+    if (review) return h(ReviewCard, { review });
+    return h("article", { className: "s2g-review", role: error ? "alert" : "status" },
+      h("p", null, error || "Loading stored review…"),
+      error ? h("button", { onClick: () => setAttempt(value => value + 1) }, "Retry review lookup") : null);
+  }
+
   function ReviewCard({ review: initial }) {
     const [review, setReview] = React.useState(initial);
     React.useEffect(() => { setReview(initial); }, [initial.proposalId, initial.state]);
@@ -463,16 +489,17 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         .catch(caught => { if (mounted) setError(caught.message); });
       return () => { mounted = false; };
     }, [request.reviewId]);
+    async function continueDecision(review = value) {
+      const result = await api(`/architecture-reviews/${encodeURIComponent(review.reviewId)}/continue`, { sessionId: review.sessionId });
+      setValue(result.architecture_review);
+    }
     async function decide(action) {
       if (busy) return;
       setBusy(true); setError("");
       try {
         const result = await api(`/architecture-reviews/${encodeURIComponent(value.reviewId)}/${action}`, { feedback });
         setValue(result.architecture_review);
-        if (action !== "cancel") {
-          inputActions.setDraft(result.continuation);
-          queueMicrotask(() => inputActions.submit());
-        }
+        if (action !== "cancel") await continueDecision(result.architecture_review);
       } catch (caught) { setError(caught.message); }
       finally { setBusy(false); }
     }
@@ -487,6 +514,13 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           h("button", { disabled: busy, onClick: () => decide("cancel") }, "Cancel"),
           h("button", { disabled: busy, onClick: () => decide("revise") }, "Revise architecture"),
           h("button", { className: "primary", disabled: busy || Boolean(plan.open_questions?.length), onClick: () => decide("approve") }, "Approve architecture"))) : null,
+      ["approved", "revised"].includes(value.status) && !value.continuationSent
+        ? h("button", { disabled: busy, onClick: async () => {
+          setBusy(true); setError("");
+          try { await continueDecision(); } catch (caught) { setError(caught.message); } finally { setBusy(false); }
+        } }, "Retry architecture continuation") : null,
+      h("details", null, h("summary", null, "Decision details"), h("pre", null, pretty({
+        kind: "architecture_decision", architecture_review_id: value.reviewId, decision: value.status, feedback: value.feedback || "" }))),
       error ? h("p", { className: "s2g-error", role: "alert" }, error) : null);
   }
 
@@ -596,9 +630,19 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const block = match.event.data.message.content[0];
       const toolName = context.state.calls.get(callId);
       const creationTool = ["prepare_architecture_review", "prepare_spec_document_creation"].includes(toolName);
+      const reference = match.event.data.meta;
+      if (reference?.kind === "spec2gds.review" && reference.version === 1
+        && typeof reference.sessionId === "string" && typeof reference.proposalId === "string") {
+        const result = { callId, toolName, seq: match.event.seq, reviewReference: reference };
+        return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
+      }
       const value = creationTool && block?.isError
         ? { creation_error: (block.content || []).filter(item => item.type === "text").map(item => item.text).join("\n") || "Tool arguments were rejected." }
         : resultContentValue(block?.content);
+      if (!value && !creationTool && !block?.isError) {
+        const result = { callId, toolName, seq: match.event.seq, recoverCall: true };
+        return { ...context.state, results: [...context.state.results.filter(item => item.callId !== callId), result] };
+      }
       if (!value?.review && !value?.error && !value?.required_input && !value?.source_creation && !value?.creation_error && !value?.architecture_review) return context.state;
       const result = { callId, toolName, seq: match.event.seq, review: value.review || null, error: value.error || null, requiredInput: value.required_input || null,
         architectureReview: value.architecture_review || null, sourceCreation: value.source_creation || null, creationError: value.creation_error || null };
@@ -629,16 +673,18 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       earlierArchitectureReviews: [...reviews.values()] };
   }
 
-  function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation }) {
+  function ProposalReviewTail({ matched, inputActions, onContinueCreation, onOpenCreation, sessionId }) {
     if (matched.earlierArchitectureReviews?.length) return h("div", null,
       matched.earlierArchitectureReviews.map(request => h(ArchitectureReviewCard, { key: request.reviewId, request, inputActions })),
-      h(ProposalReviewTail, { matched: { ...matched, earlierArchitectureReviews: [] }, inputActions, onContinueCreation, onOpenCreation }));
+      h(ProposalReviewTail, { matched: { ...matched, earlierArchitectureReviews: [] }, inputActions, onContinueCreation, onOpenCreation, sessionId }));
     if (matched.architectureReview) return h(ArchitectureReviewCard, { key: matched.architectureReview.reviewId, request: matched.architectureReview, inputActions });
     if (matched.sourceCreation) return h(SourceCreationCard, { key: matched.sourceCreation.requestId, request: matched.sourceCreation, onContinue: onContinueCreation, onOpen: onOpenCreation });
     if (matched.creationError) return h("article", { className: "s2g-review", role: "alert" },
       h("h4", null, matched.toolName === "prepare_architecture_review" ? "Architecture review could not be prepared" : "Spec creation unavailable"),
       h("p", { className: "s2g-error" }, matched.creationError),
       matched.blocked ? h("p", null, "The turn stopped before this request completed. Correct the reported fields before retrying.") : null);
+    if (matched.reviewReference || matched.recoverCall) return h(StoredReviewCard, {
+      reference: matched.reviewReference, sessionId, callId: matched.callId });
     if (matched.review) return h(ReviewCard, { review: matched.review });
     if (matched.requiredInput) return h(ProposalInputCard, { request: matched.requiredInput, inputActions });
     return h(ProposalErrorCard, { error: matched.error });
@@ -905,8 +951,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     React.useEffect(() => {
       let disposed = false;
       const refresh = async () => {
-        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
-        catch { /* An unbound chat has no source label. */ }
+        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}?optional=true`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
+        catch { /* Retain the source label while the lookup is unavailable. */ }
       };
       void refresh(); const timer = setInterval(() => void refresh(), 15000);
       return () => { disposed = true; clearInterval(timer); };
