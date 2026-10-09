@@ -1,6 +1,6 @@
-/** Spec Editor host: coherent owner views, drafts, menus and service launches.
+/** Spec Editor host: coherent Spec service views, drafts, menus and service launches.
  * The visible document and a permanently bound Assistant package are distinct.
- * Owner events invalidate projections; request ordering prevents a late response
+ * Spec service events invalidate projections; request ordering prevents a late response
  * for an older selection/revision from replacing the current view. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -32,6 +32,7 @@ import {
 } from "@spec2gds/document-core";
 
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
+import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
 import { browserRandomUuid } from "@spec2gds/circuit-app-react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
 
@@ -109,7 +110,9 @@ export default function App() {
       if (epoch !== documentEpoch.current || key !== activeKey.current) return;
       throw caught;
     }
-    if (request !== viewRequest.current || epoch !== documentEpoch.current || key !== activeKey.current) return;
+    if (!acceptsView({ request, epoch, key }, {
+      request: viewRequest.current, epoch: documentEpoch.current, key: activeKey.current,
+    })) return;
     eventCursor.current = next.event_cursor;
     setViewCursor(next.event_cursor);
     setApprovalPolicy(next.approval_policy);
@@ -133,12 +136,10 @@ export default function App() {
   const editingChanged = useCallback((value: boolean) => {
     editing.current = value;
     setInlineEditActive(value);
-    if (value) {
-      draftRevision.current = currentRevision.current;
-      reviewedRevision.current = null;
-    } else {
-      draftRevision.current = null;
-      reviewedRevision.current = null;
+    const revisions = draftRevisions(value, currentRevision.current);
+    draftRevision.current = revisions.draft;
+    reviewedRevision.current = revisions.reviewed;
+    if (!value) {
       setReviewSource(null);
       void loadView().catch(caught => setError(String(caught)));
     }
@@ -517,7 +518,7 @@ export default function App() {
     const epoch = documentEpoch.current;
     const key = snapshot.owner_document_key;
     try {
-      const base = reviewedRevision.current ?? draftRevision.current ?? snapshot.source_revision_hash;
+      const base = saveBaseRevision(reviewedRevision.current, draftRevision.current, snapshot.source_revision_hash);
       const result = await client.applyTransaction(base, operations);
       if (epoch !== documentEpoch.current || key !== activeKey.current) return;
       ++viewRequest.current;

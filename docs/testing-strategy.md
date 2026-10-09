@@ -35,7 +35,8 @@ Prioritise source integrity, atomic changes, revision control, approval rules,
 and separation between Spec and Circuit domains. During detailed test design,
 use state-transition, boundary-value, negative-input, and property-based methods
 where they fit the risk. Use exploratory review for usability and unexpected
-behaviour. Individual cases for coverage gaps need a separate detailed plan.
+behaviour. See [the coverage matrix](test-coverage-matrix.md) for implemented
+flows, local rules, conditional checks and known failures.
 
 ## Local commands
 
@@ -52,6 +53,7 @@ scripts/test-all.sh integration --scope spec,assistant
 scripts/test-all.sh regression
 scripts/test-all.sh regression --dry-run
 scripts/test-all.sh fast --output /tmp/spec2gds-fast-evidence
+scripts/test-all.sh integration --scope spec --coverage
 ```
 
 `--output` must identify a new or empty directory. The default is a private
@@ -62,8 +64,8 @@ previous selection and behaviour; `all` is not the new full regression profile.
 
 | Profile | Required checks |
 | --- | --- |
-| `fast` | Fast Python suites, Circuit Designer and Assistant units, scenario-runner units, schema consistency, required builds, and exactly three short live model end-to-end checks |
-| `integration` | Selected service/API suites, interface consumers, Harness checks, relevant fixture-browser suites, and real-service flows; hardware checks for the Activities scope |
+| `fast` | Fast Python suites, Circuit Designer and Assistant units, scenario-runner units, schema consistency, required builds, two deterministic real-service Spec Editor smoke flows, and exactly three short live model end-to-end checks |
+| `integration` | Selected service/API suites, interface consumers, Harness checks, fixture browsers and real-service Playwright projects for Spec Editor, Circuit Designer, AI Assistant and Verification Planner; hardware checks for the Activities scope |
 | `regression` | All fast checks once, remaining Python CLI and hardware suites, all browser suites, real-service scenarios, Spec/Circuit save-back, catalogue validation, and repeated live RTL evaluation |
 
 Scopes are `spec`, `circuit`, `assistant`, `verification`, `activities`, `shared`,
@@ -103,16 +105,17 @@ cannot substitute for live execution or semantic assertions.
 ## Current coverage inventory
 
 This is a map of evidence sources, not a claim that every capability is tested.
-Detailed case coverage, fixtures, and thresholds remain a separate design phase.
+Use the capability matrix and each run's report for case coverage and unresolved
+results. No fixed percentage is required for acceptance.
 
 | Subsystem | Existing evidence | Main risks and remaining gaps |
 | --- | --- | --- |
-| Spec service and `.spec` format | Python model, archive, API, transaction, projection, and refinement suites | Source integrity, compatibility, atomic changes, and binding boundaries; large-input measurements need design |
-| Spec Editor and shared document packages | Vitest component suites and fixture-backed Playwright suite | Interaction and truthful UI state; visual baselines and measured accessibility remain gaps |
+| Spec service and `.spec` format | Python model/archive suites and HTTP request, transaction, projection, refinement and SDK handoff checks | Source integrity, compatibility, atomic changes and binding boundaries; large-input measurements remain separate |
+| Spec Editor and shared document packages | Focused revision/port units, fixture browser checks and real-service browser flows | Save/reopen, conflicts, hidden source, keyboard access and events; selected-path and running-job UI failures remain visible |
 | Circuit Designer and Circuit service | Package units, service/client tests, browser suite, and real Spec save-back flow | Projection, temporary drafts, source authority, and topology/layout separation |
 | AI Assistant and Harness | Units, native integration, fixture browsers, real-service scenarios, three live checks, and repeated live RTL evaluation | Approval and binding rules, model outcomes, completion claims; Assistant catalogue requests are not all executed and full native-shell coverage remains partial |
-| Verification Planner | Python acceptance suites for source/plan authoring, evidence, checkpoints, and recipes | Snapshot identity and durable review state; complete browser coverage remains a gap |
-| Activities and importers | SDK/preflight, scratch-directory, RTL, SystemC, and document-import suites | Deterministic execution and source boundaries; optional toolchains and import dependencies limit available coverage |
+| Verification Planner | Python acceptance and real-browser authoring, evidence, checkpoint, bundle and recipe suites | Snapshot identity and durable review state; sample creation and browser export failures remain visible |
+| Activities and importers | SDK/preflight, controlled browser jobs, restart, scratch-directory, RTL, SystemC and real-import cases | Deterministic execution and source boundaries; missing Docling/toolchains leave relevant checks unverified |
 | Shared infrastructure | Service registry, observability, terminology, runner tests, and generated-contract checks | Configuration, failure propagation, process isolation, and compatibility |
 
 System-wide performance thresholds, resilience measurements, automated visual
@@ -139,8 +142,10 @@ map when evidence is added. Do not infer coverage from a filename or a pass coun
 - For each confirmed defect, add protection at the lowest effective layer. Add
   browser protection when the fault depends on browser behaviour.
 
-Each run presents `summary.html`, a standalone report with tables for check names,
-results, times, and plain-language explanations. The report updates as checks
+Each run presents `summary.html`, a standalone report with tables for check groups,
+individual recorded behaviours, capability coverage, results, times and known
+failures. `--coverage` adds line and branch diagnostics for supported unit/service
+suites without selecting extra functional checks. The report updates as checks
 finish. It contains no commands, source hashes, stack traces, or raw metadata.
 The final console message links to this HTML report. `summary.json` remains
 available for automated diagnostics, with per-suite `command.log` files. Python suites

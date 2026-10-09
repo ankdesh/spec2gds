@@ -1,4 +1,4 @@
-/** Render the owner-produced specification projection and inline editing surfaces.
+/** Render the Spec service projection and inline editing surfaces.
  * Draft text retains the revision it was authored against. A newer live view
  * must not overwrite it or restamp its save; the host must resolve a stale edit.
  * Source paths and semantic IDs come from the projection, not DOM layout. */
@@ -30,6 +30,7 @@ import {
   type PersistedEntitySectionType,
 } from "./section-registry";
 import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
+import { portInputFromRow, rowText } from "./port-input";
 export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./section-registry";
 
 import type {
@@ -1306,51 +1307,10 @@ export function DocumentTableView({
   );
 }
 
-function rowText(row: DocumentTable["rows"][number], key: string): string {
-  const value = row.cells[key]?.value;
-  return value === null || value === undefined ? "" : String(value);
-}
-
 type PortFamily = ComponentPortInput["family"];
 
 function titleCase(value: string): string {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
-}
-
-function portInputFromRow(row: DocumentTable["rows"][number]): ComponentPortInput {
-  const name = rowText(row, "name");
-  const display_name = rowText(row, "display_name");
-  const description = rowText(row, "description");
-  const family = rowText(row, "family") as PortFamily;
-  if (family === "transactional") {
-    return {
-      name,
-      family,
-      display_name,
-      description,
-      initiative: rowText(row, "initiative") as Extract<ComponentPortInput, { family: "transactional" }>["initiative"],
-      kind: (rowText(row, "transaction_kind") || null) as TransactionalPortKind | null,
-      custom_kind: rowText(row, "custom_kind") || null,
-      bus_width: rowText(row, "bus_width") || null,
-    };
-  }
-  if (family === "structured") {
-    return {
-      name,
-      family,
-      display_name,
-      description,
-      direction: rowText(row, "direction") as Extract<ComponentPortInput, { family: "structured" }>["direction"],
-    };
-  }
-  return {
-    name,
-    family: "wire",
-    display_name,
-    description,
-    direction: rowText(row, "direction") as Extract<ComponentPortInput, { family: "wire" }>["direction"],
-    range: rowText(row, "range") || null,
-  };
 }
 
 const PORT_FAMILY_BY_MODE: Partial<Record<SectionEditMode, PortFamily>> = {

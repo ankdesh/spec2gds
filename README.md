@@ -477,15 +477,21 @@ scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,assistant
 scripts/test-all.sh regression
 scripts/test-all.sh regression --dry-run
+scripts/test-all.sh integration --scope spec --coverage
 ```
 
-Fast includes exactly three short live model browser checks. Full regression
+Fast includes two deterministic real-service Spec Editor smoke flows and exactly
+three short live model browser checks. Full regression
 includes broader live evaluation. Use Node.js 24.2+ and set `OPENAI_API_KEY` in
 the invoking environment. Missing required prerequisites produce an incomplete
 result and nonzero exit status. Each run writes a report to a private `/tmp`
 directory; `--output` selects a new or empty directory. See
 [the software testing strategy](docs/testing-strategy.md) for scope selection,
 coverage limits, and coding-agent instructions.
+See [the capability coverage matrix](docs/test-coverage-matrix.md) for the maintained
+flows, smaller local checks, conditional imports and known failures. The HTML
+report distinguishes individual behaviours, capabilities and optional code
+coverage diagnostics.
 
 The legacy fundamental and extensive tiers remain available. The two tiers
 are complementary; `all` retains its legacy meaning and runs each once.

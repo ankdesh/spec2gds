@@ -92,3 +92,28 @@ def test_report_writer_redacts_secrets_and_generates_both_formats(tmp_path):
         contents = (tmp_path / filename).read_text()
         assert "private-report-key" not in contents
         assert "[REDACTED]" in contents
+
+
+def test_capability_case_and_measurement_tables_keep_limits_and_escape_names(tmp_path):
+    html = render_report({"profile": "integration", "capability_matrix": True, "suites": [
+        {"id": "e2e-spec", "status": "passed", "evidence": "real-services", "cases": [
+            {"name": "@smoke creates a Component <script>unsafe</script>", "status": "passed", "duration_seconds": 1},
+        ], "code_coverage": [{"name": "Spec service", "lines": 70, "branches": None, "note": "Untested source included."}]},
+    ]}, tmp_path)
+    content = report_content(html)
+    assert "script" not in content.tags
+    assert content.tags.count("table") == 5
+    assert "Capability coverage" in html and "Individual checks" in html
+    assert "Code coverage diagnostics" in html and "Not measured" in html
+    assert "Some mapped behaviours did not run" in html
+    assert "@smoke" not in html
+
+
+def test_individual_case_labels_omit_diagnostic_parameter_values(tmp_path):
+    html = render_report({"profile": "fast", "suites": [{
+        "id": "python-fast", "status": "passed", "cases": [
+            {"name": "test_source_integrity[sha256:private-diagnostic-hash]", "status": "passed"},
+        ],
+    }]}, tmp_path)
+    assert "source integrity" in html
+    assert "private-diagnostic-hash" not in html

@@ -30,6 +30,7 @@ document-import = [
 
 [dependency-groups]
 dev = [
+    "coverage[toml]>=7.10,<8",
     "ruff>=0.12.0",
     "vulture>=2.14",
 ]

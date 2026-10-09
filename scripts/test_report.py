@@ -6,6 +6,11 @@ import re
 from html import escape
 from pathlib import Path
 
+if __package__:
+    from .test_capabilities import capability_results
+else:
+    from test_capabilities import capability_results
+
 CHECK_NAMES = {
     "python-fast": "Spec service and Verification Planner checks",
     "circuit-units": "Circuit Designer package checks",
@@ -38,6 +43,11 @@ CHECK_NAMES = {
     "live-restricted-description": "Live model: save after restricted approval",
     "live-generalization": "Live model: hardware behaviour evaluation",
     "evaluation-catalogue": "Evaluation catalogue consistency",
+    "spec-smoke": "Spec Editor: two deterministic smoke flows",
+    "e2e-spec": "Spec Editor with the real Spec service",
+    "e2e-circuit": "Circuit Designer with real Spec and Circuit services",
+    "e2e-assistant": "AI Assistant: large native proposals",
+    "e2e-verification": "Verification Planner with real storage",
 }
 
 SCOPE_NAMES = {
@@ -104,6 +114,8 @@ def outcome_details(suite: dict, output: Path) -> str:
         return "The check reached its time limit before it completed."
     if "evidence report" in reason:
         return "The check did not produce a complete results report."
+    if "interrupted" in reason.lower():
+        return "The run was interrupted. Completed failures remain recorded; remaining checks are unverified."
     id = suite.get("id", "")
     log = ""
     if re.fullmatch(r"[a-z0-9-]+", id):
@@ -136,9 +148,15 @@ def render_report(report: dict, output: Path) -> str:
     scopes = report.get("scopes", [])
     coverage = "Full environment" if set(scopes) == set(SCOPE_NAMES) else ", ".join(
         SCOPE_NAMES.get(scope, scope.replace("-", " ").capitalize()) for scope in scopes)
-    summary = [("Overall result", status_name), ("Checks listed", str(len(suites))),
-               ("Passed", str(counts["passed"])), ("Failed", str(counts["failed"])),
-               ("Not run", str(counts["unverified"])), ("Total check time", duration_text(elapsed))]
+    summary = [("Overall result", status_name), ("Check groups listed", str(len(suites))),
+               ("Passed groups", str(counts["passed"])), ("Failed groups", str(counts["failed"])),
+               ("Groups not run", str(counts["unverified"])), ("Total check time", duration_text(elapsed))]
+    cases = [case for suite in suites for case in suite.get("cases", [])]
+    if cases:
+        summary.extend([("Individual checks recorded", str(len(cases))),
+                        ("Passed individual checks", str(sum(case["status"] == "passed" for case in cases))),
+                        ("Failed individual checks", str(sum(case["status"] == "failed" for case in cases))),
+                        ("Individual checks not run", str(sum(case["status"] == "unverified" for case in cases)))])
     if coverage:
         summary.append(("Coverage selected", coverage))
     summary_rows = "".join(f"<tr><th scope=\"row\">{escape(name)}</th><td>{escape(value)}</td></tr>"
@@ -156,13 +174,14 @@ def render_report(report: dict, output: Path) -> str:
     if not rows:
         rows.append('<tr><td colspan="4">The run has started. Results will appear as checks finish.</td></tr>')
     note = ""
-    if counts["unverified"]:
-        note = "<p class=\"notice\">Checks that did not run have no confirmed result. This run is incomplete.</p>"
+    if counts["unverified"] or report.get("incomplete"):
+        note = "<p class=\"notice\">Some required checks or requested measurements remain unverified. This run is incomplete.</p>"
     gaps = report.get("coverage_gaps", [])
     limits = ""
     if gaps:
         items = "".join(f"<li>{escape(gap[:1].upper() + gap[1:])}</li>" for gap in gaps)
         limits = f'<section><h2>Coverage still to add</h2><ul>{items}</ul></section>'
+    details = render_details(report, suites)
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(profile)} test results · spec2gds</title>
@@ -192,5 +211,47 @@ footer {{ margin-top: 28px; color: #53677b; font-size: 14px; }}
 <section aria-labelledby="checks-heading"><h2 id="checks-heading">Check results</h2><div class="table-scroll">
 <table class="checks" aria-label="Check results"><thead><tr><th scope="col">Check</th><th scope="col">Result</th>
 <th scope="col">Time</th><th scope="col">Details</th></tr></thead><tbody>{''.join(rows)}</tbody></table></div></section>
-{limits}<footer>Results apply only to the checks listed above. Checks that did not run are not counted as passed.</footer>
+{details}{limits}<footer>Results apply only to the checks listed above. Checks that did not run are not counted as passed.</footer>
 </main></body></html>'''
+
+
+def detail_table(title: str, headings: list[str], rows: list[list[str]]) -> str:
+    header = "".join(f'<th scope="col">{escape(value)}</th>' for value in headings)
+    body = "".join('<tr>' + "".join(f'<td>{escape(value)}</td>' for value in row) + '</tr>' for row in rows)
+    return (f'<section><h2>{escape(title)}</h2><div class="table-scroll"><table>'
+            f'<thead><tr>{header}</tr></thead><tbody>{body}</tbody></table></div></section>')
+
+
+def render_details(report: dict, suites: list[dict]) -> str:
+    sections = []
+    if report.get("capability_matrix"):
+        rows = [[row["name"], STATUS_NAMES[row["status"]], row["note"]]
+                for row in capability_results(suites)]
+        sections.append('<p>Only executed checks verify capabilities. Unselected and skipped behaviours remain unverified.</p>')
+        sections.append(detail_table("Capability coverage", ["Capability and tested behaviour", "Result", "Explanation"], rows))
+    cases, measurements = [], []
+    for suite in suites:
+        for case in suite.get("cases", []):
+            name = re.sub(r"\[.*\]$", "", re.sub(r"^test_", "", case["name"]))
+            name = name.replace("_", " ").removeprefix("@smoke ")
+            evidence = ("Real services; scripted model" if "fixture-model" in suite.get("evidence", "") else
+                        "Live model and real services" if "live-model" in suite.get("evidence", "") else
+                        "Real services" if suite.get("evidence") == "real-services" else "Isolated service or local check")
+            explanation = case.get("explanation") or {
+                "passed": "Expected result confirmed.",
+                "failed": "Expected result not confirmed.",
+                "unverified": "This check did not complete; no successful result is claimed.",
+            }.get(case["status"], "No confirmed result.")
+            cases.append([name, evidence, STATUS_NAMES.get(case["status"], "Unknown"), duration_text(case.get("duration_seconds")), explanation])
+        for row in suite.get("code_coverage", []):
+            values = ["Not measured" if row.get(key) is None else f'{row[key]}%' for key in ("lines", "branches")]
+            measurements.append([row["name"], CHECK_NAMES.get(suite["id"], "Selected checks"), *values, row["note"]])
+    if cases:
+        sections.append(detail_table("Individual checks", ["Behaviour", "Evidence", "Result", "Time", "Explanation"], cases))
+    if measurements:
+        sections.append('<p>Each coverage row measures one set of checks. No complete functional or environment-wide percentage is claimed.</p>')
+        sections.append(detail_table("Code coverage diagnostics", ["Subsystem", "Measured checks", "Lines", "Branches", "Limits"], measurements))
+    if report.get("known_failures"):
+        sections.append(detail_table("Known failures tracked separately", ["Issue", "Result policy"],
+                                     [[issue, "Keep the executed result. Do not retry or weaken assertions."] for issue in report["known_failures"]]))
+    return "".join(sections)

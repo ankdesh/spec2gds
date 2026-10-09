@@ -24,8 +24,10 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 if __package__:
+    from .test_coverage import collect, instrument
     from .test_report import render_report
 else:
+    from test_coverage import collect, instrument
     from test_report import render_report
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,7 +96,7 @@ def suite_catalogue() -> dict[str, Suite]:
     python("shared-api", ["tests/test_service_registry.py", "tests/test_observability.py",
                            "tests/test_log_viewer.py", "tests/test_terminology_compatibility.py",
                            "tests/test_test_tiers.py", "tests/test_test_profiles.py",
-                           "tests/test_test_report.py"], ["shared"])
+                           "tests/test_test_report.py", "tests/test_test_coverage.py"], ["shared"])
     for package in ("service", "client-http"):
         add(f"circuit-{package}-api", ["npm", "run", "test", "--workspace",
                                       f"@spec2gds/circuit-{package}"], ["spec", "circuit"],
@@ -119,6 +121,19 @@ def suite_catalogue() -> dict[str, Suite]:
             ["spec", "assistant", "activities"], "end-to-end", "real-services/fixture-model",
             dependencies=("build-assistant", "build-circuit"),
             requirements=("python", "browser", "harness", "scenarios"), timeout=600)
+    for project, scopes, deps in (
+        ("spec", ["spec"], ("build-circuit",)),
+        ("circuit", ["spec", "circuit"], ("build-circuit",)),
+        ("assistant", ["spec", "assistant"], ("build-assistant", "build-circuit")),
+        ("verification", ["spec", "verification", "activities"], ()),
+    ):
+        add(f"e2e-{project}", ["npm", "run", "test:e2e", "--", "--project", project],
+            scopes, "end-to-end", "real-services/fixture-model" if project == "assistant" else "real-services",
+            cwd="tests/ui-scenarios", dependencies=deps,
+            requirements=("python", "browser", "scenarios", *(("harness",) if project == "assistant" else ())), timeout=1200)
+    add("spec-smoke", ["npm", "run", "test:e2e", "--", "--project", "spec", "--grep", "@smoke"],
+        ["spec"], "end-to-end", "real-services", cwd="tests/ui-scenarios",
+        dependencies=("build-circuit",), requirements=("python", "browser", "scenarios"), timeout=300)
     # The presentation flow also starts Circuit service/UI and saves back to Spec.
     add("spec-circuit-flow", ["bash", "tests/ui-scenarios/run-test.sh", "--scenario", "automatic",
                               "--presentation", "--output", "{output}"], ["spec", "circuit"],
@@ -148,11 +163,13 @@ def select_suites(profile: str, scopes: set[str]) -> list[Suite]:
     fundamentals = ["python-fast", "circuit-units", "assistant-units", "scenario-units", "schema-check"]
     live = [f"live-{case}" for case in SMOKE_CASES]
     if profile == "fast":
-        selected = fundamentals + live
+        selected = fundamentals + ["spec-smoke"] + live
     elif profile == "regression":
         selected = fundamentals + ["python-extensive", "hardware-extensive", "harness", "spec-browser", "circuit-browser",
                                    "assistant-browser", "evaluation-catalogue", "spec-circuit-flow"]
-        selected += [f"scenario-{scenario}" for scenario in SCENARIOS] + live + ["live-generalization"]
+        selected += [f"scenario-{scenario}" for scenario in SCENARIOS]
+        selected += [f"e2e-{project}" for project in ("spec", "circuit", "assistant", "verification")]
+        selected += live + ["live-generalization"]
     else:
         if "shared" in scopes:
             scopes = SCOPES.copy()
@@ -160,6 +177,7 @@ def select_suites(profile: str, scopes: set[str]) -> list[Suite]:
                       "circuit-service-api", "circuit-client-http-api", "schema-check", "harness",
                       "spec-browser", "circuit-browser", "assistant-browser", "spec-circuit-flow"]
         candidates += [f"scenario-{scenario}" for scenario in SCENARIOS]
+        candidates += [f"e2e-{project}" for project in ("spec", "circuit", "assistant", "verification")]
         if "activities" in scopes:
             candidates.append("hardware-extensive")
         if scopes.intersection({"spec", "assistant"}):
@@ -295,6 +313,13 @@ def stop_process(process: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         os.killpg(process.pid, signal.SIGKILL)
         process.wait()
+    finally:
+        # npm/uv wrappers can exit before descendants finish. The group belongs
+        # to this command; remove surviving members without touching other servers.
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
 
 
 def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
@@ -307,6 +332,10 @@ def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
     raw_log = destination / ".command.raw"
     command_env = dict(env)
     command_env["SPEC2GDS_TEST_OUTPUT_DIR"] = str(destination / "playwright")
+    coverage_kind = None
+    if env.get("SPEC2GDS_TEST_COVERAGE") == "1":
+        command, coverage_kind = instrument(command, suite.id, destination, command_env, ROOT)
+        result["command"] = command
     if suite.evidence in {"isolated", "generated-contract", "catalogued-only"}:
         # Unit/API fixtures control their own registry. Browser configuration
         # must not change the tracked-default contract that those suites verify.
@@ -342,11 +371,42 @@ def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
     if junit.exists():
         try:
             skipped = [item.attrib for item in ET.parse(junit).iter("skipped")]
+            result["cases"] = [{"name": item.get("name", "Additional check"),
+                                "status": "failed" if item.find("failure") is not None or item.find("error") is not None else
+                                "unverified" if item.find("skipped") is not None else "passed",
+                                "duration_seconds": float(item.get("time", 0))}
+                               for item in ET.parse(junit).iter("testcase")]
             result["skipped"] = skipped
             if skipped:
                 result["coverage_note"] = "Skipped checks are outside the executed coverage; see pytest.xml."
-        except ET.ParseError:
+        except (ET.ParseError, ValueError):
             result.update(status="failed", reason="The Python evidence report is incomplete or malformed.")
+    playwright = destination / "playwright/results.json"
+    if playwright.exists():
+        try:
+            def browser_cases(node):
+                for spec in node.get("specs", []):
+                    for test in spec.get("tests", []):
+                        runs = test.get("results", [])
+                        status = runs[-1].get("status") if runs else "skipped"
+                        yield {"name": spec["title"], "status": "passed" if status == "passed" else
+                               "unverified" if status in {"skipped", "interrupted"} else "failed",
+                               "explanation": "Docling is unavailable; real document import remains unverified."
+                               if status == "skipped" and any("Docling" in item.get("description", "")
+                                   for item in test.get("annotations", [])) else "",
+                               "duration_seconds": sum(run.get("duration", 0) for run in runs) / 1000}
+                for child in node.get("suites", []):
+                    yield from browser_cases(child)
+            result["cases"] = list(browser_cases(json.loads(playwright.read_text())))
+            result["skipped"] = [{"message": case["name"]} for case in result["cases"] if case["status"] == "unverified"]
+        except (ValueError, KeyError, TypeError):
+            result.update(status="failed", reason="The browser evidence report is incomplete or malformed.")
+    if suite.id.startswith("e2e-") or suite.id == "spec-smoke":
+        if not result.get("cases") and result["status"] == "passed":
+            result.update(status="failed", reason="The browser evidence report is incomplete or malformed.")
+    if result["status"] == "passed" and any(case["status"] == "failed" for case in result.get("cases", [])):
+        result.update(status="failed", reason="The evidence contains a failed check.")
+    result["code_coverage"] = collect(coverage_kind, destination, ROOT, command_env)
     return result
 
 
@@ -377,13 +437,14 @@ def execute(suites: list[Suite], output: Path, env: dict[str, str], report: dict
         report["status"] = "running"
         write_reports(report, output, env)
     states = {outcome["status"] for outcome in outcomes.values()}
-    report["status"] = "failed" if "failed" in states else "incomplete" if "unverified" in states else "passed"
-    report["incomplete"] = "unverified" in states
+    measurement_missing = any(row.get("status") == "unverified" for outcome in outcomes.values() for row in outcome.get("code_coverage", []))
+    report["status"] = "failed" if "failed" in states else "incomplete" if "unverified" in states or measurement_missing else "passed"
+    report["incomplete"] = "unverified" in states or measurement_missing
     report["counts"] = {state: sum(item["status"] == state for item in outcomes.values())
                         for state in ("passed", "failed", "unverified")}
     write_reports(report, output, env)
     print(f"{report['profile']}: {report['status']}. Report: {output / 'summary.html'}", flush=True)
-    return 130 if interrupted else 1 if states != {"passed"} else 0
+    return 130 if interrupted else 1 if states != {"passed"} or measurement_missing else 0
 
 
 def write_reports(report: dict, output: Path, env: dict[str, str]) -> None:
@@ -399,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("profile", choices=("fast", "integration", "regression"))
     parser.add_argument("--scope", default="all", help="Comma-separated integration scopes; default: all.")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--coverage", action="store_true", help="Measure selected unit/service checks; do not select extra checks.")
     parser.add_argument("--output", type=Path, help="New, empty report directory; default: private /tmp directory.")
     args = parser.parse_args(argv)
     scopes = set(args.scope.split(","))
@@ -420,6 +482,8 @@ def main(argv: list[str] | None = None) -> int:
     output.chmod(0o700)
     env = isolated_environment(output, allocate_ports=any(
         suite.id in {"spec-browser", "circuit-browser"} for suite in suites))
+    if args.coverage:
+        env["SPEC2GDS_TEST_COVERAGE"] = "1"
     env.setdefault("OPENAI_MODEL", "gpt-4o-mini")
     env.setdefault("OPENAI_BASE_URL", "https://api.openai.com/v1")
     endpoint = urlsplit(env.get("OPENAI_BASE_URL", "https://api.openai.com/v1"))
@@ -439,9 +503,27 @@ def main(argv: list[str] | None = None) -> int:
                         "smoke_step_limit": 6, "smoke_output_token_limit": 4096},
               "optional_toolchains": {name: "configured" if env.get(name) else "not configured; not claimed"
                                       for name in ("SYSTEMC_PREFIX", "CIRCT_PREFIX")},
-              "coverage_gaps": ["Verification Planner browser flows", "automated visual baselines",
+              "capability_matrix": True,
+              "known_failures": [
+                  "Previously observed live wire-range saving timeout; retain the current live result without retries.",
+                  "Previously observed Circuit Designer keyboard focus and SVG export failures; retain the current browser result.",
+                  "Spec Editor New Spec derives a destination from its name; the existing-destination rejection case exposes the selected-path mismatch.",
+                  "Spec Editor document views omit running Activity jobs, so the browser cancellation case cannot reach Cancel.",
+                  "Verification Planner sample creation does not supply an imported source snapshot.",
+                  "Verification Planner browser export sends GET to the POST-only export interface.",
+              ],
+              "coverage_gaps": ["automated visual baselines",
                                 "system-wide performance and accessibility thresholds"], "suites": []}
-    return execute(suites, output, env, report)
+    previous_handler = signal.getsignal(signal.SIGTERM)
+
+    def terminate_run(_number, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, terminate_run)
+    try:
+        return execute(suites, output, env, report)
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
 
 
 if __name__ == "__main__":

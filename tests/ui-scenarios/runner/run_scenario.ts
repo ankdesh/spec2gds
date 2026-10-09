@@ -65,14 +65,15 @@ function start(name: string, command: string, argv: string[], cwd: string, env: 
   child.on("exit", () => log.end()); return child;
 }
 async function stop(child: ChildProcess): Promise<void> {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
-  const exited = once(child, "exit");
+  if (!child.pid) return;
   const signal = (value: NodeJS.Signals) => {
     try { if (process.platform === "win32") child.kill(value); else process.kill(-child.pid!, value); }
     catch (error: any) { if (error.code !== "ESRCH") throw error; }
   };
+  if (child.exitCode !== null || child.signalCode !== null) { signal("SIGKILL"); children.delete(child); return; }
+  const exited = once(child, "exit");
   signal("SIGTERM"); const timer = setTimeout(() => signal("SIGKILL"), 5_000);
-  try { await exited; } finally { clearTimeout(timer); children.delete(child); }
+  try { await exited; } finally { clearTimeout(timer); signal("SIGKILL"); children.delete(child); }
 }
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
   stopping = true; void Promise.all([...children].map(stop)).finally(() => { process.exitCode = 1; });

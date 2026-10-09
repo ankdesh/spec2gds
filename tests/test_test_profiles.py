@@ -43,6 +43,103 @@ def test_combined_scope_is_the_union_without_duplicate_builds():
     assert len(combined) == len(expected)
 
 
+def test_new_browser_projects_and_fast_smoke_are_selected_without_duplicate_execution():
+    fast = {suite.id for suite in runner.select_suites("fast", runner.SCOPES)}
+    regression = {suite.id for suite in runner.select_suites("regression", runner.SCOPES)}
+    assert "spec-smoke" in fast and "e2e-spec" not in fast
+    assert "spec-smoke" not in regression
+    assert {"e2e-spec", "e2e-circuit", "e2e-assistant", "e2e-verification"} <= regression
+    ordered = [suite.id for suite in runner.select_suites("regression", runner.SCOPES)]
+    assert all(ordered.index(f"e2e-{project}") < ordered.index("live-generalization")
+               for project in ("spec", "circuit", "assistant", "verification"))
+    verification = {suite.id for suite in runner.select_suites("integration", {"verification"})}
+    assert "e2e-verification" in verification and "e2e-assistant" not in verification
+    smoke = runner.suite_catalogue()["spec-smoke"]
+    assert smoke.command[-2:] == ("--grep", "@smoke")
+
+
+def test_coverage_dry_run_preserves_selection_and_does_not_write(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(runner.subprocess, "run", lambda *a, **k: pytest.fail("Executed a command"))
+    output = tmp_path / "coverage"
+    assert runner.main(["fast", "--coverage", "--dry-run", "--output", str(output)]) == 0
+    assert not output.exists()
+    assert "spec-smoke" in capsys.readouterr().out
+
+
+def test_junit_failed_case_cannot_be_hidden_by_a_successful_process(tmp_path):
+    (tmp_path / "pytest.xml").write_text('<testsuite><testcase name="atomic rollback" time="0.1"><failure /></testcase></testsuite>')
+    result = runner.run_suite(command_suite("evidence", "pass"), tmp_path, dict(os.environ))
+    assert result["status"] == "failed"
+    assert result["cases"][0]["status"] == "failed"
+
+
+def test_browser_skipped_cases_are_unverified_and_recorded_per_case(tmp_path):
+    evidence = tmp_path / "playwright"
+    evidence.mkdir()
+    (evidence / "results.json").write_text(json.dumps({"suites": [{"specs": [
+        {"title": "saved source", "tests": [{"results": [{"status": "passed", "duration": 100}]}]},
+        {"title": "missing tool", "tests": [{"annotations": [{"type": "skip", "description": "Docling unavailable"}],
+                                               "results": [{"status": "skipped", "duration": 0}]}]},
+    ]}]}))
+    result = runner.run_suite(command_suite("e2e-spec", "pass"), tmp_path, dict(os.environ))
+    assert [case["status"] for case in result["cases"]] == ["passed", "unverified"]
+    assert "Docling is unavailable" in result["cases"][1]["explanation"]
+    page = runner.render_report({"profile": "integration", "suites": [result]}, tmp_path)
+    assert "Docling is unavailable" in page
+    assert "Explanation" in page
+
+
+def test_browser_success_requires_nonempty_evidence(tmp_path):
+    result = runner.run_suite(command_suite("e2e-spec", "pass"), tmp_path, dict(os.environ))
+    assert result["status"] == "failed"
+    assert "evidence report" in result["reason"]
+
+
+def test_missing_requested_measurement_keeps_functional_pass_but_profile_incomplete(tmp_path, monkeypatch):
+    monkeypatch.setattr(runner, "run_suite", lambda *a: {"id": "unit", "status": "passed", "code_coverage": [
+        {"name": "Unit coverage", "status": "unverified", "note": "Measurement unavailable."},
+    ]})
+    report = {"profile": "fast"}
+    assert runner.execute([command_suite("unit", "pass")], tmp_path, dict(os.environ), report) == 1
+    assert report["status"] == "incomplete"
+    assert report["suites"][0]["status"] == "passed"
+    assert "This run is incomplete" in (tmp_path / "summary.html").read_text()
+
+
+def test_interrupt_preserves_completed_results_and_marks_remaining_checks_unverified(tmp_path, monkeypatch):
+    original = runner.run_suite
+
+    def run(suite, *args):
+        if suite.id == "interrupted":
+            raise KeyboardInterrupt
+        return original(suite, *args)
+
+    monkeypatch.setattr(runner, "run_suite", run)
+    report = {"profile": "regression"}
+    suites = [command_suite("completed", "pass"), command_suite("interrupted", "pass"), command_suite("remaining", "pass")]
+    assert runner.execute(suites, tmp_path, dict(os.environ), report) == 130
+    assert [suite["status"] for suite in report["suites"]] == ["passed", "unverified", "unverified"]
+    assert report["status"] == "incomplete"
+    assert not (tmp_path / "remaining").exists()
+
+
+def test_cli_sigterm_handler_records_interruption_and_restores_previous_handler(tmp_path, monkeypatch):
+    import signal
+
+    before = signal.getsignal(signal.SIGTERM)
+    monkeypatch.setattr(runner, "select_suites", lambda *args: [command_suite("interrupted", "pass")])
+    monkeypatch.setattr(runner, "tool_version", lambda *args: "test version")
+
+    def terminate(*args):
+        signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+
+    monkeypatch.setattr(runner, "run_suite", terminate)
+    output = tmp_path / "signal-report"
+    assert runner.main(["regression", "--output", str(output)]) == 130
+    assert json.loads((output / "summary.json").read_text())["status"] == "incomplete"
+    assert signal.getsignal(signal.SIGTERM) is before
+
+
 def test_dry_run_does_not_create_output_or_run_commands(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(runner.subprocess, "run", lambda *args, **kwargs: pytest.fail("Executed a command"))
     output = tmp_path / "evidence"
