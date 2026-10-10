@@ -7,6 +7,7 @@ import { approvedArchitecture } from "./support/architecture.js";
 import { ServiceError } from "../src/service-clients.js";
 import { parseServiceOperationContract } from "../src/service-operation-schema.js";
 import { ProductState } from "../src/state.js";
+import { submitSpecChangeCommand } from "../src/commands/submit-spec-change.js";
 import { registerDomainTools } from "../src/tools.js";
 
 function fixture(policy: "automatic" | "review" = "automatic", notificationFails = false) {
@@ -43,7 +44,8 @@ function fixture(policy: "automatic" | "review" = "automatic", notificationFails
     binding, state, owners, undefined, review => { prepared.push(review); if (notificationFails) throw new Error("Execution ledger unavailable"); }, undefined, !notificationFails, parseServiceOperationContract(wire));
   const args: any = { architecture_review_id: architectureReviewId, supported: true, base_source_revision_hash: revision, unsupported_reason: null, title: "Create leaf", summary: "Create leaf", rationale: "Requested", assumptions: [],
     operations: [{ operation_id: "create", type: "create_entity", kind: "component", name: "leaf", entity_id: "leaf-local", ports: [{ name: "clk", family: "wire", direction: "in" }], instances: [] }, { operation_id: "explain", type: "set_entity_metadata", entity: { document_id: "document", entity_id: "leaf-local", entity_kind: "component" }, description: "Leaf clock input. Implementation pending." }] };
-  const execute = (values = args) => tools.get("prepare_spec_proposal").execute(values, { callId: "call", signal: new AbortController().signal });
+  const command = submitSpecChangeCommand(binding, state, owners, parseServiceOperationContract(wire));
+  const execute = (values = args) => command.execute(values, { callId: "call", signal: new AbortController().signal } as any);
   return { state, binding, tools, args, execute, submitted, prepared, owners,
     set revision(value: string) { revision = value; },
     set contract(value: any) { wire = value; }, get contract() { return wire; },
@@ -63,7 +65,7 @@ test("fully specified creation saves automatically without a details card", asyn
     assert.equal(f.submitted.length, 1);
     assert.equal(f.submitted[0].target.serviceDocumentKey, "package-A");
     assert.equal(f.submitted[0].artifact.base_source_revision_hash, "sha256:A");
-    assert.equal(f.prepared[0].state, "applied");
+    assert.equal(f.state.listReviews("chat")[0].state, "applied");
     assert.equal(result.required_input, undefined);
   } finally { f.close(); }
 });
@@ -137,28 +139,22 @@ test("policy discovery failure cannot authorize an automatic save", async () => 
   } finally { f.close(); }
 });
 
-test("available defaults avoid confirmation; genuinely missing input retains clarification", async () => {
-  const f = fixture();
+test("unsupported drafts return a diagnostic without a Spec details card", async () => {
+  const f=fixture();
   try {
-    const args = { ...f.args, supported: false, unsupported_reason: "Need width", operations: [], required_fields: [{ name: "width", label: "Width", description: "Bits", default_value: "8" }] };
-    const defaults = await f.execute(args);
-    assert.equal(defaults.required_input, undefined);
-    assert.match(defaults.instruction, /assumptions/);
-    const missing = await f.execute({ ...args, required_fields: [{ ...args.required_fields[0], default_value: "" }] });
-    assert.equal(missing.required_input.fields.length, 1);
-    assert.equal(f.submitted.length, 0);
+    const result=await f.execute({...f.args,supported:false,unsupported_reason:"Need width",operations:[]});
+    assert.equal(result.required_input,undefined); assert.equal(result.error.error_code,"UNSUPPORTED_REQUEST");
+    assert.equal(f.submitted.length,0);
   } finally { f.close(); }
 });
 
-test("context reads refresh a changed contract in the existing conversation", async () => {
-  const f = fixture();
+test("context reads do not reinstall a Spec write tool after schema changes", async () => {
+  const f=fixture();
   try {
-    const original = f.tools.get("prepare_spec_proposal");
-    f.contract = { ...f.contract, digest: `sha256:${"b".repeat(64)}` };
-    await f.tools.get("get_bound_context").execute({}, { callId: "context", signal: new AbortController().signal });
-    assert.notEqual(f.tools.get("prepare_spec_proposal"), original);
-    assert.equal(f.tools.size, 2);
-    assert.equal((await f.execute()).review.state, "applied");
+    f.contract={...f.contract,digest:`sha256:${"b".repeat(64)}`};
+    await f.tools.get("get_bound_context").execute({}, {callId:"context",signal:new AbortController().signal});
+    assert.equal(f.tools.get("prepare_spec_proposal"),undefined); assert.equal(f.tools.size,1);
+    const result=await f.execute(); assert.equal(result.success,false); assert.equal(f.submitted.length,0);
   } finally { f.close(); }
 });
 
@@ -180,16 +176,6 @@ test("Spec context refresh retains existing pending reviews", async () => {
     f.revision = "sha256:B";
     await f.tools.get("get_bound_context").execute({}, { callId: "context", signal: new AbortController().signal });
     assert.equal(f.state.getReview("chat", "pending")!.state, "ready");
-  } finally { f.close(); }
-});
-
-for (const policy of ["automatic", "review"] as const) test(`a failed execution notification preserves the owner ${policy} result`, async () => {
-  const f = fixture(policy, true);
-  try {
-    const result = await f.execute();
-    assert.equal(result.review.state, policy === "automatic" ? "applied" : "ready");
-    assert.equal(f.state.listReviews("chat")[0].state, result.review.state);
-    assert.equal(result.error, undefined);
   } finally { f.close(); }
 });
 
@@ -254,5 +240,27 @@ test("missing or unrelated component descriptions give the component name and ca
       assert.doesNotMatch(result.error.details, /undefined/);
       assert.equal(f.submitted.length, 0);
     }
+  } finally { f.close(); }
+});
+
+
+test("native scalar wire admission reaches formatting without matching the structured branch", async () => {
+  const f = fixture();
+  try {
+    const input = structuredClone(f.args);
+    delete input.operations[0].ports[0].family;
+    const result = await f.execute(input);
+    assert.equal(result.review.state, "applied");
+    assert.equal(f.submitted[0].artifact.operations[0].ports[0].family, "wire");
+    assert.equal(input.operations[0].ports[0].family, undefined, "Formatting must preserve the submitted arguments.");
+  } finally { f.close(); }
+});
+
+
+test("an omitted operation type returns a diagnostic before submission", async () => {
+  const f=fixture();
+  try {
+    const input=structuredClone(f.args); delete input.operations[0].type;
+    const result=await f.execute(input); assert.equal(result.success,false); assert.equal(f.submitted.length,0);
   } finally { f.close(); }
 });

@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.spec.orchestrated",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "primary": "primary",
   "agents": [
     {
@@ -9,12 +9,9 @@
       "agentPreset": "orchestrated",
       "tools": [
         "get_bound_context",
-        "prepare_spec_proposal",
         "ask_user_question",
         "get_event_system",
-        "prepare_spec_document_creation",
-        "wait_for_event",
-        "prepare_architecture_review"
+        "wait_for_event"
       ],
       "publishes": []
     },

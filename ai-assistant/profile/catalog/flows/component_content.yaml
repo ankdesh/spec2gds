@@ -1,0 +1,209 @@
+{
+  "id": "spec2gds.component_content",
+  "version": "2.0.0",
+  "description": "Author and save a complete Component.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "review_id": {
+        "type": "string"
+      },
+      "request": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "session_id",
+      "review_id",
+      "request"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "applied",
+          "discarded"
+        ]
+      },
+      "source_revision_hash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "proposal_id",
+      "state",
+      "source_revision_hash"
+    ],
+    "additionalProperties": false
+  },
+  "nodes": [
+    {
+      "id": "context",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.authoring_context",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "inputs"
+      }
+    },
+    {
+      "id": "draft",
+      "kind": "model",
+      "instructionsFile": "prompts/component.md",
+      "conversation": {
+        "$ref": "inputs.session_id"
+      },
+      "inputs": {
+        "request": {
+          "$ref": "inputs.request"
+        },
+        "authoring_context": {
+          "$ref": "nodes.context"
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "direction": {
+                  "type": "string",
+                  "enum": [
+                    "in",
+                    "out",
+                    "inout"
+                  ]
+                },
+                "width": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "name",
+                "direction",
+                "width"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "narrative": {
+            "type": "string"
+          },
+          "systemverilog": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "ports",
+          "description",
+          "narrative",
+          "systemverilog"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "submit",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.submit_component",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "session_id": {
+          "$ref": "inputs.session_id"
+        },
+        "review_id": {
+          "$ref": "inputs.review_id"
+        },
+        "context": {
+          "$ref": "nodes.context"
+        },
+        "draft": {
+          "$ref": "nodes.draft"
+        }
+      }
+    },
+    {
+      "id": "saved",
+      "kind": "wait",
+      "request": {
+        "kind": "spec-receipt",
+        "session_id": {
+          "$ref": "inputs.session_id"
+        },
+        "proposal_id": {
+          "$ref": "nodes.submit.proposal_id"
+        },
+        "editor_url": {
+          "$ref": "nodes.submit.editor_url"
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "discarded",
+              "rejected",
+              "stale"
+            ]
+          },
+          "source_revision_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "state",
+          "source_revision_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "complete",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.require_saved",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "nodes.saved"
+      }
+    }
+  ],
+  "outputs": {
+    "$ref": "nodes.complete"
+  }
+}

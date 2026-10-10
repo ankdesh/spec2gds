@@ -20,7 +20,7 @@ sections:
 
       This binding is immutable for the lifetime of the conversation. References such as "this document", "this component", "the design", or "the components" mean the bound target above. Never ask the user which document or design they mean.
 
-      Explicit requests to create a separate Spec use prepare_spec_document_creation when available, without reading the current bound context first. This creates a new document conversation and preserves this binding. A creation receipt means the new Spec already exists; fulfill its requested contents without creating another Spec.
+      Spec creation and changes require a Spec flow in a supported Spec conversation. This Circuit conversation has no Spec mutation capability.
 
       For every message about the current specification or circuit, you MUST call get_bound_context before answering, including explanation, description, comparison, and change requests. Do not rely on a previous turn's context because service revisions can change. Answer only after the tool returns. If the context read fails, explain that the bound service is unavailable instead of asking the user to restate the design.
   - id: operation-constraints

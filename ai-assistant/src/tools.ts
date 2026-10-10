@@ -13,11 +13,10 @@ import { proposalError } from "./proposal-presentation.js";
 import { type ProductState } from "./state.js";
 import type { ProposalReview, SessionBinding } from "./types.js";
 import { isRecord } from "./types.js";
-import { registerSpecProposalTool } from "./tools/prepare_spec_proposal.js";
 import { registerCircuitProposalTool } from "./tools/prepare_circuit_proposal.js";
 import { registerContextTool } from "./tools/get_bound_context.js";
 import { structuredQuestionPrompt, failureResult, callId } from "./tools/shared.js";
-export { proposalInputRequest, proposedComponentFields, structuredQuestionPrompt } from "./tools/shared.js";
+export { proposalInputRequest, structuredQuestionPrompt } from "./tools/shared.js";
 export type { ProposalInputField, ProposalInputRequest } from "./tools/shared.js";
 
 export function registerDomainTools(
@@ -38,46 +37,30 @@ export function registerDomainTools(
   readOnly = false,
   instructions: InstructionBundle = defaultInstructions,
 ): void {
-  let specContract = operationContract;
-  let disposeSpecTool: (() => void) | undefined;
-  const installSpecTool = (contract: ServiceOperationContract) => {
-    disposeSpecTool?.();
-    specContract = contract;
-    disposeSpecTool = registerSpecProposalTool(agentContext, binding, state, owners, contract, interactiveForms, onReviewPrepared, currentUserRequest, onDomainToolUse, instructions);
-  };
   const sections = promptCatalog ? catalogPromptSectionsFor(promptCatalog, binding) : promptSectionsFor(binding, instructions);
   for (const section of sections) agentContext.systemPrompt?.section(section);
   const interactive = agentContext.tools.get?.("ask_user_question") !== undefined;
   const interaction = structuredQuestionPrompt(interactive, instructions);
   if (interaction) agentContext.systemPrompt?.section(interaction);
-  registerContextTool(agentContext, binding, state, owners, instructions, readOnly, onDomainToolUse, latest => {
-    if (!specContract || latest.digest !== specContract.digest) installSpecTool(latest);
-  });
+  registerContextTool(agentContext, binding, state, owners, instructions, readOnly, onDomainToolUse);
 
-  if (readOnly) return;
+  if (readOnly || binding.domain === "spec") return;
   if (!operationContract) {
     const disposeUnavailable = agentContext.tools.register(registeredTool({
-      ...nativeTool(binding.domain === "spec" ? "prepare_spec_proposal" : "prepare_circuit_proposal", instructions, undefined, true),
+      ...nativeTool("prepare_circuit_proposal", instructions, undefined, true),
       async execute(_args: unknown, exec: ToolRunContext) {
         return failureResult(proposalError(binding, callId(exec), "SERVICE_CONTRACT_ERROR", schemaError ?? "Owner operation schema unavailable."),
           instructions.text("result.8"));
       },
     }));
-    if (binding.domain === "spec") disposeSpecTool = disposeUnavailable;
+
     return;
   }
-  if (binding.domain === "spec") installSpecTool(operationContract);
-  else registerCircuitProposalTool(agentContext, binding, state, owners, operationContract, interactiveForms, onReviewPrepared, onDomainToolUse, instructions);
+  registerCircuitProposalTool(agentContext, binding, state, owners, operationContract, interactiveForms, onReviewPrepared, onDomainToolUse, instructions);
 }
 
 export function findProposal(value: Record<string, unknown>, proposalId: string): Record<string, unknown> | null {
   const proposals = value.proposals;
   if (!Array.isArray(proposals)) return null;
   return proposals.find(item => isRecord(item) && item.proposal_id === proposalId) as Record<string, unknown> | undefined ?? null;
-}
-
-export function findSpecChange(value: Record<string, unknown>, proposalId: string): Record<string, unknown> | null {
-  const changes = value.assistant_changes;
-  if (!Array.isArray(changes)) return null;
-  return changes.find(item => isRecord(item) && item.proposal_id === proposalId) as Record<string, unknown> | undefined ?? null;
 }

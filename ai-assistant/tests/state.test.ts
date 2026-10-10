@@ -4,7 +4,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { ProductState } from "../src/state.js";
+import { createHash } from "node:crypto";
+import { ProductState, artifactDigest } from "../src/state.js";
 
 test("persists immutable bindings and compare-and-swap review transitions", async () => {
   const root = await mkdtemp(join(tmpdir(), "spec2gds-assistant-state-"));
@@ -121,4 +122,23 @@ test("reads legacy service fields in saved creation records without changing sou
     assert.equal(restored.destinationServiceDocumentKey, "destination");
     assert.deepEqual(restored.artifact, legacy.artifact);
   } finally { state.close(); await rm(root, { recursive: true, force: true }); }
+});
+
+test("artifact identity ignores object key order and migrates only intact legacy digests", async () => {
+  assert.equal(artifactDigest({ b: [{ z: 2, a: 1 }], a: true }), artifactDigest({ a: true, b: [{ a: 1, z: 2 }] }));
+  assert.notEqual(artifactDigest({ a: [1, 2] }), artifactDigest({ a: [2, 1] }));
+  const directory = await mkdtemp(join(tmpdir(), "spec-artifact-digest-"));
+  const path = join(directory, "state.sqlite3");
+  try {
+    const state = new ProductState(path);
+    state.createBinding("s", { domain: "spec", serviceBaseUrl: "http://localhost:6010", serviceUrl: "http://localhost:6010", documentId: "doc", scope: "document", workspaceKey: "w", workspaceTitle: "Spec", workspacePath: directory, workspaceDomain: "spec", workspaceServiceUrl: "http://localhost:6010", workspaceDocumentId: "doc" });
+    const artifact = { z: 2, a: 1 }, encoded = JSON.stringify(artifact);
+    state.createReview({ proposalId: "p", sessionId: "s", callId: "c", domain: "spec", state: "ready", baseRevision: "r", artifact, preview: null, diagnostics: [], error: null, serviceResult: null });
+    state.database.prepare("UPDATE reviews SET artifact_digest=? WHERE proposal_id='p'").run("sha256:" + createHash("sha256").update(encoded).digest("hex"));
+    state.close();
+    const recovered = new ProductState(path);
+    assert.equal(recovered.getReview("s", "p")!.artifactDigest, artifactDigest({ a: 1, z: 2 }));
+    recovered.database.prepare("UPDATE reviews SET artifact_digest='damaged' WHERE proposal_id='p'").run(); recovered.close();
+    const damaged = new ProductState(path); assert.equal(damaged.getReview("s", "p")!.artifactDigest, "damaged"); damaged.close();
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

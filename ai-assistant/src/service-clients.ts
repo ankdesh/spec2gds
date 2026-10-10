@@ -68,9 +68,7 @@ export class ServiceClients {
       return { approval_policy: value.approval_policy, submissions: value.submission_endpoint === "/assistant/proposals/submit",
         ...(value.creation_receipts === true ? { creationReceipts: true } : {}) };
     } catch (error) {
-      // An older owner retains its explicit human review flow. Other discovery
-      // failures stop submission rather than assuming permission to write.
-      if (error instanceof ServiceError && error.status === 404) return { approval_policy: "review", submissions: false };
+      if (error instanceof ServiceError && error.status === 404) throw new ServiceError(422, "Spec flows require a service with durable capabilities and submission receipts.");
       throw error;
     }
   }
@@ -134,10 +132,10 @@ export class ServiceClients {
     return { domain, serviceBaseUrl: url, documents };
   }
 
-  async createSpec(value: string, path: string, documentId: string, title: string, requestId?: string): Promise<Record<string, unknown>> {
+  async createSpec(value: string, path: string, documentId: string, title: string, requestId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
     const url = normalizeSpecUrl(value, this.specAllowlist);
     return this.request("POST", `${url}/documents/create`, { path, document_id: documentId, title,
-      request_id: requestId || `assistant-create:${documentId}`, derive_named_path: true }, undefined, true);
+      request_id: requestId, derive_named_path: true }, signal, true);
   }
 
   async createCircuit(value: string, documentId: string, title: string): Promise<Record<string, unknown>> {
@@ -254,30 +252,18 @@ export class ServiceClients {
     return this.request("POST", this.specUrl(binding, "/assistant/proposals/preview"), artifact, signal);
   }
 
-  async applySpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
-    this.assertStoredBinding(binding);
-    return this.request("POST", this.specUrl(binding, "/assistant/proposals/apply"), artifact, signal, true);
-  }
+
 
   async submitSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
     return this.request("POST", this.specUrl(binding, "/assistant/proposals/submit", { session_id: binding.sessionId }), artifact, signal, true);
   }
 
-  async stageSpec(binding: SessionBinding, artifact: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
-    this.assertStoredBinding(binding);
-    return this.request("POST", this.specUrl(binding, "/assistant/proposals/stage", { session_id: binding.sessionId }), artifact, signal);
-  }
 
-  async approveSpec(binding: SessionBinding, proposalId: string, signal?: AbortSignal): Promise<Record<string, unknown>> {
-    this.assertStoredBinding(binding);
-    return this.request("POST", this.specUrl(binding, `/assistant/proposals/${encodeURIComponent(proposalId)}/approve`), {}, signal, true);
-  }
 
-  async rejectSpec(binding: SessionBinding, proposalId: string): Promise<Record<string, unknown>> {
-    this.assertStoredBinding(binding);
-    return this.request("POST", this.specUrl(binding, `/assistant/proposals/${encodeURIComponent(proposalId)}/reject`), {});
-  }
+
+
+
 
   async specChanges(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);

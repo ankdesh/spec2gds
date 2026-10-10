@@ -1,8 +1,6 @@
-"""Python access to the Harness-owned review store through its internal bridge.
+"""Read-only Python inspection of the Assistant product state.
 
-Reviewer path: review data belongs to the existing Assistant product state.
-CLI decisions bridge exact stored artifacts and receipts; they must not author
-replacement operations or silently advance a stale base revision.
+Decisions use revision-checked flow commands and exact Spec service receipts.
 """
 
 from __future__ import annotations
@@ -37,6 +35,8 @@ def node_executable() -> str:
 def review_bridge(
     state_root: Path, action: str, proposal_id: str | None = None, payload: Any = None
 ) -> dict[str, Any]:
+    if action not in {"list", "architecture-list"}:
+        raise ValueError("Review inspection is read-only. Use flow controls and Spec Editor for decisions.")
     command = [node_executable(), str(_BRIDGE), action, str(state_root)]
     if proposal_id is not None:
         command.append(proposal_id)

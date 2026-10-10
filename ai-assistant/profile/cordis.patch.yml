@@ -35,6 +35,10 @@
     root: !!js dshHomePath('sessions')
     compression: !!js process.env.SPEC2GDS_SESSION_COMPRESSION || 'zstd'
 
+# Bound source names provide conversation titles without an extra model request.
+- id: session-title-llm
+  disabled: true
+
 # spec2gds domain tools replace general-purpose coding and delegation tools.
 - id: compaction-basic
   config:
@@ -92,8 +96,14 @@
     routes:
       event_systems: sqlite
       event_http_sources: sqlite
+      flow_runs: sqlite
 
 - insert:
+    - id: spec2gds-invariants
+      name: '@deepseek-ai/dsh-invariants'
+      config:
+        enabled: true
+
     - id: prompt-catalog
       name: '@deepseek-ai/dsh-prompt-catalog'
 
@@ -150,6 +160,29 @@
         maxFileBytes: 262144
         maxPromptBytes: 32768
 
+    - id: flow-runtime
+      name: '@deepseek-ai/dsh-flow-runtime'
+      config:
+        maxRequests: 4
+        maxTokens: 1000000
+        maxActiveMillis: 300000
+        maxOutputTokens: 16384
+        maxRetainedBytes: 8388608
+        maxExpandedNodes: 128
+
+    - id: flow-model-native
+      name: '@deepseek-ai/dsh-flow-model-native'
+    - id: flow-native-invariant
+      name: '@deepseek-ai/dsh-flow-model-native/invariant'
+
+    - id: flow-yaml
+      name: '@deepseek-ai/dsh-flow-yaml'
+      config:
+        roots:
+          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/flows'
+        maxFileBytes: 262144
+        maxInstructionBytes: 32768
+
     - id: spec2gds-assistant
       name: '@spec2gds/harness-assistant'
       config:
@@ -163,6 +196,7 @@
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
         maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
         maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 16384)
+        flowReceiptPollMillis: 1000
         interactiveForms: !!js (process.env.ASSISTANT_PROFILE || 'spec2gds-web') === 'spec2gds-web'
         execution:
           goal:

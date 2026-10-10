@@ -1,4 +1,5 @@
 /** Repeated live inference evaluation; never route requests to canned fixtures. */
+import { selectedEvaluationCases } from "./generalization_state.js";
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -18,8 +19,7 @@ if (!process.env.OPENAI_API_KEY) {
 const repeats=Number(option("--repeats",String(manifest.live_repeats)));
 if(!Number.isSafeInteger(repeats)||repeats<1) throw new Error("--repeats must be a positive integer.");
 const selected=option("--case","");
-const cases=selected ? manifest.cases.filter((item:any)=>item.id===selected) : manifest.cases;
-if(!cases.length) throw new Error("Unknown --case.");
+const cases=selectedEvaluationCases<any>(manifest.cases,selected);
 for(const item of cases) for(let repeat=0;repeat<repeats;repeat++) {
   const destination=join(output,`${item.id}-${repeat+1}`);
   const argv=["--import","tsx",join(root,"tests/ui-scenarios/runner/run_scenario.ts"),"--scenario","generalization","--live-model","--eval-case",item.id,"--output",destination];

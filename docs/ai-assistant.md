@@ -209,7 +209,7 @@ the exact service key, scope, source revision, and requested change. For a new
 independent document, do not depend on an unrelated bound document. A derived
 request must identify the source it actually depends on.
 
-`prepare_architecture_review` stores a durable review; it does not approve it.
+The architecture subflow stores a durable review; it does not approve it.
 The Assistant card permits **Approve**, **Revise**, or **Cancel**. Essential open
 questions prevent approval. Revision creates a new review and retains the original
 request. Cancellation stops that request without creating content. Approval covers
@@ -223,14 +223,14 @@ behavior, not only the names of newly created components. Automatic checking
 must cover typed structure; behavioral correspondence is also a model/reviewer
 obligation. Do not claim that schema or lint proves RTL/prose equivalence.
 
-Architecture tool arguments use named `components` and `designs`, grouped
+Architecture phase results use named `components` and `designs`, grouped
 `interfaces`, `clocks_resets`, `decomposition_rationale`, `assumptions`,
 `open_questions`, and a nonempty `concrete_configuration`. Use `designs=[]` for
 a leaf. Give each component one interface group; portless components use
 `ports=[]`. Port directions are `in`, `out`, or `inout`; widths are positive
-integers. Legacy flat port descriptors are accepted only for one component.
+integers. Each interface is grouped by its Component.
 
-Example A is a schema-valid architecture argument. The requested behavior is a
+Example A is a schema-valid architecture phase result. The requested behavior is a
 concrete unsigned counter. The name/service/action must also be visible in the
 review context; do not invent new tool fields that are absent from its schema.
 
@@ -257,69 +257,51 @@ review context; do not invent new tool fields that are absent from its schema.
 
 <a id="as-11"></a>
 
-**AS-11 — Create after approval, without another confirmation.** Browser root
-conversations in all presets can request a new Spec document. Contentful creation needs
-an approved `architecture_review_id`. Then `prepare_spec_document_creation`
-creates the document and starts its separate conversation without another creation
-confirmation under either save policy. Restricted policy applies to the later
-content save. An explicitly empty document may use `empty=true` without an
-architecture review; it can finish as empty and ready.
+**AS-11 — Create through a flow after required approval.** Focused and Goal
+conversations select `flow_create_empty_spec` or `flow_create_spec_with_component`.
+The content flow prepares architecture, waits for approval, creates the document,
+and binds a separate conversation without another creation confirmation. It then
+authors and submits one complete Component. The empty flow skips hardware review
+and content authoring. Orchestrated Spec conversations support reads and analysis;
+they have no Spec write capability.
 
-Use the approved readable name and selected service. Derive the filename under
-`SPEC_DOCUMENT_ROOT`; the service reserves the internal identity and destination.
-Readable collision suffixes are allowed; never overwrite an existing `.spec` file.
-A display rename does not move the saved file. Follow the shared
-[naming rules](naming-and-identifiers.md). An explicitly selected offline service
-must not be replaced with another available service.
+Use the readable title and selected service. Derive the filename under
+`SPEC_DOCUMENT_ROOT`; the service reserves the identity and destination. Collision
+suffixes are allowed. Never overwrite an existing `.spec` file. An explicitly
+selected offline service must not be replaced with another service.
 
-Examples of creation arguments, used in separate requests:
+Examples of inputs for the two published tools:
 
 ```json
-{"title": "Counter specification", "architecture_review_id": "approved-review-id"}
+{"title": "Counter specification", "request": "Create a new Spec with a complete 16-bit up/down counter Component."}
 ```
 
 ```json
-{"title": "Empty specification", "empty": true}
+{"title": "Empty specification", "request": "Create a new empty Spec."}
 ```
 
-The review ID must be an actual approved record, not the example string. The
-browser creation tool is unavailable to headless requests and standing agents.
-The new-conversation chooser creates empty sources; it does not bypass architecture for
-contentful requests.
+The new-conversation chooser starts the empty-Spec flow through the generic host
+start API. It does not create a Spec directly or send a continuation message.
 
 <a id="as-12"></a>
 
-**AS-12 — Creation has separate outcomes.** Persist the original request,
-service, reserved destination, creation request ID, destination conversation ID, and
-continuation request ID before side effects. Preserve the execution preset.
-`.spec` file save, conversation activation, request admission, and content save are separate
-outcomes. `continued` means the request entered the destination conversation. It does
-not mean its content was saved.
+**AS-12 — Creation has separate outcomes.** Persist the flow execution, original
+request, service, destination, operation identity, creation receipt, and destination
+conversation identity. Preserve the execution preset and resource allowance.
+File creation, confirmed binding, model result, and content save are separate
+outcomes. The internal creation status `bound` confirms the destination binding.
+Only the exact applied service receipt completes a content request.
 
-```mermaid
-stateDiagram-v2
-    [*] --> ArchitecturePending: New document with content
-    [*] --> Creating: Explicitly empty document
-    ArchitecturePending --> ArchitecturePending: Revise with a new review
-    ArchitecturePending --> Cancelled: Cancel
-    ArchitecturePending --> Creating: Approve
-    Creating --> SavedEmpty: Owner save receipt
-    Creating --> Uncertain: Write result unknown
-    Creating --> Failed: Owner proves rejection
-    Uncertain --> SavedEmpty: Exact receipt proves save
-    SavedEmpty --> ChatActive: Activate destination chat
-    SavedEmpty --> SavedEmpty: Recover chat setup only
-    ChatActive --> EmptyReady: Empty request
-    ChatActive --> ContentPending: Admit original content request
-    ContentPending --> Complete: Content save receipt
-    ContentPending --> Incomplete: Content fails or awaits Editor approval
-```
+If the file exists but content fails, show **Document created; content not saved**
+and the failed operation. An explicit architecture revision starts a linked
+replacement flow and reuses the confirmed file and conversation. Cancel stops
+further operations and preserves confirmed saves. It does not delete the file.
 
-If the `.spec` file exists but content fails, show **Document created; content not
-saved** and the failure stage. Continue population only after an explicit user
-retry. Do not create another document. A failed conversation setup retries conversation setup,
-not `.spec` file creation. Cancel creation only before its write starts. A saved
-`.spec` file is not rolled back by cancelling a card.
+The legacy Spec mutation tools and browser continuation routes are removed. Old
+pending Spec requests have no compatibility execution path. Start a new flow.
+For current Spec edits, use `flow_edit_spec`; structural edits require approval of
+the exact operation batch. Selected Component and Design bindings remain narrow.
+Spec Editor controls the content decision under restricted policy.
 
 <a id="as-13"></a>
 
@@ -338,9 +320,8 @@ retrieval fails.
 The Assistant must not offer **Approve and apply** for Spec content. It shows
 the exact pending proposal and an **Open Spec Editor** link. The Editor approves
 the stored proposal ID after revalidation. Both UIs must then show the same service
-outcome. The existing explicit `approve-architecture` and `approve` CLI commands
-are a supported non-UI exception. They retain the same checks. Circuit send and
-accept controls are unchanged.
+outcome. Architecture decisions require a correlated flow wait. Direct Assistant Spec
+approval controls are rejected. Circuit send and accept controls are unchanged.
 
 <a id="as-14"></a>
 
@@ -571,7 +552,8 @@ saved-state indicator.
 
 **AS-21 — Presets and bounds.** A conversation pins `focused`, `goal`, or
 `orchestrated`; there is no silent complexity router. Focused performs a bounded
-single turn. Goal uses native single-agent continuation. Orchestrated keeps
+single turn. Published flows add a bounded deterministic executor that triggers
+declared model phases and stops at decisions. Goal uses native single-agent continuation. Orchestrated keeps
 read-only analyst/reviewer conversations and a proposal-owning primary. Only the primary
 can create questions/proposals; specialists cannot approve changes or edit execution
 configuration. The [operations guide](ai-assistant-operations.md#configuration-and-limits)
@@ -635,7 +617,8 @@ is untrusted data. Reject credentials in URLs, redirects, invalid JSON/pointers,
 oversized bodies, and incompatible event schemas. Unchanged polling makes no model
 requests. Changed observations use the remaining execution budget and never approve
 content. Sources persist when disabled. Pause suspends checks/admissions; Stop ends
-execution. Webhooks, file watchers, and executable flows are future work.
+execution. Webhooks and file watchers are future work. Developer-authored
+[reusable flows](ai-assistant-flows.md) use a separate pinned execution record.
 
 <a id="as-24"></a>
 

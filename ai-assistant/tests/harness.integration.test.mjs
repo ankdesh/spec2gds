@@ -3,7 +3,7 @@ import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, cp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +12,7 @@ import { once } from "node:events";
 import { DatabaseSync } from "node:sqlite";
 import { calculateMetrics, parseJsonLines } from "../lib/eval-metrics.js";
 
-import { approveTimer } from "./support/approved-timer.mjs";
+
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -28,7 +28,7 @@ async function sessionLogs(root) {
     .map(entry => resolve(entry.parentPath, entry.name));
 }
 
-test("one-off profile reads bound context and persists a previewed proposal", { timeout: 90_000 }, async () => {
+test("headless profile reads, waits for a flow decision, and replays recorded read-only output", { timeout: 90_000 }, async () => {
   let nameResolutions = 0;
   let ownerReads = 0;
   let previews = 0;
@@ -45,6 +45,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     if (url.pathname === "/assistant/operation-schema") return send(response, operationContract);
     if (url.pathname === "/assistant/context/document") {
       ownerReads += 1;
+      if (url.searchParams.get("paged") === "true") return send(response, { schema_version: "spec2gds.assistant-context-page.v1", document_id: "doc-test", source_revision_hash: "sha256:test", scope: "document", target: null, records: [{ path: ["entities"], value: [] }], incomplete: false, next_cursor: null });
       return send(response, {
         schema_version: "spec2gds.assistant-context.v1",
         scope: "document",
@@ -85,23 +86,16 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     modelRequests.push(body);
     const toolResults = body.messages.filter(message => message.role === "tool").length;
     const looping = Array.isArray(body.tools) && JSON.stringify(body.messages).includes("Repeat context forever");
-    const delta = looping
-      ? { tool_calls: [{ index: 0, id: `call_context_${toolResults}`, type: "function", function: { name: "get_bound_context", arguments: "{}" } }] }
-      : toolResults === 0
-      ? { tool_calls: [{ index: 0, id: "call_context", type: "function", function: { name: "get_bound_context", arguments: "{}" } }] }
-      : toolResults === 1
-        ? { tool_calls: [{ index: 0, id: "call_proposal", type: "function", function: { name: "prepare_spec_proposal", arguments: JSON.stringify({
-          architecture_review_id: "approved-timer",
-          supported: true,
-          base_source_revision_hash: "sha256:test",
-          unsupported_reason: null,
-          title: "Add timer",
-          summary: "Adds a timer component.",
-          rationale: "The design needs timing control.",
-          assumptions: [],
-          operations: [{ operation_id: "create_timer", type: "create_entity", kind: "component", name: "timer", instances: [], entry_design: false }, { operation_id: "explanation", type: "set_entity_metadata", entity: { entity_kind: "component", entity_id: "create_timer" }, description: "Timing control. Interface and functional RTL are not implemented yet." }],
-        }) } }] }
-        : { content: "The bound specification contains one ALU. The timer proposal is ready for review." };
+    const flowRequest = JSON.stringify(body.messages).includes("Start timer flow");
+    const phase = body.tools?.length === 1 && body.tools[0].function.name === "structured_output";
+    const call = (name, args, id) => ({ tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } }] });
+    const delta = looping ? call("get_bound_context", {}, `call_context_${toolResults}`)
+      : phase ? call("structured_output", { title: "Timer", components: [{ name: "timer", purpose: "Timing control" }], designs: [],
+        interfaces: [{ component: "timer", ports: [{ name: "clk", direction: "in", width: 1 }] }], clocks_resets: ["Rising-edge clock"],
+        decomposition_rationale: "One leaf", assumptions: [], open_questions: [], concrete_configuration: { width: 8 } }, "architecture")
+      : flowRequest ? call("flow_add_component", { title: "Timer", request: "Start timer flow: add a complete timer Component" }, "flow_start")
+      : toolResults === 0 ? call("get_bound_context", {}, "call_context")
+      : { content: "The bound specification contains one ALU." };
     response.writeHead(200, { "Content-Type": "text/event-stream" });
     const chunks = [{ role: "assistant" }, delta, {}];
     for (let index = 0; index < chunks.length; index += 1) {
@@ -110,7 +104,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
         object: "chat.completion.chunk",
         created: 1,
         model: "gpt-4o-mini",
-        choices: [{ index: 0, delta: chunks[index], finish_reason: index === 2 ? looping || toolResults < 2 ? "tool_calls" : "stop" : null }],
+        choices: [{ index: 0, delta: chunks[index], finish_reason: index === 2 ? delta.tool_calls ? "tool_calls" : "stop" : null }],
         ...(index === 2 ? { usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, prompt_tokens_details: { cached_tokens: 4 } } } : {}),
       })}\n\n`);
     }
@@ -119,11 +113,13 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
   const providerPort = await listen(provider);
   const state = await mkdtemp(join(tmpdir(), "spec2gds-harness-integration-"));
   const loopState = await mkdtemp(join(tmpdir(), "spec2gds-harness-loop-limit-"));
+  const flowState = await mkdtemp(join(tmpdir(), "spec2gds-headless-flow-"));
   const replayState = await mkdtemp(join(tmpdir(), "spec2gds-harness-replay-"));
   const harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
   let child;
   let loopChild;
   let replayChild;
+  let flowChild;
   try {
     child = spawn(process.execPath, [
       resolve(root, "scripts/request.mjs"),
@@ -132,7 +128,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       "--service-url", `http://127.0.0.1:${ownerPort}`,
       "--document-name", "Timer controller",
       "--",
-      "Inspect the specification and propose a timer component.",
+      "Inspect the specification.",
     ], {
       cwd: root,
       env: {
@@ -148,17 +144,17 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       stdio: ["ignore", "pipe", "pipe"],
     });
     let output = "";
-    child.stdout.on("data", value => { output += value; for (const line of String(value).split("\n")) { try { const event=JSON.parse(line); if(event.type==="session") approveTimer(state,event.sessionId); } catch { /* Other stream lines are not session headers. */ } } });
+    child.stdout.on("data", value => { output += value; });
     child.stderr.on("data", value => { output += value; });
     const [code, signal] = await once(child, "exit");
     assert.equal(signal, null, output);
     assert.equal(code, 0, output);
     assert.match(output, /one ALU/);
     assert.equal(nameResolutions, 1);
-    assert.ok(ownerReads >= 3, `Expected validation, context, and proposal reads; got ${ownerReads}.\n${output}`);
-    assert.equal(previews, 1);
+    assert.ok(ownerReads >= 2, `Expected validation and context reads; got ${ownerReads}.\n${output}`);
+    assert.equal(previews, 0);
     const agentRequests = modelRequests.filter(request => Array.isArray(request.tools));
-    assert.equal(agentRequests.length, 3);
+    assert.equal(agentRequests.length, 2);
     assert.ok(agentRequests.every(request => (request.max_tokens ?? request.max_completion_tokens) === 16384),
       `Expected every agent request to use the product output cap: ${agentRequests.map(request => request.max_tokens ?? request.max_completion_tokens).join(", ")}`);
     const systemMessage = agentRequests[0].messages.find(message => message.role === "system");
@@ -175,7 +171,8 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     }
     const toolNames = agentRequests[0].tools.map(tool => tool.function.name);
     assert.ok(toolNames.includes("get_bound_context"));
-    assert.ok(toolNames.includes("prepare_spec_proposal"));
+    assert.ok(toolNames.includes("flow_add_component"));
+    for (const name of ["prepare_spec_proposal", "prepare_spec_document_creation", "prepare_architecture_review"]) assert.ok(!toolNames.includes(name));
     const forbiddenGeneralTools = new Set([
       "bash", "pwsh", "jobs", "fs", "fs_search", "skill", "subagent",
       "workflow", "ralph", "todo", "web", "apply", "send", "create",
@@ -190,18 +187,24 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     try {
       const binding = database.prepare("SELECT status, domain, document_id, scope FROM bindings").get();
       assert.deepEqual({ ...binding }, { status: "active", domain: "spec", document_id: "doc-test", scope: "document" });
-      const review = database.prepare("SELECT state, domain, artifact_json, preview_json FROM reviews").get();
-      assert.equal(review.state, "ready");
-      assert.equal(review.domain, "spec");
-      assert.equal(JSON.parse(review.artifact_json).operations[0].type, "create_entity");
-      const artifact = JSON.parse(review.artifact_json);
-      assert.equal(artifact.operations[1].entity.entity_id, artifact.operations[0].entity_id);
-      assert.equal(artifact.operations[1].entity.document_id, "doc-test");
-      assert.equal(artifact.operations[0].entry_design, undefined);
-      assert.equal(JSON.parse(review.preview_json).status, "valid");
+      assert.equal(database.prepare("SELECT count(*) AS count FROM reviews").get().count, 0);
     } finally {
       database.close();
     }
+
+    const beforeFlow = modelRequests.length;
+    flowChild = spawn(process.execPath, [resolve(root, "scripts/request.mjs"), "--json", "--domain", "spec", "--service-url", `http://127.0.0.1:${ownerPort}`, "--document-id", "doc-test", "--", "Start timer flow"], {
+      cwd: root, env: { ...process.env, HARNESS_SOURCE: harness, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
+        SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`, CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1", OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1` }, stdio: ["ignore", "pipe", "pipe"],
+    });
+    let flowOutput = ""; flowChild.stdout.on("data", value => { flowOutput += value; }); flowChild.stderr.on("data", value => { flowOutput += value; });
+    const [flowCode, flowSignal] = await once(flowChild, "exit"); assert.equal(flowSignal, null, flowOutput); assert.equal(flowCode, 2, flowOutput);
+    assert.match(flowOutput, /flow_execution_id/); assert.match(flowOutput, /waiting/);
+    const flowRequests = modelRequests.slice(beforeFlow).filter(request => Array.isArray(request.tools));
+    assert.equal(flowRequests.length, 2); assert.deepEqual(flowRequests[1].tools.map(tool => tool.function.name), ["structured_output"]);
+    const flowDatabase = new DatabaseSync(resolve(flowState, "assistant.sqlite3"), { readOnly: true });
+    try { const review=flowDatabase.prepare("SELECT record_json FROM architecture_reviews").get(); assert.equal(JSON.parse(review.record_json).status,"pending"); }
+    finally { flowDatabase.close(); }
 
     const requestsBeforeLoop = modelRequests.length;
     loopChild = spawn(process.execPath, [
@@ -242,10 +245,10 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
     const logs = await sessionLogs(state);
     assert.equal(logs.length, 1, `Expected one recorded Session log under ${state}, got ${logs.join(", ")}`);
     const recordedMetrics = calculateMetrics(parseJsonLines(await readFile(logs[0], "utf8")), 1);
-    assert.equal(recordedMetrics.proposalCalls, 1);
-    assert.equal(recordedMetrics.schemaValidProposalCalls, 1);
-    assert.equal(recordedMetrics.firstPreviewReadyCases, 1);
-    assert.equal(recordedMetrics.proposedOperations, 2);
+    assert.equal(recordedMetrics.proposalCalls, 0);
+    assert.equal(recordedMetrics.schemaValidProposalCalls, 0);
+    assert.equal(recordedMetrics.firstPreviewReadyCases, 0);
+    assert.equal(recordedMetrics.proposedOperations, 0);
     assert.ok(recordedMetrics.tokens.input > 0);
     assert.ok(recordedMetrics.tokens.output > 0);
     const providerRequestsBeforeReplay = modelRequests.length;
@@ -256,7 +259,7 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       "--service-url", `http://127.0.0.1:${ownerPort}`,
       "--document-id", "doc-test",
       "--",
-      "Inspect the specification and propose a timer component.",
+      "Inspect the specification.",
     ], {
       cwd: root,
       env: {
@@ -274,20 +277,26 @@ test("one-off profile reads bound context and persists a previewed proposal", { 
       stdio: ["ignore", "pipe", "pipe"],
     });
     let replayOutput = "";
-    replayChild.stdout.on("data", value => { replayOutput += value; for (const line of String(value).split("\n")) { try { const event=JSON.parse(line); if(event.type==="session") approveTimer(replayState,event.sessionId); } catch { /* Other stream lines are not session headers. */ } } });
+    replayChild.stdout.on("data", value => { replayOutput += value; });
     replayChild.stderr.on("data", value => { replayOutput += value; });
     const [replayCode, replaySignal] = await once(replayChild, "exit");
     assert.equal(replaySignal, null, replayOutput);
     assert.equal(replayCode, 0, replayOutput);
-    assert.match(replayOutput, /timer proposal is ready for review/i);
+    assert.match(replayOutput, /one ALU/i);
     assert.equal(modelRequests.length, providerRequestsBeforeReplay, "DSH replay must not call the provider fixture.");
+  } catch (error) {
+    const evidence=await mkdtemp(join(tmpdir(), "headless-flow-failure-"));
+    for(const [name,path] of [["recorded",state],["replay",replayState],["flow",flowState]]) await cp(path,join(evidence,name),{recursive:true});
+    console.error("Headless flow evidence: " + evidence); throw error;
   } finally {
     if (child && child.exitCode === null) child.kill("SIGTERM");
     if (loopChild && loopChild.exitCode === null) loopChild.kill("SIGTERM");
+    if (flowChild && flowChild.exitCode === null) flowChild.kill("SIGTERM");
     if (replayChild && replayChild.exitCode === null) replayChild.kill("SIGTERM");
     await Promise.all([new Promise(done => owner.close(done)), new Promise(done => provider.close(done))]);
     await Promise.all([
       rm(state, { recursive: true, force: true }),
+      rm(flowState, { recursive: true, force: true }),
       rm(loopState, { recursive: true, force: true }),
       rm(replayState, { recursive: true, force: true }),
     ]);

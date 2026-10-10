@@ -3,7 +3,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { registerArchitectureTool, validateArchitectureOperations } from "../src/architecture-review.js";
+import { validateArchitectureOperations } from "../src/architecture-review.js";
+import { prepareArchitectureCommand } from "../src/commands/architecture-review.js";
 import { ProductState } from "../src/state.js";
 import { architecturePlan } from "./support/architecture.js";
 
@@ -11,20 +12,18 @@ test("counter review rejects the failed model payload and accepts a concrete int
   const root = mkdtempSync(join(tmpdir(), "architecture-counter-"));
   const state = new ProductState(join(root, "state.sqlite3"));
   try {
-    let tool: any;
-    registerArchitectureTool({ id: "counter", ctx: { tools: { register: value => { tool = value; return () => {}; } } } },
-      state, {} as any, () => "Create a 16-bit up/down counter");
+    const tool = prepareArchitectureCommand({ id: "counter" }, state, {} as any, () => "Create a 16-bit up/down counter");
     const ports = [{ name: "clk", direction: "in", width: 1 }, { name: "reset", direction: "in", width: 1 },
       { name: "up_down", direction: "in", width: 1 }, { name: "count", direction: "out", width: 16 }];
     const plan = { ...architecturePlan, components: [{ name: "up_down_counter", purpose: "16-bit counter" }],
       designs: [{ name: "counter_design", purpose: "Entry composition" }],
       interfaces: [{ component: "up_down_counter", ports }], concrete_configuration: { width: 16, reset: "synchronous active-high", overflow: "wrap" } };
-    await assert.rejects(tool.execute({ ...plan, components: [{ component: "up_down_counter", ports }] }, { callId: "invalid" }), /components\[0\]\.name/);
-    await assert.rejects(tool.execute({ ...plan, designs: [{ design: "counter_design" }] }, { callId: "invalid-design" }), /designs\[0\]\.name/);
-    await assert.rejects(tool.execute({ ...plan, interfaces: [{ component: "up_down_counter", ports: [{ name: "clk", direction: "input", width: 1 }] }] }, { callId: "invalid-direction" }), /interfaces\[0\]/);
+    assert.match((await tool.execute({ ...plan, components: [{ component: "up_down_counter", ports }] } as any, { callId: "invalid" } as any)).creation_error!, /components.*name/);
+    assert.match((await tool.execute({ ...plan, designs: [{ design: "counter_design" }] } as any, { callId: "invalid-design" } as any)).creation_error!, /designs.*name/);
+    assert.match((await tool.execute({ ...plan, interfaces: [{ component: "up_down_counter", ports: [{ name: "clk", direction: "input", width: 1 }] }] } as any, { callId: "invalid-direction" } as any)).creation_error!, /ports/);
     assert.match((await tool.execute({ ...plan, interfaces: [] }, { callId: "empty-interfaces" })).creation_error, /interfaces must contain/);
     assert.match((await tool.execute({ ...plan, concrete_configuration: {} }, { callId: "empty-config" })).creation_error, /concrete_configuration must contain/);
-    assert.match((await tool.execute({ ...plan, interfaces: [{ component: "unknown", ports }] }, { callId: "unknown" })).creation_error, /per named component/);
+    assert.match((await tool.execute({ ...plan, interfaces: [{ component: "unknown", ports }] }, { callId: "unknown" })).creation_error, /per named Component/);
     assert.match((await tool.execute({ ...plan, interfaces: [{ component: "up_down_counter", ports: [{ name: "count", direction: "out", width: 0 }] }] }, { callId: "zero-width" })).creation_error, /positive integer widths/);
     const result = await tool.execute(plan, { callId: "corrected" });
     assert.equal(result.architecture_review.status, "pending");
@@ -63,12 +62,10 @@ for(const decision of ["approved","revised","cancelled"] as const) test(`archite
   const root=mkdtempSync(join(tmpdir(),"architecture-"));
   let state=new ProductState(join(root,"state.sqlite3"));
   try {
-    const tools=new Map<string,any>();
-    const agent={id:"source",ctx:{tools:{register:(tool:any)=>{tools.set(tool.name,tool);return()=>{};}}}};
-    registerArchitectureTool(agent,state,{} as any,()=>"Create a reusable architecture");
-    const first=await tools.get("prepare_architecture_review").execute(architecturePlan,{callId:"call"});
+    const command=prepareArchitectureCommand({id:"source"},state,{} as any,()=>"Create a reusable architecture");
+    const first=await command.execute(architecturePlan,{callId:"call"});
     const id=first.architecture_review.reviewId;
-    assert.equal((await tools.get("prepare_architecture_review").execute(architecturePlan,{callId:"call"})).architecture_review.reviewId,id);
+    assert.equal((await command.execute(architecturePlan,{callId:"call"})).architecture_review.reviewId,id);
     assert.throws(()=>state.requireArchitecture("source",id),/approval/);
     state.decideArchitecture(id,decision,"Feedback");
     state.close(); state=new ProductState(join(root,"state.sqlite3"));
@@ -85,43 +82,15 @@ for(const decision of ["approved","revised","cancelled"] as const) test(`archite
   }finally{state.close();rmSync(root,{recursive:true,force:true});}
 });
 
-test("essential questions block approval and revised reviews retain original intent",async()=>{
-  const root=mkdtempSync(join(tmpdir(),"architecture-question-"));
-  const state=new ProductState(join(root,"state.sqlite3"));
+test("essential questions block approval; a new review uses explicit original inputs", async () => {
+  const root=mkdtempSync(join(tmpdir(),"architecture-question-")); const state=new ProductState(join(root,"state.sqlite3"));
   try {
-    const tools=new Map<string,any>(); let request="Create the original specification";
-    registerArchitectureTool({id:"source",ctx:{tools:{register:(tool:any)=>{tools.set(tool.name,tool);return()=>{};}}}},state,{} as any,()=>request);
-    const first=await tools.get("prepare_architecture_review").execute({...architecturePlan,open_questions:["Which reset polarity?"]},{callId:"first"});
-    assert.throws(()=>state.decideArchitecture(first.architecture_review.reviewId,"approved",""),/essential open questions/);
-    state.decideArchitecture(first.architecture_review.reviewId,"revised","Use active-low reset");
-    request=JSON.stringify({kind:"architecture_decision",architecture_review_id:first.architecture_review.reviewId,decision:"revised",feedback:"Use active-low reset"});
-    const second=await tools.get("prepare_architecture_review").execute(architecturePlan,{callId:"second"});
-    assert.equal(second.architecture_review.originalRequest,"Create the original specification");
-    assert.notEqual(second.architecture_review.reviewId,first.architecture_review.reviewId);
-  }finally{state.close();rmSync(root,{recursive:true,force:true});}
-});
-
-test("structured decisions preserve selected review lineage and reject foreign or inconsistent records", async () => {
-  const root = mkdtempSync(join(tmpdir(), "architecture-decision-"));
-  const state = new ProductState(join(root, "state.sqlite3"));
-  try {
-    let tool: any, request = "Original designer intent";
-    registerArchitectureTool({ id: "source", ctx: { tools: { register(value: any) { tool = value; return () => {}; } } } }, state, {} as any, () => request);
-    const older = (await tool.execute(architecturePlan, { callId: "older" })).architecture_review;
-    request = "Another independent request";
-    const newer = (await tool.execute(architecturePlan, { callId: "newer" })).architecture_review;
-    state.decideArchitecture(older.reviewId, "revised", "Use active-low reset");
-    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: older.reviewId, decision: "revised", feedback: "Use active-low reset" });
-    const revised = (await tool.execute(architecturePlan, { callId: "revised" })).architecture_review;
-    assert.equal(revised.originalRequest, "Original designer intent");
-    assert.notEqual(revised.originalRequest, newer.originalRequest);
-    state.decideArchitecture(revised.reviewId, "revised", "Keep the interface");
-    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: revised.reviewId, decision: "revised", feedback: "Keep the interface" });
-    assert.equal((await tool.execute(architecturePlan, { callId: "again" })).architecture_review.originalRequest, "Original designer intent");
-    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: older.reviewId, decision: "approved", feedback: "" });
-    assert.match((await tool.execute(architecturePlan, { callId: "inconsistent" })).creation_error, /does not match/);
-    state.storeArchitecture({ ...older, reviewId: "foreign", sessionId: "other", status: "approved", feedback: "" });
-    request = JSON.stringify({ kind: "architecture_decision", architecture_review_id: "foreign", decision: "approved", feedback: "" });
-    assert.match((await tool.execute(architecturePlan, { callId: "foreign" })).creation_error, /does not match/);
-  } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
+    const command=prepareArchitectureCommand({id:"source"}, state, {} as any, () => "Create a reviewed leaf");
+    const first=await command.execute({...architecturePlan,open_questions:["Which reset polarity?"]}, {callId:"first"} as any);
+    assert.throws(()=>state.decideArchitecture(first.architecture_review!.reviewId,"approved",""), /essential open questions/);
+    state.decideArchitecture(first.architecture_review!.reviewId,"revised","Use active-low reset");
+    const second=await command.execute(architecturePlan, {callId:"second"} as any);
+    assert.equal(second.architecture_review!.originalRequest,"Create a reviewed leaf");
+    assert.notEqual(second.architecture_review!.reviewId,first.architecture_review!.reviewId);
+  } finally { state.close(); rmSync(root,{recursive:true,force:true}); }
 });

@@ -178,54 +178,45 @@ HTTP monitoring has separate transport bounds:
 ## CLI flows
 
 The root Python entry points are `spec2gds-assistant` and `spec2gds-spec`.
-The Assistant command supports `focused` only. It starts a private loopback Spec
-service, binds one headless turn, prints the answer/IDs, then exits. The Spec command
-inspects or decides stored records; it never calls a model.
+The Assistant command supports Focused against an existing Spec. It starts a
+headless conversation against the selected running Spec service. A selected flow
+runs until its first wait or terminal result. At a wait, exit code 2 and the
+returned flow execution ID identify pending work; they do not mean a saved change.
 
 ```bash
-uv run spec2gds-assistant ./work/timer --preset focused -- "Propose a timer component."
-uv run spec2gds-spec architecture-reviews ./work/timer
-uv run spec2gds-spec approve-architecture ./work/timer REVIEW_ID
-uv run spec2gds-assistant ./work/timer --architecture-review-id REVIEW_ID -- "Implement the approved architecture."
+uv run spec2gds-assistant ./work/timer.spec --service-url http://127.0.0.1:6010 --preset focused -- "Add timer with scalar a input, q output and assign q = a."
+uv run spec2gds-spec architecture-reviews ./work/timer.spec
+uv run spec2gds-spec reviews ./work/timer.spec --json
+uv run spec2gds-spec history ./work/timer.spec --limit 25
 ```
 
-Use the returned review ID. `revise-architecture` and `cancel-architecture` also
-operate on that durable record. An approved review must match the exact document,
-scope, and relevant revision. Headless mode does not receive browser creation or
-question cards. Report unresolved input instead of assuming a browser action occurred.
+Architecture decisions and Pause, Resume and Cancel use the revision-checked flow
+API through a supported running profile or SDK. Restricted content decisions use
+Spec Editor and the exact service proposal. The CLI requires `--service-url` so its
+service remains available after the invocation exits. Resume its stored execution
+through a supported profile or SDK using the same state root. The CLI does not
+replay an approval as model text.
+The Spec command provides read-only inspection of reviews and history. The old
+`approve`, `reject`, and architecture decision commands are removed.
 
-For a restricted content save:
-
-```bash
-uv run spec2gds-assistant ./work/timer --require-human-approval -- "Improve the timer explanation only."
-uv run spec2gds-spec reviews ./work/timer
-uv run spec2gds-spec approve ./work/timer PROPOSAL_ID
-uv run spec2gds-spec history ./work/timer --limit 25
-```
-
-`reject` rejects a pending content proposal. Approval reopens and revalidates the
-stored artifact; it does not accept new operations from the command line. Pass an
-ID when several proposals are pending. `history --limit N --before CURSOR` paginates.
-These explicit CLI decisions are the approved exception to browser approval location.
-
-A directory target uses its sole direct-child `.spec` file. With none, the Assistant
-command creates an empty `<directory-name>.spec` before requesting content. With
-several, it reports candidates. An explicit `.spec` path selects that file and can
-create it if absent. Spec decision commands require an existing document. Browser
-and CLI writers keep disk conflict/revision checks and reconcile interrupted saves.
+A directory target selects its sole direct-child `.spec` file. With several files,
+it reports the candidates. The Assistant command requires an existing file and
+cannot create an empty file before a flow. Use a creation flow for a new Spec.
+The `--architecture-review-id` continuation flag and CLI content policy flags are
+removed. The selected Spec service determines the content policy.
 
 Each document's CLI records are under
 `<workspace>/.spec2gds/assistant/<package-path-hash>/`:
 
 | Record | Contents |
 | --- | --- |
-| `last-run.json` | Latest run schema, path, document/conversation ID, preset, policy, exit code, answer, proposal IDs/states, and event path. |
+| `last-run.json` | Version 2 run metadata, flow outcome and pending identity, path, conversation ID, policy, exit code and event path. |
 | `runs/<session-id>.json` | Run metadata. |
-| `runs/<session-id>.jsonl` | Raw exported events for that invocation. |
-| `spec2gds-spec reviews` output | Exact stored artifacts, preview, service diagnostics, and receipts. |
+| `runs/<session-id>.jsonl` | Exported events for that invocation. |
+| `spec2gds-spec reviews` output | Recorded Spec service proposal states. |
 
-The path hash distinguishes explicit files in one workspace. Do not interpret
-exit code or model answer alone as a saved-state result.
+The path hash distinguishes explicit files in one workspace. A model answer or
+exit code does not prove a save. Completion requires the exact applied receipt.
 
 Lower-level Harness requests can bind by service-resolved names or technical IDs:
 

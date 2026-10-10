@@ -75,7 +75,7 @@ export default function App() {
     proposals: [],
     assistant_changes: [],
   });
-  const [view, setView] = useState<EditorView>("document");
+  const [view, setView] = useState<EditorView>(() => new URLSearchParams(window.location.search).get("view") === "activity" ? "activity" : "document");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -132,6 +132,17 @@ export default function App() {
     setExternalChange(null);
     setSyncState("Up to date");
   }, [client]);
+
+  const initialDocumentKey = useRef(new URLSearchParams(window.location.search).get("owner_document_key"));
+  useEffect(() => {
+    const key = initialDocumentKey.current;
+    if (!key) return;
+    initialDocumentKey.current = null;
+    activeKey.current = key;
+    client.bindDocument(key);
+    void loadView().catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
+  }, [client, loadView]);
+  useEffect(() => { if (snapshot?.source_path) setPath(snapshot.source_path); }, [snapshot?.source_path]);
 
   const editingChanged = useCallback((value: boolean) => {
     editing.current = value;

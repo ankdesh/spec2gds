@@ -9,7 +9,7 @@ async function fixture(meta: any, text: string) {
   const state: any[] = [], effects: any[] = [], deps = new Map<number, string>();
   const calls: string[] = [];
   let failed = true;
-  const review = { proposalId: "proposal", sessionId: "conversation", callId: "call", state: "ready", domain: "spec",
+  const review = { proposalId: "proposal", sessionId: "conversation", callId: "call", state: "ready", domain: "circuit",
     artifact: { title: "Large proposal", operations: [] }, preview: { diff: [] }, changeSummary: {}, serviceResult: null };
   const React = {
     createElement: (type: any, props: any, ...children: any[]) => ({ type, props: props || {}, children: children.flat() }),
@@ -30,7 +30,7 @@ async function fixture(meta: any, text: string) {
     slots: { inject: (_name: string, fn: any) => fn(), register: (options: any, component: any) => { if (options.name === "conversation.chat.turnTail") tail = { options, component }; } },
   });
   let tracking = tracker.start({}, { event: { type: "turn/start", data: { turn: 1 } } });
-  tracking = tracker.update({ state: tracking }, { event: { type: "tool/call", data: { callId: "call", name: "prepare_spec_proposal" } } });
+  tracking = tracker.update({ state: tracking }, { event: { type: "tool/call", data: { callId: "call", name: "prepare_circuit_proposal" } } });
   tracking = tracker.update({ state: tracking }, { event: { type: "tool/result", seq: 3, data: { meta,
     message: { source: { callId: "call" }, content: [{ content: [{ type: "text", text }] }] } } } });
   const location = tracker.buildLocationData({ state: tracking }, "turn", null);

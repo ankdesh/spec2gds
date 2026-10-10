@@ -6,7 +6,7 @@ test("evaluation metrics derive raw counts from durable DSH events", () => {
   const payload = JSON.stringify({ success: true, review: { state: "ready", artifact: { operations: [{ type: "create_entity" }, { type: "create_entity" }] } } });
   const events = parseJsonLines([
     JSON.stringify({ type: "turn/start", time: 10, data: { turn: 1 } }),
-    JSON.stringify({ type: "tool/call", data: { turn: 1, name: "prepare_spec_proposal" } }),
+    JSON.stringify({ type: "tool/call", data: { turn: 1, name: "prepare_circuit_proposal" } }),
     JSON.stringify({ type: "tool/result", data: { turn: 1, message: { content: [{ type: "tool-result", content: [{ type: "text", text: payload }] }] } } }),
     JSON.stringify({ type: "assistant/message", data: { turn: 1, message: { content: [{ type: "text", text: "Ready for review." }] }, usage: { inputTokens: 20, cacheReadTokens: 4, outputTokens: 5, reasoningTokens: 2 } } }),
     JSON.stringify({ type: "turn/end", time: 35, data: { turn: 1 } }),

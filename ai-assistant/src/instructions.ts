@@ -8,8 +8,8 @@ import { parsePromptBundleYaml } from "@deepseek-ai/dsh-prompt-catalog-yaml";
 import { assertObjectJsonSchema, assertSupportedJsonSchema, type JsonSchemaNode } from "@deepseek-ai/dsh-tools";
 import type { ToolName } from "./tool-arguments.js";
 
-export const handlerCompatibilityVersion = 1;
-export const toolNames: readonly ToolName[] = ["get_bound_context", "prepare_spec_proposal", "prepare_circuit_proposal", "prepare_architecture_review", "prepare_spec_document_creation"];
+export const handlerCompatibilityVersion = 2;
+export const toolNames: readonly ToolName[] = ["get_bound_context", "prepare_circuit_proposal"];
 export interface ToolContract {
   name: ToolName; version: string; handler_key: ToolName; instruction_ref: string;
   availability: string; input_schema: JsonSchemaNode; output_schema: JsonSchemaNode;
@@ -85,8 +85,7 @@ export class InstructionBundle {
   }
 }
 const availability: Record<ToolName, string> = {
-  get_bound_context: "bound", prepare_spec_proposal: "spec-primary", prepare_circuit_proposal: "circuit-primary",
-  prepare_architecture_review: "spec-or-unbound-primary", prepare_spec_document_creation: "interactive-primary",
+  get_bound_context: "bound", prepare_circuit_proposal: "circuit-primary",
 };
 function freeze(value: unknown): void {
   if (value && typeof value === "object") {

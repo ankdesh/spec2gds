@@ -9,7 +9,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { ServiceClients } from "../src/service-clients.js";
 import { ProductState } from "../src/state.js";
-import { creationContinuation, registerSourceCreationTool, SourceCreations, specDestination } from "../src/source-creation.js";
+import { SourceCreations, specDestination } from "../src/source-creation.js";
 import type { BindingInput, SourceCreationRequest } from "../src/types.js";
 
 const comparatorRequest = `Create a new spec document for comparator_3bit. Compare unsigned A[2:0] and B[2:0] using combinational logic. A_greater, A_equal, and A_less are one-bit, mutually exclusive outputs for A > B, A == B, and A < B.`;
@@ -20,7 +20,7 @@ async function fixture() {
   let state = new ProductState(database);
   const paths: string[] = [];
   let creates = 0;
-  let creationReceipts = false;
+  let creationReceipts = true;
   const receipts = new Map<string, { body: string; snapshot: Record<string, unknown> }>();
   let approvalPolicy: "automatic" | "review" = "review";
   let reservationFailure = false;
@@ -53,7 +53,7 @@ async function fixture() {
     if (mode === "reject") { response.writeHead(422, { "Content-Type": "application/json" }); response.end('{"detail":"Existing package"}'); return; }
     try { await writeFile(body.path, body.document_id, { flag: "wx" }); }
     catch { response.writeHead(422, { "Content-Type": "application/json" }); response.end('{"detail":"Refusing to replace existing package"}'); return; }
-    const snapshot = { document_id: body.document_id, source_revision_hash: "sha256:created", owner_document_key: "created-package" };
+    const snapshot = { document_id: body.document_id, source_revision_hash: "sha256:created", owner_document_key: "created-package", source_path: body.path };
     if (creationReceipts) receipts.set(body.request_id, { body: raw, snapshot });
     if (mode === "drop") { request.socket.destroy(); return; }
     response.writeHead(200, { "Content-Type": "application/json" });
@@ -76,7 +76,7 @@ async function fixture() {
   approvedArchitecture(state, "bound-chat", comparatorRequest);
   let creations = new SourceCreations(state, owners, root, reserve);
   const prepare = async (callId = "create-call", originalRequest = comparatorRequest) =>
-    await creations.prepare({ sourceSessionId: "unbound-chat", callId, originalRequest, preset: "focused", title: "3-bit comparator", documentId: "comparator_3bit", architectureReviewId: "architecture-unbound-chat" }) as unknown as SourceCreationRequest;
+    await creations.prepare({ sourceSessionId: "unbound-chat", flowExecutionId: "flow-source", callId, originalRequest, preset: "focused", title: "3-bit comparator", documentId: "comparator_3bit", architectureReviewId: "architecture-unbound-chat" }) as unknown as SourceCreationRequest;
   const values = { documentId: "comparator_3bit", title: "3-bit comparator", serviceBaseUrl: url };
   return { root, url, owners, paths, values, prepare,
     get state() { return state; }, get creations() { return creations; }, get creates() { return creates; },
@@ -89,14 +89,14 @@ async function fixture() {
   };
 }
 
-test("unbound creation stages a durable card without accessing bound context or creating a package", async () => {
+test("unbound creation stages a durable flow intent without accessing bound context or creating a package", async () => {
   const f = await fixture();
   try {
     const request = await f.prepare();
     assert.equal(f.creates, 0);
     assert.ok(f.paths.every(path => ["GET /health", "GET /assistant/capabilities"].includes(path)));
     assert.equal(f.state.getBinding("unbound-chat"), null);
-    assert.equal((await f.prepare()).requestId, request.requestId, "Repeated tool execution reuses its receipt");
+    assert.equal((await f.prepare()).requestId, request.requestId, "Repeated operation execution reuses its receipt");
     f.reopen();
     assert.equal(f.creations.get(request.requestId).originalRequest, comparatorRequest);
     const result = await f.creations.create(request.requestId, f.values) as any;
@@ -104,17 +104,16 @@ test("unbound creation stages a durable card without accessing bound context or 
     assert.equal(await readFile(join(f.root, "3-bit-comparator.spec"), "utf8"), "comparator_3bit");
     assert.equal(result.session.scope, "document");
     assert.notEqual(result.session.sessionId, "unbound-chat");
-    assert.ok(result.continuation.message.includes(comparatorRequest));
-    assert.match(result.continuation.message, /Do not create another Spec/);
+    assert.equal(result.continuation, undefined);
     assert.equal(f.state.getBinding("unbound-chat"), null);
     f.state.activateBinding(result.session.sessionId);
-    f.creations.continued(request.requestId);
+    f.creations.markConversationBound(request.requestId);
     f.reopen();
     const replay = await f.creations.create(request.requestId, f.values) as any;
     assert.equal(f.creates, 1);
     assert.equal(replay.session.sessionId, result.session.sessionId);
-    assert.equal(replay.continuation.requestId, result.continuation.requestId);
-    assert.equal(replay.continuation.sent, true);
+    assert.equal(replay.creation_request.status, "bound");
+    assert.equal(replay.continuation, undefined);
   } finally { await f.close(); }
 });
 
@@ -133,7 +132,7 @@ test("known creation success survives a failed reservation and retries only chat
   } finally { await f.close(); }
 });
 
-test("simultaneous card submissions create one package and preserve one chat identity", async () => {
+test("simultaneous operation dispatches create one package and preserve one chat identity", async () => {
   const f = await fixture();
   let release!: () => void;
   try {
@@ -147,7 +146,7 @@ test("simultaneous card submissions create one package and preserve one chat ide
   } finally { release?.(); await f.close(); }
 });
 
-test("new tool-call IDs sharing an approved architecture retain one creation receipt", async () => {
+test("new operation IDs sharing an approved architecture retain one creation receipt", async () => {
   const f = await fixture();
   try {
     const [first, retry] = await Promise.all([f.prepare("first-call"), f.prepare("retry-call")]);
@@ -162,7 +161,7 @@ test("new tool-call IDs sharing an approved architecture retain one creation rec
   } finally { await f.close(); }
 });
 
-test("a source revision change while a creation card is pending requires renewed architecture approval", async () => {
+test("a source revision change while a creation operation is pending requires renewed architecture approval", async () => {
   const f = await fixture();
   try {
     f.state.createBinding("source", { domain: "spec", serviceBaseUrl: f.url, serviceUrl: f.url, documentId: "source-doc", scope: "document",
@@ -171,15 +170,15 @@ test("a source revision change while a creation card is pending requires renewed
     const reviewId = approvedArchitecture(f.state, "source", comparatorRequest, "sha256:old");
     let revision = "sha256:old";
     f.owners.context = async () => ({ document_id: "source-doc", source_revision_hash: revision });
-    const request = await f.creations.prepare({ sourceSessionId: "source", callId: "new-package", originalRequest: comparatorRequest,
+    const request = await f.creations.prepare({ sourceSessionId: "source", flowExecutionId: "flow-bound", callId: "new-package", originalRequest: comparatorRequest,
       preset: "focused", title: "Comparator", documentId: "comparator_3bit", architectureReviewId: reviewId });
     revision = "sha256:new";
-    await assert.rejects(f.creations.create(String(request.requestId), f.values), /stale/);
+    await assert.rejects(f.creations.create(String(request.requestId), { documentId: String(request.documentId), title: String(request.title), serviceBaseUrl: String(request.serviceBaseUrl) }), /stale/);
     assert.equal(f.creates, 0);
   } finally { await f.close(); }
 });
 
-test("cancelled and invalid requests never write packages", async () => {
+test("invalid creation inputs never write packages", async () => {
   const f = await fixture();
   try {
     const request = await f.prepare();
@@ -188,8 +187,7 @@ test("cancelled and invalid requests never write packages", async () => {
     }
     await assert.rejects(f.creations.create(request.requestId, { ...f.values, title: " " }), /title/);
     await assert.rejects(f.creations.create(request.requestId, { ...f.values, serviceBaseUrl: "http://127.0.0.1:9" }), /allowlist/i);
-    f.creations.cancel(request.requestId); f.reopen();
-    await assert.rejects(f.creations.create(request.requestId, f.values), /cancelled/);
+
     assert.equal(f.creates, 0);
   } finally { await f.close(); }
 });
@@ -211,29 +209,18 @@ test("owner rejection and offline services leave an editable request; existing f
   } finally { await f.close(); }
 });
 
-for (const mode of ["drop", "invalid"] as const) {
-  test(`an ambiguous ${mode} owner response is never automatically repeated`, async () => {
-    const f = await fixture();
-    try {
-      const request = await f.prepare(); f.mode = mode;
-      await assert.rejects(f.creations.create(request.requestId, f.values));
-      assert.equal(f.creations.get(request.requestId).status, "uncertain");
-      assert.equal(await readFile(request.destination, "utf8"), request.documentId);
-      f.reopen(); f.mode = "normal";
-      await assert.rejects(f.creations.create(request.requestId, f.values), /will not be repeated automatically/);
-      assert.equal(f.creates, 1);
-    } finally { await f.close(); }
-  });
-}
+test("services without durable creation receipts are rejected", async () => {
+  const f=await fixture();
+  try { f.creationReceipts=false; await assert.rejects(f.prepare(), /durable creation receipts/); assert.equal(f.creates,0); }
+  finally { await f.close(); }
+});
 
-test("restart converts an interrupted owner mutation into uncertain creation", async () => {
-  const f = await fixture();
+test("restart retains uncertain dispatch until explicit flow recovery", async () => {
+  const f=await fixture();
   try {
-    const request = await f.prepare(); assert.equal(f.state.claimSourceCreation(request), true);
-    f.reopen(); f.state.recoverInterruptedSourceCreations();
-    assert.equal(f.creations.get(request.requestId).status, "uncertain");
-    await assert.rejects(f.creations.create(request.requestId, f.values), /interrupted/);
-    assert.equal(f.creates, 0);
+    const request=await f.prepare(); assert.equal(f.state.claimSourceCreation(request),true);
+    f.reopen(); f.state.recoverInterruptedSourceCreations(); assert.equal(f.creations.get(request.requestId).status,"uncertain");
+    assert.equal(f.creates,0);
   } finally { await f.close(); }
 });
 
@@ -264,50 +251,18 @@ test("available owner selection supports a preferred Spec service and multiple c
     f.owners.specAllowlist.unshift("http://127.0.0.1:9"); f.owners.specAllowlist.push(second.url);
     const defaulted = await f.prepare() as any;
     assert.equal(defaulted.serviceBaseUrl, f.url); assert.equal(defaulted.services.length, 3);
-    const preferred = await f.creations.prepare({ sourceSessionId: "bound-chat", callId: "second", originalRequest: comparatorRequest,
-      preset: "orchestrated", preferredOwner: second.url, architectureReviewId: "architecture-bound-chat" });
-    assert.equal(preferred.serviceBaseUrl, second.url); assert.equal(preferred.preset, "orchestrated");
+    const preferred = await f.creations.prepare({ sourceSessionId: "bound-chat", flowExecutionId: "flow-second", callId: "second", originalRequest: comparatorRequest,
+      preset: "goal", preferredOwner: second.url, architectureReviewId: "architecture-bound-chat" });
+    assert.equal(preferred.serviceBaseUrl, second.url); assert.equal(preferred.preset, "goal");
   } finally { await f.close(); await second.close(); }
 });
 
-test("model tool captures the host request and supplies safe empty-spec defaults", async () => {
-  const f = await fixture();
+test("legacy creation records have no command recovery path", async () => {
+  const f=await fixture();
   try {
-    let tool: any;
-    const sections: any[] = [];
-    registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } }, systemPrompt: { section: value => { sections.push(value); return () => {}; } } } }, f.creations,
-      () => ({ sourceSessionId: "chat", originalRequest: "Create an empty specification", preset: "focused" }));
-    const result = await tool.execute({ empty: true }, { callId: "empty-call" });
-    assert.equal(tool.name, "prepare_spec_document_creation");
-    assert.match(result.source_creation.documentId, /^spec_[a-f0-9]{32}$/);
-    assert.equal(f.creates, 0);
-    assert.match(sections[0].text, /Do not read get_bound_context first/);
-    assert.match(creationContinuation(result.source_creation), /only asked for an empty Spec/);
-    assert.throws(() => specDestination(f.root, "../escape"), /Document ID/);
-  } finally { await f.close(); }
-});
-
-test("automatic creation returns a saved receipt and continuation with no confirmation", async () => {
-  const f = await fixture();
-  try {
-    f.approvalPolicy = "automatic";
-    let tool: any;
-    registerSourceCreationTool({ ctx: { tools: { register: value => { tool = value; return () => {}; } } } }, f.creations,
-      () => ({ sourceSessionId: "chat", originalRequest: comparatorRequest, preset: "focused" }));
-    const invalid = await tool.execute({ document_id: "not a valid ID", title: "3-bit comparator", architecture_review_id: "architecture-chat" }, { callId: "invalid-id" });
-    assert.match(invalid.creation_error, /Document ID/);
-    assert.equal(f.creates, 0);
-    const result = await tool.execute({ document_id: "comparator_3bit", title: "3-bit comparator", architecture_review_id: "architecture-chat" }, { callId: "automatic-call" });
-    assert.ok(result.source_creation, JSON.stringify(result));
-    assert.equal(result.source_creation.status, "reserved");
-    assert.equal(result.source_creation.automatic, true);
-    assert.equal(result.source_creation.documentId, "comparator_3bit");
-    assert.equal(result.source_creation.title, "3-bit comparator");
-    assert.equal(result.source_creation.destination, join(f.root, "3-bit-comparator.spec"));
-    assert.equal(f.creates, 1);
-    assert.ok(result.source_creation.continuation.message.includes(comparatorRequest));
-    const retry = await tool.execute({}, { callId: "automatic-call" });
-    assert.equal(retry.source_creation.requestId, result.source_creation.requestId);
-    assert.equal(f.creates, 1);
+    const request=await f.prepare(); const old={...request}; delete (old as any).flowExecutionId; f.state.storeSourceCreation(old);
+    assert.throws(()=>f.creations.get(request.requestId), /requires a flow/);
+    await assert.rejects(f.creations.create(request.requestId,f.values), /requires a flow/);
+    assert.equal(f.creates,0); assert.throws(()=>specDestination(f.root,"../escape"), /Document ID/);
   } finally { await f.close(); }
 });

@@ -1,0 +1,330 @@
+{
+  "id": "spec2gds.edit_spec",
+  "version": "2.0.0",
+  "description": "Edit the bound Spec or selected Component or Design through a reviewed, revision-checked atomic save.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "request": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "request"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string",
+        "const": "applied"
+      },
+      "source_revision_hash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "proposal_id",
+      "state",
+      "source_revision_hash"
+    ],
+    "additionalProperties": false
+  },
+  "nodes": [
+    {
+      "id": "context",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.edit_context",
+        "version": "2.0.0"
+      },
+      "inputs": {}
+    },
+    {
+      "id": "draft",
+      "kind": "model",
+      "instructionsFile": "prompts/edit.md",
+      "inputs": {
+        "request": {
+          "$ref": "inputs.request"
+        },
+        "context": {
+          "$ref": "nodes.context.context"
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "supported": {
+            "type": "boolean"
+          },
+          "unsupported_reason": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "base_source_revision_hash": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "assumptions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "operations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "required": [
+          "supported",
+          "unsupported_reason",
+          "base_source_revision_hash",
+          "title",
+          "summary",
+          "rationale",
+          "assumptions",
+          "operations"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "validated",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.validate_edit",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "context": {
+          "$ref": "nodes.context.context"
+        },
+        "draft": {
+          "$ref": "nodes.draft"
+        }
+      }
+    },
+    {
+      "id": "approval_required",
+      "kind": "branch",
+      "value": {
+        "$ref": "nodes.validated.architecture_required"
+      },
+      "equals": true,
+      "then": "architecture",
+      "otherwise": "submit_content"
+    },
+    {
+      "id": "architecture",
+      "kind": "flow",
+      "flow": {
+        "id": "spec2gds.architecture",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "title": {
+          "$ref": "inputs.title"
+        },
+        "request": {
+          "$ref": "inputs.request"
+        },
+        "creation": false,
+        "proposed_changes": {
+          "$ref": "nodes.validated.draft"
+        }
+      }
+    },
+    {
+      "id": "submit_architecture",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.submit_edit",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "session_id": {
+          "$ref": "nodes.validated.session_id"
+        },
+        "context": {
+          "$ref": "nodes.validated.context"
+        },
+        "draft": {
+          "$ref": "nodes.validated.draft"
+        },
+        "review_id": {
+          "$ref": "nodes.architecture.review_id"
+        }
+      }
+    },
+    {
+      "id": "saved_architecture",
+      "kind": "wait",
+      "request": {
+        "kind": "spec-receipt",
+        "session_id": {
+          "$ref": "nodes.validated.session_id"
+        },
+        "proposal_id": {
+          "$ref": "nodes.submit_architecture.proposal_id"
+        },
+        "editor_url": {
+          "$ref": "nodes.submit_architecture.editor_url"
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "discarded",
+              "rejected",
+              "stale"
+            ]
+          },
+          "source_revision_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "state",
+          "source_revision_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "complete_architecture",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.require_saved",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "nodes.saved_architecture"
+      },
+      "next": null,
+      "result": {
+        "$ref": "nodes.complete_architecture"
+      }
+    },
+    {
+      "id": "submit_content",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.submit_edit",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "session_id": {
+          "$ref": "nodes.validated.session_id"
+        },
+        "context": {
+          "$ref": "nodes.validated.context"
+        },
+        "draft": {
+          "$ref": "nodes.validated.draft"
+        },
+        "review_id": null
+      }
+    },
+    {
+      "id": "saved_content",
+      "kind": "wait",
+      "request": {
+        "kind": "spec-receipt",
+        "session_id": {
+          "$ref": "nodes.validated.session_id"
+        },
+        "proposal_id": {
+          "$ref": "nodes.submit_content.proposal_id"
+        },
+        "editor_url": {
+          "$ref": "nodes.submit_content.editor_url"
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "proposal_id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "discarded",
+              "rejected",
+              "stale"
+            ]
+          },
+          "source_revision_hash": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "proposal_id",
+          "state",
+          "source_revision_hash"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "complete_content",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.require_saved",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "nodes.saved_content"
+      },
+      "next": null,
+      "result": {
+        "$ref": "nodes.complete_content"
+      }
+    }
+  ],
+  "outputs": {},
+  "publication": {
+    "toolName": "flow_edit_spec",
+    "contexts": [
+      "spec2gds.document",
+      "spec2gds.entity"
+    ]
+  }
+}

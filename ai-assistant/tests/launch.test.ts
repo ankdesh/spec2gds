@@ -304,9 +304,9 @@ test("browser plugin owns New Session and consumes launch data from the fragment
   const turnStart = { type: "turn/start", seq: 1, data: { turn: 4 } };
   let proposalState = proposalDefinition.start({}, { event: turnStart });
   proposalState = proposalDefinition.update({ state: proposalState }, { event: {
-    type: "tool/call", seq: 2, data: { turn: 4, callId: "proposal-call", name: "prepare_spec_proposal" },
+    type: "tool/call", seq: 2, data: { turn: 4, callId: "proposal-call", name: "prepare_circuit_proposal" },
   } });
-  const review = { proposalId: "proposal-1", state: "ready", domain: "spec", artifact: {} };
+  const review = { proposalId: "proposal-1", state: "ready", domain: "circuit", artifact: {} };
   proposalState = proposalDefinition.update({ state: proposalState }, { event: {
     type: "tool/result", seq: 3, data: { turn: 4, message: {
       source: { callId: "proposal-call" },
@@ -322,7 +322,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
 
   let inputState = proposalDefinition.start({}, { event: { type: "turn/start", seq: 5, data: { turn: 5 } } });
   inputState = proposalDefinition.update({ state: inputState }, { event: {
-    type: "tool/call", seq: 6, data: { turn: 5, callId: "input-call", name: "prepare_spec_proposal" },
+    type: "tool/call", seq: 6, data: { turn: 5, callId: "input-call", name: "prepare_circuit_proposal" },
   } });
   const requiredInput = { title: "Complete the proposal details", fields: [{ name: "component_name", label: "Component name", default_value: "AndGate" }] };
   inputState = proposalDefinition.update({ state: inputState }, { event: {
@@ -354,7 +354,7 @@ test("unbound sessions receive a product guard instead of design-editing claims"
   assert.ok(guard, "Expected the unbound prompt guard registration.");
   assert.match(guard, /complete: true/);
   assert.match(guard, /instructionsFor\(agent.id\)\.text\("unbound"\)/);
-  assert.match(UNBOUND_SOURCE_PROMPT, /Do not claim that work was completed and do not create a goal/);
+  assert.match(UNBOUND_SOURCE_PROMPT, /Do not create a Goal before binding/);
   for (const name of ["domain-persona", "binding-context", "operation-constraints", "output-contract"]) {
     assert.doesNotMatch(guard, new RegExp(name));
   }

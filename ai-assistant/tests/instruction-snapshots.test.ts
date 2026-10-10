@@ -7,8 +7,6 @@ import { ProductState } from "../src/state.js";
 import { InstructionBundle, InstructionSnapshots, defaultInstructions, contentHash, toolNames } from "../src/instructions.js";
 import { nativeTool } from "../src/tool-registry.js";
 import { registerDomainTools } from "../src/tools.js";
-import { registerArchitectureTool } from "../src/architecture-review.js";
-import { registerSourceCreationTool } from "../src/source-creation.js";
 import { specAdapter } from "../src/service-adapters/spec.js";
 import { circuitAdapter } from "../src/service-adapters/circuit.js";
 import { metadataDigest } from "../src/service-adapters/metadata.js";
@@ -18,21 +16,19 @@ import { EventConfigurations } from "../src/event-configuration.js";
 function modified(version: string, change: (files: Record<string, string>) => void = () => {}) {
   const snapshot = structuredClone(defaultInstructions.snapshot);
   snapshot.version = version;
-  snapshot.files["release.json"] = JSON.stringify({ version, handler_compatibility_version: 1 });
+  snapshot.files["release.json"] = JSON.stringify({ version, handler_compatibility_version: 2 });
   change(snapshot.files);
   snapshot.files = Object.fromEntries(Object.entries(snapshot.files).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
   snapshot.hash = contentHash(snapshot.files);
   return new InstructionBundle(snapshot);
 }
 
-test("the registry exposes the five JSON contracts with unchanged native schemas", () => {
+test("the domain registry exposes read context and Circuit proposal contracts only", () => {
   const found = new Map<string, any>();
   const ctx: any = { tools: { register(tool: any) { found.set(tool.name, tool); return () => {}; } } };
   const contract: any = { tool_schema: { type: "json" } };
   for (const domain of ["spec", "circuit"]) registerDomainTools(ctx, { domain, scope: "document", documentId: "d" } as any,
     {} as any, {} as any, undefined, undefined, undefined, false, contract);
-  registerArchitectureTool({ id: "x", ctx }, {} as any, {} as any, () => "");
-  registerSourceCreationTool({ ctx }, {} as any, () => ({}) as any);
   assert.deepEqual([...found.keys()].sort(), [...toolNames].sort());
   const baseline = JSON.parse(readFileSync(new URL("./fixtures/native-tool-schemas.json", import.meta.url), "utf8"));
   for (const name of toolNames) {
@@ -59,7 +55,7 @@ test("contract admission rejects unsupported schema keywords, references and han
   assert.throws(() => modified("2.0.0", files => {
     files["tools/unregistered.json"] = files["tools/get_bound_context.json"]!;
   }), /unregistered tool contracts/);
-  assert.throws(() => nativeTool("prepare_spec_proposal"), /Live service operation schema/);
+  assert.throws(() => nativeTool("prepare_spec_proposal" as any), /Unknown|Missing|undefined|contract/i);
 });
 
 test("unbound snapshots survive restart and new releases without instruction replacement", () => {
@@ -81,7 +77,7 @@ test("unbound snapshots survive restart and new releases without instruction rep
     assert.equal(snapshots.pin("continuation", "unbound").snapshot.hash, old.snapshot.hash);
     assert.equal(snapshots.pin("reviewer", "continuation").snapshot.hash, old.snapshot.hash);
     assert.throws(() => snapshots.pin("missing-child", "missing-parent"), /no instruction snapshot/);
-    assert.throws(() => new InstructionSnapshots(state.database, modified("1.0.0", files => {
+    assert.throws(() => new InstructionSnapshots(state.database, modified(old.snapshot.version, files => {
       files["instructions.json"] += "\n";
     })), /version was reused/);
   } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
@@ -91,7 +87,7 @@ test("changed or incompatible stored snapshots block execution without deleting 
   const state = new ProductState(":memory:");
   try {
     const pins = new InstructionSnapshots(state.database); pins.pin("old");
-    const snapshot = structuredClone(defaultInstructions.snapshot); snapshot.handler_compatibility_version = 2;
+    const snapshot = structuredClone(defaultInstructions.snapshot); snapshot.handler_compatibility_version = 1;
     state.database.prepare("UPDATE instruction_snapshots SET snapshot_json=? WHERE session_id=?").run(JSON.stringify(snapshot), "old");
     assert.equal(pins.has("old"), true);
     assert.throws(() => pins.get("old"), /incompatible handlers/);
@@ -142,10 +138,10 @@ test("schema outages retain a valid native unavailable tool without granting ope
     const tools = new Map<string, any>();
     registerDomainTools({ tools: { register(value: any) { assertObjectJsonSchema(value.parameters); tools.set(value.name, value); return () => {}; } } },
       { domain, scope: "document", documentId: "d", sessionId: "x" } as any, {} as any, {} as any);
-    const tool = tools.get(`prepare_${domain}_proposal`);
-    assert.deepEqual(tool.parameters, { type: "object", properties: {} });
-    const result = await tool.execute({}, { callId: "unavailable" });
-    assert.equal(result.success, false);
-    assert.equal(result.error.error_code, "SERVICE_CONTRACT_ERROR");
+    if (domain === "spec") { assert.equal(tools.has("prepare_spec_proposal"),false); assert.equal(tools.size,1); }
+    else {
+      const tool=tools.get("prepare_circuit_proposal"); assert.deepEqual(tool.parameters,{type:"object",properties:{}});
+      const result=await tool.execute({}, {callId:"unavailable"}); assert.equal(result.success,false); assert.equal(result.error.error_code,"SERVICE_CONTRACT_ERROR");
+    }
   }
 });

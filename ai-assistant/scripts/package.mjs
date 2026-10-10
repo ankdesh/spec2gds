@@ -28,7 +28,7 @@ try {
   }
   symlinkSync(resolve(root, "node_modules"), resolve(staging, "node_modules"), "dir");
   mkdirSync(resolve(staging, "docs"));
-  for (const guide of ["ai-assistant.md", "ai-assistant-operations.md", "TEMP-ai-assistant-implementation-gaps.md", "ai-assistant-future-work.md", "TERMINOLOGY.md"]) {
+  for (const guide of ["ai-assistant.md", "ai-assistant-operations.md", "ai-assistant-flows.md", "TEMP-ai-assistant-implementation-gaps.md", "ai-assistant-future-work.md", "TERMINOLOGY.md"]) {
     cpSync(resolve(root, "../docs", guide), resolve(staging, "docs", guide));
   }
   const result = spawnSync(process.execPath, [resolve(harness, "scripts/product-pack.mjs"), staging, resolve(output)], { stdio: "inherit" });

@@ -1,0 +1,101 @@
+{
+  "id": "spec2gds.add_component",
+  "version": "2.0.0",
+  "description": "Add one complete leaf Component to this document-bound Spec after architecture approval. Save its ports, description, narrative and functional SystemVerilog together.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "request": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "request"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "proposal_id": {
+        "type": "string"
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "applied",
+          "discarded"
+        ]
+      },
+      "source_revision_hash": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "proposal_id",
+      "state",
+      "source_revision_hash"
+    ],
+    "additionalProperties": false
+  },
+  "nodes": [
+    {
+      "id": "binding",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.bound_document",
+        "version": "2.0.0"
+      },
+      "inputs": {}
+    },
+    {
+      "id": "architecture",
+      "kind": "flow",
+      "flow": {
+        "id": "spec2gds.architecture",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "title": {
+          "$ref": "inputs.title"
+        },
+        "request": {
+          "$ref": "inputs.request"
+        },
+        "creation": false
+      }
+    },
+    {
+      "id": "content",
+      "kind": "flow",
+      "flow": {
+        "id": "spec2gds.component_content",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "session_id": {
+          "$ref": "nodes.binding.session_id"
+        },
+        "review_id": {
+          "$ref": "nodes.architecture.review_id"
+        },
+        "request": {
+          "$ref": "inputs.request"
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "$ref": "nodes.content"
+  },
+  "publication": {
+    "toolName": "flow_add_component",
+    "contexts": [
+      "spec2gds.document"
+    ]
+  }
+}

@@ -111,7 +111,7 @@ uv run spec2gds-spec create --output timer.spec --name "Timer controller"
 uv run spec2gds-spec inspect --container timer.spec
 uv run python scripts/run_rtl_activity.py design.spec generated --target "Timer controller"
 uv run spec2gds-spec reviews design.spec
-uv run spec2gds-spec approve design.spec 1
+uv run spec2gds-spec history design.spec --limit 25
 uv run spec2gds-spec architecture-reviews design.spec
 cd ai-assistant
 npm run request -- --domain spec --service-url http://127.0.0.1:6010 --document-name "Timer controller" --entity-name "Cycle timing" -- "Explain the timing requirements."

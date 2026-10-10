@@ -12,7 +12,6 @@
         "prepare_circuit_proposal",
         "ask_user_question",
         "get_event_system",
-        "prepare_spec_document_creation",
         "wait_for_event"
       ],
       "publishes": []

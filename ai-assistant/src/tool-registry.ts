@@ -15,8 +15,8 @@ export function nativeTool(name: ToolName, instructions: InstructionBundle = def
   assertObjectJsonSchema(parameters);
   return { name, description: instructions.text(unavailable ? contract.unavailable!.instruction_ref : contract.instruction_ref), parameters,
     output: { schema: contract.output_schema,
-      render: (_args: unknown, value: unknown) => [{ type: "text" as const, text: name === "prepare_spec_proposal" || name === "prepare_circuit_proposal" ? modelProposalResult(value) : JSON.stringify(value) }],
-      ...(["prepare_spec_proposal", "prepare_circuit_proposal"].includes(name) ? { presentationMeta: (_args: unknown, value: unknown) => proposalPresentation(value) } : {}),
+      render: (_args: unknown, value: unknown) => [{ type: "text" as const, text: name === "prepare_circuit_proposal" ? modelProposalResult(value) : JSON.stringify(value) }],
+      ...(["prepare_circuit_proposal"].includes(name) ? { presentationMeta: (_args: unknown, value: unknown) => proposalPresentation(value) } : {}),
     },
     ...(contract.timeout_ms === undefined ? {} : { timeoutMs: contract.timeout_ms }) };
 }
@@ -26,7 +26,9 @@ export type { ToolRunContext };
 export function registeredTool<T>(definition: { parameters: JsonSchemaNode; execute(args: T, exec: ToolRunContext): Promise<unknown> } & Record<string, unknown>) {
   return { ...definition, async execute(args: T, exec: ToolRunContext) {
     const violations = validateJsonSchemaValue(definition.parameters, args, "");
-    if (violations.length) throw new Error(violations.join("; "));
+    if (violations.length) {
+      throw new Error(violations.join("; "));
+    }
     return definition.execute(args, exec);
   } };
 }

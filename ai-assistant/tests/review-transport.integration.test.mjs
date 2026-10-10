@@ -32,17 +32,17 @@ test('spilled native text retains durable review metadata and the complete scope
     const state = new ProductState(join(directory, 'assistant.sqlite3'));
     let review;
     try {
-      state.createBinding('review', { domain: 'spec', serviceBaseUrl: 'http://127.0.0.1:9', serviceUrl: 'http://127.0.0.1:9', documentId: 'doc', scope: 'document',
-        workspaceKey: 'w', workspaceTitle: 'Test', workspacePath: directory, workspaceDomain: 'spec', workspaceServiceUrl: 'http://127.0.0.1:9', workspaceDocumentId: 'doc' });
-      review = state.createReview({ proposalId: 'proposal', sessionId: 'review', callId: 'call', domain: 'spec', state: 'ready', baseRevision: 'r',
+      state.createBinding('review', { domain: 'circuit', serviceBaseUrl: 'http://127.0.0.1:9', serviceUrl: 'http://127.0.0.1:9', documentId: 'doc', scope: 'document',
+        workspaceKey: 'w', workspaceTitle: 'Test', workspacePath: directory, workspaceDomain: 'circuit', workspaceServiceUrl: 'http://127.0.0.1:9', workspaceDocumentId: 'doc' });
+      review = state.createReview({ proposalId: 'proposal', sessionId: 'review', callId: 'call', domain: 'circuit', state: 'ready', baseRevision: 'r',
         artifact: { operations: [] }, preview: { status: 'valid', content: '界'.repeat(60000) }, diagnostics: [], error: null, serviceResult: null });
     } finally { state.close(); }
-    primary.agent.ctx.tools.register({ ...nativeTool('prepare_spec_proposal', defaultInstructions, undefined, true),
+    primary.agent.ctx.tools.register({ ...nativeTool('prepare_circuit_proposal', defaultInstructions, undefined, true),
       execute: async () => ({ success: true, proposal_id: 'proposal', state: 'ready', review, diagnostics: [], instruction: 'Details. '.repeat(400) }) });
     runtime.adapter.stream = async function* () {
       if (!events.some(event => event.type === 'tool/result')) {
         yield { type: 'block-start', index: 0, blockType: 'tool-call' };
-        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: ToolCallId('call'), name: 'prepare_spec_proposal', arguments: '{}' } };
+        yield { type: 'block-end', index: 0, block: { type: 'tool-call', id: ToolCallId('call'), name: 'prepare_circuit_proposal', arguments: '{}' } };
         yield { type: 'finish', reason: { kind: 'tool-calls' } };
       } else {
         yield { type: 'block-start', index: 0, blockType: 'text' };

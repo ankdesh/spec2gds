@@ -8,7 +8,6 @@ import type { ToolArguments } from "../tool-arguments.js";
 import { type InstructionBundle } from "../instructions.js";
 import { type ServiceClients } from "../service-clients.js";
 import { shapeBoundContext } from "../domain-context.js";
-import { parseServiceOperationContract, type ServiceOperationContract } from "../service-operation-schema.js";
 import { type ProductState } from "../state.js";
 import type { SessionBinding } from "../types.js";
 import { isRecord } from "../types.js";
@@ -16,7 +15,7 @@ import { json } from "./shared.js";
 export function registerContextTool(
   agentContext: { tools: { register(tool: unknown): () => void } }, binding: SessionBinding,
   state: ProductState, owners: ServiceClients, instructions: InstructionBundle,
-  readOnly: boolean, onDomainToolUse?: () => Promise<void>, refreshSpec?: (contract: ServiceOperationContract) => void,
+  readOnly: boolean, onDomainToolUse?: () => Promise<void>,
 ): void {
   agentContext.tools.register(registeredTool({
     ...nativeTool("get_bound_context", instructions),
@@ -31,14 +30,7 @@ export function registerContextTool(
           state.pinServiceDocument(binding.sessionId, context.owner_document_key);
           binding.serviceDocumentKey = context.owner_document_key;
         }
-        // Refresh tools between model steps, within the same conversation.
-        try {
-          const latest = parseServiceOperationContract(await owners.operationContract(binding, exec.signal));
-          refreshSpec?.(latest);
-        } catch {
-          // Reading context remains available during a contract outage. The
-          // proposal tool verifies the contract again before any submission.
-        }
+
       }
       if (binding.domain === "spec" && (context.document_id !== binding.documentId || typeof context.source_revision_hash !== "string" || !context.source_revision_hash)) {
         throw new Error("Spec context is missing its authoritative document identity or source revision.");
@@ -67,7 +59,7 @@ export function registerContextTool(
         warnings: shaped.warnings,
         authoritative_context: context,
         architecture_reviews: binding.domain === "spec" ? state.listArchitectureReviews().filter(review => {
-          try { state.requireArchitecture(binding.sessionId, review.reviewId, typeof revision === "string" ? revision : undefined); return true; }
+          try { if (!review.flow_execution_id) return false; state.requireArchitecture(binding.sessionId, review.reviewId, typeof revision === "string" ? revision : undefined); return true; }
           catch { return false; }
         }).map(review => ({ review_id: review.reviewId, number: review.reviewNumber || null, title: review.plan.title, status: review.status, plan: review.plan })) : [],
         rules: [

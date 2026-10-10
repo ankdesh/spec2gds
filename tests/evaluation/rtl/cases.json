@@ -7,7 +7,7 @@
       "configuration": {
         "width": 8
       },
-      "request": "Create a specification for an unsigned 8-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "request": "Create a new Spec with a functional unsigned 8-bit combinational adder Component, with 8-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 9-bit total using zero-extended operands; sum contains the lower 8 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -17,7 +17,7 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
     },
     {
       "id": "adder_4",
@@ -25,7 +25,7 @@
       "configuration": {
         "width": 4
       },
-      "request": "Create a specification for an unsigned 4-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "request": "Create a new Spec with a functional unsigned 4-bit combinational adder Component, with 4-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 5-bit total using zero-extended operands; sum contains the lower 4 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -35,7 +35,7 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
     },
     {
       "id": "adder_13",
@@ -43,7 +43,7 @@
       "configuration": {
         "width": 13
       },
-      "request": "Create a specification for an unsigned 13-bit combinational adder with a, b, cin, sum and cout. It must propagate carry across every bit and expose final carry.",
+      "request": "Create a new Spec with a functional unsigned 13-bit combinational adder Component, with 13-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 14-bit total using zero-extended operands; sum contains the lower 13 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -53,7 +53,7 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
     },
     {
       "id": "counter_16",

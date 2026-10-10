@@ -1,0 +1,101 @@
+{
+  "id": "spec2gds.create_empty_spec",
+  "version": "2.0.0",
+  "description": "Create a new empty Spec and its separate bound conversation. Do not add hardware content.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string"
+      },
+      "request": {
+        "type": "string"
+      },
+      "service_url": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "title",
+      "request"
+    ],
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "properties": {
+      "session_id": {
+        "type": "string"
+      },
+      "document_id": {
+        "type": "string"
+      },
+      "source_revision_hash": {
+        "type": "string"
+      },
+      "path": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "session_id",
+      "document_id",
+      "source_revision_hash",
+      "path"
+    ],
+    "additionalProperties": false
+  },
+  "nodes": [
+    {
+      "id": "destination",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.prepare_creation",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "title": {
+          "$ref": "inputs.title"
+        },
+        "request": {
+          "$ref": "inputs.request"
+        },
+        "empty": true,
+        "review_id": ""
+      }
+    },
+    {
+      "id": "create",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.create_spec",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "nodes.destination"
+      }
+    },
+    {
+      "id": "binding",
+      "kind": "call",
+      "operation": {
+        "id": "spec2gds.ensure_conversation",
+        "version": "2.0.0"
+      },
+      "inputs": {
+        "$ref": "nodes.create"
+      }
+    }
+  ],
+  "outputs": {
+    "$ref": "nodes.binding"
+  },
+  "publication": {
+    "toolName": "flow_create_empty_spec",
+    "contexts": [
+      "spec2gds.new",
+      "spec2gds.document",
+      "spec2gds.entity"
+    ]
+  }
+}

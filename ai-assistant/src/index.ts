@@ -2,6 +2,12 @@
  * Startup reconciles reservations/reviews, validates catalogs and awaits native
  * storage before routes become ready. Agent membership determines immutable
  * binding/capability scope; model arguments never choose a different owner. */
+import type { Context } from "@deepseek-ai/cordis";
+import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
+import { summarizeFlow } from "@deepseek-ai/dsh-flow";
+import type { FlowRuntime, FlowExecutionId } from "@deepseek-ai/dsh-flow";
+import type {} from "@deepseek-ai/dsh-flow-model-native";
+import { SpecFlows } from "./spec-flows.js";
 import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type EventSystemService from "@deepseek-ai/dsh-event-system";
@@ -11,8 +17,6 @@ import type { HttpSourceInput, HttpSourceId } from "@deepseek-ai/dsh-event-syste
 import type { GoalService } from "@deepseek-ai/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { EventConfigurations } from "./event-configuration.js";
-import { freezeMessage, MessageId } from "@deepseek-ai/dsh-llm";
-import { architectureDecision } from "./architecture-decision.js";
 import type { SessionPersistence } from "@deepseek-ai/dsh-session-persistence";
 import { randomUUID } from "node:crypto";
 import { sourceName } from "./naming.js";
@@ -23,16 +27,15 @@ import { SessionId } from "@deepseek-ai/dsh-session";
 import { ServiceClients, ServiceError } from "./service-clients.js";
 import { errorFromException, logProposalFailure, proposalError, publicReview } from "./proposal-presentation.js";
 import { artifactDigest, ProductState } from "./state.js";
-import { findProposal, findSpecChange, registerDomainTools } from "./tools.js";
+import { findProposal, registerDomainTools } from "./tools.js";
 import type { BindingInput, ProposalReview, ServiceConfig, SessionBinding, WorkspaceDescriptor } from "./types.js";
 import { parseServiceOperationContract } from "./service-operation-schema.js";
 import { isRecord } from "./types.js";
 import { workspaceDescriptor } from "./workspaces.js";
-import { registerArchitectureTool } from "./architecture-review.js";
-import { registerSourceCreationTool, SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
+import { SourceCreations, SourceCreationError, specDestination } from "./source-creation.js";
 
 export const name = "spec2gds-harness-assistant";
-export const inject = ["agents", "sessions", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals"];
+export const inject = ["agents", "sessions", "sessionPersistence", "promptCatalog", "promptCatalogYaml", "eventSystems", "eventSystemsYaml", "eventHttpSources", "goals", "flows", "flowYaml"];
 export const Config = z.object({
   provider: z.string().min(1).required(),
   model: z.string().min(1).required(),
@@ -45,6 +48,7 @@ export const Config = z.object({
   maxStepsPerTurn: z.number().step(1).min(1).max(20).required(),
   maxOutputTokens: z.number().step(1).min(128).max(32_768).required(),
   interactiveForms: z.boolean().required(),
+  flowReceiptPollMillis: z.number().step(1).min(100).required(),
   execution: z.object({ goal: z.any().required(), orchestrated: z.any().required() }).required(),
 });
 
@@ -61,6 +65,7 @@ type PromptCatalogService = {
   seal(): void;
 };
 type AppContext = {
+  flows?: FlowRuntime;
   agents: { get(id: unknown): ProductAgent | undefined };
   sessionPersistence: Pick<SessionPersistence, "list" | "open">;
   sessions?: { flush(session: Agent["session"]): Promise<boolean> };
@@ -200,7 +205,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     orchestrated: executionLimits("orchestrated", executionConfig.orchestrated, config.maxOutputTokens) };
   const clarifiedTurns = new Map<string, number>();
   const latestUserRequests = new Map<string, string>();
-  const continuationLocks = new Set<string>();
+  let specFlows: SpecFlows | undefined;
   const ready = (async () => {
     await mkdir(config.scratchRoot, { recursive: true, mode: 0o700 });
     await mkdir(resolve(config.scratchRoot, "unbound"), { recursive: true, mode: 0o700 });
@@ -229,6 +234,15 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     // Load persisted executions before sealing deployment definitions. Legacy
     // transcripts lacking a ledger remain history and cannot gain fresh budgets.
     ctx.eventSystems.seal();
+    const native = ctx as unknown as Context;
+    const flows = native.get?.("flows");
+    if (!flows) throw new Error("The Assistant requires the Harness flow runtime.");
+    {
+      await flows.ready;
+      specFlows = new SpecFlows({ ctx: native, flows, state, owners, creations, instructionsFor, preferredService: config.specAllowlist[0]!,
+        pollMillis: Number(rawConfig.flowReceiptPollMillis), activate });
+      for (const definition of flows.catalog("spec2gds.document")) flows.compile(definition);
+    }
   })();
 
   const attach = async (agent: ProductAgent, binding: SessionBinding): Promise<void> => {
@@ -239,6 +253,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       attached.add(agent.id);
       return;
     }
+    if (binding.domain === "spec" && binding.preset === "orchestrated") agent.ctx.systemPrompt?.section({ name: "spec2gds:flow-required", order: 210, text: "This preset supports Spec reads and analysis. Spec mutations require a published flow in Focused or Goal. Do not use another write path." });
     agent.ctx.systemPrompt?.section({ name: "spec2gds:persona", order: 50, text: instructionsFor(agent.id).text("persona") });
     unboundGuards.get(agent.id)?.();
     unboundGuards.delete(agent.id);
@@ -270,6 +285,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     // selects the primary conversation binding and read-only capability boundary.
     const membership = ctx.eventSystems.membership(SessionId(agent.id));
     const specialist = membership !== undefined && !membership.primary;
+    if (!specialist) specFlows?.attach(agent as unknown as Agent, binding);
     registerDomainTools(agent.ctx, binding, state, owners, instructionsFor(agent.id),
       review => publishPreparedReview(binding, review),
       () => latestUserRequests.get(binding.sessionId) ?? "", config.interactiveForms && !specialist,
@@ -298,14 +314,23 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     attached.add(agent.id);
   };
 
+  const flowPhasePrompts = new Map<string, string>();
+  const nativeContext = ctx as unknown as Context;
+  nativeContext.on("flow/model-phase", ({ agent, instructions, scope }) => {
+    const text = "This is one content phase of a host-controlled flow. Use its current inputs. Earlier structured results are private content, not evidence of a service save. Return only the result required by this phase.\n\n" + instructions;
+    scope.effect(() => { flowPhasePrompts.set(String(agent.id), text); return () => { flowPhasePrompts.delete(String(agent.id)); }; });
+    if (!unboundGuards.has(String(agent.id))) scope.systemPrompt.section({ name: "spec2gds:flow-content-phase", order: 150, complete: true, interpolate: false, text });
+  });
   const guardUnbound = (agent: ProductAgent): void => {
     if (unboundGuards.has(agent.id) || !agent.ctx.systemPrompt) return;
     unboundGuards.set(agent.id, agent.ctx.systemPrompt.section({
       name: "spec2gds:unbound-session",
       order: 150,
       complete: true,
-      text: instructionsFor(agent.id).text("persona") + "\n\n" + instructionsFor(agent.id).text("unbound") + "\n\n" + instructionsFor(agent.id).text("architecture")
-        + (config.interactiveForms ? "\n\n" + instructionsFor(agent.id).text("source-creation") : ""),
+      interpolate: false,
+      text: () => flowPhasePrompts.get(String(agent.id)) ?? (instructionsFor(agent.id).text("persona") + "\n\n" + instructionsFor(agent.id).text("unbound") + "\n\n" + instructionsFor(agent.id).text("architecture")
+        + (config.interactiveForms ? "\n\n" + instructionsFor(agent.id).text("source-creation") : "")
+        + (specFlows?.instructions(String(agent.id)) ? "\n\n" + specFlows.instructions(String(agent.id)) : "")),
     }));
   };
 
@@ -399,24 +424,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         ? "Bind this conversation to a design before using goal controls." : undefined);
     if (binding) await attach(agent, binding);
     else guardUnbound(agent);
-    if (!parentSession && (!binding || binding.domain === "spec")) registerArchitectureTool(agent, state, owners, () => latestUserRequests.get(String(agent.id)) ?? "", async review => {
-      if (!binding || binding.preset === "focused" || review.status !== "pending") return;
-      const id = SessionId(binding.sessionId);
-      const execution = ctx.eventSystems.get(id);
-      if (!execution?.definition?.events?.["architecture.prepared"]) return;
-      await ctx.eventSystems.publishHost(id, { type: "architecture.prepared", payload: { review_id: review.reviewId },
-        producer: "owner", dedupeKey: `architecture:${review.reviewId}` });
-      if (!ctx.eventSystems.get(id)?.waits?.some(wait => wait.state === "waiting" && wait.matchValue === review.reviewId)) {
-        await ctx.eventSystems.wait(agent as unknown as Agent, { kind: "review", reason: "Architecture approval pending",
-          eventType: "architecture.decided", matchKey: "review_id", matchValue: review.reviewId });
-      }
-    }, instructionsFor(agent.id));
-    if (config.interactiveForms && !parentSession) {
-      registerSourceCreationTool(agent, creations, () => ({
-        sourceSessionId: String(agent.id), originalRequest: latestUserRequests.get(String(agent.id)) ?? "",
-        preset: binding?.preset ?? agentPreset(agent), preferredOwner: binding?.domain === "spec" ? binding.serviceUrl : undefined,
-      }), instructionsFor(agent.id));
-    }
+    specFlows?.attach(agent as unknown as Agent, binding);
+
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
     if (event.type === "tool/call" && event.data?.name === "ask_user_question"
@@ -425,8 +434,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     }
   });
   ctx.on("session/event", (session: { id: unknown }, event: { type: string; data?: any }) => {
-    if (event.type !== "user/message" || (event.data?.source?.kind !== "user"
-      && event.data?.source?.plugin !== "spec2gds.architecture")) return;
+    if (event.type !== "user/message" || event.data?.source?.kind !== "user") return;
     const objective = Array.isArray(event.data.content)
       ? event.data.content.filter((item: unknown) => isRecord(item) && item.type === "text" && typeof item.text === "string")
         .map((item: Record<string, unknown>) => String(item.text)).join("\n").trim()
@@ -497,13 +505,9 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   }
 
   async function createSource(body: Record<string, unknown>): Promise<Record<string, unknown>> {
+    if (body.domain !== "circuit") throw new HttpError(410, "Spec creation requires a flow execution.");
     if (typeof body.serviceBaseUrl !== "string" || typeof body.title !== "string") {
       throw new HttpError(400, "Service and document name are required.");
-    }
-    if (body.creationRequestId !== undefined) {
-      if (body.domain !== "spec" || typeof body.creationRequestId !== "string") throw new HttpError(400, "A creation request must target a Spec document.");
-      const reserved = creations.get(body.creationRequestId);
-      return creations.create(body.creationRequestId, { serviceBaseUrl: body.serviceBaseUrl, documentId: reserved.documentId, title: body.title });
     }
     const input = bindingInput({ ...body, documentId: typeof body.documentId === "string" ? body.documentId : `spec_${randomUUID().replaceAll("-", "")}`, scope: "document" });
     if (input.preset && input.preset !== "focused") {
@@ -514,11 +518,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     const title = body.title.trim();
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(documentId) || !title) throw new HttpError(400, "Document ID or title is invalid.");
     owners.normalize(input);
-    if (input.domain === "spec") {
-      const snapshot = await owners.createSpec(input.serviceBaseUrl, specDestination(config.specDocumentRoot, documentId, title), documentId, title);
-      if (typeof snapshot.owner_document_key === "string") input.serviceDocumentKey = snapshot.owner_document_key;
-    }
-    else await owners.createCircuit(input.serviceBaseUrl, documentId, title);
+    await owners.createCircuit(input.serviceBaseUrl, documentId, title);
     const result = await reserve({ ...input, title });
     return { session: result.binding, workspace: result.workspace };
   }
@@ -527,60 +527,10 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   // Claim the review before calling its owner; an uncertain response must retain
   // the same proposal identity until an owner receipt proves the outcome.
   async function reviewAction(binding: SessionBinding, review: ProposalReview, action: string): Promise<ProposalReview> {
+    if (binding.domain !== "circuit") throw new HttpError(410, "Spec mutations require flow execution and Spec Editor decisions.");
     if (artifactDigest(review.artifact) !== review.artifactDigest) throw new HttpError(409, "Stored proposal content failed its integrity check.");
     if (action === "discard") {
-      if (binding.domain === "spec" && (await owners.specPolicy(binding.serviceUrl)).submissions) {
-        try { await owners.rejectSpec(binding, review.proposalId); }
-        catch (error) { if (!(error instanceof ServiceError && error.status === 404)) throw error; }
-      }
       return state.transitionReview(binding.sessionId, review.proposalId, ["ready", "rejected", "stale", "reconcile"], "discarded");
-    }
-    if (binding.domain === "spec" && action === "apply") {
-      if (review.state === "reconcile") {
-        try {
-          const policy = await owners.specPolicy(binding.serviceUrl);
-          if (policy.submissions) {
-            const receipt = await owners.specSubmission(binding, review.proposalId);
-            if (isRecord(receipt.artifact) && artifactDigest(receipt.artifact) === review.artifactDigest
-                && receipt.state === "applied" && isRecord((receipt.service_result ?? receipt.owner_result))) {
-              return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", { error: null, serviceResult: (receipt.service_result ?? receipt.owner_result) });
-            }
-          } else {
-            const found = findSpecChange(await owners.specChanges(binding), review.proposalId);
-            if (found) return state.transitionReview(binding.sessionId, review.proposalId, ["reconcile"], "applied", {
-              error: null, serviceResult: { ...found, source_revision_hash: found.result_source_revision_hash, application_mode: "review" },
-            });
-          }
-        }
-        catch { /* Retry the idempotent apply below. */ }
-      }
-      state.transitionReview(binding.sessionId, review.proposalId, ["ready", "reconcile"], "applying");
-      try {
-        const policy = await owners.specPolicy(binding.serviceUrl);
-        if (!policy.submissions) {
-          const current = await owners.context(binding);
-          if (current.source_revision_hash !== review.baseRevision) {
-            const detail = "The Spec source revision changed.";
-            const normalized = proposalError(binding, review.proposalId, "STALE_REVISION", detail, true);
-            logProposalFailure(binding, normalized, review.proposalId);
-            return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "stale", {
-              diagnostics: detail, error: normalized,
-            });
-          }
-        }
-        let result;
-        if (policy.submissions) {
-          await owners.stageSpec(binding, review.artifact);
-          result = await owners.approveSpec(binding, review.proposalId);
-        } else result = await owners.applySpec(binding, review.artifact);
-        if (result.status !== "applied") throw new ServiceError(502, "The service did not confirm a saved change.", true);
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "applied", { error: null, serviceResult: result });
-      } catch (error) {
-        const normalized = errorFromException(binding, review.proposalId, error);
-        logProposalFailure(binding, normalized, review.proposalId);
-        if (error instanceof ServiceError && error.uncertain) return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], "reconcile", { diagnostics: error.detail, error: normalized });
-        return state.transitionReview(binding.sessionId, review.proposalId, ["applying"], normalized.error_code === "STALE_REVISION" ? "stale" : "rejected", { diagnostics: normalized.owner_diagnostics, error: normalized });
-      }
     }
     if (binding.domain === "circuit" && action === "send") {
       if (review.state === "reconcile") {
@@ -614,6 +564,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   // Publish durable service preview identity, then correlate a goal wait to that exact
   // proposal. A matching receipt resolves the wait; it does not finish the goal.
   async function publishPreparedReview(binding: SessionBinding, review: ProposalReview): Promise<void> {
+    if (binding.domain !== "circuit") throw new Error("Spec review progression belongs to its flow.");
     if (binding.preset === "focused") return;
     const id = SessionId(binding.sessionId);
     const execution = ctx.eventSystems.get(id);
@@ -639,6 +590,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
   // Circuit sent means handed to its review UI, not accepted or saved Spec source.
   // This event resumes the matching goal wait; native completion remains separate.
   async function settleReviewedExecution(binding: SessionBinding, review: ProposalReview): Promise<void> {
+    if (binding.domain !== "circuit") return;
     if (binding.preset === "focused" || !["applied", "sent", "discarded"].includes(review.state)) return;
     const prepared = ctx.eventSystems.get(SessionId(binding.sessionId))?.events.findLast(event => event.type === "review.prepared"
       && isRecord(event.payload) && event.payload.proposal_id === review.proposalId);
@@ -677,8 +629,41 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
               : { template: configurations.save(key, Number(body.revision), body.text, body.reviewDigest, body.name) });
           } catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
         }
-        const sourceRequestMatch = path.match(/^\/spec2gds-api\/source-requests\/([^/]+)(?:\/(cancel|continued))?$/);
-        const architectureMatch = path.match(/^\/spec2gds-api\/architecture-reviews\/([^/]+)(?:\/(approve|revise|cancel|continue))?$/);
+        if (path === "/spec2gds-api/flow-runs/start" && request.method === "POST") {
+          const body = await readBody(request);
+          if (typeof body.sessionId !== "string" || typeof body.toolName !== "string" || !isRecord(body.inputs) || typeof body.requestId !== "string" || !body.requestId.trim()) throw new HttpError(400, "Conversation, published flow tool, inputs and stable request ID are required.");
+          const sessionId = SessionId(body.sessionId), source = ctx.agents.get(sessionId);
+          if (!source || !specFlows?.instructions(body.sessionId)) throw new HttpError(409, "This conversation does not support Spec flows.");
+          const binding = state.getBinding(body.sessionId);
+          const callerContext = binding?.scope === "entity" ? "spec2gds.entity" : binding ? "spec2gds.document" : "spec2gds.new";
+          const flows = (ctx as unknown as Context).flows;
+          const definition = flows.catalog(callerContext).find(item => item.publication?.toolName === body.toolName);
+          if (!definition) throw new HttpError(422, "The selected flow is unavailable in this conversation.");
+          try {
+            return writeJson(response, 202, { flow: await flows.start({ definition, inputs: snapshotJsonValue(body.inputs) as JsonValue, context: callerContext, requestId: body.requestId, actor: { kind: "human", sessionId } }) });
+          } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
+        }
+        const flowList = path.match(/^\/spec2gds-api\/flows\/([^/]+)$/);
+        if (flowList && request.method === "GET") {
+          const sessionId = SessionId(decodeURIComponent(flowList[1]!));
+          return writeJson(response, 200, { flows: (ctx as unknown as Context).get("flows")?.list({ kind: "human", sessionId }).slice(-10).map(flow => ({
+            ...summarizeFlow(flow), creation_confirmation: specFlows?.creationConfirmation(flow), architecture_review_id: state.listArchitectureReviews().findLast(review => review.flow_execution_id === flow.id)?.reviewId,
+          })) ?? [] });
+        }
+        const flowAction = path.match(/^\/spec2gds-api\/flow-runs\/([^/]+)\/(pause|resume|cancel|trace)$/);
+        if (flowAction) {
+          const flows = (ctx as unknown as Context).get("flows");
+          if (!flows) throw new HttpError(404, "Flows are not configured.");
+          const body = request.method === "POST" ? await readBody(request) : { sessionId: requestUrl.searchParams.get("sessionId") };
+          if (typeof body.sessionId !== "string") throw new HttpError(400, "An exact conversation is required.");
+          const actor = { kind: "human" as const, sessionId: SessionId(body.sessionId) }, id = decodeURIComponent(flowAction[1]!) as FlowExecutionId;
+          if (flowAction[2] === "trace" && request.method === "GET") return writeJson(response, 200, { flow: flows.trace(id, actor) });
+          if (request.method !== "POST" || !Number.isSafeInteger(body.revision)) throw new HttpError(400, "Observed flow revision is required.");
+          if (!["pause", "resume", "cancel"].includes(flowAction[2]!)) throw new HttpError(400, "Unknown flow control.");
+          return writeJson(response, 200, { flow: await flows.control(id, Number(body.revision), flowAction[2] as "pause" | "resume" | "cancel", actor) });
+        }
+
+        const architectureMatch = path.match(/^\/spec2gds-api\/architecture-reviews\/([^/]+)(?:\/(approve|revise|cancel))?$/);
         if (architectureMatch) {
           const id = decodeURIComponent(architectureMatch[1]!);
           if (request.method === "GET" && !architectureMatch[2]) {
@@ -689,59 +674,27 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           if (request.method === "POST" && architectureMatch[2]) {
             const body = await readBody(request);
             try {
-              if (architectureMatch[2] === "continue") {
-                let review = state.architectureReview(id);
-                if (!review || !["approved", "revised"].includes(review.status)) throw new Error("This review has no continuation.");
-                if (body.sessionId !== review.sessionId) throw new Error("Architecture continuation requires the exact conversation.");
-                if (continuationLocks.has(id)) throw new Error("Continuation delivery is in progress. Retry this card.");
-                continuationLocks.add(id);
-                try {
-                  const agent = ctx.agents.get(SessionId(review.sessionId)) as Agent | undefined;
-                  if (!agent || !ctx.sessions) throw new Error("The conversation is not ready. Retry this card.");
-                  review.continuationId ||= randomUUID();
-                  state.storeArchitecture(review);
-                  if (!(await ctx.sessions.flush(agent.session))) throw new Error("Native continuation cannot be persisted. Retry this card.");
-                  const handle = await ctx.sessionPersistence.open(SessionId(review.sessionId), "read");
-                  const continuationId = review.continuationId;
-                  let delivered: boolean;
-                  try {
-                    const { events } = await handle.read();
-                    delivered = events.some(event => event.type === "agent/inbox/spliced"
-                      && event.data.inserted.some(message => message.id === continuationId));
-                  } finally { await handle.close(); }
-                  if (!delivered) {
-                    agent.followup(freezeMessage({ id: MessageId(review.continuationId), role: "user",
-                      source: { kind: "plugin", plugin: "spec2gds.architecture", form: "notice",
-                        summary: `Architecture review ${review.reviewNumber}: ${review.status}.` },
-                      content: [{ type: "text", text: JSON.stringify(architectureDecision(review)) }] }));
-                    if (!(await ctx.sessions.flush(agent.session))) throw new Error("Native continuation cannot be persisted. Retry this card.");
-                  }
-                  review = { ...state.architectureReview(id), continuationSent: true };
-                  state.storeArchitecture(review);
-                  return writeJson(response, 200, { architecture_review: review });
-                } finally { continuationLocks.delete(id); }
+              const previous = state.architectureReview(id);
+              if (!previous?.flow_execution_id) throw new HttpError(410, "This architecture review is not part of a flow. Start a new flow execution.");
+              if (typeof body.sessionId !== "string" || !Number.isSafeInteger(body.flowRevision)) throw new HttpError(400, "Conversation and observed flow revision are required.");
+              const flow = ctx.flows!.get(previous.flow_execution_id as FlowExecutionId, { kind: "human", sessionId: SessionId(body.sessionId) });
+              if (previous.status === "pending" && (flow.revision !== body.flowRevision || flow.status !== "waiting" || !isRecord(flow.pending?.request) || flow.pending.request.review_id !== id)) throw new HttpError(409, "The architecture decision does not match the current flow wait.");
+              if (architectureMatch[2] === "revise" && previous?.flow_execution_id && previous.status === "approved") {
+                if (!specFlows || !Number.isSafeInteger(body.flowRevision) || typeof body.sessionId !== "string" || typeof body.feedback !== "string") throw new Error("Observed flow revision and designer feedback are required.");
+                return writeJson(response, 200, { flow: summarizeFlow(await specFlows.reviseArchitecture(id, Number(body.flowRevision), body.feedback, body.sessionId)) });
               }
               const decision = architectureMatch[2] === "approve" ? "approved" : architectureMatch[2] === "revise" ? "revised" : "cancelled";
               const review = state.decideArchitecture(id, decision, typeof body.feedback === "string" ? body.feedback : "");
-              const execution = ctx.eventSystems.get(SessionId(review.sessionId));
-              if (execution?.definition?.events?.["architecture.decided"]) await ctx.eventSystems.publishHost(SessionId(review.sessionId), {
-                type: "architecture.decided", payload: { review_id: id, decision }, producer: "owner", dedupeKey: `architecture:${id}:${decision}` });
-              return writeJson(response, 200, { architecture_review: review, continuation: architectureDecision(review) });
-            } catch (error) { throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
-          }
-        }
-        if (sourceRequestMatch) {
-          const requestId = decodeURIComponent(sourceRequestMatch[1]!);
-          if (!sourceRequestMatch[2] && request.method === "GET") return writeJson(response, 200, { creation_request: await creations.present(creations.get(requestId)) });
-          if (request.method === "POST" && sourceRequestMatch[2]) {
-            await readBody(request);
-            const updated = sourceRequestMatch[2] === "cancel" ? creations.cancel(requestId) : creations.continued(requestId);
-            return writeJson(response, 200, { creation_request: await creations.present(updated) });
+              if (review.flow_execution_id) specFlows?.kick();
+              return writeJson(response, 200, { architecture_review: review });
+            } catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(409, error instanceof Error ? error.message : String(error)); }
           }
         }
         const proposalInputMatch = path.match(/^\/spec2gds-api\/proposal-inputs\/([^/]+)\/confirm$/);
         if (proposalInputMatch && request.method === "POST") {
           const body = await readBody(request);
+          const pendingInput = state.database.prepare("SELECT session_id FROM proposal_inputs WHERE input_id=?").get(decodeURIComponent(proposalInputMatch[1]!)) as { session_id: string } | undefined;
+          if (pendingInput && state.getBinding(pendingInput.session_id)?.domain !== "circuit") throw new HttpError(410, "Proposal details require a Circuit binding. Spec input is supplied through flow inputs and decisions.");
           if (!body.values || typeof body.values !== "object" || Array.isArray(body.values)) throw new HttpError(400, "values must be an object.");
           try { state.confirmProposalInput(decodeURIComponent(proposalInputMatch[1]!), body.values as Record<string, string>); }
           catch (error) { throw new HttpError(422, error instanceof Error ? error.message : String(error)); }
@@ -798,22 +751,6 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           if (resource === "activate" && request.method === "POST") return writeJson(response, 200, { session: await activate(sessionId) });
           if (resource === "abandon" && request.method === "POST") { if (state.getBinding(sessionId)?.status === "creating") state.deleteBinding(sessionId); return writeJson(response, 200, { abandoned: true }); }
           if (resource === "reviews" && request.method === "GET") {
-            const binding = state.getBinding(sessionId);
-            if (binding?.domain === "spec") {
-              for (const review of state.listReviews(sessionId).filter(item => ["ready", "reconcile"].includes(item.state))) {
-                try {
-                  const receipt = await owners.specSubmission(binding, review.proposalId);
-                  if (!isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) continue;
-                  if (receipt.state === "applied" && isRecord((receipt.service_result ?? receipt.owner_result))) {
-                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "applied", { error: null, serviceResult: (receipt.service_result ?? receipt.owner_result) });
-                    await settleReviewedExecution(binding, updated);
-                  } else if (receipt.state === "discarded") {
-                    const updated = state.transitionReview(sessionId, review.proposalId, [review.state], "discarded");
-                    await settleReviewedExecution(binding, updated);
-                  }
-                } catch { /* Keep uncertain results visible while the bound owner is offline. */ }
-              }
-            }
             return writeJson(response, 200, { reviews: state.listReviews(sessionId).map(publicReview) });
           }
           if (resource === "execution" && request.method === "GET") {
@@ -887,6 +824,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const proposalId = decodeURIComponent(reviewMatch[1]!);
           const binding = state.listBindings(true).find(item => state.getReview(item.sessionId, proposalId));
           if (!binding) throw new HttpError(404, "Unknown proposal review.");
+          if (binding.domain === "spec") throw new HttpError(410, "Spec content decisions require the correlated proposal in Spec Editor. Use flow controls for execution recovery.");
           const action = String((await readBody(request)).action ?? "");
           if (binding.preset !== "focused" && (action === "apply" || action === "send")) {
             const execution = executionFor(binding.sessionId);

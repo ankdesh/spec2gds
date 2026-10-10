@@ -1,5 +1,11 @@
 # Browser-only policy layered after dsh-web-app.
 - insert:
+    - id: flow-controller
+      name: '@deepseek-ai/dsh-flow-runtime/controller'
+
+    - id: ui-flow
+      name: '@deepseek-ai/dsh-client-ui-flow'
+
     - id: spec2gds-ui
       name: '@spec2gds/harness-web'
 

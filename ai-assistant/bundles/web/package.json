@@ -10,7 +10,9 @@
     "./package.json": "./package.json"
   },
   "dsh": {
-    "bundle": { "patch": "./cordis.patch.yml" },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
     "client": {
       "inject": [
         "@deepseek-ai/dsh-client-ui-renderer",
@@ -19,9 +21,17 @@
         "@deepseek-ai/dsh-client-ui-tool",
         "@deepseek-ai/dsh-api-session-controller"
       ],
-      "external": ["react"],
+      "external": [
+        "react"
+      ],
       "platform": "web"
     }
   },
-  "files": ["cordis.patch.yml", "lib"]
+  "files": [
+    "cordis.patch.yml",
+    "lib"
+  ],
+  "dependencies": {
+    "@deepseek-ai/dsh-client-ui-flow": "0.1.6-alpha.1"
+  }
 }

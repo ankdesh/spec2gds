@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.spec.goal",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "primary": "primary",
   "agents": [
     {
@@ -9,15 +9,18 @@
       "agentPreset": "goal",
       "tools": [
         "get_bound_context",
-        "prepare_spec_proposal",
         "ask_user_question",
         "get_event_system",
         "get_goal",
         "create_goal",
         "update_goal",
-        "prepare_spec_document_creation",
         "wait_for_event",
-        "prepare_architecture_review"
+        "flow_create_empty_spec",
+        "flow_create_spec_with_component",
+        "flow_add_component",
+        "structured_output",
+        "get_flow",
+        "flow_edit_spec"
       ],
       "publishes": []
     }

@@ -42,7 +42,7 @@ test("Spec policy discovery is explicit and bound requests carry the package key
     policy = undefined;
     await assert.rejects(clients.specPolicy(serviceUrl), /valid approval policy/);
     status = 404;
-    assert.deepEqual(await clients.specPolicy(serviceUrl), { approval_policy: "review", submissions: false });
+    await assert.rejects(clients.specPolicy(serviceUrl), /durable capabilities/);
     status = 503;
     await assert.rejects(clients.specPolicy(serviceUrl));
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }

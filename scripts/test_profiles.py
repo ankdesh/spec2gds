@@ -18,7 +18,7 @@ import subprocess
 import tempfile
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
@@ -460,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("profile", choices=("fast", "integration", "regression"))
     parser.add_argument("--scope", default="all", help="Comma-separated integration scopes; default: all.")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--rtl-cases", help="Limit regression live RTL evaluation to a comma-separated list; retain all other suites.")
     parser.add_argument("--coverage", action="store_true", help="Measure selected unit/service checks; do not select extra checks.")
     parser.add_argument("--output", type=Path, help="New, empty report directory; default: private /tmp directory.")
     args = parser.parse_args(argv)
@@ -470,6 +471,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--scope is only supported by integration.")
     scopes = SCOPES.copy() if scopes == {"all"} else scopes
     suites = select_suites(args.profile, scopes)
+    rtl_cases = None
+    if args.rtl_cases is not None:
+        if args.profile != "regression":
+            parser.error("--rtl-cases is only supported by regression.")
+        rtl_cases = args.rtl_cases.split(",")
+        catalogue = json.loads((ROOT / "tests/evaluation/rtl/cases.json").read_text())
+        known_cases = {case["id"] for case in catalogue["cases"]}
+        if len(set(rtl_cases)) != len(rtl_cases) or not rtl_cases or any(case not in known_cases for case in rtl_cases):
+            parser.error("--rtl-cases requires distinct known RTL case IDs.")
+        suites = [replace(suite, command=(*suite.command, "--case", args.rtl_cases))
+                  if suite.id == "live-generalization" else suite for suite in suites]
     if args.dry_run:
         for suite in suites:
             print(json.dumps(asdict(suite)))
@@ -514,6 +526,10 @@ def main(argv: list[str] | None = None) -> int:
               ],
               "coverage_gaps": ["automated visual baselines",
                                 "system-wide performance and accessibility thresholds"], "suites": []}
+    if rtl_cases is not None:
+        report["profile"] = "regression (selected live RTL cases)"
+        report["rtl_cases"] = rtl_cases
+        report["coverage_gaps"].append("Live RTL evaluation is limited to " + ", ".join(rtl_cases) + "; other RTL cases were not rerun.")
     previous_handler = signal.getsignal(signal.SIGTERM)
 
     def terminate_run(_number, _frame):

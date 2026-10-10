@@ -52,6 +52,7 @@ scripts/test-all.sh integration --scope spec
 scripts/test-all.sh integration --scope spec,assistant
 scripts/test-all.sh regression
 scripts/test-all.sh regression --dry-run
+scripts/test-all.sh regression --rtl-cases adder_4,adder_8,adder_13
 scripts/test-all.sh fast --output /tmp/spec2gds-fast-evidence
 scripts/test-all.sh integration --scope spec --coverage
 ```
@@ -97,6 +98,12 @@ evaluation catalogue with its configured repeats. Each broader run has a
 600-second limit; the aggregate has a six-hour limit. This evidence includes
 UI-launched Activity execution and hardware simulation. It needs Verilator 5.x,
 GNU Make, and a C++ compiler. Document quality still requires rubric review.
+
+Use `regression --rtl-cases <case-ids>` to focus live RTL evaluation during a
+case-specific investigation. It retains all other regression suites and the
+three short live checks. It uses the catalogue's original repeat count. The
+report identifies the selected cases and states that other RTL cases were not
+rerun. This is a scoped result; the default full regression still runs all cases.
 
 The Assistant `npm run eval` command checks its catalogue. It does not execute
 the requests in that catalogue. Reports label this as `catalogued-only`; it

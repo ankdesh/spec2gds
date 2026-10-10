@@ -23,7 +23,10 @@ function parseProductRecord(value: string): any {
 const parse = (value: unknown): unknown => typeof value === "string" ? parseProductRecord(value) : null;
 
 export function artifactDigest(value: unknown): string {
-  return `sha256:${createHash("sha256").update(JSON.stringify(value)).digest("hex")}`;
+  const canonical = (item: unknown): unknown => Array.isArray(item) ? item.map(canonical)
+    : item !== null && typeof item === "object"
+      ? Object.fromEntries(Object.keys(item).sort().map(key => [key, canonical((item as Record<string, unknown>)[key])])) : item;
+  return `sha256:${createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex")}`;
 }
 
 export class ProductState {
@@ -72,6 +75,7 @@ export class ProductState {
         updated_at TEXT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS reviews_session_created ON reviews(session_id, created_at);
+      CREATE TABLE IF NOT EXISTS flow_decision_outbox(delivery_id TEXT PRIMARY KEY, execution_id TEXT NOT NULL, value_json TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS architecture_reviews (
         review_id TEXT PRIMARY KEY, session_id TEXT NOT NULL, call_id TEXT NOT NULL,
         status TEXT NOT NULL, record_json TEXT NOT NULL, UNIQUE(session_id, call_id)
@@ -101,6 +105,15 @@ export class ProductState {
     if (!bindingColumns.has("preset")) this.database.exec("ALTER TABLE bindings ADD COLUMN preset TEXT NOT NULL DEFAULT 'focused'");
     if (!bindingColumns.has("owner_document_key")) this.database.exec("ALTER TABLE bindings ADD COLUMN owner_document_key TEXT");
     if (!bindingColumns.has("source_name")) this.database.exec("ALTER TABLE bindings ADD COLUMN source_name TEXT");
+    // Earlier host digests depended on JSON key order. Service receipt JSON can
+    // reorder keys. Convert only rows whose stored digest still matches their
+    // exact legacy artifact; a damaged row must not acquire a valid identity.
+    for (const row of this.database.prepare("SELECT proposal_id,artifact_json,artifact_digest FROM reviews").all()) {
+      const encoded = String(row.artifact_json);
+      const legacy = `sha256:${createHash("sha256").update(encoded).digest("hex")}`;
+      if (row.artifact_digest === legacy) this.database.prepare("UPDATE reviews SET artifact_digest=? WHERE proposal_id=? AND artifact_digest=?")
+        .run(artifactDigest(JSON.parse(encoded)), row.proposal_id as string, legacy);
+    }
     for (const review of this.listArchitectureReviews()) {
       if (!review.reviewNumber) this.storeArchitecture(review);
     }
@@ -145,11 +158,17 @@ export class ProductState {
     }
     if (record.status !== "pending") throw new Error("This review has already been decided. Prepare a new review to change its architecture.");
     if (decision === "approved" && record.plan.open_questions.length) throw new Error("Resolve essential open questions in a revised architecture before approval.");
-    const updated = { ...record, status: decision, feedback, continuationId: randomUUID(), continuationSent: false, decidedAt: now() };
-    const result = this.database.prepare(`UPDATE architecture_reviews SET status=?,record_json=? WHERE review_id=? AND status='pending'`)
-      .run(decision, JSON.stringify(updated), id);
-    if (Number(result.changes) !== 1) throw new Error("Architecture decision changed concurrently; reload the card.");
-    return updated;
+    const updated = { ...record, status: decision, feedback, decidedAt: now() };
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
+      const result = this.database.prepare(`UPDATE architecture_reviews SET status=?,record_json=? WHERE review_id=? AND status='pending'`)
+        .run(decision, JSON.stringify(updated), id);
+      if (Number(result.changes) !== 1) throw new Error("Architecture decision changed concurrently; reload the card.");
+      if (record.flow_execution_id) this.database.prepare("INSERT INTO flow_decision_outbox(delivery_id,execution_id,value_json) VALUES(?,?,?)")
+        .run(`architecture:${id}:${decision}`, record.flow_execution_id, JSON.stringify({ review_id: id, decision, feedback }));
+      this.database.exec("COMMIT");
+      return updated;
+    } catch (error) { this.database.exec("ROLLBACK"); throw error; }
   }
 
   requireArchitecture(sessionId: string, id: string | undefined, revision?: string): Record<string, any> {

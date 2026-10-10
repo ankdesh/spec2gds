@@ -13,13 +13,12 @@ import { createRequire } from 'node:module';
 import { SessionId } from '@deepseek-ai/dsh-session';
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
 import { boot, waitFor } from './support/event-runtime.mjs';
-import { approveTimer } from './support/approved-timer.mjs';
 
 const dependencies = createRequire(resolve(process.env.AI_ASSISTANT_UI_TEST_DEPS || process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
 const { chromium, expect } = dependencies('@playwright/test');
 const root = new URL('..',import.meta.url);
 const shell = `<!doctype html><html><head><meta charset="utf-8"><script src="/react.js"></script><script src="/react-dom.js"></script></head><body>
-<button id="new">New conversation</button><label>Request<input id="request" value="Propose a timer component."></label><button id="send">Send request</button><div id="dock"></div><div id="reviews"></div>
+<button id="new">New conversation</button><label>Request<input id="request" value="Inspect the bound specification."></label><button id="send">Send request</button><div id="dock"></div><div id="reviews"></div>
 <script>
 const slots={},workspaceItems=[];let current;
 const dock=ReactDOM.createRoot(document.querySelector('#dock')),reviews=ReactDOM.createRoot(document.querySelector('#reviews'));
@@ -67,7 +66,6 @@ async function fixture() {
         let data='';for await(const chunk of request)data+=chunk;const body=JSON.parse(data);
         if(request.url==='/test/create-session') {
           await runtime.ctx.agents.create({sessionId:SessionId(body.sessionId),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:body.agentPreset},setup:async(ctx)=>{if(body.agentPreset==='goal')await ctx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
-          approveTimer(directory, body.sessionId);
         }
         else if(request.url==='/test/send') {
           const agent=runtime.ctx.agents.get(SessionId(body.sessionId));
@@ -117,15 +115,14 @@ test('orchestrated UI saves text-backed reactions, runs analyst/reviewer, and ex
   const f=await fixture();try {
     const dialog=await chooser(f.page,'orchestrated');await customTemplate(f.page,dialog,'orchestrated');const id=await start(f.page,dialog);
     await f.page.getByRole('button',{name:'Send request',exact:true}).click();
-    await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).events.some(event=>event.type==='review.prepared'));
+    await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).events.some(event=>event.type==='review.ready'));
     await inspect(f.page);const state=f.runtime.ctx.eventSystems.get(SessionId(id));
-    assert.equal(state.members.length,3);assert.ok(state.definition.agents[0].prompt.includes('browser tutorial'));assert.equal(f.mutations,0);assert.equal(f.previews,1);
+    assert.equal(state.members.length,3);assert.ok(state.definition.agents[0].prompt.includes('browser tutorial'));assert.equal(f.mutations,0);assert.equal(f.previews,0);
     const review=state.events.find(event=>event.type==='review.ready');
     await f.page.getByLabel('Inspect event',{exact:true}).selectOption(review.id);
     await expect(f.page.locator('[data-causal-event]')).toContainText('user.requested (human) → analysis.ready (analyst) → review.ready (reviewer)');
     await expect(f.page.locator('[data-causal-event]')).toContainText('Matched prepare: exact review.ready → primary');
     await expect(f.page.getByRole('table',{name:'Model request charges'})).toBeVisible();
-    await f.page.getByRole('button',{name:'Discard',exact:true}).click();
     await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).deliveries.every(item=>item.state==='completed'));
     await f.page.waitForTimeout(2100); // Let the dock observe the committed review decision before its CAS action.
     await f.page.getByRole('button',{name:'Pause',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','paused');
@@ -135,13 +132,12 @@ test('orchestrated UI saves text-backed reactions, runs analyst/reviewer, and ex
   }finally{await f.close();}
 });
 
-test('goal UI retains one native primary, waits for owner review, and controls model-free HTTP checks', {timeout:45000},async()=>{
+test('goal UI retains one native primary, completes read-only analysis, and controls model-free HTTP checks', {timeout:45000},async()=>{
   const f=await fixture();try {
     const dialog=await chooser(f.page,'goal');await customTemplate(f.page,dialog,'goal');const id=await start(f.page,dialog);
-    await f.page.getByRole('button',{name:'Send request',exact:true}).click();await waitFor(()=>f.runtime.ctx.goals.get(f.runtime.ctx.agents.get(SessionId(id)))?.phase==='blocked');
-    await expect(f.page.locator('[data-s2g-execution]')).toContainText('waiting');assert.equal(f.runtime.ctx.eventSystems.get(SessionId(id)).members.length,1);assert.equal(f.mutations,0);
-    await f.page.getByRole('button',{name:'Discard',exact:true}).click();await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).waits.some(wait=>wait.state==='resolved'));
+    await f.page.getByRole('button',{name:'Send request',exact:true}).click();
     await waitFor(()=>f.runtime.ctx.goals.get(f.runtime.ctx.agents.get(SessionId(id)))?.phase==='complete');
+    assert.equal(f.runtime.ctx.eventSystems.get(SessionId(id)).members.length,1);assert.equal(f.mutations,0);assert.equal(f.previews,0);
     await expect(f.page.locator('[data-s2g-execution]')).toContainText('goal complete');
     await f.page.getByText('Monitor service endpoint',{exact:true}).click();await f.page.getByLabel('Check interval in seconds').fill('5');
     await f.page.getByRole('button',{name:'Start monitoring',exact:true}).click();await expect(f.page.getByRole('button',{name:'Disable monitor',exact:true})).toBeVisible();

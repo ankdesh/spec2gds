@@ -79,14 +79,21 @@ export async function runSmoke(context: SmokeContext): Promise<void> {
         await pending.getByRole("button", { name: "Approve architecture", exact: true }).click();
       }
     }
+    const failure = conversation.locator('[data-s2g-flow-status="failed"]');
+    if (await failure.count()) throw new Error("The flow failed: " + await failure.getAttribute("data-s2g-flow-error"));
     if (restricted) {
       assert.equal((await readSnapshot()).source_revision_hash, baseline.source_revision_hash,
         "A restricted proposal must not change saved source before Save to Spec.");
-      return conversation.getByRole("button", { name: "Save to Spec", exact: true }).isVisible();
+      assert.equal(await conversation.getByRole("button", { name: "Save to Spec", exact: true }).count(), 0, "Spec decisions belong to Spec Editor.");
+      return conversation.getByRole("link", { name: "Review in Spec Editor", exact: true }).isVisible();
     }
     return (await readSnapshot()).source_revision_hash !== baseline.source_revision_hash;
   }, { timeout: 90_000 }).toBe(true);
-  if (restricted) await conversation.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  if (restricted) {
+    const link = conversation.getByRole("link", { name: "Review in Spec Editor", exact: true });
+    await editor.goto(await link.getAttribute("href") || "");
+    await editor.getByRole("button", { name: "Approve", exact: true }).click();
+  }
   await expect.poll(async () => (await readSnapshot()).source_revision_hash,
     { timeout: 30_000 }).not.toBe(baseline.source_revision_hash);
   const result = await readSnapshot();

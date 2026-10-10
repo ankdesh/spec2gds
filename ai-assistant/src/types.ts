@@ -135,6 +135,7 @@ export interface WorkspaceDescriptor {
 }
 
 export interface SourceCreationRequest {
+  flowExecutionId: string;
   architectureReviewId?: string;
   acceptedArchitecture?: Record<string, unknown>;
   requestId: string;
@@ -142,13 +143,12 @@ export interface SourceCreationRequest {
   callId: string;
   originalRequest: string;
   preset: AssistantPreset;
-  status: "pending" | "creating" | "created" | "reserved" | "continued" | "cancelled" | "uncertain";
+  status: "pending" | "creating" | "created" | "reserved" | "bound" | "cancelled" | "uncertain";
   documentId: string;
   title: string;
   serviceBaseUrl: string;
   destination: string;
   destinationSessionId: string;
-  continuationRequestId: string;
   sourceRevisionHash: string | null;
   serviceDocumentKey?: string;
   automatic?: boolean;

@@ -24,7 +24,14 @@ export function specFormattingAdmission(schema: ValueSchemaSpec): ValueSchemaSpe
     if (Array.isArray(value)) { value.forEach(visit); return; }
     if (!object(value)) return;
     for (const [key, child] of Object.entries(value)) {
-      if (["operation_id", "instances", "family"].includes(key) && object(child)) delete child.required;
+      if (["operation_id", "instances"].includes(key) && object(child)) delete child.required;
+      if (key === "family" && object(child)) {
+        // A scalar with direction alone is the documented wire shorthand.
+        // Other families need their discriminator, or scalar wire ports match
+        // both wire and structured branches before formatting can run.
+        if (child.const === "wire") delete child.required;
+        else if (["transactional", "structured"].includes(String(child.const))) child.required = true;
+      }
       visit(child);
     }
   };

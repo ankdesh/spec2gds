@@ -306,3 +306,20 @@ def test_suite_inventory_commands_and_paths_are_valid():
         assert set(suite.scopes) <= runner.SCOPES
         assert suite.timeout > 0
         assert suite.risks
+
+
+def test_adder_regression_selection_retains_other_suites_and_original_repeats(capsys):
+    assert runner.main(["regression", "--rtl-cases", "adder_4,adder_8,adder_13", "--dry-run"]) == 0
+    rows = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line.startswith("{")]
+    assert [row["id"] for row in rows] == [suite.id for suite in runner.select_suites("regression", runner.SCOPES)]
+    rtl = next(row for row in rows if row["id"] == "live-generalization")
+    assert rtl["command"][-2:] == ["--case", "adder_4,adder_8,adder_13"]
+    assert "--repeats" not in rtl["command"]
+    assert sum(row["id"].startswith("live-") for row in rows) == 4
+
+
+@pytest.mark.parametrize("arguments", [["fast", "--rtl-cases", "adder_8"], ["regression", "--rtl-cases", "adder_8,unknown"], ["regression", "--rtl-cases", "adder_8,adder_8"]])
+def test_invalid_live_case_selection_is_rejected_before_execution(arguments):
+    with pytest.raises(SystemExit) as error:
+        runner.main([*arguments, "--dry-run"])
+    assert error.value.code == 2

@@ -5,7 +5,7 @@ import { UNBOUND_SOURCE_PROMPT } from "../src/index.js";
 import { promptSectionsFor, shapeBoundContext } from "../src/domain-context.js";
 import { validateProposalEnvelope } from "../src/operation-schemas.js";
 import { parseServiceOperationContract, validateServiceOperations, verifyServiceOperationContract } from "../src/service-operation-schema.js";
-import { proposalInputRequest, proposedComponentFields, structuredQuestionPrompt } from "../src/tools.js";
+import { proposalInputRequest, structuredQuestionPrompt } from "../src/tools.js";
 import type { SessionBinding } from "../src/types.js";
 
 const binding = (domain: "spec" | "circuit", scope: "document" | "entity" = "document"): SessionBinding => ({
@@ -59,7 +59,7 @@ test("structured-question policy is conditional and requires the interactive too
   assert.match(section.text, /MUST call ask_user_question/);
   assert.match(section.text, /every missing value in required_fields/);
   assert.match(section.text, /model-suggested default_value for every field/);
-  assert.match(section.text, /Do not list missing proposal fields in an ordinary assistant response/);
+  assert.match(section.text, /Spec requests do not use proposal details cards/);
   assert.match(section.text, /cannot be derived from bound context/);
   assert.match(section.text, /When wait_for_event is available/);
   assert.match(section.text, /durable correlated human answer/);
@@ -67,13 +67,10 @@ test("structured-question policy is conditional and requires the interactive too
   assert.doesNotMatch(section.text, /durable event waiting is not available/);
 });
 
-test("missing details use model-suggested defaults in both domains", () => {
-  const fields = [{ name: "width", label: "Terminal width", description: "Width in bits.", default_value: "8" }];
-  for (const domain of ["spec", "circuit"] as const) {
-    const request = proposalInputRequest(binding(domain), "The width is required.", fields);
-    assert.equal(request?.fields[0]?.default_value, "8");
-    assert.equal(proposalInputRequest(binding(domain), "Unsupported operation.", []), null);
-  }
+test("details cards are Circuit-only; Spec inputs require a flow", () => {
+  const fields=[{name:"width",label:"Terminal width",description:"Width",default_value:"8"}];
+  assert.equal(proposalInputRequest(binding("circuit"),"Width required",fields)?.fields[0]?.default_value,"8");
+  assert.throws(()=>proposalInputRequest(binding("spec"),"Width required",fields), /require a flow/);
 });
 
 test("binding section names immutable entity and document targets and requires fresh context", () => {
@@ -141,6 +138,8 @@ test("owner schema converts to a tool schema and validates operations", () => {
 test("proposal envelope checks remain independent of owner semantics", () => {
   assert.doesNotThrow(() => validateProposalEnvelope(false, "Outside the writable boundary.", []));
   assert.throws(() => validateProposalEnvelope(false, null, []), /unsupported_reason/);
+  assert.throws(() => validateProposalEnvelope(false, "Unsupported", [{ operation_id: "create", type: "create_entity" }]), /cannot contain operations/);
+  assert.doesNotThrow(() => validateProposalEnvelope(true, null, [{ operation_id: "create", type: "create_entity" }]));
   assert.throws(() => validateProposalEnvelope(true, null, [{ operation_id: "same" }, { operation_id: "same" }]), /Duplicate/);
 });
 
@@ -194,36 +193,19 @@ test("changed owner schema digest requires fresh tool registration", () => {
   assert.throws(() => verifyServiceOperationContract(current, { ...current, schema_version: 2 }), /invalid operation schema contract/);
 });
 
-
-test("Spec component details card uses proposed values without gate lookup defaults", () => {
-  const fields = proposedComponentFields({ name: "custom_gate", ports: [
-    { name: "left", direction: "in", range: "7:0" },
-    { name: "right", direction: "in", range: "7:0" },
-    { name: "result", direction: "out", range: "7:0" },
-  ], systemverilog: "assign result = left ^ right;" });
-  const defaults = Object.fromEntries(fields.map(field => [field.name, field.default_value]));
-  assert.deepEqual(defaults, {
-    component_name: "custom_gate", input_ports: "left, right", output_ports: "result",
-    port_width: "8", behavior: "assign result = left ^ right;",
-  });
-});
-
-test("comparator details keep 3-bit inputs and 1-bit result signals", () => {
-  const fields = proposedComponentFields({ name: "comparator_3bit", ports: [
-    { name: "A", direction: "in", range: "[2:0]" },
-    { name: "B", direction: "in", range: "2:0" },
-    { name: "A_greater", direction: "out" },
-    { name: "A_equal", direction: "out" },
-    { name: "A_less", direction: "out" },
-  ] });
-  const defaults = Object.fromEntries(fields.map(field => [field.label, field.default_value]));
-  assert.equal(defaults["A width"], "3");
-  assert.equal(defaults["B width"], "3");
-  for (const output of ["A_greater", "A_equal", "A_less"]) assert.equal(defaults[`${output} width`], "1");
+test("wire edits reject snapshot-only fields before service submission", () => {
+  const source = JSON.parse(readFileSync(new URL("../../spec2gds/spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
+  const contract = parseServiceOperationContract({ schema_version: 1, digest: `sha256:${"c".repeat(64)}`, operation_schema: source });
+  const operation = { operation_id: "wire", type: "upsert_component_port", component: { document_id: "doc", entity_kind: "component", entity_id: "core" },
+    port: { name: "irq", family: "wire", direction: "out", range: "15:0", display_name: "IRQ output", description: "Smoke check output." } };
+  assert.doesNotThrow(() => validateServiceOperations(contract, [operation]));
+  for (const field of [{ style: "wire" }, { packed: false }, { width: 16 }]) {
+    assert.throws(() => validateServiceOperations(contract, [{ ...operation, port: { ...operation.port, ...field } }]), /published schema/);
+  }
 });
 
 
 test("unbound prompt names both supported owner bindings", () => {
-  assert.match(UNBOUND_SOURCE_PROMPT, /Spec Editor document or entity/);
-  assert.match(UNBOUND_SOURCE_PROMPT, /Circuit Designer document/);
+  assert.match(UNBOUND_SOURCE_PROMPT, /selected Component or Design/);
+  assert.match(UNBOUND_SOURCE_PROMPT, /published creation flow/);
 });

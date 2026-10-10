@@ -60,7 +60,7 @@ export function calculateMetrics(events: Record<string, unknown>[], caseCount: n
       metrics.latencyMs.count += 1;
       metrics.latencyMs.total += event.time - turnStarts.get(turn)!;
     }
-    if (event.type === "tool/call" && (data.name === "prepare_spec_proposal" || data.name === "prepare_circuit_proposal")) {
+    if (event.type === "tool/call" && data.name === "prepare_circuit_proposal") {
       metrics.proposalCalls += 1;
       proposalTurns.add(turn);
       const count = proposalCallsByTurn.get(turn) ?? 0;

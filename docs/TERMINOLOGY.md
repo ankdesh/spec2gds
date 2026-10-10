@@ -35,7 +35,9 @@ This document defines the canonical terminology that must be used consistently a
 ## 7. Processes and Generation Tools
 - **Activity**: The registered SDK tool/plugin (e.g., `rtl.generate`).
 - **job**: An instance of an Activity's execution.
-- **flow**: A user-facing sequence of UI steps.
+- **flow**: A declared sequence of operations, conditions and approval waits, shown to the designer as progress.
+- **flow definition**: A reusable versioned definition.
+- **flow execution**: One run with concrete inputs and recorded progress.
 - *(Avoid "generator", "task", or "workflow").*
 
 ## 8. Embedded RTL

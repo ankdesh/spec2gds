@@ -1,22 +1,20 @@
 import { randomUUID } from "node:crypto";
-import { registeredTool, nativeTool, type ToolRunContext } from "../tool-registry.js";
-import type { ToolArguments } from "../tool-arguments.js";
+import type { ToolRunContext } from "../tool-registry.js";
+export interface ArchitectureInputs { title: string; components: Array<{ name: string; purpose?: string; description?: string }>; designs: Array<{ name: string; purpose?: string; description?: string }>; interfaces: Array<{ component: string; ports: Array<{ name: string; direction: "in" | "out" | "inout"; width: number }> }>; clocks_resets: string[]; decomposition_rationale: string; assumptions: string[]; open_questions: string[]; concrete_configuration: Record<string, unknown>; }
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import { artifactDigest, ProductState } from "../state.js";
 import type { ServiceClients } from "../service-clients.js";
-import { decisionReview } from "../architecture-decision.js";
 import { isRecord } from "../types.js";
-export function registerArchitectureTool(
-  agent: { id: string; ctx: { tools: { register(tool: unknown): () => void }; systemPrompt?: { section(value: unknown): () => void } } },
+export function prepareArchitectureCommand(
+  agent: { id: string },
   state: ProductState, owners: ServiceClients, currentRequest: () => string,
   onPrepared?: (record: Record<string, any>) => Promise<void>,
   instructions: InstructionBundle = defaultInstructions,
-): void {
-  agent.ctx.systemPrompt?.section({ name: "spec2gds:architecture", order: 180, text: instructions.text("architecture") });
-  agent.ctx.tools.register(registeredTool({
-    ...nativeTool("prepare_architecture_review", instructions),
-    async execute(args: ToolArguments["prepare_architecture_review"], exec: ToolRunContext) {
+  independentCreation = false,
+) {
+  return {
+    async execute(args: ArchitectureInputs, exec: ToolRunContext) {
       try {
         if (!args.title.trim()) throw new Error("title must be nonempty.");
         if (!args.decomposition_rationale.trim()) throw new Error("decomposition_rationale must be nonempty.");
@@ -29,20 +27,15 @@ export function registerArchitectureTool(
             throw new Error(`${field} entries require distinct nonempty name fields; use {name,purpose}.`);
           }
         }
-        const flat = args.interfaces.every(item => "name" in item);
-        if (flat && args.components.length !== 1) throw new Error("Multiple components require grouped interfaces: {component,ports} for each component.");
-        if (!flat) {
-          const groups = args.interfaces.filter(item => "component" in item);
-          if (groups.length !== args.interfaces.length || groups.length !== args.components.length
-            || new Set(groups.map(item => item.component)).size !== groups.length
-            || args.components.some(component => !groups.some(item => item.component === component.name))) {
-            throw new Error("interfaces must contain exactly one {component,ports} group per named component.");
-          }
+        const groups = args.interfaces;
+        if (groups.some(item => !("component" in item) || !Array.isArray(item.ports)) || groups.length !== args.components.length
+          || new Set(groups.map(item => "component" in item ? item.component : null)).size !== groups.length
+          || args.components.some(component => !groups.some(item => "component" in item && item.component === component.name))) {
+          throw new Error("interfaces must contain exactly one {component,ports} group per named Component.");
         }
-        const portLists = flat ? [args.interfaces.filter(item => "name" in item)]
-          : args.interfaces.flatMap(item => "ports" in item ? [item.ports] : []);
+        const portLists = groups.flatMap(item => "ports" in item ? [item.ports] : []);
         for (const ports of portLists) {
-          if (ports.some(port => !port.name.trim() || port.width < 1)
+          if (ports.some(port => !port.name.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1)
             || new Set(ports.map(port => port.name)).size !== ports.length) {
             throw new Error("Interface ports require distinct nonempty names and positive integer widths.");
           }
@@ -51,15 +44,13 @@ export function registerArchitectureTool(
         if (old && old.digest !== artifactDigest(args)) throw new Error("This review call ID was reused with changed architecture.");
         let record = old;
         if (!record) {
-          const binding = state.getBinding(String(agent.id));
+          const binding = independentCreation ? null : state.getBinding(String(agent.id));
           const context = binding ? await owners.context(binding, exec.signal) : null;
           if (binding && binding.domain !== "spec") throw new Error("Architecture review requires a Spec conversation.");
           if (binding && (!context || context.document_id !== binding.documentId || typeof context.source_revision_hash !== "string" || !context.source_revision_hash)) {
             throw new Error("Architecture review requires a fresh service context with the exact document identity and source revision.");
           }
-          let originalRequest = currentRequest();
-          const previous = decisionReview(state, String(agent.id), originalRequest);
-          if (previous) originalRequest = previous.originalRequest;
+          const originalRequest = currentRequest();
           record = { reviewId: randomUUID(), sessionId: String(agent.id), callId: String(exec.callId), status: "pending",
             plan: args, digest: artifactDigest(args), originalRequest,
             documentId: binding?.documentId ?? null, serviceDocumentKey: context?.owner_document_key ?? binding?.serviceDocumentKey ?? null,
@@ -67,11 +58,17 @@ export function registerArchitectureTool(
             sourceRevision: context?.source_revision_hash ?? null, createdAt: new Date().toISOString() };
           state.storeArchitecture(record);
         }
-        if (record.status === "pending") await onPrepared?.(record);
+        if (record.status === "pending") {
+          await onPrepared?.(record);
+          // The durable card is the decision boundary. Do not let another
+          // model step replace it with a generic approval question.
+          exec.concludeTurn?.();
+        }
         return snapshotJsonValue({ architecture_review: record,
           instruction: instructions.text("result.24") }) as JsonValue;
       } catch (error) { return { creation_error: error instanceof Error ? error.message : String(error),
         instruction: instructions.text("result.25") }; }
     },
-  }));
+  };
 }
+

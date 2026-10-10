@@ -1,4 +1,4 @@
-"""Workspace-oriented Python command for one focused assistant turn."""
+"""Focused Assistant requests and bounded flows against an existing Spec."""
 
 from __future__ import annotations
 
@@ -75,17 +75,17 @@ def _private_spec_service(require_designer_approval: bool = False) -> Iterator[s
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2gds-assistant", description="Run one focused assistant turn against a workspace specification.")
     parser.add_argument("target", help="Workspace directory or exact .spec path")
-    parser.add_argument("--architecture-review-id", help="Previously approved architecture for this exact specification and revision")
     parser.add_argument("--preset", default="focused", help="Assistant preset (currently focused only)")
-    parser.add_argument("--require-designer-approval", "--require-human-approval", dest="require_designer_approval", action="store_true", help="leave valid submissions pending for an explicit Spec CLI decision")
+    parser.add_argument("--service-url", help="Running Spec service URL; its policy and receipts remain authoritative")
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Run one focused request against a private Spec service for the selected package.
+    """Run a Focused request against a running Spec service for an existing package.
 
     Persist native session/run output for later review and evaluation. Only the
-    focused preset is admitted; longer-lived browser execution has another lifecycle.
+    Focused preset is admitted. A flow returns its first wait or terminal result;
+    later controls use a supported Harness profile or SDK.
     """
     raw = list(sys.argv[1:] if argv is None else argv)
     parser = _parser()
@@ -106,51 +106,46 @@ def main(argv: list[str] | None = None) -> int:
             raise RuntimeError("Build the assistant first: cd ai-assistant && npm run build")
         if not os.environ.get("OPENAI_API_KEY") and not (assistant_root / ".env").exists():
             raise RuntimeError("Set OPENAI_API_KEY before running the assistant.")
-        spec_path = resolve_spec_target(args.target, create=True)
+        spec_path = resolve_spec_target(args.target)
+        if not spec_path.is_file():
+            raise ValueError("The Assistant CLI requires an existing Spec. Create a new Spec through a creation flow.")
+        if not args.service_url:
+            raise ValueError("A running Spec service is required. Pass --service-url; flow waits must retain their service authority.")
+        owner_url = args.service_url.rstrip("/")
+        policy = _request(owner_url, "/assistant/capabilities")["approval_policy"]
+        if policy not in {"automatic", "review"}:
+            raise ValueError("The Spec service did not publish a valid approval policy.")
         state_root = assistant_state_root(spec_path)
         state_root.mkdir(parents=True, exist_ok=True)
         identity_owner = f"spec2gds-cli:{spec_path}"
-        with _private_spec_service(args.require_designer_approval) as owner_url:
-            snapshot = _request(
-                owner_url,
-                "/documents/open" if spec_path.exists() else "/documents/create",
-                {"path": str(spec_path)} if spec_path.exists() else
-                {"path": str(spec_path), "title": spec_path.stem},
-            )
-            document_id = snapshot["document_id"]
-            workspace_key = hashlib.sha256(
-                json.dumps({"domain": "spec", "ownerUrl": identity_owner, "documentId": document_id},
-                           ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-            ).hexdigest()
-            cwd = state_root / "workspaces" / "design-sources" / workspace_key
-            cwd.mkdir(parents=True, exist_ok=True)
-            if args.architecture_review_id:
-                review = review_bridge(state_root, "architecture-require", args.architecture_review_id)["architecture_review"]
-                if review.get("documentId") != document_id or review.get("serviceDocumentKey") != snapshot["owner_document_key"]:
-                    raise ValueError("Approved architecture does not belong to this exact specification.")
-                if review.get("sourceRevision") != snapshot["source_revision_hash"]:
-                    raise ValueError("Approved architecture is stale. Prepare an updated review.")
-                prompt += f"\n\nApproved architecture_review_id: {args.architecture_review_id}\nAccepted architecture: {json.dumps(review['plan'])}\nUse the approved review ID in the content proposal."
-            env = {
-                **os.environ,
-                "PATH": f"{Path(node).parent}:{os.environ.get('PATH', '')}",
-                "ASSISTANT_PROFILE": "spec2gds-headless",
-                "ASSISTANT_STATE": str(state_root),
-                "SPEC2GDS_SCRATCH_ROOT": str(state_root / "workspaces"),
-                "SPEC_DOCUMENT_ROOT": str(state_root / "documents"),
-                "SPEC_SERVICE_ALLOWLIST": owner_url,
-                "SPEC2GDS_CLI_WORKSPACE_IDENTITY": identity_owner,
-                "SPEC2GDS_BINDING_JSON": json.dumps({
-                    "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
-                    "documentId": document_id, "scope": "document",
-                    "serviceDocumentKey": snapshot["owner_document_key"],
-                }),
-                "DSH_PRODUCT_RUN_CWD": str(cwd),
-            }
-            result = subprocess.run(
-                [node, str(assistant_root / "scripts/dev.mjs"), "--json", prompt],
-                cwd=cwd, env=env, text=True, capture_output=True, check=False,
-            )
+        snapshot = _request(owner_url, "/documents/open", {"path": str(spec_path)})
+        document_id = snapshot["document_id"]
+        workspace_key = hashlib.sha256(
+            json.dumps({"domain": "spec", "ownerUrl": identity_owner, "documentId": document_id},
+                       ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        cwd = state_root / "workspaces" / "design-sources" / workspace_key
+        cwd.mkdir(parents=True, exist_ok=True)
+        env = {
+            **os.environ,
+            "PATH": f"{Path(node).parent}:{os.environ.get('PATH', '')}",
+            "ASSISTANT_PROFILE": "spec2gds-headless",
+            "ASSISTANT_STATE": str(state_root),
+            "SPEC2GDS_SCRATCH_ROOT": str(state_root / "workspaces"),
+            "SPEC_DOCUMENT_ROOT": str(state_root / "documents"),
+            "SPEC_SERVICE_ALLOWLIST": owner_url,
+            "SPEC2GDS_CLI_WORKSPACE_IDENTITY": identity_owner,
+            "SPEC2GDS_BINDING_JSON": json.dumps({
+                "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
+                "documentId": document_id, "scope": "document",
+                "serviceDocumentKey": snapshot["owner_document_key"],
+            }),
+            "DSH_PRODUCT_RUN_CWD": str(cwd),
+        }
+        result = subprocess.run(
+            [node, str(assistant_root / "scripts/dev.mjs"), "--json", prompt],
+            cwd=cwd, env=env, text=True, capture_output=True, check=False,
+        )
         events = []
         for line in result.stdout.splitlines():
             try:
@@ -159,6 +154,10 @@ def main(argv: list[str] | None = None) -> int:
                 continue
         session_id = next((item["sessionId"] for item in events if item.get("type") == "session"), None)
         final = next((item["text"] for item in reversed(events) if item.get("type") == "final"), "")
+        try:
+            flow_result = json.loads(final)
+        except (json.JSONDecodeError, TypeError):
+            flow_result = None
         reviews = [item for item in list_spec_reviews(state_root, document_id) if item["sessionId"] == session_id]
         runs = state_root / "runs"
         runs.mkdir(parents=True, exist_ok=True)
@@ -166,10 +165,12 @@ def main(argv: list[str] | None = None) -> int:
         event_path.write_text(result.stdout, encoding="utf-8")
         architecture_reviews = review_bridge(state_root, "architecture-list")["architecture_reviews"]
         run = {
-            "schema_version": "spec2gds.assistant-workspace-run.v1",
+            "schema_version": "spec2gds.assistant-workspace-run.v2",
+            "flow": flow_result if isinstance(flow_result, dict) and "flow_execution_id" in flow_result else None,
             "spec_path": str(spec_path), "document_id": document_id,
             "session_id": session_id, "preset": "focused", "exit_code": result.returncode,
-            "approval_policy": "review" if args.require_designer_approval else "automatic",
+            "approval_policy": policy,
+            "service_url": owner_url,
             "answer": final, "events_path": str(event_path),
             "architecture_reviews": [item for item in architecture_reviews if item["sessionId"] == session_id],
             "proposals": [{"proposal_id": item["proposalId"], "state": item["state"]} for item in reviews],

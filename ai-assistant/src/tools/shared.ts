@@ -7,7 +7,7 @@ import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
 import { type ToolRunContext } from "../tool-registry.js";
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
-import { compactWireRange } from "../normalize.js";
+import { rtlSizingFeedback } from "../rtl-authoring-feedback.js";
 import { publicReview } from "../proposal-presentation.js";
 import { type ProductState } from "../state.js";
 import type { ProposalError, ProposalReview, SessionBinding } from "../types.js";
@@ -27,12 +27,13 @@ export interface ProposalInputRequest {
   readonly submit_label: string;
 }
 
-/** Render fields supplied by the model for either owner domain. */
+/** Render model-supplied Circuit proposal fields. */
 export function proposalInputRequest(
   _binding: SessionBinding,
   reason: string,
   provided: readonly ProposalInputField[] | undefined,
 ): ProposalInputRequest | null {
+  if (_binding.domain !== "circuit") throw new Error("Spec inputs require a flow.");
   const fields = (provided ?? []).filter(field => field.name.trim() && field.label.trim());
   if (!fields.length) return null;
   return {
@@ -41,32 +42,6 @@ export function proposalInputRequest(
     fields,
     submit_label: "Continue proposal",
   };
-}
-
-export function proposedComponentFields(operation: Record<string, unknown>): ProposalInputField[] {
-  const ports = Array.isArray(operation.ports) ? operation.ports.filter(isRecord) : [];
-  const listed = (direction: string) => ports.filter(port => port.direction === direction).map(port => String(port.name ?? "")).join(", ");
-  const width = (port: Record<string, unknown>) => {
-    const range = compactWireRange(port.range);
-    const vector = typeof range === "string" ? /^\s*(\d+)\s*:\s*0\s*$/.exec(range) : null;
-    return vector ? String(Number(vector[1]) + 1) : "1";
-  };
-  const widths = ports.map(width);
-  const widthFields: ProposalInputField[] = new Set(widths).size <= 1
-    ? [{ name: "port_width", label: "Port width", description: "Width in bits for the listed ports.", default_value: widths[0] ?? "1" }]
-    : ports.map((port, index) => ({
-      name: `port_width_${index + 1}`,
-      label: `${String(port.name ?? `Port ${index + 1}`)} width`,
-      description: `Width in bits for ${String(port.name ?? `port ${index + 1}`)} (${String(port.direction ?? "port")}).`,
-      default_value: width(port),
-    }));
-  return [
-    { name: "component_name", label: "Component name", description: "Name for the new component.", default_value: String(operation.name ?? "") },
-    { name: "input_ports", label: "Input ports", description: "Comma-separated input port names.", default_value: listed("in") },
-    { name: "output_ports", label: "Output ports", description: "Comma-separated output port names.", default_value: listed("out") },
-    ...widthFields,
-    { name: "behavior", label: "Behavior", description: "Intended module-body behavior.", default_value: String(operation.systemverilog ?? "") },
-  ];
 }
 
 export function structuredQuestionPrompt(enabled: boolean, instructions: InstructionBundle = defaultInstructions): PromptSection | null {
@@ -99,7 +74,7 @@ export function reviewResult(review: ProposalReview, instructions: InstructionBu
       ? instructions.text("result.18")
       : review.state === "ready"
       ? instructions.text("result.19")
-      : instructions.text("result.20"),
+      : instructions.text("result.20") + (review.domain === "spec" ? "\n" + rtlSizingFeedback(review.diagnostics, review.artifact) : ""),
   });
 }
 

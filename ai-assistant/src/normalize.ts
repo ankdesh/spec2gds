@@ -56,35 +56,52 @@ export function normalizeSpecFormatting(input: unknown[], documentId?: string): 
       throw new Error(`Spec operation ${index} must be an object with a type.`);
     }
     const operation = structuredClone(item);
-    if (operation.operation_id === undefined) operation.operation_id = `operation_${index + 1}`;
-    if (operation.type === "create_entity") {
-      if (operation.entity_id === undefined) operation.entity_id = operation.operation_id;
-      if (operation.instances === undefined) operation.instances = [];
-      // A false entry flag has no effect on components; only designs can be entries.
-      if (operation.kind === "component" && operation.entry_design === false) delete operation.entry_design;
-      if (operation.kind === "component" && Array.isArray(operation.instances) && operation.instances.length) {
-        throw new Error("Only designs contain instances. Create a component-owned internal design instead of placing instances on a component.");
+    try {
+      if (operation.operation_id === undefined) operation.operation_id = `operation_${index + 1}`;
+      if (operation.type === "create_entity") {
+        if (operation.entity_id === undefined) operation.entity_id = operation.operation_id;
+        if (operation.instances === undefined) operation.instances = [];
+        // A false entry flag has no effect on components; only designs can be entries.
+        if (operation.kind === "component" && operation.entry_design === false) delete operation.entry_design;
+        if (operation.kind === "component" && Array.isArray(operation.instances) && operation.instances.length) {
+          throw new Error("Only designs contain instances. Create a component-owned internal design instead of placing instances on a component.");
+        }
+        if (operation.kind === "design" && operation.systemverilog != null) {
+          throw new Error("Designs define composition. Remove systemverilog from this Design; put behavioral SV only in the approved Component.");
+        }
+        if (operation.kind === "component" && typeof operation.systemverilog === "string" && !operation.systemverilog.trim()) {
+          throw new Error("systemverilog is empty. Author the requested functional module-body RTL and its set_entity_metadata.description before submitting. For an explicitly interface-only Component, omit systemverilog or use null; do not describe an empty body as implemented.");
+        }
+        if (operation.systemverilog !== undefined) operation.systemverilog = cleanSystemVerilogBody(operation.systemverilog);
+        if (operation.kind === "component" && Array.isArray(operation.ports)) operation.ports.forEach(port => normalizePort(port, true));
       }
-      if (operation.systemverilog !== undefined) operation.systemverilog = cleanSystemVerilogBody(operation.systemverilog);
-      if (operation.kind === "component" && Array.isArray(operation.ports)) operation.ports.forEach(port => normalizePort(port, true));
-    }
-    if (operation.type === "upsert_component_port") normalizePort(operation.port, false);
-    if (operation.type === "upsert_entity_section" && operation.section_type === "sv" && isRecord(operation.payload)) operation.payload.content = cleanSystemVerilogBody(operation.payload.content);
-    if (operation.type === "set_entity_metadata" && Array.isArray(operation.clear_fields)) {
-      if (operation.clear_fields.some(field => typeof field !== "string" || !["display_name", "short_description", "description"].includes(field))) throw new Error("Metadata clear_fields contains an invalid field.");
-      for (const field of operation.clear_fields) if (typeof field === "string") operation[field] = null;
-      delete operation.clear_fields;
-    }
-    if (operation.type === "update_bus_definition" && isRecord(operation.properties)) {
-      const properties = operation.properties;
-      if (Array.isArray(properties.clear_fields)) {
-        if (properties.clear_fields.some(field => typeof field !== "string")) throw new Error("Bus clear_fields must contain field names.");
-        for (const field of properties.clear_fields) if (typeof field === "string") properties[field] = null;
-        delete properties.clear_fields;
+      if (operation.type === "upsert_component_port") normalizePort(operation.port, false);
+      if (operation.type === "upsert_entity_section" && operation.section_type === "sv" && isRecord(operation.payload)) operation.payload.content = cleanSystemVerilogBody(operation.payload.content);
+      if (operation.type === "set_entity_metadata" && Array.isArray(operation.clear_fields)) {
+        if (operation.clear_fields.some(field => typeof field !== "string" || !["display_name", "short_description", "description"].includes(field))) throw new Error("Metadata clear_fields contains an invalid field.");
+        for (const field of operation.clear_fields) if (typeof field === "string") {
+          if (operation[field] !== undefined && operation[field] !== null) throw new Error(`Cannot set and clear metadata field ${field} in the same operation.`);
+          operation[field] = null;
+        }
+        delete operation.clear_fields;
       }
+      if (operation.type === "update_bus_definition" && isRecord(operation.properties)) {
+        const properties = operation.properties;
+        if (Array.isArray(properties.clear_fields)) {
+          if (properties.clear_fields.some(field => typeof field !== "string")) throw new Error("Bus clear_fields must contain field names.");
+          for (const field of properties.clear_fields) if (typeof field === "string") {
+            if (properties[field] !== undefined && properties[field] !== null) throw new Error(`Cannot set and clear bus field ${field} in the same operation.`);
+            properties[field] = null;
+          }
+          delete properties.clear_fields;
+        }
+      }
+      if (operation.type === "upsert_narrative_block") normalizeNarrativeBlock(operation.block);
+      return operation;
+    } catch (error) {
+      const target = operation.name ? ` ${String(operation.kind ?? "")} ${String(operation.name)}` : "";
+      throw new Error(`Spec operation ${index + 1} (${operation.type}${target}): ${error instanceof Error ? error.message : String(error)}`);
     }
-    if (operation.type === "upsert_narrative_block") normalizeNarrativeBlock(operation.block);
-    return operation;
   });
   const aliases = new Set<string>();
   for (const operation of operations) {

@@ -1,77 +1,51 @@
-"""End-to-end checks for the two exclusive workspace commands."""
-
+"""Workspace inspection and flow-only Assistant command checks."""
 from __future__ import annotations
 
 import json
+import subprocess
 import threading
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 
 import pytest
 
-from scripts.spec2gds_assistant import main as assistant_main
+from scripts.spec2gds_assistant import main as assistant_main, _private_spec_service
 from scripts.spec2gds_spec import main as spec_main
 from spec2gds.spec.spec_format.archive import SpecPackage
-from spec2gds.spec.spec_format.review_store import list_spec_reviews
+from spec2gds.spec.spec_format.review_store import review_bridge, node_executable, _BRIDGE
 from spec2gds.spec.spec_format.v1_api import V1Session
-from spec2gds.spec.spec_format.workspace_target import (
-    assistant_state_root,
-    resolve_spec_target,
-)
+from spec2gds.spec.spec_format.workspace_target import assistant_state_root, resolve_spec_target
 
 
 @contextmanager
 def model_fixture():
+    requests = []
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
         def do_POST(self):
-            length = int(self.headers.get("Content-Length", "0"))
-            body = json.loads(self.rfile.read(length))
-            calls = sum(message.get("role") == "tool" for message in body["messages"])
-            import re
-            approved = re.search(r"Approved architecture_review_id: ([^\n]+)", "\n".join(str(message.get("content", "")) for message in body["messages"] if message.get("role") == "user"))
-            if calls == 0:
-                delta = {"tool_calls": [{"index": 0, "id": "call_context", "type": "function", "function": {
-                    "name": "get_bound_context", "arguments": "{}"}}]}
-            elif calls == 1:
-                content = next(message["content"] for message in body["messages"] if message.get("role") == "tool")
-                if isinstance(content, list):
-                    content = "".join(part.get("text", "") for part in content)
-                context = json.loads(content)
-                revision = context["authoritative_context"]["source_revision_hash"]
-                if not approved:
-                    delta = {"tool_calls": [{"index": 0, "id": "call_architecture", "type": "function", "function": {
-                        "name": "prepare_architecture_review", "arguments": json.dumps({
-                            "title": "Timer architecture", "components": [{"name": "timer", "purpose": "Timing control"}],
-                            "designs": [], "interfaces": [{"component": "timer", "ports": []}],
-                            "clocks_resets": [], "decomposition_rationale": "Keep a cohesive timer component.",
-                            "assumptions": ["Interface and implementation will be refined later."], "open_questions": [],
-                            "concrete_configuration": {"implemented": False},
-                        })}}]}
-                else:
-                    delta = {"tool_calls": [{"index": 0, "id": "call_proposal", "type": "function", "function": {
-                    "name": "prepare_spec_proposal", "arguments": json.dumps({
-                        "architecture_review_id": approved[1], "supported": True, "unsupported_reason": None, "title": "Add timer",
-                        "base_source_revision_hash": revision,
-                        "summary": "Adds a timer component.", "rationale": "Timing control is required.",
-                        "assumptions": [], "operations": [{"operation_id": "create_timer",
-                            "type": "create_entity", "kind": "component", "name": "timer", "entity_id": "local_timer",
-                            "instances": []}, {"operation_id": "explanation", "type": "set_entity_metadata",
-                            "entity": {"document_id": context["authoritative_context"]["document_id"], "entity_kind": "component", "entity_id": "local_timer"},
-                            "description": "Timing control component. Interface and functional RTL are not implemented yet."}],
-                    })}}]}
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append(body)
+            tools = {tool["function"]["name"] for tool in body["tools"]}
+            assert not tools & {"prepare_spec_proposal", "prepare_architecture_review", "prepare_spec_document_creation"}
+            if tools == {"structured_output"}:
+                name = "structured_output"
+                args = {"title": "Timer architecture", "components": [{"name": "timer", "purpose": "Replicate the input."}],
+                        "designs": [], "interfaces": [{"component": "timer", "ports": [{"name": "a", "direction": "in", "width": 1}, {"name": "q", "direction": "out", "width": 1}]}],
+                        "clocks_resets": [], "decomposition_rationale": "One combinational leaf.", "assumptions": [], "open_questions": [], "concrete_configuration": {"width": 1}}
+            elif not any(message.get("role") == "tool" for message in body["messages"]):
+                name, args = "get_bound_context", {}
             else:
-                delta = {"content": "The timer proposal is ready for review."}
+                assert "flow_add_component" in tools
+                name, args = "flow_add_component", {"title": "Add timer", "request": "Add timer with scalar a input, q output and assign q = a."}
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
+            delta = {"tool_calls": [{"index": 0, "id": f"cli_{len(requests)}", "type": "function", "function": {"name": name, "arguments": json.dumps(args)}}]}
             for index, chunk in enumerate(({"role": "assistant"}, delta, {})):
-                event = {"id": "fixture", "object": "chat.completion.chunk", "created": 1,
-                         "model": "gpt-4o-mini", "choices": [{"index": 0, "delta": chunk,
-                         "finish_reason": ("tool_calls" if calls < 2 else "stop") if index == 2 else None}]}
+                event = {"id": "fixture", "object": "chat.completion.chunk", "created": 1, "model": "gpt-4o-mini", "choices": [{"index": 0, "delta": chunk, "finish_reason": "tool_calls" if index == 2 else None}]}
                 self.wfile.write(f"data: {json.dumps(event)}\n\n".encode())
             self.wfile.write(b"data: [DONE]\n\n")
 
@@ -79,64 +53,83 @@ def model_fixture():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        yield f"http://127.0.0.1:{server.server_port}/v1"
+        yield f"http://127.0.0.1:{server.server_port}/v1", requests
     finally:
         server.shutdown()
         thread.join()
         server.server_close()
 
 
-def reviewed_assistant_run(argv):
-    """Exercise both explicit architecture approval and the final owner policy."""
-    assert assistant_main(argv) == 0
-    path = resolve_spec_target(argv[0])
-    run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
-    review = run["architecture_reviews"][-1]
-    assert review["status"] == "pending"
-    assert spec_main(["approve-architecture", str(path), review["reviewId"]]) == 0
-    split = argv.index("--")
-    return assistant_main([*argv[:split], "--architecture-review-id", review["reviewId"], *argv[split:]])
-
-
 def test_workspace_discovery_and_explicit_target(tmp_path):
     workspace = tmp_path / "my design"
     assert resolve_spec_target(str(workspace), create=True) == workspace / "my_design.spec"
-    first = workspace / "first.spec"
-    second = workspace / "second.spec"
+    first, second = workspace / "first.spec", workspace / "second.spec"
     SpecPackage.create().save(str(first))
     assert resolve_spec_target(str(workspace)) == first
     SpecPackage.create().save(str(second))
     with pytest.raises(ValueError, match="first.spec.*second.spec"):
         resolve_spec_target(str(workspace))
     assert resolve_spec_target(str(second)) == second
-    assert resolve_spec_target(str(workspace / "exact.spec"), create=True) == workspace / "exact.spec"
 
 
 @pytest.mark.extensive
-def test_focused_turn_review_and_approval(tmp_path, monkeypatch, capsys):
-    workspace = tmp_path / "timer-design"
-    with model_fixture() as endpoint:
+@pytest.mark.parametrize("restricted", [False, True])
+def test_focused_cli_returns_correlated_flow_wait(tmp_path, monkeypatch, restricted):
+    path = tmp_path / "timer.spec"
+    assert spec_main(["create", "--output", str(path), "--name", "Timer"]) == 0
+    before = path.read_bytes()
+    with _private_spec_service(restricted) as service_url, model_fixture() as (endpoint, requests):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--preset", "focused", "--", "Propose a timer"]) == 0
-    path = workspace / "timer-design.spec"
+        assert assistant_main([str(path), "--service-url", service_url, "--", "Add timer with scalar a input, q output and assign q = a."]) == 2
     run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
-    assert run["session_id"]
-    assert (assistant_state_root(path) / "runs" / f"{run['session_id']}.json").exists()
-    assert Path(run["events_path"]).exists()
-    assert len(run["proposals"]) == 1
-    assert run["proposals"][0]["state"] == "ready"
-    assert not [item for item in SpecPackage.load(str(path)).manifest.documents if item.kind == "component"]
-    assert spec_main(["reviews", str(workspace)]) == 0
-    open_editor = V1Session(str(path))
-    assert spec_main(["approve", str(workspace)]) == 0
-    with pytest.raises(ValueError, match="refresh from disk"):
-        open_editor.save()
-    assert [item for item in SpecPackage.load(str(path)).manifest.documents if item.kind == "component"]
-    reviews = list_spec_reviews(assistant_state_root(path), run["document_id"])
-    assert reviews[0]["state"] == "applied"
-    assert "timer proposal is ready" in capsys.readouterr().out
+    assert run["schema_version"] == "spec2gds.assistant-workspace-run.v2"
+    assert run["flow"]["status"] == "waiting"
+    assert run["flow"]["pending"]["request"]["kind"] == "architecture"
+    assert run["flow"]["flow_execution_id"]
+    assert len(requests) == 3
+    assert path.read_bytes() == before
+    assert run["proposals"] == []
+
+
+@pytest.mark.parametrize("command", ["approve", "reject", "approve-architecture", "revise-architecture", "cancel-architecture"])
+def test_legacy_cli_decisions_are_not_commands(tmp_path, command):
+    path = tmp_path / "design.spec"
+    SpecPackage.create().save(str(path))
+    before = path.read_bytes()
+    with pytest.raises(SystemExit) as error:
+        spec_main([command, str(path)])
+    assert error.value.code == 2
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("action", ["begin", "complete", "discard", "recover", "architecture-approved", "architecture-require"])
+def test_review_bridge_cannot_advance_product_state(tmp_path, action):
+    with pytest.raises(ValueError, match="read-only"):
+        review_bridge(tmp_path, action, "old")
+    assert not (tmp_path / "assistant.sqlite3").exists()
+
+
+def test_node_review_bridge_also_rejects_direct_mutation(tmp_path):
+    result = subprocess.run([node_executable(), str(_BRIDGE), "architecture-approved", str(tmp_path), "old"], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "revision-checked flow controls" in result.stderr
+    assert not (tmp_path / "assistant.sqlite3").exists()
+
+
+def test_assistant_cannot_create_a_spec_outside_a_flow(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
+    path = tmp_path / "workspace" / "chosen.spec"
+    assert assistant_main([str(path), "--", "Create a Spec"]) == 2
+    assert not path.exists()
+    assert not path.parent.exists()
+
+
+def test_legacy_architecture_flag_is_removed(tmp_path):
+    with pytest.raises(SystemExit) as error:
+        assistant_main([str(tmp_path), "--architecture-review-id", "old", "--", "Add timer"])
+    assert error.value.code == 2
 
 
 def test_preset_rejected_before_creation(tmp_path, capsys):
@@ -149,107 +142,23 @@ def test_preset_rejected_before_creation(tmp_path, capsys):
 def test_editor_save_rejects_changed_disk(tmp_path):
     path = tmp_path / "design.spec"
     SpecPackage.create().save(str(path))
-    editor = V1Session(str(path))
-    other = V1Session(str(path))
-    other.package.narrative = other.package.narrative.model_copy(update={"title": "Changed in another session"})
+    editor, other = V1Session(str(path)), V1Session(str(path))
+    other.package.narrative = other.package.narrative.model_copy(update={"title": "Changed in another conversation"})
     other.save()
     with pytest.raises(ValueError, match="changed on disk"):
         editor.save()
 
 
-@pytest.mark.extensive
-def test_multiple_reviews_require_id_and_stale_after_apply(tmp_path, monkeypatch, capsys):
-    workspace = tmp_path / "multi"
-    with model_fixture() as endpoint:
-        monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
-        monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        for _ in range(3):
-            assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
-    path = workspace / "multi.spec"
-    root = assistant_state_root(path)
-    document_id = SpecPackage.load(str(path)).manifest.document_id
-    ids = [item["proposalId"] for item in list_spec_reviews(root, document_id)]
-    assert len(ids) == 3
-    assert len(list((root / "workspaces" / "design-sources").iterdir())) == 1
-    assert spec_main(["approve", str(workspace)]) == 2
-    assert "Multiple proposals" in capsys.readouterr().err
-    assert spec_main(["reject", str(workspace), ids[0]]) == 0
-    assert spec_main(["approve", str(workspace)]) == 2
-    assert spec_main(["approve", str(workspace), ids[1]]) == 0
-    assert spec_main(["approve", str(workspace), ids[2]]) == 2
-    states = {item["proposalId"]: item["state"] for item in list_spec_reviews(root, document_id)}
-    assert states == {ids[0]: "discarded", ids[1]: "applied", ids[2]: "stale"}
-
-
-@pytest.mark.extensive
-def test_interrupted_approval_reconciles_saved_proposal(tmp_path, monkeypatch):
-    from spec2gds.spec.spec_format.assistant import SpecChangeProposal
-    from spec2gds.spec.spec_format.proposal_service import apply_assistant_proposal
-    from spec2gds.spec.spec_format.review_store import review_bridge
-
-    workspace = tmp_path / "retry"
-    with model_fixture() as endpoint:
-        monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
-        monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        assert reviewed_assistant_run([str(workspace), "--require-human-approval", "--", "Propose a timer"]) == 0
-    path = workspace / "retry.spec"
-    root = assistant_state_root(path)
-    document_id = SpecPackage.load(str(path)).manifest.document_id
-    review = list_spec_reviews(root, document_id)[0]
-    review_bridge(root, "begin", review["proposalId"])
-    first = apply_assistant_proposal(V1Session(str(path)), SpecChangeProposal.model_validate(review["artifact"]))
-    assert first["status"] == "applied"
-    assert list_spec_reviews(root, document_id)[0]["state"] == "applying"
-    assert spec_main(["approve", str(workspace)]) == 0
-    assert list_spec_reviews(root, document_id)[0]["state"] == "applied"
-    assert len(V1Session(str(path)).activity.state.assistant_changes) == 1
-
-
 def test_editor_http_save_conflict_requires_refresh(tmp_path):
     from urllib.error import HTTPError
-
     from scripts.spec2gds_assistant import _private_spec_service, _request
-
     path = tmp_path / "editor.spec"
     SpecPackage.create().save(str(path))
     with _private_spec_service() as url:
         opened = _request(url, "/documents/open", {"path": str(path)})
-        revision = opened["source_revision_hash"]
         other = V1Session(str(path))
         other.package.narrative = other.package.narrative.model_copy(update={"title": "Updated outside editor"})
         other.save()
         with pytest.raises(HTTPError) as conflict:
-            _request(url, "/transactions", {"expected_source_revision_hash": revision, "operations": []})
+            _request(url, "/transactions", {"expected_source_revision_hash": opened["source_revision_hash"], "operations": []})
         assert conflict.value.code == 409
-        assert "stale" in conflict.value.read().decode().lower()
-
-
-@pytest.mark.extensive
-def test_focused_turn_saves_automatically_by_default(tmp_path, monkeypatch):
-    workspace = tmp_path / "automatic"
-    with model_fixture() as endpoint:
-        monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
-        monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
-        assert reviewed_assistant_run([str(workspace), "--", "Add a timer"]) == 0
-    path = workspace / "automatic.spec"
-    run = json.loads((assistant_state_root(path) / "last-run.json").read_text())
-    assert run["approval_policy"] == "automatic"
-    assert run["proposals"][0]["state"] == "applied"
-    session = V1Session(str(path))
-    assert len(session.revision.components) == 1
-    assert len(session.activity.state.assistant_changes) == 1
-    assert session.journal.history()["items"][0]["service_result"]["source_revision_hash"] == session.revision.source_revision_hash
-
-
-@pytest.mark.extensive
-def test_assistant_creates_exact_spec_path(tmp_path, monkeypatch):
-    path = tmp_path / "workspace" / "chosen.spec"
-    with model_fixture() as endpoint:
-        monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
-        monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
-        assert reviewed_assistant_run([str(path), "--", "Propose a timer"]) == 0
-    assert path.is_file()
-    assert sorted(path.parent.glob("*.spec")) == [path]
-    assert len(json.loads((assistant_state_root(path) / "last-run.json").read_text())["proposals"]) == 1

@@ -94,3 +94,29 @@ test("creation operation IDs resolve partial bound references without rewriting 
   assert.throws(() => normalizeSpecOperations([operations[0],
     { ...operations[1], entity: { entity_id: "create_counter", entity_kind: "design" } }], "proposal", "bound"), /different entity kind/);
 });
+
+
+test("authoring failures identify the failing operation and distinguish Design composition from Component behavior", () => {
+  assert.throws(() => normalizeSpecOperations([
+    { type: "create_entity", kind: "component", name: "adder", systemverilog: "assign sum = a;" },
+    { type: "create_entity", kind: "design", name: "wrapper", systemverilog: "module wrapper; endmodule" },
+  ]), /Spec operation 2.*design wrapper.*Remove systemverilog/);
+  assert.throws(() => normalizeSpecOperations([
+    { type: "create_entity", kind: "component", name: "adder", systemverilog: "module adder; endmodule" },
+  ]), /Spec operation 1.*component adder.*module-body/);
+});
+
+
+test("initial empty RTL is rejected while explicit interface-only Components remain supported", () => {
+  assert.throws(() => normalizeSpecOperations([{ type: "create_entity", kind: "component", name: "adder", systemverilog: "  " }]), /systemverilog is empty/);
+  assert.doesNotThrow(() => normalizeSpecOperations([{ type: "create_entity", kind: "component", name: "interface_only" }]));
+  assert.doesNotThrow(() => normalizeSpecOperations([{ type: "create_entity", kind: "component", name: "interface_only", systemverilog: null }]));
+});
+
+
+test("conflicting metadata and bus set/clear values cannot silently erase authored values", () => {
+  assert.throws(() => normalizeSpecOperations([{ type: "set_entity_metadata", description: "Requested description", clear_fields: ["description"] }]), /Cannot set and clear metadata field description/);
+  assert.throws(() => normalizeSpecOperations([{ type: "update_bus_definition", properties: { description: "Requested description", clear_fields: ["description"] } }]), /Cannot set and clear bus field description/);
+  const [clear] = normalizeSpecOperations([{ type: "set_entity_metadata", description: null, clear_fields: ["description"] }]);
+  assert.equal(clear!.description, null);
+});

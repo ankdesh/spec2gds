@@ -35,7 +35,7 @@
     "test:ui": "node --test tests/*.ui.test.mjs",
     "generate:tools": "node scripts/generate-tool-arguments.mjs",
     "check:tools": "node scripts/generate-tool-arguments.mjs --check",
-    "prebuild:server": "npm run check:tools",
+    "prebuild:server": "npm run check:tools && node scripts/clean-server.mjs",
     "pretypecheck": "npm run check:tools",
     "pretest": "npm run check:tools"
   },
@@ -67,7 +67,12 @@
     "@deepseek-ai/dsh-event-system-yaml": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-goal": "0.1.6-alpha.1",
     "@deepseek-ai/dsh-storage-sqlite": "0.1.6-alpha.1",
-    "@deepseek-ai/dsh-event-system-http": "0.1.6-alpha.1"
+    "@deepseek-ai/dsh-event-system-http": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-flow": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-flow-runtime": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-flow-yaml": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-flow-model-native": "0.1.6-alpha.1",
+    "@deepseek-ai/dsh-tool-flow": "0.1.6-alpha.1"
   },
   "devDependencies": {
     "@types/node": "^24.1.0",

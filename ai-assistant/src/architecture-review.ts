@@ -12,7 +12,7 @@ export function validateArchitectureOperations(plan: Record<string, any>, operat
     if (!approved) throw new Error(`Creation of ${String(operation.kind)} ${String(operation.name)} was not included in the approved architecture. Prepare a revised architecture review.`);
     if (operation.kind !== "component") continue;
     const grouped = plan.interfaces.find((item: unknown) => isRecord(item) && item.component === operation.name && Array.isArray(item.ports));
-    const expected = grouped?.ports ?? (plan.components.length === 1 && plan.interfaces.every((item: unknown) => isRecord(item) && typeof item.name === "string") ? plan.interfaces : null);
+    const expected = grouped?.ports;
     if (!expected) continue;
     const ports = Array.isArray(operation.ports) ? operation.ports : [];
     if (ports.length !== expected.length) throw new Error(`Component ${String(operation.name)} ports differ from its approved interface.`);
@@ -23,12 +23,10 @@ export function validateArchitectureOperations(plan: Record<string, any>, operat
       if (descriptor.width !== undefined) {
         const range = typeof port.range === "string" ? /^(\d+):(\d+)$/.exec(port.range) : null;
         const width = range ? Math.abs(Number(range[1]) - Number(range[2])) + 1 : port.range === undefined || port.range === null ? 1 : null;
-        if (width !== descriptor.width) throw new Error(`Port ${String(operation.name)}.${descriptor.name} width differs from its approved concrete configuration.`);
+        if (width !== descriptor.width) throw new Error(`Port ${String(operation.name)}.${descriptor.name} width differs from its approved concrete configuration: expected ${String(descriptor.width)} bit(s), received range ${JSON.stringify(port.range)}. Use range "${Number(descriptor.width) - 1}:0" for a vector; omit range or use null for a scalar. Correct the proposal port, not the approved architecture.`);
       }
     }
   }
 }
 
 export const ARCHITECTURE_PROMPT = defaultInstructions.text("architecture");
-
-export { registerArchitectureTool } from "./tools/prepare_architecture_review.js";
