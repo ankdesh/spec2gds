@@ -1,6 +1,6 @@
 """Acceptance test suite for Verification Planner Layer 1 (Test Plan).
 
-Implements L1-01 through L1-15 test scenarios per docs/verification-layer-1-test-plan.md.
+Implements L1-01 through L1-15 test scenarios per docs/verification-planner.md.
 """
 
 from __future__ import annotations

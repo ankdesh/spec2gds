@@ -1,79 +1,48 @@
 # spec2gds
 
-`spec2gds` is a specification-first hardware design workspace. It combines a
-structured Spec Editor, an independent circuit editor, and an
-optional assistant with owner-validated submissions.
+`spec2gds` is a specification-first hardware design platform.
+It combines a structured Spec Editor, an independent Circuit Designer, an integrated Verification Planner, and an AI Assistant with service-validated transactions.
 
-The repository no longer ships a gallery of demos or benchmark corpora. New
-sample applications are developed one at a time through the complete system,
-then kept only when they remain useful and reproducible.
+## System at a Glance
 
-## System at a glance
+![spec2gds System Architecture](docs/images/system-architecture.png)
 
 ```mermaid
 flowchart LR
     User["Designer"] --> SpecUI["Spec Editor"]
     SpecUI --> SpecAPI["Spec API"]
-    SpecAPI --> Package[".spec package<br/>IP-XACT + narrative + assets"]
-    SpecAPI -->|"source-owned projection"| CircuitAPI["Circuit service"]
+    SpecAPI --> Package[".spec Package<br/>IP-XACT + Narrative + Annotations"]
+    SpecAPI -->|"Source-Owned Projection"| CircuitAPI["Circuit Service"]
     CircuitUI["Circuit Designer"] --> CircuitAPI
-    CircuitAPI --> CircuitFile[".circuit.json<br/>independent circuits"]
-    CircuitAPI -->|"validated source commit"| SpecAPI
+    CircuitAPI --> CircuitFile[".circuit.json<br/>Independent Circuits"]
+    CircuitAPI -->|"Validated Source Commit"| SpecAPI
     User --> CircuitUI
-    Assistant["Optional assistant"] -->|"validated submissions"| SpecAPI
-    Assistant -->|"reviewed proposals"| CircuitAPI
+    Assistant["AI Assistant"] -->|"Validated Submissions"| SpecAPI
+    Assistant -->|"Reviewed Proposals"| CircuitAPI
 ```
 
-The two editors have different source-of-truth rules:
+### Source of Truth Rules
+- A `.spec` package is authoritative and saved by the Spec API.
+- A local circuit is managed by the Circuit client and saved as `.circuit.json`.
+- A source-bound circuit is an editable projection; **Save to Spec** commits validated changes back to the `.spec` container.
+- Leaf-component previews remain read-only.
+- Valid Spec assistant proposals save automatically by default. Launch with `--require-designer-approval` to require manual review.
+- On a source-bound circuit, accepting a proposal stages a private draft; **Save to Spec** commits to the `.spec` file.
 
-- A `.spec` package is owned and saved by the Spec API.
-- A local circuit is owned by its client and saved as `.circuit.json`.
-- A source-bound circuit is an editable projection; **Save to Spec**
-  commits validated topology and layout changes back to the `.spec` package.
-- Leaf-component previews and unsupported projections remain read-only.
-- Valid Spec assistant submissions save automatically by default. Launch with
-  `--require-human-approval` to require review. On a source-bound Circuit,
-  Accept stages a private draft; **Save to Spec** writes the package.
+See the [Documentation Index](docs/README.md) for architecture and workflow references.
 
-See [the documentation index](docs/README.md) for the architecture and flow
-details.
+### Core Documentation Guides
+- **Architecture**: [System Architecture](docs/architecture.md) and [End-to-End Flows](docs/flows.md).
+- **Spec Editor**: [Spec Editor and Specification Service](docs/spec-editor.md).
+- **Circuit Designer**: [Circuit Designer](docs/circuit-designer.md) and [Spec-Circuit Integration Architecture](docs/spec-circuit-integration-architecture.md).
+- **Verification Planner**: [Verification Planner](docs/verification-planner.md).
+- **AI Assistant**: [System Contract](docs/ai-assistant.md), [Operations & Verification](docs/ai-assistant-operations.md), and [Reusable Flows](docs/ai-assistant-flows.md).
+- **Activities & Code Generation**: [Activity SDK](docs/activity-sdk.md), [Deterministic RTL Generation](docs/rtl-generation.md), [RTL Language Examples](docs/rtl-language-examples.md), and [SystemC Activities](docs/systemc-activities.md).
+- **Development & Standards**: [Development Guide](docs/development.md), [Python Code Guide](docs/python-code-guide.md), [Testing Strategy](docs/testing-strategy.md), and [Canonical Terminology](docs/TERMINOLOGY.md).
 
-The AI Assistant uses DeepSeek Harness for its chat shell and runtime. Product
-adapters add permanent document bindings, owner tools, and review cards. Use these
-four guides:
-
-- [System contract](docs/ai-assistant.md) defines required behavior.
-- [Operations and tests](docs/ai-assistant-operations.md) gives run commands,
-  configuration, diagnostics, and acceptance checks.
-- [TEMP implementation gaps](docs/TEMP-ai-assistant-implementation-gaps.md) records
-  where the current code differs from the contract.
-- [Future work](docs/ai-assistant-future-work.md) keeps proposed improvements separate.
-
-A chat keeps its document target when the editor opens another document. Architecture
-approval and content-save approval are separate decisions. Check TEMP for accepted
-rules that still need implementation. Stored RTL, structured wiring, and explanation
-text have different roles; see the contract and [RTL generator guide](docs/rtl-generation-activity.md).
-
-For a focused explanation of how the two editors cooperate, including launch,
-projection, save, refresh, conflict, and security diagrams, read
-[Spec Editor and Circuit Designer integration architecture](docs/spec-circuit-integration-architecture.md).
-
-Circuit Designer's application shell is also available as the compiled private
-package `@spec2gds/circuit-app-react`. It can be embedded with host-provided
-file, preference, source, telemetry, event, and tool adapters; see
-[Embedding Circuit Designer](docs/circuit-designer-embedding.md). Its
-[Blueprint Slate visual profile](docs/circuit-designer-visual-profile.md) and
-[Chipmind feature-gap inventory](docs/circuit-designer-chipmind-gap-analysis.md)
-document the current professionalization direction.
-
-The independent **Verification Planner** (`testplan-service`, port `6016`)
-provides snapshot-bound Test Plan, Coverage & Evidence, and recipe authoring
-with immutable reviewed checkpoints. Its built-in generator emits reference
-artifacts and synthetic fixture templates; executable test generation and
-simulation remain future work. See [architecture](docs/verification-planner-architecture.md)
-and [remaining requirements](docs/verification-planner-backlog.md).
-
-Run it separately in the root uv environment:
+### Verification Planner Service
+The independent **Verification Planner** (`testplan-service`, port `6016`) provides snapshot-bound Test Plan authoring, Coverage & Evidence evaluation, and reference artifact generation.
+Run it separately in the root virtual environment:
 
 ```bash
 uv sync
@@ -155,7 +124,7 @@ scripts/serve-all.sh restart
 reporting success while an older process continues serving the UI.
 
 The commands above use the tracked defaults in `config/services.json`. See
-[Service configuration](docs/service-configuration.md) before using different
+the [Development Guide](docs/development.md#2-shared-service-configuration) before using different
 addresses or ports.
 
 ## Configure service addresses
@@ -173,7 +142,7 @@ advertised host without changing the bind address. Never give another system a
 URL containing `0.0.0.0`; use the detected/overridden public host instead.
 
 Unified file logging is disabled by default. Enable concise operational logs
-with `SPEC2GDS_LOGGING=ON`; add boundary data and owned OpenAI request/response
+with `SPEC2GDS_LOGGING=ON`; add boundary data and model request/response
 objects with `SPEC2GDS_LOG_LEVEL=debug`. All applications append to the single
 file configured under `logging.file`. At its configured size limit the file is
 compacted in place so only the newest complete entries remain; no backups are
@@ -183,7 +152,7 @@ created. Start the color-coded local viewer with:
 uv run spec2gds-log-viewer
 ```
 
-See [the logging guide](docs/logging.md) for filters, redaction, and the event
+See the [Development Guide](docs/development.md#3-unified-logging-system) for filters, redaction, and the event
 format.
 
 The Circuit service can also run independently without the shared registry:
@@ -213,17 +182,16 @@ specification is open. A document chat can create and refine supported entities
 throughout its package. An entity's **Options → More actions… → Explore with AI
 Assistant** creates a narrower entity-bound conversation.
 
-Unbound Assistant chats can discuss general hardware topics and create a new
-specification document. Editing an existing document requires its exact binding.
-The system contract defines approval, scope, and failure rules; the TEMP register
-records the remaining code changes.
+Unbound Assistant conversations discuss general hardware topics and create a new
+specification document. Editing an existing document requires an exact document binding.
+The system contract defines approval, scope, and validation rules.
 
-Use `uv run spec2gds-editor --require-human-approval` or
-`scripts/serve-all.sh start --require-human-approval` for restricted Spec content
+Use `uv run spec2gds-spec-service --require-designer-approval` or
+`scripts/serve-all.sh start --require-designer-approval` for restricted Spec content
 saves. Idle views follow incoming changes. Inline drafts retain their text and
-original revision. See [owner refinement](docs/spec-editor-iterative-refinement.md)
+original revision. See [Spec Editor and Specification Service](docs/spec-editor.md#4-spec-service-revisions-and-approval-modes)
 and [Assistant acceptance checks](docs/ai-assistant-operations.md#acceptance-matrix).
-Configuration and execution limits are defined once in
+Configuration and execution limits are defined in
 [Assistant operations](docs/ai-assistant-operations.md#configuration-and-limits).
 
 ## Run only the Spec Editor
@@ -262,7 +230,7 @@ shows an unavailable message while leaving the source tables accessible.
 Saved Circuit Designer cycle edges appear in this preview and in SVG/PNG
 exports. They divide the canvas into pipeline stages, default to
 one implicit `clk` domain, and are persisted as validated semantic timing
-annotations; see [the timing-stage guide](docs/circuit-designer-timing-stages.md).
+annotations; see [the Circuit Designer guide](docs/circuit-designer.md#4-pipeline-stages-and-timing-analysis).
 Leaf-component sections provide separate **Add wire port**, **Add
 transactional port**, and **Add structured port** commands. All ports are shown
 as editable rows in one Ports table. Wire ports use
@@ -275,8 +243,8 @@ browser-only draft.
 Components and designs also expose **Options → Add section → SystemVerilog**.
 The optional singleton is an IEEE 1800-2017 module body, edited with CodeMirror
 and validated with Verilator 5.x when available. Saved bodies render inline;
-Edit preserves rejected/stale drafts and Delete requires confirmation. See the
-[entity sections guide](docs/component-sections.md) for package layout, API, limits,
+Edit preserves rejected/stale drafts and Delete requires confirmation. See
+[Spec Editor sections](docs/spec-editor.md#3-component-and-design-sections) for package layout, API, limits,
 validation, and extension instructions.
 
 The **Circuit** menu lists available designs and components. Eligible document
@@ -332,7 +300,6 @@ returns a validated report, artifacts, and optional review-gated source
 proposals. It never reads or mutates the live editor session.
 
 The public contracts live in `spec2gds.spec.activities`. See the
-[Activity Snapshot v1 format](docs/activity-snapshot-v1.md) and
 [Activity SDK guide](docs/activity-sdk.md). The SDK intentionally does not
 choose a queue, worker process, storage service, or monitoring mechanism.
 
@@ -360,7 +327,7 @@ publishes a managed project beside the active package under
 typed report and JSON report artifact. Phase one has no LLM dependency or inferred
 performance behavior. Packaged Jinja2 templates format normalized render
 contexts while all topology and naming decisions remain in deterministic
-Python code. See the [SystemC AT Activity guide](docs/systemc-at-activity.md)
+Python code. See the [SystemC Activities guide](docs/systemc-activities.md)
 for invocation, supported topology, template constraints, and build
 instructions.
 
@@ -371,7 +338,7 @@ a CIRCT-linked emitter, and publishes separately under
 `<spec-folder>/systemc-rtl/<document-name>/<entity-name>/`. Set `CIRCT_PREFIX` to
 the installation containing `circt-verilog` and `spec2gds-systemc-emit`; build
 the generated project against SystemC 2.3.3 or later. The
-[cycle-accurate SystemC guide](docs/systemc-cycle-accurate-activity.md) gives
+[SystemC Activities guide](docs/systemc-activities.md) gives
 the source profile, setup, invocation, and build instructions.
 
 The deterministic `rtl.generate` Activity generates a SystemVerilog 2017
@@ -383,12 +350,9 @@ compile-safe defaults unless explicit component/design SV bodies provide
 behavior; no clocks, resets, parameters, or testbench are inferred. Bus
 interfaces, non-wire ports, symbolic ranges, and
 unsupported net shapes are rejected during preflight. See the
-[RTL Generation Activity guide](docs/rtl-generation-activity.md) for the exact
-source profile, report contract, invocation, and required Verilator 5.x lint
-workflow. The
-[one-cycle and two-cycle semantics examples](docs/rtl-semantics-examples.md)
-show the body-only source contract and can be generated under the configured
-Activity scratch directory with:
+[Deterministic RTL Generation guide](docs/rtl-generation.md) for the exact
+source profile, report contract, invocation, semantics, and required Verilator 5.x lint
+workflow. Generate examples under the configured Activity scratch directory with:
 
 ```bash
 uv run python scripts/generate_rtl_examples.py --check
@@ -434,7 +398,7 @@ components, selections, routes, bends, junctions, and ports. The Context Menu
 key and Shift+F10 provide the same menus from the keyboard. Use **Edit →
 Preferences → Actions and shortcuts** to configure shared keyboard and mouse
 inputs; right-click itself is reserved for context menus. See the
-[Circuit Designer interaction guide](docs/circuit-designer-interactions.md).
+[Circuit Designer guide](docs/circuit-designer.md).
 
 To use **Open circuit** from the Spec Editor, run both services. A
 design projection supports **Edit → Begin Editing** and **Save to
@@ -442,7 +406,7 @@ Specification**; the save validates and atomically updates IP-XACT topology and
 its semantic layout annotation. Leaf-component previews remain read-only. The
 default Spec API (`6010`) and Circuit service (`6011`) already use compatible
 settings from `config/services.json`. See the
-[specification synchronization guide](docs/circuit-designer-spec-sync.md) for
+[Spec-Circuit Integration Architecture](docs/spec-circuit-integration-architecture.md) for
 save, conflict, layout, and recovery behavior.
 
 ## Run only the optional AI Assistant
@@ -487,11 +451,7 @@ the invoking environment. Missing required prerequisites produce an incomplete
 result and nonzero exit status. Each run writes a report to a private `/tmp`
 directory; `--output` selects a new or empty directory. See
 [the software testing strategy](docs/testing-strategy.md) for scope selection,
-coverage limits, and coding-agent instructions.
-See [the capability coverage matrix](docs/test-coverage-matrix.md) for the maintained
-flows, smaller local checks, conditional imports and known failures. The HTML
-report distinguishes individual behaviours, capabilities and optional code
-coverage diagnostics.
+coverage limits, and capability matrix.
 
 The legacy fundamental and extensive tiers remain available. The two tiers
 are complementary; `all` retains its legacy meaning and runs each once.

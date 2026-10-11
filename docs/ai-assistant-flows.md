@@ -113,6 +113,4 @@ Structural edits include the exact proposed operation batch in the architecture
 review context. The host records its digest and rejects a different batch at
 submission. Content edits skip hardware review. Both branches require an applied
 service receipt. Rejected, discarded, or stale receipts fail the request.
-
-Implementation checks and remaining release work are recorded in
-[the evidence report](flow-implementation-evidence-2026-10-10.md).
+All completed flows record an immutable receipt from the authoritative Spec service.

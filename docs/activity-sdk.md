@@ -1,175 +1,148 @@
 # Activity SDK
 
-The Activity SDK is the supported Python interface for teams that analyze a
-specification, generate code, run tools, or format selected information for an
-LLM. It is deliberately independent of how work is queued, launched, stored,
-or monitored.
+The Activity SDK provides the Python extension interface to analyze hardware specifications, generate code, and produce verification artifacts.
+The SDK remains completely independent of queueing, process management, and HTTP hosting.
 
-## Terminology and lifecycle
-
-An **Activity** is registered Python logic. An **Activity Snapshot** is its
-complete immutable Spec input. An **Activity Result** contains its report,
-artifacts, and optional review-gated source proposals. Host-owned run status is
-not part of any of these contracts.
-
-```text
-SpecRevision -> ActivitySnapshot -> ActivityContext -> Activity -> ActivityResult
+```mermaid
+flowchart LR
+    Rev["SpecRevision"] --> Snap["Activity Snapshot v1"]
+    Snap --> Ctx["ActivityContext"]
+    Ctx --> Act["Activity Plugin"]
+    Act --> Res["Activity Result"]
+    Res --> Rep["Reports & Artifacts"]
+    Res --> Prop["Typed Source Proposals"]
 ```
 
-Activity definitions contain no command, process, HTTP, database, queue, or
-workspace settings. The Spec Editor's persistent in-process host, a direct
-caller, or an independent Activity service can invoke the same plugin
-unchanged.
+## 1. Core Concepts and Architecture
 
-## Two-level read API
+- **Activity**: A registered Python function or class that performs analysis or code generation.
+- **Job**: An execution instance of an Activity with concrete parameters.
+- **Activity Snapshot**: An immutable, portable ZIP container capturing one complete `.spec` source revision.
+- **Activity Context**: The runtime execution interface providing read-only access to specification data.
+- **Activity Result**: The immutable output containing markdown reports, output artifacts, and optional typed source proposals.
 
-`context.spec.high` is the preferred stable API for most plugins:
+Activity code never receives mutable `.spec` packages or live editor sessions.
+Any source changes return as typed proposals that require designer review and revision validation.
+
+---
+
+## 2. Activity Snapshot v1 Container Specification
+
+An Activity Snapshot is the portable input boundary for Activities and Context Renderers.
+The container media type is `application/vnd.spec2gds.activity-snapshot.v1+zip`.
+
+The deterministic ZIP contains exactly three entries in order:
+```text
+mimetype
+snapshot.json
+source/source.spec
+```
+
+- `mimetype`: Uncompressed file containing the exact media type string.
+- `source/source.spec`: Complete, valid, source-only `.spec` container without execution history.
+- `snapshot.json`: Manifest adhering to `spec2gds.activity-snapshot.v1`:
+
+```json
+{
+  "schema_version": "spec2gds.activity-snapshot.v1",
+  "snapshot_id": "sha256:...",
+  "source": {
+    "document_id": "soc_top",
+    "source_revision_hash": "sha256:...",
+    "package_path": "source/source.spec",
+    "package_sha256": "sha256:..."
+  },
+  "scope": {
+    "kind": "entity",
+    "target": {
+      "document_id": "soc_top",
+      "entity_kind": "design",
+      "entity_id": "main_design"
+    }
+  },
+  "dependency_closure": []
+}
+```
+
+The `snapshot_id` hashes the canonical manifest fields.
+Timestamps and host paths are excluded to guarantee deterministic snapshot hashes.
+
+---
+
+## 3. Two-Level Read API
+
+The `ActivityContext` exposes two distinct read interfaces:
+
+### High-Level API (`context.spec.high`)
+Use `context.spec.high` for general hardware analysis and LLM prompt rendering:
 
 ```python
+# Query entities by kind
 components = context.spec.high.entities(kind="component")
 dma = components.where(name="dma").one()
+
+# Query graph relationships
 dependencies = context.spec.high.related(dma.ref, "dependencies")
 usages = context.spec.high.related(dma.ref, "usages")
+
+# Read narrative documentation
 intent = context.spec.high.text.linked_to(dma.ref).plain_text()
 ```
 
-High-level queries are deterministic, iterable, and immutable. They expose
-common entity identity, relationships, and narrative text without requiring
-knowledge of concrete IP-XACT types.
+High-level queries are deterministic, iterable, and immutable.
 
-`context.spec.low` provides more detailed typed access:
+### Low-Level API (`context.spec.low`)
+Use `context.spec.low` when detailed IP-XACT hardware models or exact port layouts are required:
 
 ```python
 for component in context.spec.low.components:
     for port in component.ports:
-        print(component.vlnv, port.name, port.style)
+        print(component.vlnv, port.name, port.direction, port.width)
 
+# Resolve design topology and netlist connections
 design = context.spec.low.resolve(design_ref)
 connections = context.spec.low.connections(design_ref)
 ```
 
-The low-level API returns concrete immutable SpecIR values. It does not expose
-raw XML, mutable package files, `save()`, `to_package()`, or transaction APIs.
-Use it when generic queries do not contain enough hardware detail.
+The low-level API returns concrete immutable `SpecIR` objects.
+It never exposes raw XML or mutable write handles.
 
-## Define an Activity
+---
 
-The function decorator is the shortest authoring path:
+## 4. Define and Register an Activity
+
+Use the `@activity` decorator to register an Activity function:
 
 ```python
-import pydantic
+from pydantic import BaseModel
+from spec2gds.spec.activities import activity, ActivityContext, ActivityResult
 
-from spec2gds.spec.activities import (
-    ActivityContext,
-    ActivityResult,
-    ActivityScopes,
-    activity,
-)
-
-
-class Report(pydantic.BaseModel):
-    component_count: int
-
+class LintParams(BaseModel):
+    strict: bool = True
 
 @activity(
-    activity_id="acme.component_summary",
+    id="hardware.lint",
+    title="Hardware Spec Linter",
+    description="Validates port conventions and naming rules.",
     version="1.0.0",
-    title="Component summary",
-    description="Write a compact component inventory.",
-    scopes=ActivityScopes(document=True, entity_kinds=("component",)),
-    report_model=Report,
-    artifact_roles=("inventory.text",),
+    params_model=LintParams,
 )
-def summarize(context: ActivityContext) -> ActivityResult:
-    components = context.spec.high.entities(kind="component").all()
-    artifact = context.outputs.add_text(
-        role="inventory.text",
-        name="components.txt",
-        text="\n".join(item.name for item in components),
-    )
+def run_linter(context: ActivityContext, params: LintParams) -> ActivityResult:
+    warnings = []
+    for component in context.spec.low.components:
+        if not component.ports:
+            warnings.append(f"Component {component.name} has no ports defined.")
+            
     return ActivityResult(
-        summary=f"Found {len(components)} components.",
-        report=Report(component_count=len(components)).model_dump(mode="json"),
-        artifacts=(artifact,),
+        summary=f"Lint completed with {len(warnings)} warnings.",
+        report_markdown="\n".join(f"- {w}" for w in warnings) if warnings else "Clean.",
     )
 ```
 
-Subclass `BaseActivity` when an Activity needs its own availability check or
-additional private helper methods. `ActivityDefinition` declares document or
-entity scope, report schema, artifact roles, and proposal permission. Per-run
-user input and earlier Activity artifacts are not inputs in v1.
+---
 
-The output writer constructs validated, portable artifacts from bytes, text,
-JSON, files, or a deterministically zipped directory. Plugins declare semantic
-roles; the eventual host chooses durable storage and artifact IDs.
+## 5. Execution Rules and Determinism
 
-An Activity that must publish a persistent generated tree declares
-`requires_workspace_output=True`. The invoking host supplies an
-`ActivityScratchWriter` through `ActivityContext.workspace`; the Activity
-submits only relative paths and in-memory bytes. `LocalActivityScratchDirectory`
-provides the direct local implementation. It atomically replaces only folders
-carrying a matching ownership manifest, so extension code never receives an
-unrestricted filesystem root.
-
-Direct invocation passes this capability explicitly:
-
-```python
-from pathlib import Path
-
-from spec2gds.spec.activities import LocalActivityScratchDirectory, invoke_activity
-
-result = invoke_activity(
-    registry,
-    "acme.code_generator",
-    snapshot,
-    LocalActivityScratchDirectory(Path("generated")),
-)
-```
-
-Activities without `requires_workspace_output` remain host-neutral and require
-no workspace argument. A required workspace that is not supplied is rejected
-before the Activity runs.
-
-## Source proposals
-
-An Activity cannot mutate SpecIR. An Activity that declares
-`may_propose_changes=True` may return `SpecChangeProposalDraft` objects with a
-rationale and typed public Spec operations. The host attaches snapshot and
-Activity provenance, previews the operations against the current source hash,
-and requires explicit Accept or Reject. Reports and artifacts do not require
-approval.
-
-## Register extensions
-
-One plugin module can register Activities and Context Renderers:
-
-```python
-def register(registry):
-    registry.register_activity(summarize)
-    registry.register_context_renderer(MyContextRenderer())
-```
-
-Deployments load explicit `module:callable` paths with
-`load_extension_modules()`. Registration is atomic per module. Invalid imports,
-definitions, duplicate IDs, or schema mismatches disable that module and
-produce visible `ExtensionDiagnostic` records; valid plugins remain available.
-The product host reads these paths from `activities.extension_modules` in
-`config/services.json` and reports the same diagnostics through
-`GET /activities` and the editor launch dialog.
-
-Context Renderers use the same snapshot and read APIs but return deterministic
-`RenderedContext` text rather than creating Activity runs. This is the intended
-replacement boundary for consumer-specific LLM context formatting.
-
-## Test a plugin
-
-Use `ActivityTestHarness` with a small fixture revision and a
-`SpecExtensionRegistry`. Its `snapshot()`, `invoke()`, and `render()` methods
-are direct contract checks, not a scheduling decision: they validate
-availability, report schemas, artifact roles, source references, proposal
-permissions, and returned provenance. The underlying `invoke_activity()` and
-`render_context()` functions are also public for focused tests.
-
-The repository examples live in
-`spec2gds.spec.activities.reference`. Contract tests are in
-`tests/spec/activities/`.
+- **No Network / Process Side Effects**: Activities must be pure deterministic functions of their snapshot and inputs.
+- **Scratch Directory**: Use `context.scratch_dir` for temporary compiler files. Scratch files are deleted after execution.
+- **Artifact Publishing**: Save persistent outputs through `context.publish_artifact(name, data)`. Artifacts are stored in the `.spec` container sidecar.

@@ -2,7 +2,7 @@
 """API Fixture-Building Script for Verification Planner Layer 1.
 
 Executes the ordered fixture-building sequence against public endpoints per
-docs/verification-service-overall.md Section 9 and docs/verification-layer-1-test-plan.md.
+docs/verification-planner.md.
 """
 
 from __future__ import annotations

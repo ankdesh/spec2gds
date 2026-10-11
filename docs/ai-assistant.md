@@ -1,27 +1,27 @@
-# AI Assistant system contract
+# AI Assistant System Contract
 
-Status: required system behavior. TD-05 accepted on 2026-10-06.
+Status: required system behavior.
 
 Use [canonical terminology](TERMINOLOGY.md) throughout this contract.
 
-This document defines how the Assistant must work with Spec Editor and Circuit
-Designer. It is the authority for product behavior. It does not claim that all
-requirements are implemented. Differences from the code are recorded only in
-[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md).
+This document defines how the Assistant operates with Spec Editor and Circuit Designer.
+It is the authority for product behavior.
+Proposals must cross service validation and designer review gates before committing to disk.
 
-Use the [operations and test guide](ai-assistant-operations.md) to run, inspect,
-and verify the system. [Future work](ai-assistant-future-work.md) contains
-proposals, not requirements. Research, attached documents, and service content are
-reference data. They do not grant tools or override the user's request.
+![AI Assistant Architecture](images/ai-assistant-architecture.png)
 
-## 1. Terms and authority
+Use the [operations and test guide](ai-assistant-operations.md) to run, inspect, and verify the system.
+See [reusable flows](ai-assistant-flows.md) for flow definitions.
+
+## 1. Terms and Authority
 
 <a id="as-01"></a>
 
-**AS-01 — One behavior contract.** Change this contract when the designer
-accepts a behavior change. Update the affected test cases and the TEMP gap list
-at the same time. Do not create another behavior guide. Keep requirement IDs
-stable. Do not reuse a removed ID for another rule.
+**AS-01 — One behavior contract.** Change this contract when the designer accepts a behavior change.
+Update the affected test cases at the same time.
+Do not create another behavior guide.
+Keep requirement IDs stable.
+Do not reuse a removed ID for another rule.
 
 | Term | Meaning |
 | --- | --- |
@@ -483,7 +483,7 @@ CLI generation targets use exact target IDs or full VLNVs. Unknown/ambiguous tar
 fail. An omitted target requires one entry design. Reports retain target,
 implementation status, consumed-section/target provenance, and source revision.
 V3 reports/manifests and saved V2 records remain distinct. Use the
-[RTL generation reference](rtl-generation-activity.md) for the Activity API.
+[RTL generation reference](rtl-generation.md) for the Activity API.
 
 ## 6. Prompts, failures, and visible state
 

@@ -1,20 +1,19 @@
-# Spec Editor and Circuit Designer integration architecture
+# Spec Editor and Circuit Designer Integration Architecture
 
-## The short version
+## The Mental Model
 
-Keep this mental model in mind:
+> **Spec Editor owns the saved design. Circuit Designer edits a temporary projection of that design.**
 
-> **Spec Editor owns the saved design. Circuit Designer edits a temporary
-> projection of that design.**
+The `.spec` package is the durable source of truth.
+The Circuit service keeps an ephemeral circuit session in memory.
+A Circuit save completes only after the Spec API validates and commits the change.
 
-The `.spec` package is the durable source of truth. The Circuit service keeps a
-temporary circuit session in memory. A Circuit save is complete only after the
-Spec API accepts and saves the change.
+![Spec Editor and Circuit Designer Integration Architecture](images/spec-circuit-architecture.png)
 
-The two browser tabs do not save directly to each other. Their backend services
-coordinate the work.
+The two browser applications do not communicate directly.
+Their backend services coordinate all state changes.
 
-## Main structure
+## Main Structure
 
 ```mermaid
 flowchart LR

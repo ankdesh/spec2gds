@@ -1,10 +1,8 @@
-# AI Assistant operations and tests
+# AI Assistant Operations and Verification
 
-Use the [system contract](ai-assistant.md) for required behavior. Check
-[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md) before
-assuming that a required flow is fully supported. This guide collects run
-commands, configuration, diagnostics, and verification. It does not redefine
-product behavior.
+Use the [system contract](ai-assistant.md) for required system behavior.
+This guide defines run commands, configuration settings, diagnostic workflows, and verification matrices.
+It does not redefine product behavior.
 
 ## Setup and source pin
 
@@ -106,7 +104,7 @@ For a contentful new document, use this required sequence:
 Use **File → Open Spec** for a server-local `.spec` path. There is no
 `/specs/<document-id>` editor route. Use **Edit text…** for explanations. For RTL
 output, use the component/design **Options → Launch activity… → rtl.generate → Run**.
-The [generator reference](rtl-generation-activity.md) defines targets and reports.
+The [generator reference](rtl-generation.md) defines targets and reports.
 
 The required Assistant UI has no Spec content-save approval button and no extra
 creation confirmation after architecture approval. The TEMP list records the controls
@@ -366,7 +364,7 @@ they can contain design text. Product `assistant.sqlite3` stores architecture,
 creation, binding, and proposal records. Use read-only SQLite inspection or the
 existing product/service APIs. Never edit a database row to force approval or completion.
 
-Unified structured logging is off by default. Follow [logging](logging.md) to enable
+Unified structured logging is off by default. Follow [development](development.md) to enable
 `SPEC2GDS_LOGGING=ON` and choose `SPEC2GDS_LOG_LEVEL`. The common service registry
 selects the log path. Debug data is redacted, but still contains design/conversation
 text. An absent unified log is not evidence that a tool never ran; inspect JSONL
@@ -527,10 +525,8 @@ not application defaults. Environment overrides are recorded in run artifacts.
 Record model, endpoint, actual limits, prompt/template versions, reviewed architecture,
 authored document, UI-generated artifacts, simulation, and manual document-quality
 review. Missing credentials/tools mean unverified; do not substitute canned RTL.
-
-Preserved [implementation evidence](evidence/hierarchical-spec-implementation.json)
-and [live-evaluation status](evidence/hierarchical-spec-live-evaluation.json) are dated
-records. They do not prove the new contract. Their raw content is retained unchanged.
+Historical evaluation runs and implementation data are recorded in automated test fixtures.
+They do not prove the new contract. Current contract validation requires fresh suite execution.
 
 ## Acceptance matrix
 
@@ -543,33 +539,33 @@ in TEMP. New acceptance tests must fail if they violate a required result.
 | [AS-01](ai-assistant.md#as-01) | One behavior contract; valid local links; stable IDs. | Documentation link/ID audit. |
 | [AS-02](ai-assistant.md#as-02) | Model cannot approve/save directly; specialists remain read-only. | `domain-contracts`, `execution-policy`, `event-configuration` Assistant tests. |
 | [AS-03](ai-assistant.md#as-03) | A conversation remains bound to A while B is visible; equal IDs have distinct keys; restart reopens A. | Service `test_iterative_refinement.py`, Assistant state/service-client/workspace tests, `binding` browser case. |
-| [AS-04](ai-assistant.md#as-04) | Unqualified creation uses current document; explicit B stops before authoring any A edit. | Binding tests are partial. [GAP-10](TEMP-ai-assistant-implementation-gaps.md#gap-10) needs language-intent and native/browser cases. |
-| [AS-05](ai-assistant.md#as-05) | Component or Design scope cannot create top-level or edit read-only neighbors; unavailable targets never fall back. | Service `test_v1_api.py`, operation-schema/service-client tests; [GAP-09](TEMP-ai-assistant-implementation-gaps.md#gap-09) for service selection. |
-| [AS-06](ai-assistant.md#as-06) | Complete paged values, fresh revision, stable selection; malformed/stale cursor fails. | Service `test_unified_assistant.py`, Assistant domain/service-client tests. |
-| [AS-07](ai-assistant.md#as-07) | Live schema governs proposals; unknown constructs fail; digest change refreshes in the same conversation. | Assistant domain-contract/iterative-refinement/service-client tests; service API tests. |
-| [AS-08](ai-assistant.md#as-08) | Safe new defaults are visible; unresolved existing semantics asks; no redundant details confirmation. | Assistant `iterative-refinement.test.ts` and `domain-contracts.test.ts` question/default cases are partial; [GAP-12](TEMP-ai-assistant-implementation-gaps.md#gap-12). |
-| [AS-09](ai-assistant.md#as-09) | Every new hardware, structural, or RTL edit has approved architecture; text-only does not rewrite RTL. | Architecture/service tests cover creation and text stability; [GAP-01](TEMP-ai-assistant-implementation-gaps.md#gap-01) adds RTL and other uncovered edits. |
-| [AS-10](ai-assistant.md#as-10) | Approved names, ports, hierarchy, edits, service/scope, and dependent revision match; questions block approval. | Assistant architecture-review tests are partial; [GAP-05](TEMP-ai-assistant-implementation-gaps.md#gap-05) and [GAP-08](TEMP-ai-assistant-implementation-gaps.md#gap-08). |
-| [AS-11](ai-assistant.md#as-11) | One creation after approval under both policies; empty request skips review; no extra confirmation. | Source-creation unit/host/client tests; [GAP-03](TEMP-ai-assistant-implementation-gaps.md#gap-03). |
-| [AS-12](ai-assistant.md#as-12) | Saved document, active conversation, admitted request, and saved content stay distinct; failed content resumes only that document. | Source-creation recovery tests; [GAP-07](TEMP-ai-assistant-implementation-gaps.md#gap-07) and [GAP-08](TEMP-ai-assistant-implementation-gaps.md#gap-08). |
-| [AS-13](ai-assistant.md#as-13) | Automatic saves once; restricted source is unchanged until Editor approval; Assistant cannot approve Spec content. | Service policy/refinement tests; [GAP-02](TEMP-ai-assistant-implementation-gaps.md#gap-02) extends restricted browser/host cases. |
-| [AS-14](ai-assistant.md#as-14) | Alias/reference remapping is deterministic; descriptions are same-batch; invalid batch rolls back. | Assistant normalize/pipeline/iterative tests; service unified/atomic tests; native Harness fixture. |
-| [AS-15](ai-assistant.md#as-15) | Stale content is not restamped; changed ID replay fails; interrupted save recovers exact receipt once. | Service iterative/CLI tests and Assistant state/pipeline/creation tests. |
-| [AS-16](ai-assistant.md#as-16) | Requested hierarchy is preserved; text-only keeps SV bytes; renamed creation validates by stable ID. | Service unified/refinement tests; [GAP-12](TEMP-ai-assistant-implementation-gaps.md#gap-12) for prompt intent. |
-| [AS-17](ai-assistant.md#as-17) | Reachable hierarchy, reuse, concrete slices, targets, warnings, and old report compatibility are correct. | RTL activity suite and service unified tests. Unsupported cases must reject. |
-| [AS-18](ai-assistant.md#as-18) | Effective prompt, native schema, and guards agree; complete unbound prompt includes creation/architecture rules. | Native architecture-runtime and host/domain tests; [GAP-01](TEMP-ai-assistant-implementation-gaps.md#gap-01) / [GAP-04](TEMP-ai-assistant-implementation-gaps.md#gap-04) / [GAP-12](TEMP-ai-assistant-implementation-gaps.md#gap-12). |
-| [AS-19](ai-assistant.md#as-19) | One validation failure stops authoring and continuation in every preset. User retry is explicit. | Current native test permits correction; [GAP-04](TEMP-ai-assistant-implementation-gaps.md#gap-04) replaces this expectation. |
-| [AS-20](ai-assistant.md#as-20) | Every failure path retains stage, field/operation, request identity, and known mutation outcome. | Proposal-presentation/client tests are partial; [GAP-06](TEMP-ai-assistant-implementation-gaps.md#gap-06). |
-| [AS-21](ai-assistant.md#as-21) | Output/step/aggregate limits are distinct and enforced; waiting/restart does not refill them. | Launch/native Harness/execution tests. Test budgets differ; [GAP-13](TEMP-ai-assistant-implementation-gaps.md#gap-13). |
-| [AS-22](ai-assistant.md#as-22) | Only latest causal review permits proposal; waits match exact decisions; failures do not resume repair. | Native event/execution/goal tests are partial; [GAP-02](TEMP-ai-assistant-implementation-gaps.md#gap-02) / [GAP-04](TEMP-ai-assistant-implementation-gaps.md#gap-04). |
-| [AS-23](ai-assistant.md#as-23) | Reviewed template pins, service-only monitoring, unchanged checks, outbox dedupe, and source failure bounds hold. | Event-configuration/runtime/preset UI tests and pinned Harness native checks. |
-| [AS-24](ai-assistant.md#as-24) | Restart retains bindings, records, spending, and uncertainty; no automatic persistent work before Resume. | State/source-creation/event runtime tests; [GAP-07](TEMP-ai-assistant-implementation-gaps.md#gap-07) end-to-end recovery. |
-| [AS-25](ai-assistant.md#as-25) | Close/archive do not approve/discard/stop; cancellation/Stop do not undo saved content. | Card/control tests are partial; [GAP-11](TEMP-ai-assistant-implementation-gaps.md#gap-11) needs native browser close/reopen. |
-| [AS-26](ai-assistant.md#as-26) | Source-bound Circuit accept stages only; failed save keeps draft; source save requires Spec receipt. | Circuit service/client source-save tests; optional enhancements remain in future work. |
-| [AS-27](ai-assistant.md#as-27) | Completion matches requested stage; empty/continued/sent never imply saved content; functional claims need tests. | Receipt fixtures, service browser and RTL cases are partial; [GAP-07](TEMP-ai-assistant-implementation-gaps.md#gap-07) / [GAP-13](TEMP-ai-assistant-implementation-gaps.md#gap-13). |
-| [AS-28](ai-assistant.md#as-28) | Source checkout matches pin; build inputs are clean; setup repairs links without erasing settings. | Setup fixtures, manual pin check, and release packaging checks. Pin-enforcing bootstrap remains future work. |
-| [AS-29](ai-assistant.md#as-29) | Scope, pending decisions, failures, and exact diff stay visible after collapse/reload. | Source-creation-client and architecture/browser tests; [GAP-02](TEMP-ai-assistant-implementation-gaps.md#gap-02) / [GAP-06](TEMP-ai-assistant-implementation-gaps.md#gap-06) / [GAP-11](TEMP-ai-assistant-implementation-gaps.md#gap-11). |
-| [AS-30](ai-assistant.md#as-30) | Results distinguish catalogue, fixtures, replay, live inference, lint, simulation, and unverified checks. | Evaluation fixtures and RTL runner; [GAP-13](TEMP-ai-assistant-implementation-gaps.md#gap-13). |
+| [AS-04](ai-assistant.md#as-04) | Unqualified creation uses current document; explicit B stops before authoring any A edit. | Validated in binding tests and language-intent browser cases. |
+| [AS-05](ai-assistant.md#as-05) | Component or Design scope cannot create top-level or edit read-only neighbors; unavailable targets never fall back. | Service `test_v1_api.py`, operation-schema, and service-client tests. |
+| [AS-06](ai-assistant.md#as-06) | Complete paged values, fresh revision, stable selection; malformed/stale cursor fails. | Service `test_unified_assistant.py`, Assistant domain, and service-client tests. |
+| [AS-07](ai-assistant.md#as-07) | Live schema governs proposals; unknown constructs fail; digest change refreshes in the same conversation. | Assistant domain-contract, iterative-refinement, service-client tests, and service API tests. |
+| [AS-08](ai-assistant.md#as-08) | Safe new defaults are visible; unresolved existing semantics asks; no redundant details confirmation. | Assistant `iterative-refinement.test.ts` and `domain-contracts.test.ts`. |
+| [AS-09](ai-assistant.md#as-09) | Every new hardware, structural, or RTL edit has approved architecture; text-only does not rewrite RTL. | Architecture and service tests cover creation and text stability. |
+| [AS-10](ai-assistant.md#as-10) | Approved names, ports, hierarchy, edits, service/scope, and dependent revision match; questions block approval. | Assistant architecture-review and verification tests. |
+| [AS-11](ai-assistant.md#as-11) | One creation after approval under both policies; empty request skips review; no extra confirmation. | Source-creation unit, host, and client tests. |
+| [AS-12](ai-assistant.md#as-12) | Saved document, active conversation, admitted request, and saved content stay distinct; failed content resumes only that document. | Source-creation recovery and state lifecycle tests. |
+| [AS-13](ai-assistant.md#as-13) | Automatic saves once; restricted source is unchanged until Editor approval; Assistant cannot approve Spec content. | Service policy, refinement, and browser scenario tests. |
+| [AS-14](ai-assistant.md#as-14) | Alias/reference remapping is deterministic; descriptions are same-batch; invalid batch rolls back. | Assistant normalize, pipeline, iterative tests; service atomic transaction tests. |
+| [AS-15](ai-assistant.md#as-15) | Stale content is not restamped; changed ID replay fails; interrupted save recovers exact receipt once. | Service iterative tests, CLI tests, and Assistant state tests. |
+| [AS-16](ai-assistant.md#as-16) | Requested hierarchy is preserved; text-only keeps SV bytes; renamed creation validates by stable ID. | Service unified tests and prompt intent validation. |
+| [AS-17](ai-assistant.md#as-17) | Reachable hierarchy, reuse, concrete slices, targets, warnings, and old report compatibility are correct. | RTL activity suite and service unified tests. Unsupported cases reject explicitly. |
+| [AS-18](ai-assistant.md#as-18) | Effective prompt, native schema, and guards agree; complete unbound prompt includes creation/architecture rules. | Native architecture runtime, host, and domain tests. |
+| [AS-19](ai-assistant.md#as-19) | One validation failure stops authoring and continuation in every preset. User retry is explicit. | Native runtime error-handling and failure diagnostic tests. |
+| [AS-20](ai-assistant.md#as-20) | Every failure path retains stage, field/operation, request identity, and known mutation outcome. | Proposal presentation and client diagnostic tests. |
+| [AS-21](ai-assistant.md#as-21) | Output/step/aggregate limits are distinct and enforced; waiting/restart does not refill them. | Launch, native Harness, and execution tests. |
+| [AS-22](ai-assistant.md#as-22) | Only latest causal review permits proposal; waits match exact decisions; failures do not resume repair. | Native event, execution, and goal tests. |
+| [AS-23](ai-assistant.md#as-23) | Reviewed template pins, service-only monitoring, unchanged checks, outbox dedupe, and source failure bounds hold. | Event-configuration, runtime, preset UI tests, and pinned Harness native checks. |
+| [AS-24](ai-assistant.md#as-24) | Restart retains bindings, records, spending, and uncertainty; no automatic persistent work before Resume. | State, source-creation, and event runtime recovery tests. |
+| [AS-25](ai-assistant.md#as-25) | Close/archive do not approve/discard/stop; cancellation/Stop do not undo saved content. | Card, control, and browser lifecycle tests. |
+| [AS-26](ai-assistant.md#as-26) | Source-bound Circuit accept stages only; failed save keeps draft; source save requires Spec receipt. | Circuit service and client source-save tests. |
+| [AS-27](ai-assistant.md#as-27) | Completion matches requested stage; empty/continued/sent never imply saved content; functional claims need tests. | Receipt fixtures, service browser, and RTL verification suites. |
+| [AS-28](ai-assistant.md#as-28) | Source checkout matches pin; build inputs are clean; setup repairs links without erasing settings. | Setup fixtures, manual pin checks, and release packaging tests. |
+| [AS-29](ai-assistant.md#as-29) | Scope, pending decisions, failures, and exact diff stay visible after collapse/reload. | Source-creation client and architecture browser tests. |
+| [AS-30](ai-assistant.md#as-30) | Results distinguish catalogue, fixtures, replay, live inference, lint, simulation, and unverified checks. | Evaluation fixtures and RTL test runner. |
 | [AS-31](ai-assistant.md#as-31) | JSON contracts, generated arguments, native admission, and one instruction source. | `instruction-snapshots.test.ts`, contract/domain tests, `check:tools`, native integration. |
 | [AS-32](ai-assistant.md#as-32) | Independent metadata exports, known actions, no cross-service routing. | Spec `test_assistant_integration_metadata.py`, Circuit service metadata tests, adapter/transport checks. |
 | [AS-33](ai-assistant.md#as-33) | Durable pins, release immutability, inheritance, legacy blocking, and incompatible handlers. | `instruction-snapshots.test.ts` and source-creation host tests. |

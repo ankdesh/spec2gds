@@ -1,94 +1,72 @@
-# Python code-reading guide
+# Python Code Architecture and Standards
 
-This guide gives a new contributor a safe reading order for the Python side of
-spec2gds. Module docstrings explain each file's local responsibility; this page
-connects those modules into the main runtime and data flows.
+This document specifies the structure, reading order, and engineering standards for Python code in `spec2gds`.
 
-## Start with the ownership boundaries
+## 1. Codebase Boundaries
 
-There are three Python distributions:
+The Python codebase contains three main packages:
 
-1. The root `spec2gds` project owns `.spec` packages, immutable semantic reads,
-   validated edits, imports, Activities, the Spec API, and the Log Viewer.
-2. `runtime/` is the deliberately small shared package for service-independent
-   logging configuration and structured events.
-3. `testplan-service/` owns snapshot-bound verification planning, reviewed
-   checkpoints, evidence and reference generation with its own SQLite/blob store.
+1. **`spec2gds`**: The core package. Manages `.spec` containers, IP-XACT semantic models, transactional mutations, document importers, Activities, the Spec API, and the Log Viewer.
+2. **`runtime`**: A shared utility library for structured logging and event definitions.
+3. **`testplan-service`**: Verification Planner. Manages verification plans, review checkpoints, evidence evaluation, and reference generation.
 
-The optional `ai-assistant/` is a TypeScript/Node DeepSeek Harness product, not
-a Python distribution. It manages conversations and review records but never manages
-specification or circuit source.
+The AI Assistant (`ai-assistant/`) and Circuit Designer (`circuit-designer/`) use TypeScript.
+Python modules communicate with them only through versioned HTTP and JSON interfaces.
 
-The Circuit Designer service and browser applications are TypeScript. Python
-integrates with them only through their versioned HTTP and JSON contracts.
+---
 
-## Follow a specification request
+## 2. Recommended Reading Order
 
-Read these modules in order:
+### Specification Service and Transactions
+To understand specification handling, read modules in this order:
 
-1. `spec2gds/spec/api/__main__.py` parses bind settings and starts the
-   server.
-2. `spec2gds/spec/spec_format/v1_api.py` is the HTTP composition root. It
-   converts request models into reads or transactions and publishes browser
-   events.
-3. `spec2gds/spec/spec_format/ir.py` builds the immutable semantic view
-   used after a package is loaded.
-4. `spec2gds/spec/spec_format/transactions.py` is the revision-guarded
-   mutation boundary.
-5. `spec2gds/spec/spec_format/archive.py` validates and atomically writes
-   the deterministic `.spec` ZIP.
-6. `spec2gds/spec/spec_format/document.py` derives the renderer-neutral
-   document projection consumed by the browser editor.
+1. `spec2gds/spec/api/__main__.py`: CLI entrypoint and server binding.
+2. `spec2gds/spec/spec_format/v1_api.py`: FastAPI routes, transaction dispatch, and event publishing.
+3. `spec2gds/spec/spec_format/ir.py`: Immutable semantic representation of hardware specs (`SpecRevision`).
+4. `spec2gds/spec/spec_format/transactions.py`: Revision-guarded transaction processor.
+5. `spec2gds/spec/spec_format/archive.py`: Deterministic `.spec` ZIP packaging and validation.
+6. `spec2gds/spec/spec_format/document.py`: Projection logic converting IP-XACT models into UI view models.
 
-The important invariant is that HTTP handlers and renderers do not mutate XML
-or package objects directly. A save constructs a candidate revision, validates
-it, checks the expected source hash, and only then replaces the package.
+HTTP route handlers never mutate XML directly.
+Edits construct a candidate `SpecRevision`, validate hardware consistency, verify the base revision hash, and commit atomically to the ZIP archive.
 
-## Follow an Activity
+### Activity Pipeline
+To understand Activities and code generators, read modules in this order:
 
-The Activity path separates portable plugin contracts from the product queue and
-worker host:
+1. `spec2gds/spec/activities/snapshot.py`: Captures immutable, source-only `.spec` revisions.
+2. `spec2gds/spec/activities/view.py`: Provides `context.spec.high` and `context.spec.low` read APIs.
+3. `spec2gds/spec/activities/contracts.py`: Defines Activity metadata, parameters, results, and artifacts.
+4. `spec2gds/spec/activities/registry.py`: Activity discovery, registration, and invocation.
+5. `spec2gds/spec/activities/scratch_directory.py`: Manages isolated temporary build directories.
 
-1. `activities/snapshot.py` captures one deterministic, source-only revision.
-2. `activities/view.py` exposes stable high-level queries and detailed typed
-   low-level reads without mutation methods.
-3. `activities/contracts.py` defines plugin metadata, contexts, results,
-   artifacts, cancellation, and the constrained workspace capability.
-4. `activities/registry.py` validates extensions and performs direct
-   invocation.
-5. `activities/scratch_directory.py` atomically publishes only Activity-managed relative
-   directories.
-6. `spec_format/activity_jobs.py` provides the implemented persisted single-worker
-   queue and immutable input recovery, outside the portable Activity contracts.
+---
 
-The RTL and SystemC Activities deliberately use two phases. Analysis traverses
-and validates the complete reachable source graph before output begins;
-normalization then converts accepted IR into simple template values. Jinja
-templates format text but make no topology or naming decisions.
+## 3. Engineering and Code-Quality Standards
 
-Assistant proposal execution is documented in [AI Assistant](ai-assistant.md).
-Its TypeScript source lives under `ai-assistant/src`; no Assistant Python,
-FastAPI, Pydantic, or A2A package remains.
+### Architecture Rules
+- **One Primary Class Per File**: Keep modules lightweight, focused, and readable.
+- **Fail Explicitly and Early**: Validate inputs at service boundaries. Raise precise exceptions instead of returning generic fallbacks.
+- **No Stale Overwrites**: Enforce revision hash validation on every state mutation.
+- **Static Typing**: Annotate all functions and classes with complete type hints. Verify types with `mypy`.
 
-## Follow verification planning
+### Documentation and Comments
+- **Module Docstrings**: Every production module must begin with a docstring describing its boundary and authority.
+- **Intent over Syntax**: Inline comments must explain *why* non-obvious algorithms and constraints exist.
+- **Do Not Comment Boilerplate**: Avoid manual comments on generated code, schemas, or routine test setups.
 
-Start with `testplan-service/src/testplan_service/application/service.py`, then
-read `command_handler.py` for candidate authoring, `review_engine.py` for frozen
-checkpoints, `coverage_service.py` and `domain/coverage_evaluator.py` for evidence,
-and `generation_runner.py` for synchronous reference artifact generation.
-`storage/sqlite_repo.py` owns final transaction/revision checks. These boundaries
-do not import live Spec mutation APIs. See [the Planner architecture](verification-planner-architecture.md).
+---
 
-## Verify a Python change
+## 4. Lint and Static Analysis Checks
 
-From the repository root:
+Run formatting, linting, and dead-code analysis from the repository root:
 
 ```bash
-uv run python -m pytest -q tests testplan-service/tests
+# Check code style and imports
 uv run ruff check spec2gds runtime/src
-uv run vulture spec2gds runtime/src --min-confidence 90
-```
 
-The root suite requires GNU Make and Verilator 5.x because generated RTL is
-linted as part of the Activity tests. See the development guide for frontend
-and focused test commands.
+# Scan for dead code with high confidence threshold
+uv run vulture spec2gds runtime/src --min-confidence 90
+
+# Run all unit and integration tests
+uv run python -m pytest tests testplan-service/tests -q
+```

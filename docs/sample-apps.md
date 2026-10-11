@@ -8,7 +8,7 @@ generated files.
 
 There is currently no maintained full editor/Circuit/Assistant user-journey
 sample. Small RTL semantics examples are available under `samples/rtl/` and
-in [the RTL examples guide](rtl-semantics-examples.md). Choose any broader
+in [the RTL generation guide](rtl-generation.md). Choose any broader
 application deliberately and add its reproducible vertical slice.
 
 ```mermaid

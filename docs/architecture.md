@@ -1,110 +1,119 @@
 # Architecture
 
-## Product objective
+## Product Objective
 
-The system turns structured hardware intent into reviewable design state. Each
-layer has one owner and every mutation crosses a validated boundary.
+The `spec2gds` platform converts structured hardware specifications into validated hardware design state.
+Each layer has a strict service boundary.
+Every mutation must cross a validated boundary.
+
+![spec2gds System Architecture](images/system-architecture.png)
 
 ```mermaid
 flowchart TB
-    subgraph Spec["Specification system"]
-        SE["React / A2UI editor"] --> SA["FastAPI application"]
+    subgraph Spec["Specification System"]
+        SE["React / A2UI Spec Editor"] --> SA["FastAPI Spec Service"]
         SA --> IR["Immutable SpecRevision"]
-        SA --> TX["Validated transactions"]
-        TX --> SP["Deterministic .spec package"]
-        SA --> AS["Actions and artifact sidecar"]
-        IR --> SNAP["Immutable Activity snapshot"]
-        SNAP --> SDK["High/low read SDK"]
+        SA --> TX["Validated Transactions"]
+        TX --> SP["Deterministic .spec Package"]
+        SA --> AS["Actions and Artifact Sidecar"]
+        IR --> SNAP["Immutable Activity Snapshot"]
+        SNAP --> SDK["High / Low Read SDK"]
     end
 
-    subgraph Circuit["Circuit design system"]
-        CE["React canvas"] --> CS["REST circuit service"]
-        CS --> ENG["Shared operation engine"]
-        ENG --> MEM["Ephemeral sessions"]
-        CE --> FILE["Client-owned .circuit.json"]
+    subgraph Circuit["Circuit Design System"]
+        CE["React Canvas Circuit Designer"] --> CS["REST Circuit Service"]
+        CS --> ENG["Shared Operation Engine"]
+        ENG --> MEM["Ephemeral Sessions"]
+        CE --> FILE["Client-Managed .circuit.json"]
     end
 
-    subgraph Optional["Optional collaboration"]
-        AU["DeepSeek Harness assistant + focused UI"]
+    subgraph Verification["Verification System"]
+        VP["Verification Planner"] --> VDB["SQLite + Content-Addressed Blobs"]
+        VP --> L1["Layer 1: Test Plan"]
+        VP --> L2["Layer 2: Coverage & Evidence"]
+        VP --> L3["Layer 3: Recipes & Test IR"]
     end
 
-    IR --> ADAPTER["Direct-port adapter"] --> CS
-    AU -->|"typed proposal"| SA
-    AU -->|"typed proposal"| CS
+    subgraph Assistant["AI Collaboration"]
+        AU["DeepSeek Harness AI Assistant"]
+    end
+
+    IR --> ADAPTER["Direct-Port Adapter"] --> CS
+    AU -->|"Validated Proposals / Flows"| SA
+    AU -->|"Reviewed Proposals"| CS
+    SNAP --> VP
 ```
 
-## Source ownership
+## Source Authority and State Boundaries
 
-| State | Authority | Durable form | Mutation rule |
+| State Category | Authoritative Service | Durable Storage | Mutation Rule |
 | --- | --- | --- | --- |
-| Hardware specification | Spec API | deterministic `.spec` ZIP | revision-guarded transaction |
-| Narrative and source assets | Spec API | inside `.spec` | same transaction boundary |
-| Action history | Spec API | package activity plus artifact sidecar | append/review operations |
-| Independent circuit | client | `.circuit.json` | private draft, then Save |
-| Circuit session | Circuit service | memory only | lease and revision checks |
-| Spec-derived circuit | specification source | `.spec` topology plus circuit-layout annotation | edit a private projection, then revision-checked Save to Spec |
-| AI Assistant suggestion | bound owner approval policy | proposal/review record | automatic validated Spec save or restricted review; explicit Circuit send/save |
-| Verification plan/evidence | Verification Planner | SQLite plus content-addressed blobs | revision-checked commands and immutable checkpoints |
+| Hardware Specification | Spec service | Deterministic `.spec` ZIP | Revision-guarded transaction |
+| Narrative and Assets | Spec service | Inside `.spec` container | Same transaction boundary |
+| Activity History | Spec service | Package history + artifact sidecar | Append and review operations |
+| Independent Circuit | Circuit client | `.circuit.json` | Private draft, then Save |
+| Circuit Session | Circuit service | Memory only | Lease and revision validation |
+| Spec-Derived Circuit | Spec service | `.spec` topology + layout annotation | Edit private projection, then Save to Spec |
+| AI Assistant Suggestion | Document approval policy | Proposal and review record | Automatic save or restricted review gate |
+| Verification Plan & Evidence | Verification Planner | SQLite + content-addressed blobs | Revision-checked commands and immutable checkpoints |
 
-The combined editor/Assistant processes bind to all interfaces by default so
-the editors can be used by multiple systems on the same intranet. Their service
-directory advertises one detected or configured LAN host. The independent
-Verification Planner defaults to loopback (`127.0.0.1`).
+The combined development processes bind to all interfaces (`0.0.0.0`) by default.
+This configuration allows intranet access across multiple workstations.
+The service directory advertises one detected or configured LAN host.
+The independent Verification Planner binds to loopback (`127.0.0.1`) by default.
 
-## Activity extension boundary
+## Activity Extension Boundary
 
-The public Activity SDK is separate from the current execution host. A
-deterministic Activity snapshot embeds a complete source-only `.spec` revision;
-Activities and Context Renderers select data through explicit high- and
-low-level read APIs. Activity definitions and results contain no queue,
-process, HTTP, database, workspace, or monitoring settings. This permits the
-launch mechanism to change without changing team plugins or snapshot/result
-formats.
+The public Activity SDK remains decoupled from the execution host.
+An Activity snapshot embeds a complete source-only `.spec` revision.
+Activities and Context Renderers read data through high-level and low-level read APIs.
+Activity definitions contain no queue, process, HTTP, database, or monitoring settings.
+This separation allows the execution runner to change without modifying Activity plugins.
 
-Activities return reports and staged artifacts immediately. Any source edits
-are typed proposals and still cross the ordinary revision-checked review
-boundary. Extension code never receives a mutable package or live editor
-session.
+Activities return reports and staged artifacts immediately.
+Any hardware modifications remain typed proposals.
+Proposals must cross the normal revision-checked review boundary.
+Extension code never receives a mutable package or live editor session.
 
-## Specification package
+## Specification Package Container
 
-A `.spec` file is a deterministic ZIP container.
+A `.spec` file is a deterministic ZIP container with standard structure:
 
 ```mermaid
 flowchart LR
     P[".spec"] --> M["manifest.json"]
-    P --> N["document/document.json<br/>typed narrative"]
-    P --> X["ipxact/...<br/>IEEE 1685-2022 source"]
-    P --> A["assets/...<br/>content-addressed media"]
-    P --> E["annotations/entity-sections/...<br/>indexed typed bodies"]
-    P --> C["annotations/circuit-layout/...<br/>semantic design geometry"]
-    P --> H["activity/...<br/>execution history"]
-    H --> S[".spec.artifacts/<br/>large generated artifacts"]
+    P --> N["document/document.json<br/>Typed Narrative"]
+    P --> X["ipxact/...<br/>IEEE 1685-2022 Source"]
+    P --> A["assets/...<br/>Content-Addressed Media"]
+    P --> E["annotations/entity-sections/...<br/>Indexed Typed Bodies"]
+    P --> C["annotations/circuit-layout/...<br/>Semantic Design Geometry"]
+    P --> H["activity/...<br/>Execution History"]
+    H --> S[".spec.artifacts/<br/>Large Generated Artifacts"]
 ```
 
-`SpecPackage` validates and writes the container. `SpecRevision` is the
-immutable semantic view. `SpecEditTransaction` is the write boundary. A source
-revision hash prevents a stale client from overwriting newer work.
+- `SpecPackage`: Validates and writes the physical ZIP container.
+- `SpecRevision`: Supplies an immutable semantic view of the specification.
+- `SpecEditTransaction`: Enforces atomic write validation.
+- Revision hash checks prevent stale clients from overwriting newer edits.
 
-Component/design content is projected through the typed section registry.
-Existing text and ports are IP-XACT adapters; optional SystemVerilog bodies are
-digest-indexed annotation files. See [Entity sections](component-sections.md).
+The Spec service projects Component and Design content through a typed section registry.
+Narrative text and ports use IP-XACT adapters.
+Optional SystemVerilog module bodies use digest-indexed annotation files.
 
-## Circuit document
+## Circuit Document Model
 
-Circuit Designer uses the JSON Schema in
-`circuit-designer/schema/circuit-designer.v1.schema.json`. A document contains:
+Circuit Designer validates documents with JSON Schema (`circuit-designer.v1.schema.json`).
+A circuit document contains:
+- Reusable component definitions and boundary terminals.
+- Exactly one design containing component instances, boundary terminals, and nets.
+- Layout geometry separated from electrical connectivity.
 
-- reusable component definitions and terminals;
-- one design with instances, boundary terminals, and nets;
-- layout geometry kept separate from electrical connectivity.
+The Circuit service manages live revisions, edit leases, idempotency tokens, proposals, and events.
+The Circuit service does not maintain a persistent database.
+Independent circuits download canonical JSON documents directly.
+Source-bound circuits commit changes through the Spec API before their session updates.
 
-The service owns live revisions, edit leases, idempotency results, proposals,
-events, and ephemeral source bindings. It intentionally owns no durable
-database. Independent circuits download the accepted canonical document;
-source-bound circuits commit through the Spec API before their session changes.
-
-## Dependency direction
+## Dependency Direction
 
 ```mermaid
 flowchart LR
@@ -116,34 +125,27 @@ flowchart LR
     Service --> HTTP["circuit-client-http"]
     HTTP --> Shell
     Layout --> Shell
-    Shell --> App["Standalone or embedded host"]
+    Shell --> App["Standalone or Embedded Host"]
 
-    Package["Spec package + IP-XACT"] --> Revision["SpecRevision"]
+    Package[".spec Package + IP-XACT"] --> Revision["SpecRevision"]
     Revision --> API["Spec API"]
-    API --> Editor["Spec editor"]
-    Revision --> Adapter["Circuit adapter"]
+    API --> Editor["Spec Editor"]
+    Revision --> Adapter["Circuit Adapter"]
     Adapter --> HTTP
 ```
 
-Circuit packages do not import Python or SpecIR. The specification side owns
-translation because it understands IP-XACT. The reusable React application
-shell consumes host adapters for files, preferences, source synchronization,
-events, telemetry, and tools; the standalone application supplies the current
-browser and Spec integrations. UI packages consume public projections and
-clients; they do not mutate model objects directly.
+Circuit packages do not import Python or SpecIR.
+The Spec service owns translation because it parses IP-XACT.
+The reusable React application shell consumes host adapters for files, preferences, source synchronization, events, and tools.
+UI packages consume public projections and clients.
+UI packages never mutate model objects directly.
 
-## Deliberate limits
+## Deliberate Design Limits
 
-- One visible `.spec` document per editor; persistent owner keys allow existing
-  bound chats to access other packages without changing their bindings.
-- Circuit service sessions disappear on restart.
-- The Spec Editor omits bus interfaces, interface connections, and
-  bus/abstraction definitions while retaining them in the `.spec` source.
-- The initial adapter projects direct physical ports and ad-hoc connections;
-  bus interfaces remain in the specification source.
-- Imported PDF, Word, and ODT files become narrative source; optional model
-  extraction requires explicit OpenAI configuration.
-- The AI Assistant is optional; writes follow the bound owner approval policy
-  and always cross owner validation and revision checks.
-- Verification Planner imports snapshots independently. Its reference backend
-  does not execute hardware tests or close coverage automatically.
+- **Document Focus**: The Spec Editor displays one `.spec` document at a time. Document tokens ensure Assistant conversations keep their correct target.
+- **Session Durability**: Circuit service sessions live in memory and terminate on server restart.
+- **Bus Interface Modeling**: The Spec Editor preserves bus interfaces in the `.spec` source, but hides them from direct UI edits.
+- **Port Projection**: The circuit adapter projects physical wire ports and ad-hoc connections. Bus interfaces stay in the specification source.
+- **Document Import**: Imported PDF, Word, and ODT documents become narrative text. Model-based extraction requires explicit API key configuration.
+- **AI Assistant Writes**: The AI Assistant cannot write directly to disk. Writes must follow the document approval policy and pass service validation.
+- **Verification Execution**: Verification Planner generates reference artifacts and synthetic templates. External simulators run executable tests outside the service.

@@ -1,6 +1,6 @@
 """Layer 3 (Implementation, Test IR, and Backend Plugins) Acceptance Test Suite.
 
-Validates scenarios L3-01 through L3-17 per docs/verification-layer-3-implementation.md Section 10.
+Validates scenarios L3-01 through L3-17 per docs/verification-planner.md.
 """
 
 from __future__ import annotations

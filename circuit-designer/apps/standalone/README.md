@@ -69,9 +69,9 @@ right-drag panning remains available and suppresses a context menu after drag.
 Use **Connect → New connection** for named or sliced nets. View and selection
 commands work in read-only documents; circuit-changing commands require an
 active private draft. See the
-[interaction guide](../../../docs/circuit-designer-interactions.md) for the
-complete mouse and keyboard contract.
-See the [specification synchronization guide](../../../docs/circuit-designer-spec-sync.md)
+[Circuit Designer guide](../../../docs/circuit-designer.md) for the
+complete mouse, keyboard, and preference contract.
+See the [Spec and Circuit integration architecture](../../../docs/spec-circuit-integration-architecture.md)
 for source save, conflict, and recovery behavior.
 
 See [`../../../docs/architecture.md`](../../../docs/architecture.md) and

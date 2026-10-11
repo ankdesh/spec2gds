@@ -7,9 +7,8 @@ P1/C1/I1 checkpoints preserve reviewed plan, coverage and implementation inputs.
 
 The bundled `spec2gds.reference.bundle` backend emits reference artifacts and
 synthetic fixture result templates. It does not generate executable tests or
-run simulators. Test IR validation and generation recovery remain partial; see
-[architecture](../docs/verification-planner-architecture.md) and
-[remaining requirements](../docs/verification-planner-backlog.md).
+run simulators. See the authoritative
+[Verification Planner architecture and guide](../docs/verification-planner.md).
 
 ## Run and test
 
@@ -38,8 +37,8 @@ other service is needed. The combined root launcher does not start this service.
 5. Author target bindings and recipes, review implementation, generate and
    inspect reference artifacts. External simulation is a separate operation.
 
-Read [service operation](../docs/verification-service-overall.md) and the
-[layer references](../docs/README.md#verification-planner) for current boundaries.
+Read the [Verification Planner guide](../docs/verification-planner.md)
+for architecture, command operations, coverage schemas, and implementation recipe boundaries.
 `src/testplan_service/application/service.py` composes the domain services;
 `api/app.py` mounts HTTP/UI; `storage/` owns persistence; `ui/static/` owns the
 browser. API field shapes come from Pydantic/OpenAPI and `/operation-catalog`.

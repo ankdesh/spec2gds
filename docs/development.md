@@ -1,256 +1,138 @@
-# Development guide
+# Development Guide
 
-## Repository map
+This document defines repository organization, build commands, service configuration, logging, and test execution for `spec2gds`.
+
+## 1. Repository Organization
 
 ```text
-spec2gds/spec/spec_format/   .spec model, SpecIR, transactions, actions, API
-spec2gds/spec/activities/    Activity snapshots, read SDK, contracts, registry
-spec2gds/spec/importers/     PDF, Word, and ODT import
-circuit-designer/schema/           canonical Circuit Designer JSON Schema
-circuit-designer/packages/core/    contracts, validation, operations, drafts, export
-circuit-designer/packages/service/ REST sessions, leases, proposals, providers
-circuit-designer/packages/layout/  placement and orthogonal routing
-circuit-designer/packages/react/   canvas rendering and gestures
-circuit-designer/packages/app-react/ reusable application shell and host adapters
-circuit-designer/apps/editor/      Spec Editor frontend
-circuit-designer/apps/standalone/  independent Circuit Designer frontend
-ai-assistant/                      DeepSeek Harness assistant product and web client
-testplan-service/                   snapshot-bound planning, evidence, reference generation
-config/services.json               shared hosted-service IP/port registry
-tests/                             Python contract and integration tests
-docs/                              current architecture and workflows
+spec2gds/spec/spec_format/    .spec package model, SpecIR, transactions, Spec API
+spec2gds/spec/activities/     Activity SDK, snapshots, generators, contracts
+spec2gds/spec/importers/      PDF, Word, and ODT document importers
+circuit-designer/schema/      Canonical Circuit Designer JSON Schema
+circuit-designer/packages/    Core models, layout engine, React canvas, and app shell
+circuit-designer/apps/        Spec Editor and standalone Circuit Designer applications
+ai-assistant/                 DeepSeek Harness assistant product and UI
+testplan-service/             Verification Planner service, domain, and static UI
+config/services.json          Shared service registry and port configuration
+tests/                        Automated tests across all subsystems
+docs/                         Living technical documentation
 ```
 
-## Test tiers
+---
 
-For implementation checks, use the local profiles described in
-[the software testing strategy](testing-strategy.md):
+## 2. Shared Service Configuration
+
+The platform defines default bind addresses and ports in [`config/services.json`](../config/services.json).
+
+### Port and Service Map
+
+| Application | Service Port | UI Port | Purpose |
+| --- | --- | --- | --- |
+| **Spec Editor** | `6010` | `6010` (or `6015` in dev) | Specification authoring and IP-XACT transactions |
+| **Circuit Designer** | `6011` | `6012` | Schematic layout, routing, and canvas interaction |
+| **AI Assistant** | `6013` | `6013` | DeepSeek Harness conversation shell and flows |
+| **Log Viewer** | `6014` | `6014` | Real-time structured log viewer |
+| **Verification Planner** | `6016` | `6016` | Standalone verification planning and reference generator |
+
+### Host Binding and Public Address
+- **Bind Address**: Backend services bind to `0.0.0.0` by default to enable local intranet access.
+- **Public Host**: Defaults to auto-detected local IPv4. Set `SPEC2GDS_PUBLIC_HOST` to specify an explicit IP or hostname:
+  ```bash
+  export SPEC2GDS_PUBLIC_HOST="192.168.1.50"
+  ```
+
+---
+
+## 3. Unified Logging System
+
+All subsystems share one newline-delimited JSON log file configured in `config/services.json`.
+Logging is disabled by default during development.
+
+### Enable Logging
+Set environment variables before starting services:
 
 ```bash
-scripts/test-all.sh fast
-scripts/test-all.sh integration --scope spec,assistant
-scripts/test-all.sh regression
-scripts/test-all.sh regression --dry-run
+export SPEC2GDS_LOGGING=ON
+export SPEC2GDS_LOG_LEVEL=info   # Options: info, debug
 ```
 
-Run fast and relevant integration profiles after implementation. Run full
-regression for broad or high-risk changes and release preparation. Fast requires
-exactly three short live model browser checks. Full regression also runs broader
-live evaluation. Set `OPENAI_API_KEY` in the invoking environment and use Node.js
-24.2+. Missing required prerequisites produce an incomplete result and nonzero
-exit status while independent checks continue. Reports use a private `/tmp`
-directory by default; `--output` selects a new or empty evidence directory.
+- **Info Mode**: Records lifecycle events, HTTP requests, document transactions, and errors.
+- **Debug Mode**: Enriches records with parameter payloads, diffs, and redacted model calls.
+- **Security**: Tokens, passwords, cookies, and secret keys are masked automatically.
 
-The legacy tiers below retain their previous behaviour and do not call a live
-provider. `all` retains its legacy meaning; use `regression` for the full profile.
-
-After `scripts/setup-all.sh`, run these commands from the repository root:
+### Start the Log Viewer
+Start the read-only web log viewer:
 
 ```bash
-scripts/test-all.sh                   # fundamental is the default
-scripts/test-all.sh fundamental
-scripts/test-all.sh extensive
-scripts/test-all.sh all
+uv run spec2gds-log-viewer
+# In headless environments:
+uv run spec2gds-log-viewer --no-open
 ```
+Open `http://<SERVER_IP>:6014` to inspect and filter live events.
 
-| Tier | Coverage | Use |
-| --- | --- | --- |
-| Fundamental | Fast Python model, package, validation, transaction, projection, owner/API, Activity preflight, importer, runtime and Verification Planner tests; all Circuit Designer and Assistant unit tests | During development and for ordinary pull requests |
-| Extensive | Remaining Python RTL lint/compilation/simulation, SystemC/CIRCT compilation and Assistant CLI flows; Harness integration; Circuit Designer, Spec Editor and Assistant browser suites | Before merging flow, Activity or UI changes, and for complete regression runs |
+---
 
-The tiers are disjoint. `all` runs both without repeating fundamental tests.
-Existing `npm test` and unfiltered Python test commands retain their full
-selection. Nothing is removed from the suites.
+## 4. Environment Setup and Service Launcher
 
-Preview commands with `scripts/test-all.sh all --dry-run`. Use
-`scripts/test-all.sh extensive --no-browser` when browser checks are being run
-through their dedicated commands below. The runner reports every failed check,
-continues independent suites, skips consumers of failed builds and exits nonzero
-if any check fails. It prints the total elapsed time after a successful run.
-
-Fundamental needs the installed root uv environment, Circuit Designer npm
-dependencies and linked Assistant/DSH dependencies. It does not rebuild products
-or run hardware simulations. Extensive builds the Assistant before CLI/Harness
-checks and the frontends before browser checks. It needs Verilator 5.x, GNU Make
-and a C++ compiler; `SYSTEMC_PREFIX` and `CIRCT_PREFIX` enable their existing
-optional compiler checks. Both tiers use deterministic model fixtures and need
-no model API keys. Local HTTP fixtures need permission to bind loopback sockets.
-
-The Assistant browser tests reuse Circuit Designer's Playwright and React
-dependencies and the Chromium installed by setup. `ASSISTANT_UI_TEST_DEPS` and
-`PLAYWRIGHT_BROWSERS_PATH` can override those defaults. The independent Circuit
-and Spec browser runners retain their own browser-path settings.
-
-Python selection uses the registered `extensive` marker:
-
-```bash
-uv run python -m pytest -q --strict-markers tests testplan-service/tests -m 'not extensive'
-uv run python -m pytest -q --strict-markers tests testplan-service/tests -m extensive
-```
-
-New fast tests enter fundamental automatically. Mark a test
-`@pytest.mark.extensive` when it compiles/simulates hardware or launches a complete
-Assistant flow; use `pytestmark = pytest.mark.extensive` only for modules
-whose tests belong together. Keep fast structural/preflight tests fundamental
-even when they share a file with compiler tests. Marker names are checked by the
-runner. All current JavaScript unit tests remain fundamental; native Harness and
-browser integration retain their separate existing commands in extensive.
-
-The named owner/editor scenarios under `tests/ui-scenarios`, Assistant evaluation
-reports and live-provider/generalization runs remain separately invoked. They
-have their own service lifecycle, artifacts or model-key requirements; see
-[Assistant acceptance](ai-assistant-operations.md#acceptance-matrix). Lint, typechecking and
-schema generation checks also retain their existing commands below.
-
-## Python environment
-
-The combined launcher exports `config/services.json` to participating services.
-Use `SPEC2GDS_SERVICE_CONFIG=/absolute/path/services.json` for an untracked
-machine-specific registry. Circuit Designer's service and Vite UI also have
-independent defaults and do not require that shared registry.
-
-Use `uv`; do not install project packages into the system interpreter.
-Running `uv sync` creates the repository-local `.venv`. The AI Assistant is a
-Node product and does not use Python or `uv`.
-
-The extensive RTL Activity tests require GNU Make and Verilator 5.x on `PATH`.
-This requirement also applies to the unfiltered full Python command below.
-
-```bash
-uv sync
-uv run python -m pytest -q tests testplan-service/tests
-```
-
-For document import:
-
-```bash
-uv sync --extra document-import
-uv run spec2gds-import-document input.pdf -o output.spec
-```
-
-Focused checks:
-
-```bash
-uv run python -m pytest tests/spec/spec_format -q
-uv run python -m pytest tests/spec/activities -q
-uv run python -m pytest tests/spec/activities/rtl -q
-uv run python -m pytest tests/spec/importers -q
-uv run python -m py_compile spec2gds/spec/spec_format/*.py spec2gds/spec/activities/*.py
-```
-
-## TypeScript environment
-
-Use Node.js 24.2 or newer for the combined workspaces. Circuit Designer alone
-declares Node 24+; the Assistant also accepts 22.19+ in the 22.x line. The
-pinned Harness CLI uses `import.meta.main`, which is absent in Node 24.0/24.1.
-
-```bash
-cd circuit-designer
-npm install
-npm run generate:check
-npm test
-npm run build
-```
-
-`schema/circuit-designer.v1.schema.json` is authoritative. After a schema
-change, run `npm run generate`, inspect the generated types and protocol copy,
-then run `npm run generate:check`.
-
-Circuit Designer browser acceptance tests use:
-
-```bash
-cd circuit-designer
-npm run test:e2e
-```
-
-The Spec Editor owns a separate browser-test configuration and dev
-server lifecycle:
-
-```bash
-cd circuit-designer
-npm run test:e2e:editor
-```
-
-The two commands deliberately do not start each other's applications. A future
-combined flow should be managed by the Spec service and delegate to
-the existing Circuit Designer command rather than expanding Circuit Designer's
-default startup.
-
-## Optional AI Assistant
-
-The AI Assistant is a separate DeepSeek Harness Node workspace. Use the
-[Assistant operations guide](ai-assistant-operations.md) for source setup,
-configuration, build commands, and isolated tests. It is the single Assistant
-command reference.
-
-Use the [system contract](ai-assistant.md) for required behavior and
-[TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md) for known
-code differences. The acceptance matrix separates deterministic owner tests,
-native Harness tests, browser fixtures, and live-model evaluation. Browser
-fixtures that use the minimal adapter shell do not prove complete native-shell
-behavior.
-
-## Verification Planner
-
-```bash
-uv sync
-uv run testplan-service --host 127.0.0.1 --port 6016 --storage-dir verification-data
-uv run python -m pytest testplan-service/tests -q
-```
-
-The service can also use its own `uv sync` environment from `testplan-service/`.
-Its UI is shipped static JavaScript; no Node build is needed. It is not part of
-the combined launcher's process list. See [service operation](verification-service-overall.md).
-
-## Combined local launcher
-
-For a first-time setup from the repository root, install every runtime and
-build the Harness Assistant:
+### Complete First-Time Setup
+Install Python packages and build Node workspaces:
 
 ```bash
 scripts/setup-all.sh
 ```
 
-Then run all three services with their default settings from the repository
-root:
+### Combined Launcher
+Manage the combined services with `scripts/serve-all.sh`:
 
 ```bash
+# Start all services
 scripts/serve-all.sh start
-scripts/serve-all.sh restart  # replace a running stack after source changes
+
+# Restart running services after code modifications
+scripts/serve-all.sh restart
+
+# Stop all background services
 scripts/serve-all.sh stop
 ```
 
-Set `OPENAI_API_KEY` before `start` to enable Assistant proposal generation; it
-is not required for the other two applications. The script tracks process
-groups with PID files in `logs/serve-all/`. Each
-service writes to a separate log in the same directory. The `stop` command also
-uses `lsof` to terminate untracked listeners on the default service ports
-`6010` through `6014`. Services read their bind configuration from
-`config/services.json`, while the displayed URLs and cleanup list describe the
-tracked defaults. `start` refuses partial and untracked stacks on those ports;
-use `restart` after rebuilding so an older browser bundle cannot remain active.
-The script deliberately does not install dependencies or own
-the longer-term service monitoring mechanism.
+---
 
-## Change rules
+## 5. Testing and Validation Strategy
 
-- Change the owner of a contract first, then update adapters and views.
-- Keep immutable reads separate from validated writes.
-- Use revision guards for all saved edits.
-- Keep connectivity separate from layout geometry.
-- Keep generated artifacts out of source control unless they are required
-  runtime assets, such as the packaged editor bundle.
-- Put reusable regression data in small programmatic test fixtures.
-- Add or update a document in `docs/` when architecture, a public flow, or
-  run instructions change.
-- Remove stale documents rather than preserving an in-repository archive.
+Follow the testing guidelines in [Software Testing Strategy](testing-strategy.md).
 
-## Completion checklist
+```bash
+# Fast test suite (Python units, frontend units, and live checks)
+scripts/test-all.sh fast
 
-Before handing off a change:
+# Integration test suite for specific scopes
+scripts/test-all.sh integration --scope spec,assistant
 
-1. Run focused tests for the changed owner.
-2. Run the full Python and TypeScript suites when a shared contract changed.
-3. Build any affected frontend.
-4. Search for references to removed routes, files, demos, or commands.
-5. Update the root README and the smallest relevant living document.
+# Full regression test suite
+scripts/test-all.sh regression
+```
+
+### Subsystem Unit Tests
+```bash
+# Run Python backend tests
+uv run python -m pytest tests/spec -q
+
+# Run Verification Planner tests
+uv run python -m pytest testplan-service/tests -q
+
+# Run Circuit Designer tests
+npm --prefix circuit-designer test
+
+# Run AI Assistant tests
+npm --prefix ai-assistant test
+```
+
+---
+
+## 6. Contribution Rules
+
+1. Follow canonical terminology in [TERMINOLOGY.md](TERMINOLOGY.md).
+2. Maintain one primary class per file.
+3. Every mutation must cross a revision-checked boundary.
+4. Separate connectivity from layout geometry.
+5. Update documentation immediately when architecture, APIs, or commands change.

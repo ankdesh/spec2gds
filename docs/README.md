@@ -1,64 +1,44 @@
-# Documentation
+# Documentation Index
 
-Use each document's status to distinguish required contracts, current owner
-behavior, and proposed work. The Assistant contract defines required behavior;
-its TEMP register records current code gaps. Historical plans and release diaries
-remain in Git.
+This directory contains the living technical documentation for `spec2gds`.
+All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TERMINOLOGY.md) and Simplified Technical English (ASD-STE100).
 
-## System and development
+## 1. System Overview and Architecture
 
-- [Architecture](architecture.md), [end-to-end flows](flows.md) and
-  [development commands](development.md)
-- [Code reading guide](python-code-guide.md), [commenting conventions](code-quality.md)
-  and [documentation/code audit](documentation-code-audit.md)
-- [Service configuration](service-configuration.md) and [logging](logging.md)
-- [Sample application method](sample-apps.md)
-- [Software testing strategy and local regression profiles](testing-strategy.md)
+- [System Architecture](architecture.md): Subsystems, authoritative service boundaries, state containers, and dependency direction.
+- [End-to-End Flows](flows.md): System workflows for specification authoring, circuit projection, independent circuit editing, and document import.
+- [Names and Identifiers](naming-and-identifiers.md): Hardware identifier rules, display name resolution, and normalization policies.
+- [Canonical Terminology](TERMINOLOGY.md): Mandatory terminology rules across code, UI, and documentation.
 
-## Specification editing and Activities
+## 2. Specification System
 
-- [Editor UI](editor-ui.md), [entity sections/SystemVerilog](component-sections.md),
-  and [owner refinement, live views, and drafts](spec-editor-iterative-refinement.md)
-- [Activity Snapshot v1](activity-snapshot-v1.md) and [Activity SDK](activity-sdk.md)
-- [RTL generation](rtl-generation-activity.md), [RTL semantics examples](rtl-semantics-examples.md)
-  and [SystemVerilog language examples](rtl-language-examples.md)
-- [SystemC AT](systemc-at-activity.md), [performance-model requirements](systemc-at-performance-backlog.md)
-  and [cycle-accurate SystemC](systemc-cycle-accurate-activity.md)
+- [Spec Editor and Spec Service](spec-editor.md): User interface, section registry (text, ports, SystemVerilog), package layout, transactions, and approval modes.
 
-## Assistant
+## 3. Circuit Designer
 
-- [System contract](ai-assistant.md): required behavior, workflows, tools, and states.
-- [Operations and tests](ai-assistant-operations.md): setup, configuration, CLI,
-  diagnostics, and acceptance checks.
-- [TEMP implementation gaps](TEMP-ai-assistant-implementation-gaps.md): differences
-  between the contract and current code. Remove entries after verification.
-- [Future work](ai-assistant-future-work.md): proposals, not accepted requirements.
+- [Circuit Designer](circuit-designer.md): Canvas gestures, menubar, pipeline timing stages, user preferences, and embedding `@spec2gds/circuit-app-react`.
+- [Spec-Circuit Integration Architecture](spec-circuit-integration-architecture.md): Deep-dive into bidirectional projection, edit leases, source-bound drafts, and Save to Spec transactions.
 
-The preserved research and raw evidence are linked from these guides. They do
-not grant capabilities or establish current product behavior.
+## 4. Verification Planner
 
-## Circuit Designer
+- [Verification Planner](verification-planner.md): Architecture of `testplan-service`, 3-layer verification model (Test Plan, Coverage & Evidence, Recipes & Test IR), evaluator precedence, and reference artifact generation.
 
-- [Spec/Circuit serviceship and flow diagrams](spec-circuit-integration-architecture.md)
-  and [specification synchronization](circuit-designer-spec-sync.md)
-- [Interactions](circuit-designer-interactions.md), [preferences](circuit-designer-preferences.md)
-  and [timing stages](circuit-designer-timing-stages.md)
-- [Embedding](circuit-designer-embedding.md), [visual profile](circuit-designer-visual-profile.md)
-  and [remaining feature gaps](circuit-designer-chipmind-gap-analysis.md)
+## 5. AI Assistant
 
-## Verification Planner
+- [AI Assistant Contract](ai-assistant.md): Core behavioral contract, approval gating, document tokens, and boundary invariants.
+- [AI Assistant Operations](ai-assistant-operations.md): Setup, configuration, execution commands, diagnostics, and acceptance matrix.
+- [Reusable Flows](ai-assistant-flows.md): Published flow tools (`flow_create_empty_spec`, `flow_create_spec_with_component`, `flow_add_component`, `flow_edit_spec`) and execution lifecycles.
 
-- [Architecture](verification-planner-architecture.md) and [service operation](verification-service-overall.md)
-- [Layer 1: Test Plan](verification-layer-1-test-plan.md)
-- [Layer 2: Coverage and Evidence](verification-layer-2-coverage.md)
-- [Layer 3: Recipes and reference generation](verification-layer-3-implementation.md)
-- [Remaining requirements](verification-planner-backlog.md)
+## 6. Activities, RTL, and SystemC
 
-## Maintenance
+- [Activity SDK](activity-sdk.md): Extension SDK, Activity Snapshot v1 format, high/low read APIs, and plugin registration.
+- [RTL Generation](rtl-generation.md): Deterministic SystemVerilog generator (`rtl.generate`), supported source profiles, body-only SystemVerilog contract, and Verilator linting.
+- [RTL Language Examples](rtl-language-examples.md): Verified SystemVerilog examples for combinational logic, registers, state machines, and arithmetic modules.
+- [SystemC Activities](systemc-activities.md): Approximately-Timed TLM 2.0 skeleton generator and cycle-accurate native SystemC generator using CIRCT.
 
-Update the smallest relevant current reference and run instructions when behavior
-changes. Move useful decisions from completed plans into those pages, then remove
-the superseded plan. Keep proposed capabilities separate from supported APIs.
-Generated samples and dependencies are not authoritative documentation.
+## 7. Development and Testing
 
-- [Names and identifiers](naming-and-identifiers.md): naming policy, exposure inventory, normalization, and acceptance checks.
+- [Development Guide](development.md): Repository layout, port allocations, service configuration (`config/services.json`), unified logging, and launcher commands.
+- [Python Code Guide](python-code-guide.md): Reading order, architectural boundaries, code-quality standards, and static analysis commands.
+- [Software Testing Strategy](testing-strategy.md): Test pyramid, execution profiles (`fast`, `integration`, `regression`), and capability coverage matrix.
+- [Sample Application Methodology](sample-apps.md): Guidelines for developing small, reproducible hardware scenarios through the full platform.

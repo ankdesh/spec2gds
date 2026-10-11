@@ -9,15 +9,10 @@ Use the maintained guides:
 - [System contract](../docs/ai-assistant.md): required behavior and tool rules.
 - [Operations and tests](../docs/ai-assistant-operations.md): setup, configuration,
   CLI, diagnostics, test commands, and packaging.
-- [TEMP implementation gaps](../docs/TEMP-ai-assistant-implementation-gaps.md):
-  current differences from the required behavior.
 - [Reusable flows](../docs/ai-assistant-flows.md): definitions, execution, controls,
   approvals, and recovery.
-- [Future work](../docs/ai-assistant-future-work.md): proposed improvements.
 
-The contract includes accepted changes that still need code work. Check TEMP
-before assuming that a workflow is complete. Model output alone is not proof of
-a saved document.
+Model output alone is not proof of a saved document. An applied service receipt proves saved content.
 
 From the repository root, prepare the source-linked product:
 

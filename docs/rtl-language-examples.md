@@ -5,8 +5,8 @@ Activity output or evidence of Activity feature support. Test each fenced block
 independently, except `two_bit_mux`, which also needs the first gate-based `mux`.
 The Spec Editor stores interfaces separately and accepts only SystemVerilog section content as module bodies; do
 not paste a full module into an SV section. Symbolic ranges and parameterized
-topology remain outside the current [RTL Activity profile](rtl-generation-activity.md).
-See [maintained RTL semantics samples](rtl-semantics-examples.md) for source packages.
+topology remain outside the current [RTL Activity profile](rtl-generation.md).
+See [maintained RTL semantics and generation guide](rtl-generation.md) for source packages.
 
 The parameterized examples use their shown defaults. The shift register requires
 `N >= 2`; the register files require power-of-two `SIZE >= 2`. The dual-port RAM

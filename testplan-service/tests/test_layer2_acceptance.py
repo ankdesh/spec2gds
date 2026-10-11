@@ -1,6 +1,6 @@
 """Layer 2 (Coverage & Evidence Mapping) Acceptance Test Suite.
 
-Validates scenarios L2-01 through L2-20 per docs/verification-layer-2-coverage.md Section 9.
+Validates scenarios L2-01 through L2-20 per docs/verification-planner.md.
 """
 
 from __future__ import annotations
