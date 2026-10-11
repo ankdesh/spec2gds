@@ -211,6 +211,10 @@ function setupEventListeners() {
   // Sample fixture buttons in New Plan modal
   document.getElementById("btnSampleFifo").addEventListener("click", () => loadSampleFixture("fifo"));
   document.getElementById("btnSampleTwoFifo").addEventListener("click", () => loadSampleFixture("two_fifo"));
+  document.getElementById("fileSnapshotUpload").addEventListener("change", event => {
+    const file = event.target.files[0];
+    if (file) void stageSourceSnapshot(() => Promise.resolve(file));
+  });
 
   // Observation row in intent modal
   document.getElementById("btnAddObservationRow").addEventListener("click", addObservationRow);
@@ -892,40 +896,73 @@ async function submitReviewCheckpoint() {
 
 // --- New Plan Modal ---
 let stagedSnapshotId = null;
-function openNewPlanModal() {
+let sourceImportRevision = 0;
+function clearStagedSnapshot() {
   stagedSnapshotId = null;
+  document.getElementById("newPlanScope").replaceChildren();
+  document.getElementById("btnSubmitNewPlan").disabled = true;
+}
+function openNewPlanModal() {
+  sourceImportRevision++;
+  clearStagedSnapshot();
+  document.getElementById("fileSnapshotUpload").value = "";
+  document.getElementById("newPlanSourceStatus").textContent = "Choose a sample or upload a snapshot.";
   document.getElementById("newPlanName").value = "FIFO Subsystem Verification";
   document.getElementById("modalNewPlan").classList.add("open");
 }
 
 async function loadSampleFixture(fixtureType) {
+  await stageSourceSnapshot(async () => {
+    const response = await fetch(`${API_BASE}/source-samples/${encodeURIComponent(fixtureType)}`);
+    if (!response.ok) throw new Error(`Sample request failed with HTTP ${response.status}.`);
+    return response.blob();
+  });
+}
+
+async function stageSourceSnapshot(readBytes) {
+  const revision = ++sourceImportRevision;
+  clearStagedSnapshot();
+  document.getElementById("newPlanSourceStatus").textContent = "Importing source snapshot…";
   try {
-    let endpoint = "";
-    if (fixtureType === "fifo") {
-      // Create FIFO snapshot via script test import or synthetic byte upload
-      const res = await fetch(`${API_BASE}/source-imports`, {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: await (await fetch("/static/fifo.snapshot")).blob().catch(() => null),
-      });
+    const res = await fetch(`${API_BASE}/source-imports`, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: await readBytes(),
+    });
+    if (!res.ok) throw new Error(`Snapshot import failed with HTTP ${res.status}.`);
+    const source = await res.json();
+    if (revision !== sourceImportRevision) return;
+    if (!source.snapshot_id || !source.occurrences?.length) throw new Error("The snapshot has no verification scopes.");
+    const scopes = document.getElementById("newPlanScope");
+    for (const occurrence of source.occurrences) {
+      const option = document.createElement("option");
+      option.value = occurrence.occurrence_id;
+      option.textContent = occurrence.qualified_name || occurrence.name || occurrence.occurrence_id;
+      scopes.append(option);
     }
+    stagedSnapshotId = source.snapshot_id;
+    document.getElementById("newPlanSourceStatus").textContent = "Source snapshot imported.";
+    document.getElementById("btnSubmitNewPlan").disabled = false;
   } catch (e) {
-    console.error(e);
+    if (revision === sourceImportRevision) {
+      clearStagedSnapshot();
+      document.getElementById("newPlanSourceStatus").textContent = e.message || String(e);
+    }
   }
 }
 
 async function submitNewPlan() {
   const name = document.getElementById("newPlanName").value.trim();
-  if (!name) return;
+  const rootScopeId = document.getElementById("newPlanScope").value;
+  if (!name || !stagedSnapshotId || !rootScopeId) return;
 
-  // If no snapshot staged, create a basic default FIFO snapshot from server
   const res = await fetch(`${API_BASE}/plans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       name: name,
-      snapshot_id: stagedSnapshotId || "default-snapshot",
-      root_scope_id: "sync_fifo",
+      snapshot_id: stagedSnapshotId,
+      root_scope_id: rootScopeId,
       description: document.getElementById("newPlanDesc").value.trim(),
     }),
   });
@@ -941,13 +978,31 @@ async function submitNewPlan() {
 }
 
 // --- Export Menu ---
-function handleExportMenu() {
+async function handleExportMenu() {
   if (!state.activePlanId) return;
   const choice = prompt("Choose export format: bundle (.vplan), markdown (.md), or csv (.csv):", "bundle");
   if (!choice) return;
 
-  const fmt = choice.toLowerCase().includes("md") ? "markdown" : choice.toLowerCase().includes("csv") ? "csv" : "bundle";
-  window.open(`${API_BASE}/plans/${state.activePlanId}/exports?format=${fmt}`, "_blank");
+  const value = choice.trim().toLowerCase();
+  const fmt = value === "markdown" || value === "md" ? "markdown" : value === "csv" ? "csv" : "bundle";
+  try {
+    const response = await fetch(`${API_BASE}/plans/${state.activePlanId}/exports`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format: fmt }),
+    });
+    if (!response.ok) throw new Error(`Export failed with HTTP ${response.status}.`);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "")?.[1]
+      || `verification-plan.${{ bundle: "vplan", markdown: "md", csv: "csv" }[fmt]}`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  } catch (e) {
+    alert(e.message || String(e));
+  }
 }
 
 function handleImportBundle() {
@@ -2451,5 +2506,4 @@ async function viewArtifact(artifactId, relPath) {
     alert(`Could not display artifact: ${err.message}`);
   }
 }
-
 

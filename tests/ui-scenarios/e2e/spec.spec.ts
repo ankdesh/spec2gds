@@ -339,10 +339,20 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     if (status === "cancelled") {
       await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
       await page.getByRole("button", { name: /^Activity \d/ }).click();
-      await page.locator(".activity-item").filter({ hasText: title }).getByRole("button", { name: "Cancel", exact: true }).click();
+      const cancel = page.locator(".activity-item").filter({ hasText: title }).getByRole("button", { name: "Cancel", exact: true });
+      await expect(cancel).toBeEnabled();
+      await page.getByRole("button", { name: "Refresh", exact: true }).click();
+      await expect(cancel).toBeEnabled();
+      await page.reload();
+      await openSpec(page, stack);
+      await page.getByRole("button", { name: /^Activity \d/ }).click();
+      await expect(cancel).toBeEnabled();
+      await cancel.click();
     }
     await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe(status);
-    await page.getByRole("button", { name: /^Activity \d/ }).click();
+    if (!await page.getByRole("heading", { name: "Activity", exact: true }).isVisible()) {
+      await page.getByRole("button", { name: /^Activity \d/ }).click();
+    }
     await expect(page.locator(".activity-item").filter({ hasText: title }).first()).toContainText(status);
     const execution = (await stack.json("/executions")).executions.at(-1);
     expect(execution.source_revision_hash).toBe(before.source_revision_hash);

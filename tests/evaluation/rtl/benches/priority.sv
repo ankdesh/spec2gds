@@ -2,7 +2,7 @@ module evaluation_tb;
   logic [7:0] request;
   logic [2:0] index;
   logic valid;
-  @@TOP@@ dut (.*);
+  @@TOP@@ dut (.request(request), .index(index), .valid(valid));
   initial begin
     for(int value=0;value<256;value++) begin
       int expected;

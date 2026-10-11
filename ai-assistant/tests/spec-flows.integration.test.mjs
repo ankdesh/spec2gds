@@ -50,6 +50,11 @@ function script(runtime, toolName, title, component, invalidDraft = false) {
       assert.doesNotMatch(system, /MUST call get_bound_context before answering|The Spec service currently allows automatic/);
       const data = JSON.parse(last.content.find(block => block.type === 'text').text);
       name = 'structured_output';
+      if (!data.phase.startsWith('architecture/')) {
+        assert.deepEqual(data.inputs.authoring_context.approved_component.ports, ports);
+        assert.equal(data.inputs.authoring_context.operation_schema, undefined);
+        assert.equal(data.inputs.authoring_context.pages, undefined);
+      }
       args = data.phase.startsWith('architecture/') ? plan(component) : { name: component, ports, description: invalidDraft ? '' : 'Adds two unsigned 8-bit inputs and retains the carry bit.', narrative: 'The sum includes the carry bit.', systemverilog: rtl };
     } else if (last?.source.kind === 'user') { assert.equal(options.tools.some(tool => ['prepare_spec_document_creation', 'prepare_architecture_review', 'prepare_spec_proposal'].includes(tool.name)), false, 'Spec has no legacy mutation tools'); assert.match(options.messages.filter(message => message.role === 'system').flatMap(message => message.content).filter(block => block.type === 'text').map(block => block.text).join('\n'), /flow_create_empty_spec|flow_add_component/, 'Native complete prompts must expose the available flow guidance'); name = toolName; args = { title, request: 'Create ' + component + ' with ports, description, narrative and functional SystemVerilog.' }; }
     if (name) {
@@ -441,6 +446,13 @@ test('manual empty-Spec start is idempotent and does not call a model', { timeou
     const command = { sessionId: 'source', toolName: 'flow_create_empty_spec', inputs: { title: 'Manual empty Spec', request: 'Create an empty Spec', service_url: owner.url }, requestId: 'manual-create' };
     const first = await runtime.api('/flow-runs/start', command); assert.equal(first.status, 202, JSON.stringify(first));
     const complete = await runtime.ctx.flows.settled(first.value.flow.id); assert.equal(complete.status, 'succeeded', complete.error);
+    const progress = await runtime.api('/flows/source');
+    assert.equal(progress.status, 200);
+    const summary = progress.value.flows.find(flow => flow.id === complete.id);
+    assert.equal(summary.definition_id, 'spec2gds.create_empty_spec');
+    assert.equal(summary.definition, undefined);
+    assert.equal(summary.nodes, undefined);
+    assert.equal(summary.inputs, undefined);
     const duplicate = await runtime.api('/flow-runs/start', command); assert.equal(duplicate.status, 202); assert.equal(duplicate.value.flow.id, complete.id);
     assert.equal(runtime.adapter.requests.length, 0); assert.equal(saved(complete.result.path).components.length, 0);
     assert.equal((await runtime.api('/flow-runs/start', { ...command, inputs: { ...command.inputs, title: 'Changed' } })).status, 409);

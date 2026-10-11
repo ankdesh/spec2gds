@@ -886,6 +886,15 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 raise fastapi.HTTPException(status_code=404, detail="The selected target was removed.") from exc
         return {"name": name, "target_name": target_name, "owner_document_key": session.service_document_key}
 
+    def document_executions(session: V1Session) -> list[dict[str, typing.Any]]:
+        """Merge saved records with current jobs for this bound Spec only."""
+        legacy = [{"execution_type": "action", **named_execution(item, session)}
+                  for item in session.activity.state.executions]
+        persisted = {item.execution_id: item for item in session.activity.state.activity_executions}
+        for item in activity_jobs.list_for_package(session.path):
+            persisted[item.execution_id] = item
+        return [*legacy, *[named_execution(item, session) for item in persisted.values()]]
+
     @app.get("/documents/view")
     def document_view(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         session = bound_session(owner_document_key)
@@ -894,7 +903,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             activity = session.activity.state
             return {"snapshot": _snapshot(session),
                     "a2ui": build_a2ui_batch(build_document_projection(session.revision)).model_dump(mode="json"),
-                    "activity": {"executions": [named_execution(item, session) for item in (*activity.executions, *activity.activity_executions)],
+                    "activity": {"executions": document_executions(session),
                                  "artifacts": [_jsonable(item) for item in activity.artifacts],
                                  "proposals": [_jsonable(item) for item in activity.proposals],
                                  "assistant_changes": [_jsonable(item) for item in activity.assistant_changes[-50:]]},
@@ -1491,7 +1500,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     @app.get("/activity-events")
     async def activity_events(owner_document_key: str | None = None) -> typing.Any:
         """Stream background Activity execution transitions for the active package."""
-        package_path = bound_session(owner_document_key).path
+        session = bound_session(owner_document_key)
+        package_path = session.path
 
         async def events() -> typing.AsyncIterator[str]:
             observed = 0
@@ -1506,7 +1516,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                     envelope = activity_jobs.get(str(execution["execution_id"]))
                     if envelope is None or envelope.package_path != package_path:
                         continue
-                    payload = json.dumps(execution, separators=(",", ":"))
+                    with session.lock:
+                        payload = json.dumps(named_execution(ActivityExecutionRecord.model_validate(execution), session), separators=(",", ":"))
                     yield f"id: {observed}\nevent: activity.execution.changed\ndata: {payload}\n\n"
 
         return fastapi.responses.StreamingResponse(
@@ -1664,24 +1675,16 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/executions")
-    def executions() -> dict[str, typing.Any]:
+    def executions(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """List legacy actions and Activity jobs for the active package."""
-        session = active()
-        legacy = [
-            {"execution_type": "action", **named_execution(item, session)}
-            for item in session.activity.state.executions
-        ]
-        persisted = {item.execution_id: item for item in session.activity.state.activity_executions}
-        for item in activity_jobs.list_for_package(session.path):
-            persisted[item.execution_id] = item
-        return {
-            "executions": [*legacy, *[named_execution(item, session) for item in persisted.values()]],
-        }
+        session = bound_session(owner_document_key)
+        with session.lock:
+            return {"executions": document_executions(session)}
 
     @app.get("/executions/{execution_id}")
-    def execution(execution_id: str) -> dict[str, typing.Any]:
+    def execution(execution_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return one legacy action or Activity execution record."""
-        session = active()
+        session = bound_session(owner_document_key)
         item = next((item for item in session.activity.state.executions if item.execution_id == execution_id), None)
         if item is not None:
             return {"execution_type": "action", **_jsonable(item)}
@@ -1697,10 +1700,10 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         return _jsonable(activity_item)
 
     @app.post("/executions/{execution_id}/cancel")
-    def cancel_execution(execution_id: str) -> dict[str, typing.Any]:
+    def cancel_execution(execution_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Cancel one queued Activity or request cooperative running cancellation."""
         envelope = activity_jobs.get(execution_id)
-        if envelope is None or envelope.package_path != active().path:
+        if envelope is None or envelope.package_path != bound_session(owner_document_key).path:
             raise fastapi.HTTPException(status_code=404, detail="Unknown Activity execution.")
         try:
             return _jsonable(activity_jobs.cancel(execution_id))

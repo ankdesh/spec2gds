@@ -1,9 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { generatedSpecReceipt, selectedEvaluationCases } from "./generalization_state.js";
+import { generatedSpecReceipt, selectedEvaluationCases, assertEvaluationCreationFlow, assertEvaluationInterface } from "./generalization_state.js";
 
 const created = { destination: "/tmp/adder.spec", architectureReviewId: "approved-adder", status: "bound",
   serviceDocumentKey: "saved-adder-key", documentId: "saved-adder" };
+
+test("an empty creation or failed hardware flow stops evaluation without waiting for approval", () => {
+  assertEvaluationCreationFlow(null, null, null);
+  assertEvaluationCreationFlow("spec2gds.create_spec_with_component", "waiting", "");
+  assert.throws(() => assertEvaluationCreationFlow("spec2gds.create_empty_spec", "succeeded", ""), /wrong flow/);
+  assert.throws(() => assertEvaluationCreationFlow("spec2gds.create_spec_with_component", "failed", "bad widths"), /bad widths/);
+});
+
+test("testbench contracts reject reset aliases while accepting approved port order changes", () => {
+  const ports = [{ name: "clk", direction: "in", width: 1 }, { name: "reset", direction: "in", width: 1 }];
+  const plan = { components: [{ name: "pipeline" }], designs: [], interfaces: [{ component: "pipeline", ports: [...ports].reverse() }] };
+  assertEvaluationInterface(plan, ports);
+  assert.throws(() => assertEvaluationInterface({ ...plan, interfaces: [{ component: "pipeline", ports: [ports[0], { ...ports[1], name: "rst" }] }] }, ports), /testbench contract/);
+});
 
 test("evaluation uses the created Spec receipt when another Spec is active", () => {
   const other = { ...created, destination: "/tmp/other.spec", serviceDocumentKey: "active-other-key" };

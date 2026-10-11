@@ -1061,3 +1061,19 @@ def test_l1_15_api_idempotent_retry_and_conflicting_edit(client: TestClient) -> 
     err = res2.json()
     assert err["error"]["code"] == "revision_conflict"
     assert err["error"]["current_revision"] == 2
+
+
+@pytest.mark.parametrize("sample", ["fifo", "two_fifo"])
+def test_builtin_sample_uses_real_snapshot_import_identity(client, sample):
+    response = client.get(f"/api/verification/v1/source-samples/{sample}")
+    assert response.status_code == 200
+    imported = client.post("/api/verification/v1/source-imports", content=response.content)
+    assert imported.status_code == 201, imported.text
+    source = imported.json()
+    created = client.post("/api/verification/v1/plans", json={
+        "name": f"Imported {sample}", "snapshot_id": source["snapshot_id"],
+        "root_scope_id": source["occurrences"][0]["occurrence_id"],
+    })
+    assert created.status_code == 201, created.text
+    assert created.json()["snapshot_id"] == source["snapshot_id"]
+    assert client.get("/api/verification/v1/source-samples/missing").status_code == 404

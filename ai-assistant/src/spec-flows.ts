@@ -35,8 +35,19 @@ export interface SpecFlowOptions {
   activate(id: string): Promise<SessionBinding>;
 }
 /** Build one complete atomic batch; model output never selects service commands. */
+export function approvedComponentInterface(plan: Record<string, any>): { name: string; ports: { name: string; direction: string; width: number }[] } {
+  if (!Array.isArray(plan.components) || plan.components.length !== 1 || !Array.isArray(plan.designs) || plan.designs.length) throw new Error("This flow requires exactly one approved leaf Component.");
+  const name = plan.components[0].name;
+  const interfaces = Array.isArray(plan.interfaces) ? plan.interfaces.filter((item: Record<string, any>) => item.component === name) : [];
+  if (interfaces.length !== 1 || !Array.isArray(interfaces[0].ports)) throw new Error("The approved Component requires one concrete interface.");
+  const ports = interfaces[0].ports;
+  if (typeof name !== "string" || !name.trim() || ports.some((port: Record<string, any>) => typeof port.name !== "string" || !port.name.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1) || new Set(ports.map((port: Record<string, any>) => port.name)).size !== ports.length) throw new Error("The approved Component requires unique ports with positive concrete widths and directions.");
+  return { name, ports: ports.map((port: Record<string, any>) => ({ name: port.name, direction: port.direction, width: port.width })) };
+}
+
 export function componentFlowOperations(documentId: string, plan: Record<string, any>, draft: Record<string, any>, identity: string): Record<string, unknown>[] {
-  if (plan.components.length !== 1 || plan.designs.length || draft.name !== plan.components[0].name) throw new Error("This flow requires exactly the approved leaf Component.");
+  const approved = approvedComponentInterface(plan);
+  if (draft.name !== approved.name) throw new Error(`The draft Component name must be exactly ${JSON.stringify(approved.name)} from the approved interface.`);
   if (!draft.description?.trim() || !draft.systemverilog?.trim()) throw new Error("The complete Component requires description and functional SystemVerilog.");
   if (!Array.isArray(draft.ports) || draft.ports.some((port: Record<string, any>) => !port.name?.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1) || new Set(draft.ports.map((port: Record<string, any>) => port.name)).size !== draft.ports.length) throw new Error("The complete Component requires unique ports with positive concrete widths and directions.");
   const entity = { document_id: documentId, entity_kind: "component", entity_id: "flow_component" };
@@ -313,10 +324,14 @@ export class SpecFlows {
       if (!receipt || !isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) return undefined;
       return { proposal_id: review.proposalId, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&view=activity` };
     });
-    add("authoring_context", object, object, "read", async (input, context) => {
+    add("authoring_context", object, { ...object, properties: { model_context: object }, required: ["model_context"] }, "read", async (input, context) => {
       const binding = this.binding(input.session_id), source = await this.contextPages(binding, context);
       const approval = state.requireArchitecture(binding.sessionId, input.review_id, source.source_revision_hash);
-      return { ...source, architecture: approval.plan, operation_schema: await owners.operationContract(binding, context.signal) };
+      const modelContext = { document_id: source.document_id, source_revision_hash: source.source_revision_hash,
+        architecture: approval.plan, approved_component: approvedComponentInterface(approval.plan),
+        module_body_contract: { stored_ports_are_predeclared: true, include_module_wrapper: false } };
+      return { ...source, ...modelContext, model_context: modelContext,
+        operation_schema: await owners.operationContract(binding, context.signal) };
     });
     const submit = async (input: Record<string, any>, context: FlowOperationContext) => {
       const binding = this.binding(input.session_id), approval = state.requireArchitecture(binding.sessionId, input.review_id, input.context.source_revision_hash);

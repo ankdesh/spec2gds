@@ -2,7 +2,7 @@ module evaluation_tb;
   localparam int W = @@WIDTH@@;
   logic clk=0, reset=1, up_down=1;
   logic [W-1:0] count, expected=0;
-  @@TOP@@ dut (.*);
+  @@TOP@@ dut (.clk(clk), .reset(reset), .up_down(up_down), .count(count));
   always #5 clk=~clk;
   task step(input bit rst, input bit direction);
     @(negedge clk); reset=rst; up_down=direction;

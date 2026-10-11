@@ -1,9 +1,14 @@
 """HTTP contracts through request validation, middleware, and durable source storage."""
 
+import asyncio
+import json
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
 from spec2gds.spec.spec_format.assistant import SpecChangeProposal
+from spec2gds.spec.spec_format.actions import ActivityExecutionRecord
 from spec2gds.spec.spec_format.assistant_integration import ASSISTANT_ACTIONS
 from spec2gds.spec.spec_format.testing import write_test_package
 from spec2gds.spec.spec_format.v1_api import create_app
@@ -176,3 +181,73 @@ def test_http_sdk_snapshot_handoff_is_immutable_after_a_later_spec_edit(client, 
         assert planner.get(f"/api/verification/v1/plans/{plan_id}").json() == before
     with TestClient(planner_app(storage_dir=tmp_path / "planner")) as restarted:
         assert restarted.get(f"/api/verification/v1/plans/{plan_id}").json() == before
+
+
+def test_explicit_creation_retries_preserve_path_and_reject_existing_destination(client, tmp_path):
+    active = create(client, tmp_path, "active")
+    source = (tmp_path / "active.spec").read_bytes()
+    rejected = client.post("/documents/create", json={
+        "path": str(tmp_path / "active.spec"), "title": "Replacement", "request_id": "replace-existing",
+    })
+    assert rejected.status_code == 422
+    assert (tmp_path / "active.spec").read_bytes() == source
+    assert client.get("/documents/snapshot").json()["document_id"] == active["document_id"]
+    target = tmp_path / "chosen.spec"
+    request = {"path": str(target), "title": "A different display name", "request_id": "exact-path"}
+    first = client.post("/documents/create", json=request)
+    assert first.status_code == 200, first.text
+    assert first.json()["source_path"] == str(target)
+    saved = target.read_bytes()
+    retry = client.post("/documents/create", json=request)
+    assert retry.status_code == 200
+    assert retry.json()["document_id"] == first.json()["document_id"]
+    assert target.read_bytes() == saved
+    assert not (tmp_path / "a-different-display-name.spec").exists()
+
+
+def test_document_view_includes_current_jobs_for_its_bound_spec(client, tmp_path, monkeypatch):
+    first = create(client, tmp_path, "first")
+    saved = transaction(client, first, [{"type": "create_entity", "kind": "component", "name": "leaf"}]).json()["snapshot"]
+    second = create(client, tmp_path, "second")
+    current = ActivityExecutionRecord(
+        execution_id="current-job", activity_id="test.controlled", activity_version="1.0.0",
+        snapshot_id="enqueued", source_revision_hash=saved["source_revision_hash"],
+        target=saved["components"][0]["ref"], status="running", created_at="2026-10-10T00:00:00Z",
+    )
+    monkeypatch.setattr(client.app.state.activity_jobs, "list_for_package",
+                        lambda path: (current,) if str(path) == str(tmp_path / "first.spec") else ())
+    query = {"service_document_key": first["owner_document_key"]}
+    view = client.get("/documents/view", params=query).json()["activity"]["executions"]
+    assert len(view) == 1
+    assert view[0]["execution_id"] == "current-job"
+    assert view[0]["status"] == "running"
+    assert view[0]["execution_type"] == "activity"
+    assert client.get("/executions", params=query).json()["executions"] == view
+    other = client.get("/documents/view", params={"service_document_key": second["owner_document_key"]})
+    assert other.json()["activity"]["executions"] == []
+    monkeypatch.setattr(client.app.state.activity_jobs, "get", lambda identifier: SimpleNamespace(
+        package_path=str(tmp_path / "first.spec"), record=current,
+    ) if identifier == current.execution_id else None)
+    cancelled = []
+    def cancel(identifier):
+        cancelled.append(identifier)
+        return current.model_copy(update={"cancel_requested": True})
+    monkeypatch.setattr(client.app.state.activity_jobs, "cancel", cancel)
+    assert client.get("/executions/current-job", params=query).json()["status"] == "running"
+    foreign = {"service_document_key": second["owner_document_key"]}
+    assert client.get("/executions/current-job", params=foreign).status_code == 404
+    assert client.post("/executions/current-job/cancel", params=foreign).status_code == 404
+    assert cancelled == []
+    assert client.post("/executions/current-job/cancel", params=query).json()["cancel_requested"] is True
+    assert cancelled == ["current-job"]
+    monkeypatch.setattr(client.app.state.activity_jobs, "events_after", lambda observed, timeout: [
+        {"sequence": 1, "execution": current.model_dump(mode="json")},
+    ])
+    endpoint = next(route.endpoint for route in client.app.routes if getattr(route, "name", "") == "activity_events")
+    async def first_event():
+        response = await endpoint(owner_document_key=first["owner_document_key"])
+        message = await anext(response.body_iterator)
+        await response.body_iterator.aclose()
+        return message
+    event = asyncio.run(first_event())
+    assert json.loads(event.split("data: ", 1)[1]) == view[0]

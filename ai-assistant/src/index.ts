@@ -647,7 +647,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         if (flowList && request.method === "GET") {
           const sessionId = SessionId(decodeURIComponent(flowList[1]!));
           return writeJson(response, 200, { flows: (ctx as unknown as Context).get("flows")?.list({ kind: "human", sessionId }).slice(-10).map(flow => ({
-            ...summarizeFlow(flow), creation_confirmation: specFlows?.creationConfirmation(flow), architecture_review_id: state.listArchitectureReviews().findLast(review => review.flow_execution_id === flow.id)?.reviewId,
+            ...summarizeFlow(flow), definition_id: flow.definition.id,
+            creation_confirmation: specFlows?.creationConfirmation(flow), architecture_review_id: state.listArchitectureReviews().findLast(review => review.flow_execution_id === flow.id)?.reviewId,
           })) ?? [] });
         }
         const flowAction = path.match(/^\/spec2gds-api\/flow-runs\/([^/]+)\/(pause|resume|cancel|trace)$/);

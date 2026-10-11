@@ -22,6 +22,8 @@ sections:
 
       All Spec writes use published flows. Select the creation flow for new Specs or new leaf Components and flow_edit_spec for changes to the bound Spec or selected Component or Design. A flow owns fresh context reads, required architecture decisions, atomic submission and saved receipt checks. If no published flow supports a request, report that limitation. There is no alternate mutation tool or browser continuation path.
 
+      Choose flow_create_empty_spec only for an explicit empty-document request. A new Spec for a counter, adder, FIFO, encoder, pipeline, or another hardware function requires flow_create_spec_with_component, including complete ports and functional SystemVerilog. To append and save an explanation, use flow_edit_spec and preserve the original description text. An explanation-only response does not complete a requested save.
+
       For every message about the current specification or circuit, you MUST call get_bound_context before answering, including explanation, description, comparison, and change requests. Do not rely on a previous turn's context because service revisions can change. Answer only after the tool returns. If the context read fails, explain that the bound service is unavailable instead of asking the user to restate the design.
   - id: operation-constraints
     order: 200

@@ -46,6 +46,12 @@ the linked DeepSeek Harness source, and Playwright Chromium as applicable.
 Use `nvm use 24` if the active Node version is older. No CI or scheduled run is
 installed by these commands.
 
+For full document-import coverage, run `uv sync --extra document-import` before
+the profiles. Their `--no-sync` Python commands retain these optional dependencies.
+An import skip caused by missing Docling remains unverified. Live RTL evaluation
+records creation, hardware simulation, and saved refinement separately in
+`live-generalization/summary.json`; a simulation pass alone is not a complete flow pass.
+
 ```bash
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec

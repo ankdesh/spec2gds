@@ -98,11 +98,15 @@ test("supports keyboard navigation, nested submenus, dismissal, and focus restor
   await page.keyboard.press("Space");
   await expect(page.getByRole("menu", { name: "Help" })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Help" })).toHaveCount(0);
+  await expect(help).toBeFocused();
   const tools = page.getByRole("menuitem", { name: "Tools", exact: true });
   await tools.focus();
+  await expect(tools).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page.getByRole("menu", { name: "Tools" })).toBeVisible();
   await page.keyboard.press("Escape");
+  await expect(tools).toBeFocused();
 });
 
 test("launches former sidebar and action-strip workflows from menus", async ({ page }) => {

@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
 import type { Page } from "@playwright/test";
-import { generatedSpecReceipt } from "./generalization_state.js";
+import { generatedSpecReceipt, assertEvaluationCreationFlow, assertEvaluationInterface } from "./generalization_state.js";
 import { expectedBrowserFailure } from "./browser_failures.js";
 import { modelFixture, componentDescription } from "./model_fixture.js";
 import type { SmokeCase } from "./smoke_flow.js";
@@ -53,6 +53,8 @@ let packagePath = join(isolated, "packages", `${documentId}.spec`);
 mkdirSync(dirname(packagePath), { recursive: true });
 const children = new Set<ChildProcess>();
 const failures: any[] = [], records: any[] = [];
+const evaluationStages: Record<string, any> = { creation: { status: "unverified" }, simulation: { status: "unverified" }, refinement: { status: "unverified" } };
+let evaluationStage = "creation";
 let stopping = false;
 
 async function freePort(): Promise<number> {
@@ -284,7 +286,11 @@ async function run(): Promise<void> {
         await conversation.goto(`${assistant}/launch`);
         await prompt(conversation, evalCase.request);
         const architectureCard = conversation.locator('[data-s2g-architecture-review="pending"]').last();
-        await expect(architectureCard).toBeVisible({ timeout: 60_000 });
+        await expect.poll(async () => {
+          const flow = conversation.locator(".s2g-flow-approval").last();
+          if (await flow.count()) assertEvaluationCreationFlow(await flow.getAttribute("data-s2g-flow-definition"), await flow.getAttribute("data-s2g-flow-status"), await flow.getAttribute("data-s2g-flow-error"));
+          return architectureCard.isVisible();
+        }, { timeout: 60_000 }).toBe(true);
         const approvalResponse = conversation.waitForResponse(response => response.request().method() === "POST"
           && response.url().startsWith(`${assistant}/spec2gds-api/architecture-reviews/`)
           && response.url().endsWith("/approve"));
@@ -293,6 +299,7 @@ async function run(): Promise<void> {
         assert.ok(approvedResponse.ok(), "The architecture decision must be saved by the Assistant service.");
         const architectureReview = (await approvedResponse.json()).architecture_review;
         assert.equal(architectureReview.status, "approved");
+        assertEvaluationInterface(architectureReview.plan, evalCase.ports);
         records.push({ approved_architecture: architectureReview });
         let generatedPackage = "";
         await expect.poll(() => {
@@ -334,6 +341,8 @@ async function run(): Promise<void> {
         assert.deepEqual(saved.entity_sections, generated.entity_sections);
         assert.deepEqual(saved.designs, generated.designs);
         records.push({ saved_generated_spec: saved });
+        evaluationStages.creation = { status: "passed", source_revision_hash: saved.source_revision_hash };
+        evaluationStage = "simulation";
         const used = new Set(generated.designs.flatMap((design: any) => design.instances.map((instance: any) => instance.component_vlnv)));
         const roots = generated.components.filter((component: any) => !used.has(component.vlnv));
         assert.equal(roots.length, 1, "Evaluation needs one uninstantiated public component target; ambiguous roots require review.");
@@ -360,11 +369,13 @@ async function run(): Promise<void> {
         const evaluated = spawnSync("uv", evalArgs, { cwd: root, encoding: "utf8", timeout: 180_000 });
         writeFileSync(join(output,"functional-command.log"), evaluated.stdout + evaluated.stderr);
         const functional = JSON.parse(readFileSync(join(output,"functional/evaluation-report.json"),"utf8"));
+        evaluationStages.simulation = { ...functional.simulation, lint: functional.lint.status, compilation: functional.compilation.status };
         records.push({ case: evalCase, snapshot: generated, ui_activity_execution: execution, ui_activity_report: activityReport, functional,
           inference_quality: { functional_behavior: functional.simulation.status, document_quality: "requires rubric review", criteria: evalCase.quality_criteria } });
         cpSync(execution.workspace_output_path, join(output, "generated-project"), { recursive: true });
         records.push({ generated_project_evidence: join(output, "generated-project") });
         assert.equal(functional.simulation.status,"passed",JSON.stringify(functional));
+        evaluationStage = "refinement";
         const bodiesBefore = generated.entity_sections.filter((section: any) => section.section_type === "sv");
         const descriptionsBefore = savedComponentDescriptions(generatedPackage);
         records.push({ original_descriptions: descriptionsBefore });
@@ -381,7 +392,7 @@ async function run(): Promise<void> {
           "Explanation refinement must preserve the SV section.");
         assert.deepEqual(refined.components, generated.components, "Explanation refinement must preserve interfaces.");
         assert.deepEqual(refined.designs, generated.designs, "Explanation refinement must preserve wiring.");
-        if (evalCase.family === "adder") {
+        {
           const descriptionsAfter = savedComponentDescriptions(generatedPackage);
           assert.deepEqual(Object.keys(descriptionsAfter).sort(), Object.keys(descriptionsBefore).sort());
           for (const [id, original] of Object.entries(descriptionsBefore)) {
@@ -398,6 +409,7 @@ async function run(): Promise<void> {
         await conversation.screenshot({ path: join(output,"assistant.png"),fullPage:true });
         await editor.screenshot({ path: join(output,"editor.png"),fullPage:true });
         assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected browser failures must fail generalization.");
+        evaluationStages.refinement = { status: "passed", source_revision_hash: refined.source_revision_hash };
         return;
       }
       let initial: any;
@@ -616,11 +628,15 @@ async function run(): Promise<void> {
       assert.deepEqual(fixture?.failures || [], [], "The model fixture must not hide malformed results.");
       assert.deepEqual(failures.filter(failure => !failure.expected), [], "Unexpected console, page, process, and network failures must fail the scenario");
     } catch (error) {
+      if (evalCase) evaluationStages[evaluationStage] = { ...evaluationStages[evaluationStage],
+        ...(evaluationStage === "simulation" ? {} : { status: "failed" }),
+        stage_status: "failed", error: error instanceof Error ? error.message : String(error) };
       await Promise.allSettled([conversation.screenshot({ path: join(output, "failed-assistant.png"), fullPage: true }), editor.screenshot({ path: join(output, "failed-editor.png"), fullPage: true })]);
       throw error;
     } finally {
       await context.tracing.stop({ path: join(output, "trace.zip") });
       writeFileSync(join(output, "records.json"), JSON.stringify({ scenario, approval, documentId, records, failures, confirmations }, null, 2));
+      if (evalCase) writeFileSync(join(output, "evaluation-stages.json"), JSON.stringify(evaluationStages, null, 2));
     }
   } finally {
     await browser?.close(); stopping = true; await Promise.all([...children].map(stop));

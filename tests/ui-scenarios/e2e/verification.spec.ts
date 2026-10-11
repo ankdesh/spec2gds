@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { join } from "node:path";
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { test, expect, root, type Stack } from "./fixtures.js";
 
@@ -20,20 +21,28 @@ async function get(stack: Stack, path: string): Promise<any> {
   expect(response.ok).toBe(true); return response.json();
 }
 
-test("creates a Test Plan from the sample source through the UI", async ({ page, stack }) => {
-  await page.goto(stack.planner);
-  await page.locator("#btnNewPlan").click();
-  await page.locator("#btnSampleFifo").click();
-  await page.locator("#newPlanName").fill("Browser sample plan");
-  const dialogs: string[] = [];
-  page.on("dialog", async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
-  await page.locator("#btnSubmitNewPlan").click();
-  await expect(page.locator("#modalNewPlan")).not.toHaveClass(/open/);
-  expect(dialogs).toEqual([]);
-  const plans = await get(stack, "/plans");
-  expect(plans).toHaveLength(1);
-  expect(plans[0].name).toBe("Browser sample plan");
-});
+for (const [sample, button] of [["FIFO", "btnSampleFifo"], ["Two-FIFO", "btnSampleTwoFifo"]]) {
+  test(`creates a Test Plan from the sample source through the UI (${sample})`, async ({ page, stack }) => {
+    await page.goto(stack.planner);
+    await page.locator("#btnNewPlan").click();
+    const imported = page.waitForResponse(response => response.url().endsWith(`${api}/source-imports`) && response.request().method() === "POST");
+    await page.locator(`#${button}`).click();
+    const source = await (await imported).json();
+    await expect(page.locator("#btnSubmitNewPlan")).toBeEnabled();
+    const selectedScope = await page.locator("#newPlanScope").inputValue();
+    await page.locator("#newPlanName").fill("Browser sample plan");
+    const dialogs: string[] = [];
+    page.on("dialog", async dialog => { dialogs.push(dialog.message()); await dialog.accept(); });
+    await page.locator("#btnSubmitNewPlan").click();
+    await expect(page.locator("#modalNewPlan")).not.toHaveClass(/open/);
+    expect(dialogs).toEqual([]);
+    const plans = await get(stack, "/plans");
+    expect(plans).toHaveLength(1);
+    expect(plans[0].name).toBe("Browser sample plan");
+    expect(plans[0].snapshot_id).toBe(source.snapshot_id);
+    expect(plans[0].root_scope_id).toBe(selectedScope);
+  });
+}
 
 test("authors a Section and draft intent and preserves them across restart", async ({ page, stack }) => {
   const data = seed(stack, "draft");
@@ -90,21 +99,27 @@ test("reviews a ready plan and freezes P1 across restart", async ({ page, stack 
   expect(await get(stack, `/plans/${data.plan_id}/checkpoints`)).toEqual(checkpoints);
 });
 
-test("exports a bundle through the supported UI command", async ({ page, context, stack }) => {
-  const data = seed(stack, "draft");
-  await open(page, stack, data.plan_id);
-  page.on("dialog", dialog => dialog.accept("bundle"));
-  const responseEvent = context.waitForEvent("response", { predicate: response => response.url().includes(`/plans/${data.plan_id}/exports`) });
-  const downloadEvent = page.waitForEvent("download");
-  // Retain a caught promise if an HTTP contract failure occurs before a download.
-  void downloadEvent.catch(() => {});
-  await page.locator("#btnExportHeader").click();
-  const response = await responseEvent;
-  expect(response.ok(), `Export request failed with HTTP ${response.status()}`).toBe(true);
-  const download = await downloadEvent;
-  const bundle = await download.path();
-  expect(bundle).not.toBeNull();
-});
+for (const [format, extension] of [["bundle", "vplan"], ["markdown", "md"], ["csv", "csv"]]) {
+  test(`exports ${format === "bundle" ? "a bundle" : format} through the supported UI command`, async ({ page, context, stack }) => {
+    const data = seed(stack, "draft");
+    await open(page, stack, data.plan_id);
+    page.on("dialog", dialog => dialog.accept(format));
+    const responseEvent = context.waitForEvent("response", { predicate: response => response.url().includes(`/plans/${data.plan_id}/exports`) });
+    const downloadEvent = page.waitForEvent("download");
+    // Retain a caught promise if an HTTP contract failure occurs before a download.
+    void downloadEvent.catch(() => {});
+    await page.locator("#btnExportHeader").click();
+    const response = await responseEvent;
+    expect(response.ok(), `Export request failed with HTTP ${response.status()}`).toBe(true);
+    expect(response.request().method()).toBe("POST");
+    const download = await downloadEvent;
+    const bundle = await download.path();
+    expect(bundle).not.toBeNull();
+    expect(download.suggestedFilename().endsWith("." + extension)).toBe(true);
+    expect(readFileSync(bundle!).length).toBeGreaterThan(0);
+    if (format === "bundle") expect(readFileSync(bundle!).subarray(0, 2).toString()).toBe("PK");
+  });
+}
 
 test("imports a real exported bundle through the UI and reopens its copy", async ({ page, stack }) => {
   const data = seed(stack, "evidence");

@@ -7,7 +7,7 @@
       "configuration": {
         "width": 8
       },
-      "request": "Create a new Spec with a functional unsigned 8-bit combinational adder Component, with 8-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 9-bit total using zero-extended operands; sum contains the lower 8 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
+      "request": "Create a new Spec with a functional unsigned 8-bit combinational adder Component, with 8-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 9-bit total using zero-extended operands; sum contains the lower 8 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 8-bit in a, 8-bit in b, 1-bit in cin, 8-bit out sum, 1-bit out cout. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -17,7 +17,34 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "a",
+          "direction": "in",
+          "width": 8
+        },
+        {
+          "name": "b",
+          "direction": "in",
+          "width": 8
+        },
+        {
+          "name": "cin",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "sum",
+          "direction": "out",
+          "width": 8
+        },
+        {
+          "name": "cout",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "adder_4",
@@ -25,7 +52,7 @@
       "configuration": {
         "width": 4
       },
-      "request": "Create a new Spec with a functional unsigned 4-bit combinational adder Component, with 4-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 5-bit total using zero-extended operands; sum contains the lower 4 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
+      "request": "Create a new Spec with a functional unsigned 4-bit combinational adder Component, with 4-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 5-bit total using zero-extended operands; sum contains the lower 4 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 4-bit in a, 4-bit in b, 1-bit in cin, 4-bit out sum, 1-bit out cout. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -35,7 +62,34 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "a",
+          "direction": "in",
+          "width": 4
+        },
+        {
+          "name": "b",
+          "direction": "in",
+          "width": 4
+        },
+        {
+          "name": "cin",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "sum",
+          "direction": "out",
+          "width": 4
+        },
+        {
+          "name": "cout",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "adder_13",
@@ -43,7 +97,7 @@
       "configuration": {
         "width": 13
       },
-      "request": "Create a new Spec with a functional unsigned 13-bit combinational adder Component, with 13-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 14-bit total using zero-extended operands; sum contains the lower 13 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation.",
+      "request": "Create a new Spec with a functional unsigned 13-bit combinational adder Component, with 13-bit a, b and sum and 1-bit cin and cout. Author and save the implementation in the Component's embedded SystemVerilog section, together with its explanation. Implement addition of a, b and cin as an explicitly 14-bit total using zero-extended operands; sum contains the lower 13 bits and cout the final carry bit. Carry must propagate across every input bit, including overflow. Author the functional RTL yourself using the approved concrete widths and save it to Spec so it is ready for the rtl.generate Activity and simulation. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 13-bit in a, 13-bit in b, 1-bit in cin, 13-bit out sum, 1-bit out cout. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/adder.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -53,7 +107,34 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; add clarification after it and flag any discrepancy rather than replacing existing text. Save the changes to Spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain carry propagation, carry-in, sum width and final carry, including overflow cases. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "a",
+          "direction": "in",
+          "width": 13
+        },
+        {
+          "name": "b",
+          "direction": "in",
+          "width": 13
+        },
+        {
+          "name": "cin",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "sum",
+          "direction": "out",
+          "width": 13
+        },
+        {
+          "name": "cout",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "counter_16",
@@ -61,7 +142,7 @@
       "configuration": {
         "width": 16
       },
-      "request": "Create a specification for a 16-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "request": "Create a specification for a 16-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in clk, 1-bit in reset, 1-bit in up_down, 16-bit out count. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/counter.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -71,7 +152,29 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "reset",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "up_down",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "count",
+          "direction": "out",
+          "width": 16
+        }
+      ]
     },
     {
       "id": "counter_5",
@@ -79,7 +182,7 @@
       "configuration": {
         "width": 5
       },
-      "request": "Create a specification for a 5-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "request": "Create a specification for a 5-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in clk, 1-bit in reset, 1-bit in up_down, 5-bit out count. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/counter.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -89,7 +192,29 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "reset",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "up_down",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "count",
+          "direction": "out",
+          "width": 5
+        }
+      ]
     },
     {
       "id": "counter_9",
@@ -97,7 +222,7 @@
       "configuration": {
         "width": 9
       },
-      "request": "Create a specification for a 9-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits.",
+      "request": "Create a specification for a 9-bit up/down counter. On each rising clk edge, active-high reset clears count; otherwise up_down=1 increments and 0 decrements, wrapping at the limits. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in clk, 1-bit in reset, 1-bit in up_down, 9-bit out count. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/counter.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -107,7 +232,29 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "reset",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "up_down",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "count",
+          "direction": "out",
+          "width": 9
+        }
+      ]
     },
     {
       "id": "fifo_8_16",
@@ -116,7 +263,7 @@
         "width": 8,
         "depth": 16
       },
-      "request": "Create a specification for an asynchronous FIFO with 8-bit words and 16 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "request": "Create a specification for an asynchronous FIFO with 8-bit words and 16 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in wclk, 1-bit in rclk, 1-bit in wrstn, 1-bit in rrstn, 1-bit in winc, 1-bit in rinc, 8-bit in wdata, 8-bit out rdata, 1-bit out wfull, 1-bit out rempty. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/fifo.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -126,7 +273,59 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "wclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "winc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rinc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wdata",
+          "direction": "in",
+          "width": 8
+        },
+        {
+          "name": "rdata",
+          "direction": "out",
+          "width": 8
+        },
+        {
+          "name": "wfull",
+          "direction": "out",
+          "width": 1
+        },
+        {
+          "name": "rempty",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "fifo_12_4",
@@ -135,7 +334,7 @@
         "width": 12,
         "depth": 4
       },
-      "request": "Create a specification for an asynchronous FIFO with 12-bit words and 4 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "request": "Create a specification for an asynchronous FIFO with 12-bit words and 4 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in wclk, 1-bit in rclk, 1-bit in wrstn, 1-bit in rrstn, 1-bit in winc, 1-bit in rinc, 12-bit in wdata, 12-bit out rdata, 1-bit out wfull, 1-bit out rempty. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/fifo.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -145,7 +344,59 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "wclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "winc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rinc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wdata",
+          "direction": "in",
+          "width": 12
+        },
+        {
+          "name": "rdata",
+          "direction": "out",
+          "width": 12
+        },
+        {
+          "name": "wfull",
+          "direction": "out",
+          "width": 1
+        },
+        {
+          "name": "rempty",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "fifo_16_8",
@@ -154,7 +405,7 @@
         "width": 16,
         "depth": 8
       },
-      "request": "Create a specification for an asynchronous FIFO with 16-bit words and 8 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge.",
+      "request": "Create a specification for an asynchronous FIFO with 16-bit words and 8 entries. Use wclk/rclk, active-low wrstn/rrstn, winc/rinc, wdata/rdata, wfull/rempty. Accept transfers only when allowed; preserve ordering and block full writes and empty reads. Read data updates on an accepted read clock edge. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in wclk, 1-bit in rclk, 1-bit in wrstn, 1-bit in rrstn, 1-bit in winc, 1-bit in rinc, 16-bit in wdata, 16-bit out rdata, 1-bit out wfull, 1-bit out rempty. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/fifo.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -164,7 +415,59 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "wclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rclk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rrstn",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "winc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "rinc",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "wdata",
+          "direction": "in",
+          "width": 16
+        },
+        {
+          "name": "rdata",
+          "direction": "out",
+          "width": 16
+        },
+        {
+          "name": "wfull",
+          "direction": "out",
+          "width": 1
+        },
+        {
+          "name": "rempty",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "priority_encoder",
@@ -172,7 +475,7 @@
       "configuration": {
         "width": 8
       },
-      "request": "Create a specification for an 8-input combinational priority encoder. Highest numbered asserted request wins. Return a 3-bit index and valid; when no requests are asserted, valid=0 and index=0.",
+      "request": "Create a specification for an 8-input combinational priority encoder. Highest numbered asserted request wins. Return a 3-bit index and valid; when no requests are asserted, valid=0 and index=0. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 8-bit in request, 3-bit out index, 1-bit out valid. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/priority.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -182,7 +485,24 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "request",
+          "direction": "in",
+          "width": 8
+        },
+        {
+          "name": "index",
+          "direction": "out",
+          "width": 3
+        },
+        {
+          "name": "valid",
+          "direction": "out",
+          "width": 1
+        }
+      ]
     },
     {
       "id": "registered_pipeline",
@@ -190,7 +510,7 @@
       "configuration": {
         "width": 8
       },
-      "request": "Create a specification for an 8-bit two-stage registered pipeline with clk, active-high synchronous reset, din and dout. Reset clears both stages; otherwise each stage advances every rising edge. Reuse a register component for both stages.",
+      "request": "Create a new Spec with one leaf 8-bit two-stage registered pipeline Component. Use clk, active-high synchronous reset named reset, 8-bit din and 8-bit dout. Reset clears both internal register stages; otherwise each stage advances on every rising clk edge. Implement both stages inside this Component with internal state; do not create or instantiate another Component. Create and save the complete functional SystemVerilog module-body implementation, description and structured ports through flow_create_spec_with_component. The exact ports are: 1-bit in clk, 1-bit in reset, 8-bit in din, 8-bit out dout. Preserve these exact port names; the testbench uses them. Do not include module wrappers or redeclare stored ports.",
       "bench": "benches/pipeline.sv",
       "bench_adaptation": "Self-checking concrete-configuration bench; no claim of full parameterized RTLLM compatibility.",
       "quality_criteria": [
@@ -200,7 +520,29 @@
         "Concrete approved configuration and functional RTL",
         "Refinement preserves existing user text and ownership"
       ],
-      "refinement": "Explain each component from its stored RTL and structured wiring. Flag any disagreements with the existing text and preserve both."
+      "refinement": "Append and save an explanation to each Component's existing description in the bound Spec, using its stored RTL and structured interfaces. Explain the implemented behavior, clock and reset rules where present, and flag any disagreement with the existing description. Preserve the existing description verbatim; append the explanation after it. Save the changes to Spec through flow_edit_spec. Do not change SystemVerilog, Component interfaces, IDs, Designs or wiring.",
+      "ports": [
+        {
+          "name": "clk",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "reset",
+          "direction": "in",
+          "width": 1
+        },
+        {
+          "name": "din",
+          "direction": "in",
+          "width": 8
+        },
+        {
+          "name": "dout",
+          "direction": "out",
+          "width": 8
+        }
+      ]
     }
   ],
   "live_repeats": 3,

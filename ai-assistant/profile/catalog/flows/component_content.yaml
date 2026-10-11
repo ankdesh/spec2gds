@@ -70,7 +70,7 @@
           "$ref": "inputs.request"
         },
         "authoring_context": {
-          "$ref": "nodes.context"
+          "$ref": "nodes.context.model_context"
         }
       },
       "outputSchema": {

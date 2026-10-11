@@ -594,6 +594,7 @@
             <button id="btnSampleTwoFifo" class="btn btn-secondary btn-sm" type="button">Use Two-FIFO Pipeline Sample</button>
           </div>
           <input type="file" id="fileSnapshotUpload" class="form-input" accept=".snapshot,.zip" />
+          <p id="newPlanSourceStatus" role="status"></p>
         </div>
         <div class="form-group">
           <label class="form-label" for="newPlanName">Plan Name</label>
@@ -610,7 +611,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" data-close="modalNewPlan">Cancel</button>
-        <button id="btnSubmitNewPlan" class="btn btn-primary">Create Plan</button>
+        <button id="btnSubmitNewPlan" class="btn btn-primary" disabled>Create Plan</button>
       </div>
     </div>
   </div>

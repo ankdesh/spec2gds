@@ -2,6 +2,22 @@
 import assert from "node:assert/strict";
 import { resolve } from "node:path";
 
+/** A completed empty Spec cannot satisfy a hardware creation evaluation. */
+export function assertEvaluationCreationFlow(definition: string | null, status: string | null, error: string | null): void {
+  if (!definition) return;
+  assert.equal(definition, "spec2gds.create_spec_with_component", `Evaluation selected the wrong flow: ${definition}`);
+  assert.ok(!["failed", "needs-reconcile", "cancelled"].includes(status || ""), `Evaluation creation flow ${status}: ${error || "no diagnostic"}`);
+}
+
+export function assertEvaluationInterface(plan: any, ports: { name: string; direction: string; width: number }[]): void {
+  assert.equal(plan.components.length, 1, "Evaluation requires one approved leaf Component.");
+  assert.equal(plan.designs.length, 0, "Evaluation uses the published leaf creation flow.");
+  const groups = plan.interfaces.filter((item: any) => item.component === plan.components[0].name);
+  assert.equal(groups.length, 1, "Evaluation requires one complete approved interface.");
+  const ordered = (items: typeof ports) => items.map(({ name, direction, width }) => ({ name, direction, width })).sort((a, b) => a.name.localeCompare(b.name));
+  assert.deepEqual(ordered(groups[0].ports), ordered(ports), "Approved ports differ from the declared testbench contract.");
+}
+
 export function generatedSpecReceipt(receipts: any[], destination: string, reviewId: string): any | null {
   const matches = receipts.filter(item => typeof item.destination === "string"
     && resolve(item.destination) === resolve(destination) && item.architectureReviewId === reviewId);

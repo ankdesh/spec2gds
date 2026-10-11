@@ -1,7 +1,7 @@
 /** Repeated live inference evaluation; never route requests to canned fixtures. */
 import { selectedEvaluationCases } from "./generalization_state.js";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -25,7 +25,12 @@ for(const item of cases) for(let repeat=0;repeat<repeats;repeat++) {
   const argv=["--import","tsx",join(root,"tests/ui-scenarios/runner/run_scenario.ts"),"--scenario","generalization","--live-model","--eval-case",item.id,"--output",destination];
   const benchmark=option("--benchmark-root",""); if(benchmark) argv.push("--benchmark-root",benchmark);
   const run=spawnSync(process.execPath,argv,{cwd:join(root,"tests/ui-scenarios"),stdio:"inherit",timeout:600000});
-  runs.push({case:item.id,repeat:repeat+1,status:run.status===0?"passed":"failed",output:destination,error:run.error?.message});
-  writeFileSync(join(output,"summary.json"),JSON.stringify({status:"completed",runs,document_quality:"requires rubric review; deterministic functional passes do not imply document quality"},null,2));
+  const stagesPath=join(destination,"evaluation-stages.json");
+  const stages=existsSync(stagesPath) ? JSON.parse(readFileSync(stagesPath,"utf8")) :
+    {creation:{status:"unverified"},simulation:{status:"unverified"},refinement:{status:"unverified"}};
+  runs.push({case:item.id,repeat:repeat+1,status:run.status===0?"passed":"failed",stages,output:destination,error:run.error?.message});
+  const stage_counts=Object.fromEntries(["creation","simulation","refinement"].map(stage=>[stage,
+    Object.fromEntries(["passed","failed","unverified"].map(status=>[status,runs.filter(item=>item.stages[stage].status===status).length]))]));
+  writeFileSync(join(output,"summary.json"),JSON.stringify({status:runs.length===cases.length*repeats?"completed":"running",expected_runs:cases.length*repeats,runs,stage_counts,document_quality:"requires rubric review; deterministic functional passes do not imply document quality"},null,2));
 }
 process.exitCode=runs.some(run=>run.status!=="passed")?1:0;

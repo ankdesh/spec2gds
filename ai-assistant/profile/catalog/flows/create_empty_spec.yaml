@@ -1,7 +1,7 @@
 {
   "id": "spec2gds.create_empty_spec",
   "version": "2.0.0",
-  "description": "Create a new empty Spec and its separate bound conversation. Do not add hardware content.",
+  "description": "Create an empty Spec only when the designer explicitly requests no hardware content. For a requested hardware function, use flow_create_spec_with_component instead.",
   "inputSchema": {
     "type": "object",
     "properties": {

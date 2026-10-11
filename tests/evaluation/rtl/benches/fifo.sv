@@ -3,7 +3,7 @@ module evaluation_tb;
   logic wclk=0, rclk=0, wrstn=0, rrstn=0, winc=0, rinc=0;
   logic [W-1:0] wdata=0, rdata;
   logic wfull, rempty;
-  @@TOP@@ dut (.*);
+  @@TOP@@ dut (.wclk(wclk), .rclk(rclk), .wrstn(wrstn), .rrstn(rrstn), .winc(winc), .rinc(rinc), .wdata(wdata), .rdata(rdata), .wfull(wfull), .rempty(rempty));
   always #5 wclk=~wclk;
   always #7 rclk=~rclk;
   task write_word(input logic [W-1:0] value);

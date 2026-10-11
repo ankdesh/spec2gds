@@ -451,7 +451,7 @@ export class SpecEditorHttpClient {
     return this.request("/documents/create", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path, title, ...(requestId ? { request_id: requestId, derive_named_path: true } : {}) }),
+      body: JSON.stringify({ path, title, ...(requestId ? { request_id: requestId } : {}) }),
     });
   }
 

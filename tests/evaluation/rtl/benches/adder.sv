@@ -3,7 +3,7 @@ module evaluation_tb;
   logic [W-1:0] a, b, sum;
   logic cin, cout;
   logic [W:0] expected;
-  @@TOP@@ dut (.*);
+  @@TOP@@ dut (.a(a), .b(b), .cin(cin), .sum(sum), .cout(cout));
   initial begin
     for (int i=0; i<512; i++) begin
       a = W'($urandom); b = W'($urandom); cin = 1'(i);

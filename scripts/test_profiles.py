@@ -519,10 +519,10 @@ def main(argv: list[str] | None = None) -> int:
               "known_failures": [
                   "Previously observed live wire-range saving timeout; retain the current live result without retries.",
                   "Previously observed Circuit Designer keyboard focus and SVG export failures; retain the current browser result.",
-                  "Spec Editor New Spec derives a destination from its name; the existing-destination rejection case exposes the selected-path mismatch.",
-                  "Spec Editor document views omit running Activity jobs, so the browser cancellation case cannot reach Cancel.",
-                  "Verification Planner sample creation does not supply an imported source snapshot.",
-                  "Verification Planner browser export sends GET to the POST-only export interface.",
+                  "Previously observed Spec Editor selected-path mismatch; retain the current existing-destination rejection result.",
+                  "Previously observed Spec Editor running-job visibility and cancellation failure; retain the current browser result.",
+                  "Previously observed Verification Planner sample snapshot import failure; retain the current browser result.",
+                  "Previously observed Verification Planner export HTTP method mismatch; retain the current browser result.",
               ],
               "coverage_gaps": ["automated visual baselines",
                                 "system-wide performance and accessibility thresholds"], "suites": []}

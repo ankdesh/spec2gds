@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 
 from testplan_service.application.service import VerificationPlannerService
@@ -22,6 +22,17 @@ class CommitBundleImportRequest(BaseModel):
 def create_imports_router(get_service: Callable[[], VerificationPlannerService]) -> APIRouter:
     """Factory creating snapshot upload and bundle import endpoints."""
     imports_router = APIRouter(tags=["Imports"])
+
+    @imports_router.get("/source-samples/{sample_id}")
+    def source_sample(sample_id: str) -> Response:
+        """Return a deterministic sample through the normal snapshot import path."""
+        from testplan_service.fixtures.fifo_snapshot import get_fifo_snapshot_bytes
+        from testplan_service.fixtures.two_fifo_snapshot import get_two_fifo_snapshot_bytes
+
+        samples = {"fifo": get_fifo_snapshot_bytes, "two_fifo": get_two_fifo_snapshot_bytes}
+        if sample_id not in samples:
+            raise HTTPException(status_code=404, detail="Unknown source sample.")
+        return Response(content=samples[sample_id](), media_type="application/octet-stream")
 
     @imports_router.post("/source-imports", status_code=status.HTTP_201_CREATED)
     async def upload_source_snapshot(

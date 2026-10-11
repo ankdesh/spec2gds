@@ -888,7 +888,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     const current = flows.at(-1), pending = record(current?.pending?.request);
     const creation = current?.creation_confirmation;
     const destination = creation?.binding_confirmed ? creation.conversation_id : undefined;
-    return h("div", { className: "s2g-flow-approval", "data-s2g-flow-status": current?.status, "data-s2g-flow-error": current?.error || "" },
+    return h("div", { className: "s2g-flow-approval", "data-s2g-flow-status": current?.status, "data-s2g-flow-definition": current?.definition_id, "data-s2g-flow-error": current?.error || "" },
       creation?.content_required && ["failed", "needs-reconcile"].includes(current?.status) ? h("p", null, "Document created; content request incomplete. ", h("a", { href: creation.editor_url, target: "_blank", rel: "noopener noreferrer" }, "Open Spec Editor")) : null,
       architecture ? h(ArchitectureReviewCard, { request: architecture, sessionId, flow: flows.find(flow => flow.pending?.request?.review_id === architecture.reviewId) }) : null,
       current?.status === "waiting" && pending.kind === "spec-receipt" ? h("p", null,
