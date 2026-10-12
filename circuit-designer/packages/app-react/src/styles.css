@@ -19,8 +19,8 @@
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 .topbar { position: relative; z-index: 30; display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto auto; align-items: stretch; gap: 8px; padding: 0 10px; border-bottom: 1px solid #c9ccc5; background: #fffef9; }
-.theme-quick-toggle { align-self: center; display: inline-grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--cd-border, #b8c6d1); border-radius: 9999px; background: var(--cd-surface, #fff); color: var(--cd-text, #102a43); font-size: 11px; cursor: pointer; transition: transform 120ms ease; }
-.theme-quick-toggle:hover { transform: scale(1.1); border-color: var(--cd-primary); }
+.theme-quick-toggle { align-self: center; display: inline-grid; place-items: center; width: 28px; height: 28px; min-width: 28px; flex-shrink: 0; border: 1px solid var(--cd-border, #b8c6d1); border-radius: 9999px; background: var(--cd-surface, #fff); color: var(--cd-text, #102a43); font-size: 13px; cursor: pointer; transition: transform 120ms ease; }
+.theme-quick-toggle:hover { transform: scale(1.08); border-color: var(--cd-primary); }
 .source-save-button { align-self: center; border: 1px solid #1d5f61; border-radius: 3px; background: #1d5f61; padding: 5px 8px; color: #fff; font-size: 9px; white-space: nowrap; }
 .brand { display: flex; align-items: center; gap: 11px; }
 .brand-mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 3px; background: #193d43; color: #b9e2d4; font: 800 9px ui-monospace; }
@@ -245,6 +245,24 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 [data-theme="obsidian"] .preference-toggle small {
   color: var(--cd-text-muted);
+}
+[data-theme="obsidian"] .theme-quick-toggle {
+  background: #18181b;
+  border-color: #27272a;
+  color: #f4f4f5;
+}
+[data-theme="obsidian"] .theme-quick-toggle:hover {
+  border-color: #8b5cf6;
+  background: #27272a;
+}
+[data-theme="blueprint-slate"] .theme-quick-toggle {
+  background: #ffffff;
+  border-color: #7b8fa1;
+  color: #102a43;
+}
+[data-theme="blueprint-slate"] .theme-quick-toggle:hover {
+  border-color: #007c89;
+  background: #f0f7f9;
 }
 .timing-analysis-list article[data-status="cdc"], .timing-analysis-list article[data-status="backward"] { border-color: var(--cd-warning); background: var(--cd-warning-surface); }
 

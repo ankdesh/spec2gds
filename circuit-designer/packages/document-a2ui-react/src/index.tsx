@@ -1734,7 +1734,7 @@ function referenceLabel(block: NarrativeBlockData, ref: EntityRef) {
 }
 
 function renderInlines(block: NarrativeBlockData): React.ReactNode {
-  if (!block.inlines.length) return block.text;
+  if (!block.inlines?.length) return block.text;
   return block.inlines.map((inline, index) => {
     const key = `${block.block_id}-inline-${index}`;
     if (inline.type === "emphasis") return <em key={key}>{inline.text}</em>;
@@ -1836,9 +1836,13 @@ export function DocumentSectionView({
 const NarrativeBlock = createComponentImplementation(
   NarrativeBlockApi,
   ({ props }) => (
-    <div className="spec-narrative">
-      <NarrativeExploreButton block={props.block as NarrativeBlockData} documentId={props.documentId} />
-      <NarrativeNode block={props.block as NarrativeBlockData} />
+    <div className="spec-narrative-block">
+      <div className="spec-narrative">
+        <NarrativeNode block={props.block as NarrativeBlockData} />
+      </div>
+      <div className="spec-narrative-actions">
+        <NarrativeExploreButton block={props.block as NarrativeBlockData} documentId={props.documentId} />
+      </div>
     </div>
   ),
 );
@@ -1850,18 +1854,22 @@ const EntityLink = createComponentImplementation(
     return (
       <div className="spec-callout spec-callout--link">
         <span className="spec-callout__icon" aria-hidden="true">↗</span>
-        <div>
-          <NarrativeExploreButton block={block} documentId={props.documentId} />
-          <strong>{block.text || "Related specification entities"}</strong>
-          <div className="spec-link-row">
-            {block.entity_refs.map((ref) => (
-              <a
-                href={`#${referenceLabel(block, ref).anchor}`}
-                key={`${ref.entity_kind}-${ref.entity_id}`}
-              >
-                {referenceLabel(block, ref).name}
-              </a>
-            ))}
+        <div className="spec-callout__content">
+          <div className="spec-callout__main">
+            <strong>{block.text || "Related specification entities"}</strong>
+            <div className="spec-link-row">
+              {block.entity_refs.map((ref) => (
+                <a
+                  href={`#${referenceLabel(block, ref).anchor}`}
+                  key={`${ref.entity_kind}-${ref.entity_id}`}
+                >
+                  {referenceLabel(block, ref).name}
+                </a>
+              ))}
+            </div>
+          </div>
+          <div className="spec-narrative-actions">
+            <NarrativeExploreButton block={block} documentId={props.documentId} />
           </div>
         </div>
       </div>
@@ -1886,17 +1894,21 @@ const LiveView = createComponentImplementation(
     return (
       <div className="spec-callout spec-callout--live">
         <span className="spec-live-dot" aria-hidden="true" />
-        <div>
-          <NarrativeExploreButton block={block} documentId={props.documentId} />
-          <strong>{block.text || "Live design view"}</strong>
-          {block.entity_refs.map((ref) => (
-            <a
-              href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
-              key={`${ref.entity_kind}-${ref.entity_id}`}
-            >
-              Open {ref.entity_kind.replaceAll("_", " ")}
-            </a>
-          ))}
+        <div className="spec-callout__content">
+          <div className="spec-callout__main">
+            <strong>{block.text || "Live design view"}</strong>
+            {block.entity_refs.map((ref) => (
+              <a
+                href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
+                key={`${ref.entity_kind}-${ref.entity_id}`}
+              >
+                Open {ref.entity_kind.replaceAll("_", " ")}
+              </a>
+            ))}
+          </div>
+          <div className="spec-narrative-actions">
+            <NarrativeExploreButton block={block} documentId={props.documentId} />
+          </div>
         </div>
       </div>
     );

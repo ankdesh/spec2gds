@@ -115,7 +115,7 @@ export function CircuitActionMenuPanel<CommandId extends string>({
           <button
             aria-expanded={open}
             aria-haspopup="menu"
-            onClick={() => setOpenSubmenu(open ? undefined : entry.id)}
+            onClick={() => setOpenSubmenu(entry.id)}
             onKeyDown={(event) => {
               if (event.key !== "ArrowRight") return;
               event.preventDefault();

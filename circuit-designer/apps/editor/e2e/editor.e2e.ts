@@ -325,8 +325,28 @@ const batch = {
           section("component-component_timer", "Timer", 2, componentRef, {
             facts: componentFacts,
             tables: [allPortsTable],
-            children: ["table-component-component_timer-ports"],
+            children: ["narrative-component-timer-desc", "table-component-component_timer-ports"],
           }),
+          {
+            id: "narrative-component-timer-desc",
+            component: "NarrativeBlock",
+            block: {
+              block_id: "block_timer_desc",
+              type: "paragraph",
+              text: "The timer module generates periodic interrupts and tracks real-time intervals using a configurable 32-bit prescaler.",
+              inlines: [],
+              children: [],
+              ordered: false,
+              rows: [],
+              asset_id: "",
+              alt_text: "",
+              caption: "",
+              entity_refs: [],
+              renderer_id: "",
+              options: {},
+            },
+            documentId,
+          },
           {
             id: "table-component-component_timer-ports",
             component: "SpecTable",
@@ -683,7 +703,7 @@ test("opens the configured AI Assistant from the top bar", async ({ page }) => {
     }) as typeof window.open;
   });
 
-  await page.getByRole("button", { name: /AI Assistant/ }).click();
+  await page.getByRole("button", { name: "AI Assistant", exact: true }).click();
   await expect.poll(() => page.evaluate(
     () => (window as Window & { openedAssistantUrl?: string }).openedAssistantUrl,
   )).toBe("http://127.0.0.1:6013/launch/spec-document?document_id=editor_test");
@@ -1460,3 +1480,46 @@ test("toggles themes via quick toggle and Preferences dialog with persistence", 
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
 });
+
+test("renders SystemVerilog edit box with full width and aligns Explore button to right", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+
+  // Verify narrative block and Explore button alignment
+  const narrativeBlock = page.locator(".spec-narrative-block");
+  await expect(narrativeBlock).toBeVisible();
+  const exploreButton = narrativeBlock.locator(".spec-narrative-action");
+  await expect(exploreButton).toBeVisible();
+  await expect(exploreButton).toHaveText("Explore with AI Assistant");
+
+  // Verify exploreButton is aligned to the right edge of narrativeBlock
+  const narrativeBox = await narrativeBlock.boundingBox();
+  const buttonBox = await exploreButton.boundingBox();
+  expect(narrativeBox).not.toBeNull();
+  expect(buttonBox).not.toBeNull();
+  expect(buttonBox!.x + buttonBox!.width).toBeGreaterThanOrEqual(narrativeBox!.x + narrativeBox!.width - 10);
+
+  await page.locator("#component-component_timer").scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_narrative_action_right.png" });
+
+  // Open SystemVerilog editor
+  const timer = page.locator("#component-component_timer");
+  await timer.locator(".spec-options-trigger").click();
+  await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
+
+  const svForm = timer.locator(".spec-sv-editor-form");
+  await expect(svForm).toBeVisible();
+  const codeEditor = svForm.locator(".spec-sv-code-editor");
+  await expect(codeEditor).toBeVisible();
+
+  // Verify that code editor width matches form width (full width available)
+  const formBox = await svForm.boundingBox();
+  const codeBox = await codeEditor.boundingBox();
+  expect(formBox).not.toBeNull();
+  expect(codeBox).not.toBeNull();
+  expect(codeBox!.width).toBeGreaterThanOrEqual(formBox!.width - 36);
+
+  await svForm.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_sv_full_width.png" });
+});
+

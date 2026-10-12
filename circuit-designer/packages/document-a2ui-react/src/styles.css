@@ -579,6 +579,28 @@
   text-transform: uppercase;
 }
 
+.spec-narrative-block {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.spec-narrative-block .spec-narrative {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 74ch;
+}
+
+.spec-narrative-actions {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .spec-narrative {
   position: relative;
   color: #d4d4d8;
@@ -587,16 +609,19 @@
 }
 
 .spec-narrative-action {
-  float: right;
-  margin: 0 0 0.4rem 0.7rem;
-  padding: 0.28rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.32rem 0.75rem;
   border: 1px solid #3f3f46;
-  border-radius: 999px;
+  border-radius: var(--spec-radius, 0.375rem);
   background: #202024;
   color: #c4b5fd;
   cursor: pointer;
   font-size: var(--spec-font-small, 0.8125rem);
   font-weight: 600;
+  white-space: nowrap;
   transition: all 120ms ease;
 }
 
@@ -650,6 +675,20 @@
   border-left: 3px solid var(--spec-accent, #8b5cf6);
   background: rgba(139, 92, 246, 0.08);
   border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.spec-callout__content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.spec-callout__main {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .spec-callout p {
@@ -1125,10 +1164,21 @@
   white-space: pre;
 }
 
-.spec-sv-editor-form {
+.spec-sv-editor-form,
+.spec-inline-editor.spec-sv-editor-form {
   display: grid;
+  grid-template-columns: 1fr;
   grid-column: 1 / -1;
   gap: 0.65rem;
+  width: 100%;
+}
+
+.spec-sv-editor-form label,
+.spec-sv-editor-form .spec-sv-code-editor,
+.spec-sv-editor-form small,
+.spec-sv-editor-form .spec-edit-error,
+.spec-sv-editor-form .spec-edit-actions {
+  grid-column: 1 / -1;
   width: 100%;
 }
 
@@ -1137,6 +1187,7 @@
   border: 1px solid #2e2e34;
   border-radius: 0.35rem;
   background: #0e0f11;
+  width: 100%;
 }
 
 .spec-sv-code-editor .cm-editor {
@@ -1144,6 +1195,7 @@
   max-height: 32rem;
   background: #0e0f11;
   color: #f4f4f5;
+  width: 100%;
 }
 
 .spec-sv-code-editor .cm-scroller {
@@ -1497,4 +1549,16 @@
 [data-theme="clean"] .spec-toc__sticky {
   background: #ffffff;
   border-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-narrative-action {
+  background: #ffffff;
+  border-color: var(--spec-line-strong);
+  color: #246b5a;
+}
+
+[data-theme="clean"] .spec-narrative-action:hover {
+  background: #eef5f2;
+  border-color: var(--spec-accent);
+  color: #123d33;
 }
