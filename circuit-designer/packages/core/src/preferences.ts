@@ -74,6 +74,7 @@ export interface CircuitDesignerPreferencesV1 {
   ui: {
     inspector_open: boolean;
     timing_overlay_visible: boolean;
+    theme_id?: string;
   };
   action_bindings: CircuitActionBindings;
 }
@@ -106,7 +107,7 @@ export function createDefaultCircuitActionBindings(): CircuitActionBindings {
 export function createDefaultCircuitDesignerPreferences(): CircuitDesignerPreferencesV1 {
   return {
     schema_version: 1,
-    ui: { inspector_open: false, timing_overlay_visible: true },
+    ui: { inspector_open: false, timing_overlay_visible: true, theme_id: "blueprint-slate" },
     action_bindings: createDefaultCircuitActionBindings(),
   };
 }
@@ -146,6 +147,7 @@ export function validateCircuitDesignerPreferences(value: unknown): CircuitPrefe
   const preferences = createDefaultCircuitDesignerPreferences();
   preferences.ui.inspector_open = value.ui.inspector_open;
   preferences.ui.timing_overlay_visible = typeof value.ui.timing_overlay_visible === "boolean" ? value.ui.timing_overlay_visible : true;
+  preferences.ui.theme_id = typeof value.ui.theme_id === "string" ? value.ui.theme_id : "blueprint-slate";
   for (const actionId of circuitActionIds) {
     const legacyId = Object.entries(legacyActionAliases).find(([, next]) => next === actionId)?.[0];
     const binding = value.action_bindings[actionId] ?? (legacyId ? value.action_bindings[legacyId] : undefined);

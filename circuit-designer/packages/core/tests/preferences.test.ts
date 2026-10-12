@@ -54,4 +54,28 @@ describe("Circuit Designer preferences", () => {
       action_bindings: { ...defaults.action_bindings, undo: { keyboard: "x".repeat(65), mouse: "none" } },
     }).valid).toBe(false);
   });
+
+  test("defaults theme_id to blueprint-slate and preserves customized theme_id", () => {
+    const defaults = createDefaultCircuitDesignerPreferences();
+    expect(defaults.ui.theme_id).toBe("blueprint-slate");
+
+    const validatedDefault = validateCircuitDesignerPreferences({
+      schema_version: 1,
+      ui: { inspector_open: false },
+      action_bindings: {},
+    });
+    expect(validatedDefault.valid).toBe(true);
+    if (!validatedDefault.valid) return;
+    expect(validatedDefault.preferences.ui.theme_id).toBe("blueprint-slate");
+
+    const validatedCustom = validateCircuitDesignerPreferences({
+      schema_version: 1,
+      ui: { inspector_open: true, theme_id: "obsidian" },
+      action_bindings: {},
+    });
+    expect(validatedCustom.valid).toBe(true);
+    if (!validatedCustom.valid) return;
+    expect(validatedCustom.preferences.ui.theme_id).toBe("obsidian");
+  });
 });
+

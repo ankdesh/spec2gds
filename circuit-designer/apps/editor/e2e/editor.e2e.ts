@@ -1422,3 +1422,41 @@ test("proposal review preserves a private draft and its authored revision", asyn
   expect(state.transactions[0].expected_source_revision_hash).toBe(authoredRevision);
   await expect(design.getByLabel("Design explanation")).toHaveValue("Keep the authored draft.");
 });
+
+test("toggles themes via quick toggle and Preferences dialog with persistence", async ({ page }) => {
+  await mockEditorApi(page);
+  await page.goto("/");
+
+  // Default theme is obsidian
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_obsidian.png" });
+
+  // Click quick toggle in header
+  const toggleButton = page.locator(".theme-quick-toggle");
+  await expect(toggleButton).toBeVisible();
+  await toggleButton.click();
+
+  // Switched to clean (light)
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "clean");
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_clean.png" });
+
+  // Open Edit -> Preferences…
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Preferences/ }).click();
+
+  const preferencesDialog = page.getByRole("dialog", { name: "Preferences" });
+  await expect(preferencesDialog).toBeVisible();
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_preferences_dialog.png" });
+
+  // Switch back to Obsidian in the dialog
+  await preferencesDialog.getByRole("radio", { name: /Obsidian/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
+
+  // Close dialog
+  await preferencesDialog.getByRole("button", { name: "Done" }).click();
+  await expect(preferencesDialog).not.toBeVisible();
+
+  // Reload page to verify persistence in localStorage
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
+});

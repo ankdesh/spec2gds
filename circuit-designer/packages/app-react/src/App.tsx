@@ -36,8 +36,8 @@ import {
   type NodeGeometry,
   type TerminalPlacement,
   setAllRouteLocks,
-  blueprintSlateTheme,
   circuitThemeCssProperties,
+  getCircuitTheme,
   type CircuitDesignerBackend,
   type CircuitThemeDefinition,
 } from "@spec2gds/circuit-core";
@@ -135,7 +135,7 @@ export function App({
   launch = { kind: "new" },
   source,
   telemetry = noopCircuitTelemetry,
-  theme = blueprintSlateTheme,
+  theme: hostTheme,
   tools = [],
   onLaunchChange,
 }: CircuitDesignerAppProps) {
@@ -144,6 +144,7 @@ export function App({
   const [preferences, setPreferences] = useState<CircuitDesignerPreferencesV1>(
     () => initialCachedPreferences ?? createDefaultCircuitDesignerPreferences(),
   );
+  const theme = useMemo(() => hostTheme ?? getCircuitTheme(preferences.ui.theme_id), [hostTheme, preferences.ui.theme_id]);
   const [preferenceStatus, setPreferenceStatus] = useState<"loading" | "saved" | "saving" | "error">("loading");
   const [dialog, setDialog] = useState<CircuitDialogId>();
   const [confirmation, setConfirmation] = useState<{
@@ -1421,7 +1422,7 @@ export function App({
   })();
   const themeStyle = circuitThemeCssProperties(theme) as CSSProperties;
 
-  return <main className="cd-app standalone-shell" ref={appRef} style={themeStyle}>
+  return <main className="cd-app standalone-shell" data-theme={theme.id} ref={appRef} style={themeStyle}>
     <header className="topbar">
       <div className="brand"><span className="brand-mark">CD</span><h1>Circuit Designer</h1></div>
       <CircuitMenuBar
@@ -1447,6 +1448,21 @@ export function App({
         }}>Rename</button>}
         <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source read-only" : lease ? "private draft" : "saved circuit"}</small>
       </div>
+      <button
+        aria-label={`Switch theme (currently ${theme.id === "obsidian" ? "Dark" : "Light"})`}
+        className="theme-quick-toggle"
+        onClick={() => {
+          const nextThemeId = theme.id === "obsidian" ? "blueprint-slate" : "obsidian";
+          setPreferences((prev) => ({
+            ...prev,
+            ui: { ...prev.ui, theme_id: nextThemeId },
+          }));
+        }}
+        title={`Switch to ${theme.id === "obsidian" ? "Blueprint Slate (Clean Light)" : "Obsidian (Dark Canvas)"}`}
+        type="button"
+      >
+        <span aria-hidden="true">{theme.id === "obsidian" ? "☀️" : "🌙"}</span>
+      </button>
       {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
         className="source-save-button"
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}

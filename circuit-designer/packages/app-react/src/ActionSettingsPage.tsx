@@ -1,6 +1,6 @@
 /* Reusable Circuit Designer application shell. */
 import { useState, type KeyboardEvent } from "react";
-import { createDefaultCircuitDesignerPreferences, type CircuitDesignerPreferencesV1 } from "@spec2gds/circuit-core";
+import { createDefaultCircuitDesignerPreferences, circuitThemes, type CircuitDesignerPreferencesV1 } from "@spec2gds/circuit-core";
 import {
   assignKeyboardShortcut,
   assignMouseShortcut,
@@ -63,6 +63,41 @@ export function ActionSettingsPage({ preferences, preferenceStatus, onPreference
     </header>
 
     <p className={`action-settings__status action-settings__status--${preferenceStatus}`} role="status">{message} · {preferenceStatus === "loading" ? "Loading…" : preferenceStatus === "saving" ? "Saving…" : preferenceStatus === "saved" ? "Saved" : "Save failed"}</p>
+
+    <section className="action-settings__group">
+      <h3>Appearance & Theme</h3>
+      <div className="action-settings__theme-grid" role="radiogroup" aria-label="Visual Theme">
+        {Object.values(circuitThemes).map((theme) => {
+          const isSelected = (preferences.ui.theme_id || "blueprint-slate") === theme.id;
+          return (
+            <button
+              key={theme.id}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              className={`action-settings__theme-card${isSelected ? " action-settings__theme-card--selected" : ""}`}
+              onClick={() => {
+                onPreferencesChange({ ...preferences, ui: { ...preferences.ui, theme_id: theme.id } });
+                setMessage(`Active theme switched to ${theme.label ?? theme.id}.`);
+              }}
+            >
+              <div className="action-settings__theme-swatches">
+                <span className="swatch-canvas" style={{ background: theme.colors.canvas }}>
+                  <span className="swatch-surface" style={{ background: theme.colors.surface, borderColor: theme.colors.border }}>
+                    <span className="swatch-net" style={{ background: theme.colors.net }} />
+                  </span>
+                </span>
+              </div>
+              <div className="action-settings__theme-info">
+                <strong>{theme.label ?? theme.id}</strong>
+                <small>{theme.description ?? ""}</small>
+                {isSelected && <span className="action-settings__theme-badge">Active</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </section>
 
     <section className="action-settings__group">
       <h3>Interface</h3>

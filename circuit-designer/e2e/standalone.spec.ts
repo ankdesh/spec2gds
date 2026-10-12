@@ -145,7 +145,9 @@ test("launches former sidebar and action-strip workflows from menus", async ({ p
 test("edits a writable specification binding and saves it through source preview and commit", async ({ page, request }) => {
   sourceProviderCalls = [];
   const document = simpleDocumentFixture();
-  document.document_id = `source_roundtrip_${Date.now()}`;
+  const uniqueId = `source_roundtrip_${Date.now()}`;
+  document.document_id = uniqueId;
+  document.label = uniqueId;
   const created = await request.post(`${circuitApiUrl}/documents`, {
     data: { request_id: `create_${document.document_id}`, document },
   });
@@ -511,3 +513,44 @@ test("rejects an invalid file without replacing the current circuit", async ({ p
   await expect(page.locator(".notice")).toContainText("Could not open broken.circuit.json");
   await expect(page.locator(".react-flow__node")).toHaveCount(nodeCount);
 });
+
+test("toggles visual theme via quick toggle and preferences page", async ({ page }) => {
+  await page.goto("/");
+  // Defaults to blueprint-slate (light canvas)
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_blueprint_slate.png" });
+
+  // Click topbar quick toggle
+  const toggle = page.locator(".topbar .theme-quick-toggle");
+  await expect(toggle).toBeVisible();
+  const toggleSaved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
+  await toggle.click();
+  await toggleSaved;
+
+  // Switched to obsidian
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_obsidian.png" });
+
+  // Open preferences page
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Preferences", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Actions and shortcuts/ }).click();
+  await expect(page.locator(".action-settings")).toBeVisible();
+  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_preferences.png" });
+
+  // Switch back to Blueprint Slate in preferences
+  const saved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
+  await page.locator(".action-settings__theme-card").filter({ hasText: "Blueprint Slate" }).click();
+  await saved;
+  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
+
+  // Done closes settings
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".action-settings")).not.toBeVisible();
+
+  // Reload page to verify persistence
+  await page.reload();
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
+});
+

@@ -35,6 +35,12 @@ import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
 import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
 import { browserRandomUuid } from "@spec2gds/circuit-app-react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
+import {
+  applySpecEditorTheme,
+  loadSpecEditorPreferences,
+  saveSpecEditorPreferences,
+  type SpecEditorThemeId,
+} from "./preferences";
 
 function text(value: unknown, fallback = "—"): string {
   if (typeof value === "string") return value || fallback;
@@ -83,6 +89,29 @@ export default function App() {
   const [viewCursor, setViewCursor] = useState(0);
   const viewRequest = useRef(0);
   const [browserLogger, setBrowserLogger] = useState<BrowserLogger | null>(null);
+  const [preferences, setPreferences] = useState(loadSpecEditorPreferences);
+  const themeId = preferences.theme_id;
+
+  useEffect(() => {
+    applySpecEditorTheme(themeId);
+  }, [themeId]);
+
+  const selectTheme = useCallback((nextThemeId: SpecEditorThemeId) => {
+    setPreferences((prev) => {
+      const next = { ...prev, theme_id: nextThemeId };
+      saveSpecEditorPreferences(next);
+      return next;
+    });
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setPreferences((prev) => {
+      const nextThemeId = prev.theme_id === "obsidian" ? "clean" : "obsidian";
+      const next = { ...prev, theme_id: nextThemeId };
+      saveSpecEditorPreferences(next);
+      return next;
+    });
+  }, []);
 
   const loadView = useCallback(async () => {
     const request = ++viewRequest.current;
@@ -648,7 +677,7 @@ export default function App() {
   ) ?? [];
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={themeId}>
       <EditorMenuBar
         activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
         diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length + sectionDiagnostics.length}
@@ -662,9 +691,12 @@ export default function App() {
         onOpen={openDocument}
         onOpenAssistant={launchDocumentAssistant}
         onOpenCircuit={launchCircuitDesigner}
+        onSelectTheme={selectTheme}
+        onToggleTheme={toggleTheme}
         onViewChange={setView}
         path={path}
         snapshot={snapshot}
+        themeId={themeId}
         view={view}
       />
 

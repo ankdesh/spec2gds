@@ -3,11 +3,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { DocumentSnapshot, FilesystemDirectoryListing } from "@spec2gds/document-core";
 import { captureSpecTextEditTarget, type SpecTextEditTarget } from "@spec2gds/document-a2ui-react";
 import { publicFilenameStem } from "@spec2gds/circuit-core";
+import { PreferencesDialog } from "./PreferencesDialog";
+import type { SpecEditorThemeId } from "./preferences";
 
 export type EditorView = "document" | "activity" | "diagnostics";
 
 type MenuId = "file" | "edit" | "circuit" | "help";
-type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | null;
+type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | "preferences" | null;
 
 interface EditorMenuBarProps {
   activityCount: number;
@@ -17,6 +19,7 @@ interface EditorMenuBarProps {
   loading: boolean;
   path: string;
   snapshot: DocumentSnapshot | null;
+  themeId: SpecEditorThemeId;
   view: EditorView;
   onCreate: (path: string, title: string) => Promise<boolean>;
   onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
@@ -25,6 +28,8 @@ interface EditorMenuBarProps {
   onOpen: (path: string) => Promise<boolean>;
   onOpenAssistant: () => Promise<void>;
   onOpenCircuit: (entityKind: "component" | "design", entityId: string) => Promise<void>;
+  onSelectTheme: (themeId: SpecEditorThemeId) => void;
+  onToggleTheme: () => void;
   onViewChange: (view: EditorView) => void;
 }
 
@@ -579,6 +584,7 @@ export default function EditorMenuBar({
   loading,
   path,
   snapshot,
+  themeId,
   view,
   onCreate,
   onBrowseDirectories,
@@ -587,6 +593,8 @@ export default function EditorMenuBar({
   onOpen,
   onOpenAssistant,
   onOpenCircuit,
+  onSelectTheme,
+  onToggleTheme,
   onViewChange,
 }: EditorMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<MenuId | null>(null);
@@ -767,6 +775,10 @@ export default function EditorMenuBar({
               <MenuAction disabled={!canCopy} onActivate={activate(() => { void copySelection(); })}>Copy</MenuAction>
               <MenuAction disabled={!canPaste} onActivate={activate(() => { void editClipboard("paste"); })}>Paste</MenuAction>
               <MenuAction disabled={!snapshot} onActivate={activate(selectAll)}>Select All</MenuAction>
+              <div className="editor-menu__separator" role="separator" />
+              <MenuAction disabled status="Coming soon">Find</MenuAction>
+              <div className="editor-menu__separator" role="separator" />
+              <MenuAction onActivate={activate(() => setDialog("preferences"))} shortcut="Ctrl/⌘ ,">Preferences…</MenuAction>
             </TopMenu>
             <TopMenu id="circuit" label="Circuit" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               {designs.length > 0 && <div className="editor-menu__group" role="presentation">Designs</div>}
@@ -822,6 +834,15 @@ export default function EditorMenuBar({
 
         <div className="app-header__utilities">
           <button
+            aria-label={`Switch theme (currently ${themeId === "obsidian" ? "Dark" : "Light"})`}
+            className="theme-quick-toggle"
+            onClick={onToggleTheme}
+            title={`Switch to ${themeId === "obsidian" ? "Clean (Light)" : "Obsidian (Dark)"}`}
+            type="button"
+          >
+            <span aria-hidden="true">{themeId === "obsidian" ? "☀️" : "🌙"}</span>
+          </button>
+          <button
             className="assistant-launch"
             disabled={launchingAssistant}
             onClick={() => { void onOpenAssistant(); }}
@@ -858,8 +879,15 @@ export default function EditorMenuBar({
           onSubmit={(nextPath) => onOpen(nextPath)}
         />
       )}
-      {dialog && !["new", "open"].includes(dialog) && (
-        <HelpDialog dialog={dialog as Exclude<DialogId, "new" | "open">} onClose={() => setDialog(null)} />
+      {dialog === "preferences" && (
+        <PreferencesDialog
+          currentThemeId={themeId}
+          onClose={() => setDialog(null)}
+          onThemeChange={onSelectTheme}
+        />
+      )}
+      {dialog && !["new", "open", "preferences"].includes(dialog) && (
+        <HelpDialog dialog={dialog as Exclude<DialogId, "new" | "open" | "preferences">} onClose={() => setDialog(null)} />
       )}
     </>
   );
