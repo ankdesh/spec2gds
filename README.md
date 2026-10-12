@@ -179,7 +179,7 @@ uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
 chat already bound to the active circuit. Spec Editor opens
 a chat bound to the complete active Spec, or an unbound chat when no
 specification is open. A document chat can create and refine supported entities
-throughout its package. An entity's **Options → More actions… → Explore with AI
+throughout its package. An entity's **Options → Explore with AI
 Assistant** creates a narrower entity-bound conversation.
 
 Unbound Assistant conversations discuss general hardware topics and create a new
@@ -231,16 +231,12 @@ Saved Circuit Designer cycle edges appear in this preview and in SVG/PNG
 exports. They divide the canvas into pipeline stages, default to
 one implicit `clk` domain, and are persisted as validated semantic timing
 annotations; see [the Circuit Designer guide](docs/circuit-designer.md#4-pipeline-stages-and-timing-analysis).
-Leaf-component sections provide separate **Add wire port**, **Add
-transactional port**, and **Add structured port** commands. All ports are shown
-as editable rows in one Ports table. Wire ports use
-an optional Range such as `DATA_WIDTH-1:0`; transactional ports capture their
-initiative and optional kind; structured ports are generated as packed structs
-with their required IP-XACT type definition maintained internally. Save
-validates and persists the complete change, while Cancel discards the
-browser-only draft.
+Leaf Component sections provide **Add wire port…**. Existing transaction and
+structured ports remain visible and read-only. All ports appear in one Ports
+table. Wire ports use an optional Range such as `DATA_WIDTH-1:0`. Use
+**Save to Spec** to validate and save a draft, or **Cancel** to discard it.
 
-Components and designs also expose **Options → Add section → SystemVerilog**.
+Components and designs also expose **Options → Add SystemVerilog section…**.
 The optional singleton is an IEEE 1800-2017 module body, edited with CodeMirror
 and validated with Verilator 5.x when available. Saved bodies render inline;
 Edit preserves rejected/stale drafts and Delete requires confirmation. See
@@ -248,8 +244,8 @@ Edit preserves rejected/stale drafts and Delete requires confirmation. See
 validation, and extension instructions.
 
 The **Circuit** menu lists available designs and components. Eligible document
-sections also expose **Options → Open circuit** beside their headings, while
-**Options → More actions** opens the entity action workflow. The server exposes
+sections also expose **Options → Open in Circuit Designer** beside their headings, while
+**Options** lists AI Assistant exploration, registered actions, and compatible Activities directly. Empty menus show **No options available**. The server exposes
 interactive API docs at `http://SERVER_IP:6010/docs`.
 
 Launching a leaf component shows one read-only component preview with its wire
@@ -304,10 +300,8 @@ The public contracts live in `spec2gds.spec.activities`. See the
 choose a queue, worker process, storage service, or monitoring mechanism.
 
 The Spec Editor supplies the product host for these contracts. Open a design,
-choose **Options → More actions… → Launch activity…**, and select an
-available generator. The dialog shows preflight failures without allowing an
-invalid run. Accepted runs move to the **Activity** tab, where queued and
-running jobs can be cancelled and reports update live. Completed generator
+choose **Options**, and select a compatible Activity. The menu shows availability warnings and disables unavailable Activities. Accepted runs move to the **Activity** tab, where queued and
+running jobs can be cancelled and reports update live. Completed Activity
 output is left on the server at the absolute path shown in the report; it is
 not downloaded by the browser.
 
@@ -373,6 +367,12 @@ npm run dev:editor
 
 Open `http://SERVER_IP:6015`. Rebuild the Python-packaged editor with
 `npm run build:editor` before committing UI changes.
+
+The sample **Export target details (JSON)** Activity exports all source Sections
+for the selected Component or Design and its dependencies. Use **Download JSON**
+on its `spec.summary` artifact in the Activity view. The export uses an immutable
+saved snapshot, includes hidden protocol details and SystemVerilog content, and
+does not run a compiler or change source.
 
 ## Run only Circuit Designer
 

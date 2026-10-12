@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { DocumentSnapshot, FilesystemDirectoryListing } from "@spec2gds/document-core";
+import { captureSpecTextEditTarget, type SpecTextEditTarget } from "@spec2gds/document-a2ui-react";
 import { publicFilenameStem } from "@spec2gds/circuit-core";
 
 export type EditorView = "document" | "activity" | "diagnostics";
@@ -540,8 +541,8 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
         <div className="editor-dialog__copy">
           <p>Use <strong>File → New Spec</strong> to name and create a server-local package, or <strong>File → Open Spec</strong> to load one.</p>
           <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
-          <p>Entry designs can add named instances of available top-level components. Leaf components keep wire, transactional, and packed structured ports together in one editable table; wire ranges use <code>left:right</code> syntax.</p>
-          <p>Saved edits are validated and persisted automatically after an explicit Save.</p>
+          <p>Entry designs can add named instances of available top-level components. Leaf Components support wire-port editing. Existing transaction and structured ports are read-only; wire ranges use <code>left:right</code> syntax.</p>
+          <p>Use Save to Spec to validate and save each draft. Options lists compatible Activities; Export target details (JSON) exports the saved target and its dependencies.</p>
         </div>
       </Modal>
     );
@@ -592,6 +593,10 @@ export default function EditorMenuBar({
   const [dialog, setDialog] = useState<DialogId>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [canCopy, setCanCopy] = useState(false);
+  const [canCut, setCanCut] = useState(false);
+  const [canPaste, setCanPaste] = useState(false);
+  const clipboardPending = useRef(false);
+  const textTarget = useRef<SpecTextEditTarget | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -652,23 +657,43 @@ export default function EditorMenuBar({
   });
 
   useEffect(() => {
-    const onSelectionChange = () => {
+    const update = () => {
+      const active = document.activeElement;
+      const captured = captureSpecTextEditTarget(active);
+      if (captured || !rootRef.current?.contains(active)) textTarget.current = captured;
+      const target = textTarget.current;
+      const editable = Boolean(target?.isCurrent());
       const selection = window.getSelection();
       const paper = document.querySelector(".spec-paper");
-      setCanCopy(Boolean(
-        selection
-        && !selection.isCollapsed
-        && selection.toString()
-        && paper
-        && selection.anchorNode
-        && selection.focusNode
-        && paper.contains(selection.anchorNode)
-        && paper.contains(selection.focusNode),
-      ));
+      const paperSelection = Boolean(selection && !selection.isCollapsed && selection.toString()
+        && Boolean(paper?.getClientRects().length) && paper?.contains(selection.anchorNode) && paper.contains(selection.focusNode));
+      setCanCopy(Boolean(editable && target?.selectedText) || paperSelection);
+      setCanCut(Boolean(editable && target?.selectedText));
+      setCanPaste(editable);
     };
-    document.addEventListener("selectionchange", onSelectionChange);
-    return () => document.removeEventListener("selectionchange", onSelectionChange);
+    const events = ["focusin", "selectionchange", "keyup", "pointerup", "input"];
+    events.forEach(event => document.addEventListener(event, update));
+    return () => events.forEach(event => document.removeEventListener(event, update));
   }, []);
+
+  const editClipboard = async (operation: "cut" | "paste") => {
+    const target = textTarget.current;
+    if (clipboardPending.current || !target?.isCurrent()) return;
+    clipboardPending.current = true;
+    try {
+      if (operation === "cut") {
+        await navigator.clipboard.writeText(target.selectedText);
+        target.replaceSelection("", "cut");
+      } else {
+        const text = await navigator.clipboard.readText();
+        if (text) target.replaceSelection(text, "paste");
+        else target.focus();
+      }
+    } catch (caught) {
+      target.focus();
+      onError(`Could not ${operation} text: ${caught instanceof Error ? caught.message : String(caught)}. You can use the keyboard shortcut in the field.`);
+    } finally { clipboardPending.current = false; }
+  };
 
   const activate = (callback: () => void) => () => {
     setOpenMenu(null);
@@ -677,7 +702,7 @@ export default function EditorMenuBar({
   };
 
   const copySelection = async () => {
-    const selection = window.getSelection()?.toString() ?? "";
+    const selection = textTarget.current?.isCurrent() ? textTarget.current.selectedText : window.getSelection()?.toString() ?? "";
     try {
       await navigator.clipboard.writeText(selection);
     } catch (caught) {
@@ -686,6 +711,7 @@ export default function EditorMenuBar({
   };
 
   const selectAll = () => {
+    if (textTarget.current?.isCurrent()) { textTarget.current.selectAll(); return; }
     const paper = document.querySelector(".spec-paper");
     const selection = window.getSelection();
     if (!paper || !selection) return;
@@ -735,19 +761,12 @@ export default function EditorMenuBar({
               >
                 Refresh From Disk
               </MenuAction>
-              <div className="editor-menu__separator" role="separator" />
-              <MenuAction disabled status="Automatic">Save</MenuAction>
             </TopMenu>
             <TopMenu id="edit" label="Edit" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-              <MenuAction disabled status="Coming later">Undo</MenuAction>
-              <MenuAction disabled status="Coming later">Redo</MenuAction>
-              <div className="editor-menu__separator" role="separator" />
-              <MenuAction disabled status="Use keyboard in fields">Cut</MenuAction>
+              <MenuAction disabled={!canCut} onActivate={activate(() => { void editClipboard("cut"); })}>Cut</MenuAction>
               <MenuAction disabled={!canCopy} onActivate={activate(() => { void copySelection(); })}>Copy</MenuAction>
-              <MenuAction disabled status="Use keyboard in fields">Paste</MenuAction>
+              <MenuAction disabled={!canPaste} onActivate={activate(() => { void editClipboard("paste"); })}>Paste</MenuAction>
               <MenuAction disabled={!snapshot} onActivate={activate(selectAll)}>Select All</MenuAction>
-              <div className="editor-menu__separator" role="separator" />
-              <MenuAction disabled status="Coming soon">Find</MenuAction>
             </TopMenu>
             <TopMenu id="circuit" label="Circuit" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               {designs.length > 0 && <div className="editor-menu__group" role="presentation">Designs</div>}
@@ -778,7 +797,7 @@ export default function EditorMenuBar({
             <TopMenu id="help" label="Help" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               <MenuAction onActivate={activate(() => setDialog("getting-started"))}>Getting Started</MenuAction>
               <MenuAction onActivate={activate(() => setDialog("shortcuts"))}>Keyboard Shortcuts</MenuAction>
-              <MenuAction onActivate={activate(openApiReference)}>API Reference</MenuAction>
+              <MenuAction onActivate={activate(openApiReference)}>Developer API Reference</MenuAction>
               <div className="editor-menu__separator" role="separator" />
               <MenuAction onActivate={activate(() => setDialog("about"))}>About spec2gds</MenuAction>
             </TopMenu>

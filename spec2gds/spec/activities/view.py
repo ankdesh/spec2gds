@@ -24,6 +24,9 @@ from spec2gds.spec.spec_format.models import (
 )
 from spec2gds.spec.spec_format.sections import SectionIR
 
+if typing.TYPE_CHECKING:
+    from spec2gds.spec.spec_format.document import DocumentProjection
+
 
 class EntitySummary(StrictModel):
     """Stable high-level identity shared by every supported source entity."""
@@ -193,6 +196,12 @@ class LowLevelSpecApi:
 
     def __init__(self, revision: SpecRevision) -> None:
         self._revision = revision
+
+    def document_projection(self) -> "DocumentProjection":
+        """Return complete source Section data without UI filtering or tool execution."""
+        from spec2gds.spec.spec_format.document import build_document_projection
+
+        return build_document_projection(self._revision, source_only=True).model_copy(deep=True)
 
     @property
     def manifest(self) -> SpecManifest:

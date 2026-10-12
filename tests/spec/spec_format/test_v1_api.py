@@ -97,6 +97,7 @@ def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> No
         assert endpoints["entity_actions"]("design", design_id)["actions"] == []
         catalog_ids = {item["activity_id"] for item in endpoints["activities"]()["activities"]}
         assert catalog_ids == {
+            "reference.spec_summary",
             "rtl.generate",
             "systemc.generate_at_skeleton",
             "systemc.generate_cycle_accurate",
@@ -276,6 +277,7 @@ def test_v1_api_reports_extension_load_diagnostics(tmp_path: Path, monkeypatch) 
     }
     catalog = endpoints["activities"]()
     assert {item["activity_id"] for item in catalog["activities"]} == {
+        "reference.spec_summary",
         "rtl.generate",
         "systemc.generate_at_skeleton",
         "systemc.generate_cycle_accurate",
@@ -1186,3 +1188,48 @@ def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_
     with pytest.raises(fastapi.HTTPException) as missing:
         schema("different-document", "document")
     assert missing.value.status_code == 409
+
+
+def test_diagnostic_activity_and_download_stay_bound_to_the_selected_spec(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
+    app = create_app()
+    endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    first_path = tmp_path / "first.spec"
+    second_path = tmp_path / "second.spec"
+    write_test_package(first_path)
+    write_test_package(second_path)
+    try:
+        first = endpoints["open_document"](OpenDocumentRequest(path=str(first_path)))
+        key = first["owner_document_key"]
+        target = first["components"][0]["ref"]
+        endpoints["open_document"](OpenDocumentRequest(path=str(second_path)))
+        catalog = endpoints["entity_activities"]("component", target["entity_id"], owner_document_key=key)
+        assert any(item["definition"]["activity_id"] == "reference.spec_summary" for item in catalog["activities"])
+        assert endpoints["entity_actions"]("component", target["entity_id"], owner_document_key=key)["actions"] == []
+        with pytest.raises(fastapi.HTTPException) as stale:
+            endpoints["launch_activity"]("component", target["entity_id"], "reference.spec_summary",
+                ActivityExecutionRequest(expected_source_revision_hash="sha256:" + "0" * 64), owner_document_key=key)
+        assert stale.value.status_code == 409
+        job = endpoints["launch_activity"]("component", target["entity_id"], "reference.spec_summary",
+            ActivityExecutionRequest(expected_source_revision_hash=first["source_revision_hash"]), owner_document_key=key)
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            job = endpoints["execution"](job["execution_id"], owner_document_key=key)
+            if job["status"] in {"succeeded", "failed", "cancelled"}:
+                break
+            time.sleep(0.02)
+        assert job["status"] == "succeeded", job
+        artifact_id = job["artifact_ids"][0]
+        with pytest.raises(fastapi.HTTPException) as absent:
+            endpoints["artifact_content"](artifact_id)
+        assert absent.value.status_code == 404
+        value = json.loads(endpoints["artifact_content"](artifact_id, owner_document_key=key).body)
+        assert value["target"] == target
+        assert value["source_revision_hash"] == first["source_revision_hash"]
+        reopened = endpoints["open_document"](OpenDocumentRequest(path=str(first_path)))
+        assert reopened["source_revision_hash"] == first["source_revision_hash"]
+        assert json.loads(endpoints["artifact_content"](artifact_id, owner_document_key=key).body) == value
+        second = endpoints["open_document"](OpenDocumentRequest(path=str(second_path)))
+        assert endpoints["executions"](owner_document_key=second["owner_document_key"])["executions"] == []
+    finally:
+        app.state.activity_jobs.close()

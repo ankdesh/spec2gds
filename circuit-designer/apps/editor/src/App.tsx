@@ -6,11 +6,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   A2UIDocumentSurface,
-  SPEC_HARDWARE_ACTION_EVENT,
-  SPEC_LAUNCH_ACTIVITY_EVENT,
   SPEC_OPEN_CIRCUIT_EVENT,
+  type SpecDocumentCommandController,
   type SpecDocumentEditController,
-  type SpecLaunchActivityEventDetail,
   type SpecOpenCircuitEventDetail,
 } from "@spec2gds/document-a2ui-react";
 import {
@@ -31,25 +29,12 @@ import {
   type SourceChangeEvent,
 } from "@spec2gds/document-core";
 
+import { publicFilenameStem } from "@spec2gds/circuit-core";
+
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
 import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
 import { browserRandomUuid } from "@spec2gds/circuit-app-react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
-
-type ActionDialogState = {
-  ref: EntityRef;
-  name?: string;
-  actions: EntityAction[];
-  loading: boolean;
-  runningId: string;
-} | null;
-
-type ActivityDialogState = {
-  ref: EntityRef;
-  activities: EntityActivity[];
-  loading: boolean;
-  runningId: string;
-} | null;
 
 function text(value: unknown, fallback = "—"): string {
   if (typeof value === "string") return value || fallback;
@@ -79,8 +64,8 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
-  const [activityDialog, setActivityDialog] = useState<ActivityDialogState>(null);
+  const commandPending = useRef(false);
+  const assistantPending = useRef(false);
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
   const [launchingAssistant, setLaunchingAssistant] = useState(false);
   const [externalChange, setExternalChange] = useState<SourceChangeEvent | null>(null);
@@ -220,6 +205,13 @@ export default function App() {
           else executions.push(execution);
           return { ...current, executions };
         });
+        if (["succeeded", "failed", "cancelled"].includes(text(execution.status))) {
+          void refreshActivity().catch(caught => {
+            if (epoch === documentEpoch.current && key === activeKey.current) {
+              setError(`The job finished, but its results could not refresh: ${caught instanceof Error ? caught.message : String(caught)}`);
+            }
+          });
+        }
       } catch {
         // Reconnect recovery fetches the authoritative execution list.
       }
@@ -302,40 +294,14 @@ export default function App() {
     return () => { source.close(); if (timer) clearTimeout(timer); };
   }, [client, loadView, snapshot?.owner_document_key]);
 
-  useEffect(() => {
-    const onEntityAction = (event: Event) => {
-      const ref = (event as CustomEvent<{ entityRef: EntityRef }>).detail.entityRef;
-      setActionDialog({ ref, actions: [], loading: true, runningId: "" });
-      client.listEntityActions(ref)
-        .then(({ actions }) => setActionDialog({
-          ref,
-          actions,
-          loading: false,
-          runningId: "",
-        }))
-        .catch((caught) => {
-          setActionDialog(null);
-          setError(caught instanceof Error ? caught.message : String(caught));
-        });
-    };
-    window.addEventListener(SPEC_HARDWARE_ACTION_EVENT, onEntityAction);
-    return () => window.removeEventListener(SPEC_HARDWARE_ACTION_EVENT, onEntityAction);
-  }, [client]);
-
-  const executeAction = async (action: EntityAction) => {
-    if (!actionDialog) return;
-    const ref = actionDialog.ref;
-    setActionDialog({ ...actionDialog, runningId: action.action_id });
-    try {
-      const execution = await client.executeEntityAction(ref, action.action_id);
-      await refreshActivity();
-      setActionDialog(null);
-      setNotice(`Action ${action.action_id} ${text(execution.status, "completed")}.`);
-      setView("activity");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-      setActionDialog({ ...actionDialog, runningId: "" });
-    }
+  const executeAction = async (ref: EntityRef, action: EntityAction) => {
+    const key = snapshot?.owner_document_key;
+    const execution = await client.executeEntityAction(ref, action.action_id);
+    if (activeKey.current !== key) return;
+    await refreshActivity();
+    if (activeKey.current !== key) return;
+    setNotice(`${action.title} ${text(execution.status, "completed")}.`);
+    setView("activity");
   };
 
   const reviewProposal = async (proposalId: string, decision: "accept" | "reject") => {
@@ -347,7 +313,7 @@ export default function App() {
         snapshot.source_revision_hash,
       );
       const nextSnapshot = record(result.snapshot) as unknown as DocumentSnapshot;
-      if (result.snapshot) {
+      if (result.snapshot && !editing.current) {
         setSnapshot(nextSnapshot);
         setBatch(await client.getA2UIBatch());
       }
@@ -407,41 +373,14 @@ export default function App() {
     return () => window.removeEventListener(SPEC_OPEN_CIRCUIT_EVENT, onOpenCircuit);
   }, [launchCircuitDesigner]);
 
-  useEffect(() => {
-    const onLaunchActivity = (event: Event) => {
-      const { entityRef } = (event as CustomEvent<SpecLaunchActivityEventDetail>).detail;
-      setActivityDialog({ ref: entityRef, activities: [], loading: true, runningId: "" });
-      void client.listEntityActivities(entityRef).then((response) => {
-        setActivityDialog((current) => current?.ref.entity_id === entityRef.entity_id
-          ? { ...current, activities: response.activities, loading: false }
-          : current);
-      }).catch((caught) => {
-        setActivityDialog(null);
-        setError(caught instanceof Error ? caught.message : String(caught));
-      });
-    };
-    window.addEventListener(SPEC_LAUNCH_ACTIVITY_EVENT, onLaunchActivity);
-    return () => window.removeEventListener(SPEC_LAUNCH_ACTIVITY_EVENT, onLaunchActivity);
-  }, [client]);
-
-  const executeActivity = async (item: EntityActivity) => {
-    if (!activityDialog || !snapshot) return;
-    const ref = activityDialog.ref;
-    setActivityDialog({ ...activityDialog, runningId: item.definition.activity_id });
-    try {
-      await client.launchEntityActivity(
-        ref,
-        item.definition.activity_id,
-        snapshot.source_revision_hash,
-      );
-      await refreshActivity();
-      setActivityDialog(null);
-      setNotice(`Queued ${item.definition.title} for ${referenceName(snapshot, ref)}.`);
-      setView("activity");
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-      setActivityDialog({ ...activityDialog, runningId: "" });
-    }
+  const executeActivity = async (ref: EntityRef, item: EntityActivity) => {
+    if (!snapshot) return;
+    await client.launchEntityActivity(ref, item.definition.activity_id, snapshot.source_revision_hash);
+    if (activeKey.current !== snapshot.owner_document_key) return;
+    await refreshActivity();
+    if (activeKey.current !== snapshot.owner_document_key) return;
+    setNotice(`Queued ${item.definition.title} for ${referenceName(snapshot, ref)}.`);
+    setView("activity");
   };
 
   const cancelActivity = async (executionId: string) => {
@@ -454,7 +393,8 @@ export default function App() {
   };
 
   const launchAssistant = async (target: EntityRef) => {
-    if (launchingAssistant) return;
+    if (assistantPending.current) return;
+    assistantPending.current = true;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
       pendingWindow.opener = null;
@@ -467,18 +407,19 @@ export default function App() {
       const launch = await client.launchAssistant(target);
       if (pendingWindow) pendingWindow.location.replace(launch.assistant_url);
       else window.open(launch.assistant_url, "_blank", "noopener,noreferrer");
-      setActionDialog(null);
       setNotice(`Opened a new AI Assistant conversation for ${referenceName(snapshot, target)}.`);
     } catch (caught) {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      assistantPending.current = false;
       setLaunchingAssistant(false);
     }
   };
 
   const launchDocumentAssistant = async () => {
-    if (launchingAssistant) return;
+    if (assistantPending.current) return;
+    assistantPending.current = true;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
       pendingWindow.opener = null;
@@ -500,6 +441,7 @@ export default function App() {
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
+      assistantPending.current = false;
       setLaunchingAssistant(false);
     }
   };
@@ -664,6 +606,39 @@ export default function App() {
     };
   }, [commitEditorOperations, snapshot]);
 
+  const commandController = useMemo<SpecDocumentCommandController | undefined>(() => {
+    if (!snapshot) return undefined;
+    const key = snapshot.owner_document_key;
+    const revision = snapshot.source_revision_hash;
+    const assertCurrent = (ref: EntityRef) => {
+      if (activeKey.current !== key || currentRevision.current !== revision || ref.document_id !== snapshot.document_id) {
+        throw new Error("The Spec changed. Open the current Section menu again.");
+      }
+    };
+    const run = async (ref: EntityRef, invoke: () => Promise<void>) => {
+      assertCurrent(ref);
+      if (commandPending.current) throw new Error("Wait for the current command to finish.");
+      commandPending.current = true;
+      try { await invoke(); }
+      catch (caught) {
+        if (activeKey.current === key) setError(caught instanceof Error ? caught.message : String(caught));
+        throw caught;
+      } finally { commandPending.current = false; }
+    };
+    return {
+      revisionKey: `${key}:${revision}`,
+      async loadCommands(ref) {
+        assertCurrent(ref);
+        const [actions, activities] = await Promise.all([client.listEntityActions(ref), client.listEntityActivities(ref)]);
+        assertCurrent(ref);
+        return { actions: actions.actions, activities: activities.activities };
+      },
+      explore: ref => run(ref, () => launchAssistant(ref)),
+      executeAction: (ref, action) => run(ref, () => executeAction(ref, action)),
+      launchActivity: (ref, item) => run(ref, () => executeActivity(ref, item)),
+    };
+  }, [client, snapshot?.owner_document_key, snapshot?.source_revision_hash]);
+
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
   const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
@@ -724,6 +699,7 @@ export default function App() {
           <A2UIDocumentSurface
             batch={batch}
             editController={editController}
+            commandController={commandController}
             onEditingChange={editingChanged}
           />
         </div>}
@@ -731,6 +707,7 @@ export default function App() {
           <ActivityView
             history={<AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />}
             activity={activity}
+            client={client}
             snapshot={snapshot}
             onCancel={cancelActivity}
             onRefresh={refreshActivity}
@@ -748,22 +725,7 @@ export default function App() {
         )}
       </main>
 
-      {actionDialog && (
-        <ActionDialog
-          state={{ ...actionDialog, name: referenceName(snapshot, actionDialog.ref) }}
-          onClose={() => setActionDialog(null)}
-          onExecute={executeAction}
-          onExplore={launchAssistant}
-          exploring={launchingAssistant}
-        />
-      )}
-      {activityDialog && (
-        <ActivityDialog
-          state={activityDialog}
-          onClose={() => setActivityDialog(null)}
-          onExecute={executeActivity}
-        />
-      )}
+
     </div>
   );
 }
@@ -850,6 +812,7 @@ function LoadingState() {
 function ActivityView({
   history,
   activity,
+  client,
   snapshot,
   onCancel,
   onRefresh,
@@ -857,6 +820,7 @@ function ActivityView({
 }: {
   history: React.ReactNode;
   activity: ActivityState;
+  client: SpecEditorHttpClient;
   snapshot: DocumentSnapshot | null;
   onCancel: (id: string) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -914,9 +878,13 @@ function ActivityView({
             const item = record(value);
             return (
               <article className="activity-item" key={text(item.artifact_id)}>
-                <strong>{text(item.role, "Artifact")}</strong>
+                <strong>{item.role === "spec.summary" && item.media_type === "application/json" ? "Target Section details" : text(item.role, "Artifact")}</strong>
                 <TechnicalDetails value={item} />
-                <p>{text(item.media_type)} · {text(item.byte_length, "0")} bytes</p>
+                <p>{text(item.media_type)} · {text(item.size, "0")} bytes</p>
+                {item.role === "spec.summary" && item.media_type === "application/json" && snapshot && <a
+                  href={client.artifactContentUrl(text(item.artifact_id), snapshot.owner_document_key)}
+                  download={`${publicFilenameStem(referenceName(snapshot, (item.source_entities as EntityRef[] | undefined)?.[0] ?? { document_id: snapshot.document_id, entity_kind: "component", entity_id: "target" }), "target")}-section-details.json`}
+                >Download JSON</a>}
               </article>
             );
           })}
@@ -970,62 +938,6 @@ function ActivityView({
   );
 }
 
-function ActivityDialog({
-  state,
-  onClose,
-  onExecute,
-}: {
-  state: NonNullable<ActivityDialogState>;
-  onClose: () => void;
-  onExecute: (activity: EntityActivity) => Promise<void>;
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        aria-labelledby="activity-dialog-title"
-        aria-modal="true"
-        className="action-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <p className="utility-kicker">{state.ref.entity_kind.replaceAll("_", " ")}</p>
-            <h2 id="activity-dialog-title">Launch activity</h2>
-          </div>
-          <button aria-label="Close" className="icon-button" onClick={onClose}>×</button>
-        </header>
-        {state.loading && <p>Checking Activity availability…</p>}
-        {!state.loading && !state.activities.length && <p>No Activities support this entity.</p>}
-        {state.activities.map((item) => {
-          const diagnostics = item.availability.diagnostics;
-          return (
-            <article className="action-option" key={item.definition.activity_id}>
-              <div>
-                <strong>{item.definition.title}</strong>
-                <small>Version {item.definition.version}</small>
-                <TechnicalDetails value={{ activity: item.definition.activity_id, version: item.definition.version }} />
-                <p>{item.definition.description}</p>
-                {diagnostics.map((diagnostic, index) => (
-                  <p className={item.availability.available ? "activity-warning" : "diagnostic"} key={index}>
-                    {diagnostic}
-                  </p>
-                ))}
-              </div>
-              <button
-                disabled={!item.availability.available || Boolean(state.runningId)}
-                onClick={() => void onExecute(item)}
-              >
-                {state.runningId === item.definition.activity_id ? "Queueing…" : "Run"}
-              </button>
-            </article>
-          );
-        })}
-      </section>
-    </div>
-  );
-}
-
 function UtilityPanel({
   title,
   count,
@@ -1073,70 +985,6 @@ function DiagnosticsView({
         {artifacts.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
         {!artifacts.length && <p className="diagnostic diagnostic--ok">No artifact diagnostics.</p>}
       </UtilityPanel>
-    </div>
-  );
-}
-
-function ActionDialog({
-  state,
-  onClose,
-  onExecute,
-  onExplore,
-  exploring,
-}: {
-  state: NonNullable<ActionDialogState>;
-  onClose: () => void;
-  onExecute: (action: EntityAction) => Promise<void>;
-  onExplore: (target: EntityRef) => Promise<void>;
-  exploring: boolean;
-}) {
-  return (
-    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
-        aria-labelledby="action-dialog-title"
-        aria-modal="true"
-        className="action-dialog"
-        role="dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header>
-          <div>
-            <p className="utility-kicker">{state.ref.entity_kind.replaceAll("_", " ")}</p>
-            <h2 id="action-dialog-title">Actions for {state.name || state.ref.entity_kind.replaceAll("_", " ")}</h2>
-          </div>
-          <button aria-label="Close" className="icon-button" onClick={onClose}>×</button>
-        </header>
-        <article className="action-option action-option--assistant">
-          <div>
-            <strong>Explore with AI Assistant</strong>
-            <small>Creates a new conversation bound to this Component or Design</small>
-            <p>Discuss ideas first, then request a typed proposal when ready.</p>
-          </div>
-          <button
-            disabled={exploring || Boolean(state.runningId)}
-            onClick={() => void onExplore(state.ref)}
-          >
-            {exploring ? "Opening…" : "Explore"}
-          </button>
-        </article>
-        {state.loading && <p>Checking available actions…</p>}
-        {!state.loading && !state.actions.length && <p>No actions target this Component or Design.</p>}
-        {state.actions.map((action) => (
-          <article className="action-option" key={action.action_id}>
-            <div>
-              <strong>{action.title}</strong>
-              <small>{action.action_id} · v{action.version}</small>
-              <p>Produces: {action.produced_artifact_roles.join(", ") || "review proposal"}</p>
-            </div>
-            <button
-              disabled={Boolean(state.runningId)}
-              onClick={() => onExecute(action)}
-            >
-              {state.runningId === action.action_id ? "Executing…" : "Execute"}
-            </button>
-          </article>
-        ))}
-      </section>
     </div>
   );
 }

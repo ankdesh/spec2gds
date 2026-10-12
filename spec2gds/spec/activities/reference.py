@@ -29,40 +29,61 @@ class SummaryReport(pydantic.BaseModel):
 
 @activity(
     activity_id="reference.spec_summary",
-    version="1.0.0",
-    title="Specification summary",
-    description="Create a deterministic text summary using the high-level Spec API.",
-    scopes=ActivityScopes(document=True, entity_kinds=("component", "design")),
+    version="2.0.0",
+    title="Export target details (JSON)",
+    description="Export all saved Section details for the selected target and its dependencies as diagnostic JSON.",
+    scopes=ActivityScopes(entity_kinds=("component", "design")),
     report_model=SummaryReport,
     artifact_roles=("spec.summary",),
 )
 def specification_summary(context: ActivityContext) -> ActivityResult:
-    """Demonstrate generic entity and narrative queries without concrete IR access."""
+    """Export complete source Section data through the public read-only SDK."""
     context.cancellation.raise_if_cancelled()
-    components = context.spec.high.entities(kind="component").all()
-    designs = context.spec.high.entities(kind="design").all()
-    text_blocks = context.spec.high.text.all().all()
-    lines = [
-        f"Specification: {context.spec.high.document['title'] or context.spec.high.document['document_id']}",
-        f"Source revision: {context.spec.high.document['source_revision_hash']}",
-        f"Components: {len(components)}",
-        *[f"- {item.name} ({item.vlnv})" for item in components],
-        f"Designs: {len(designs)}",
-        *[f"- {item.name} ({item.vlnv})" for item in designs],
-        f"Narrative blocks: {len(text_blocks)}",
-    ]
+    if context.target is None:
+        raise ValueError("Select a Component or Design to export.")
+    projection = context.spec.low.document_projection()
+    closure = context.spec.low.dependencies(context.target)
+    included = set(closure)
+    sections = [section.model_dump(mode="json") for section in projection.sections
+                if section.entity_ref in included]
+    # Preserve full nested blocks. Include shared notes that link to the closure.
+    def linked(block: dict) -> bool:
+        refs = [*block.get("entity_refs", []),
+                *(inline.get("entity_ref") for inline in block.get("inlines", []) if inline.get("entity_ref"))]
+        return any(any(ref == item.model_dump(mode="json") for item in closure) for ref in refs) or any(
+            linked(child) for child in block.get("children", []))
+
+    narrative = [block for section in projection.sections if section.entity_ref is None
+                 for block in section.narrative if linked(block)]
+    def block_count(blocks: list[dict]) -> int:
+        return sum(1 + block_count(block.get("children", [])) for block in blocks)
+
+    value = {
+        "schema_version": "spec2gds.section-diagnostics.v1",
+        "snapshot_id": context.snapshot.snapshot_id,
+        "document_id": projection.document_id,
+        "source_revision_hash": projection.source_revision_hash,
+        "target": context.target.model_dump(mode="json"),
+        "dependency_closure": [item.model_dump(mode="json") for item in closure],
+        "sections": sections,
+        "linked_narrative": narrative,
+    }
+    context.cancellation.raise_if_cancelled()
+    from spec2gds.spec.spec_format.naming import filename_stem
+    target = context.spec.high.entity(context.target)
     artifact = context.outputs.add_text(
         role="spec.summary",
-        name="spec-summary.txt",
-        text="\n".join(lines) + "\n",
-        source_entities=(context.target,) if context.target else (),
+        name=f"{filename_stem(target.display_name or target.name, 'target')}-section-details.json",
+        text=json.dumps(value, ensure_ascii=False, indent=2) + "\n",
+        media_type="application/json",
+        source_entities=(context.target,),
     )
     return ActivityResult(
-        summary=f"Summarized {len(components)} components and {len(designs)} designs.",
+        summary=f"Exported {len(sections)} source Sections for {target.display_name or target.name} and its dependencies.",
         report=SummaryReport(
-            component_count=len(components),
-            design_count=len(designs),
-            narrative_block_count=len(text_blocks),
+            component_count=sum(item.entity_kind == "component" for item in closure),
+            design_count=sum(item.entity_kind == "design" for item in closure),
+            narrative_block_count=sum(block_count(section["narrative"]) for section in sections) + block_count(narrative),
         ).model_dump(mode="json"),
         artifacts=(artifact,),
     )

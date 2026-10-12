@@ -38,6 +38,8 @@ import type {
   ComponentInstanceInput,
   ComponentPortInput,
   ComponentPortUpdateInput,
+  EntityAction,
+  EntityActivity,
   DocumentCell,
   DocumentSectionData,
   DocumentTable,
@@ -74,6 +76,16 @@ export interface SpecDocumentEditController {
   deleteEntitySection(ref: EntityRef, sectionId?: string): Promise<void>;
   portEditingAvailability(ref: EntityRef): { enabled: boolean; reason: string };
 }
+
+export interface SpecDocumentCommandController {
+  revisionKey: string;
+  loadCommands(ref: EntityRef): Promise<{ actions: EntityAction[]; activities: EntityActivity[] }>;
+  explore(ref: EntityRef): Promise<void>;
+  executeAction(ref: EntityRef, action: EntityAction): Promise<void>;
+  launchActivity(ref: EntityRef, activity: EntityActivity): Promise<void>;
+}
+
+const CommandControllerContext = createContext<SpecDocumentCommandController | undefined>(undefined);
 
 export interface ComponentInstanceOption {
   label: string;
@@ -207,10 +219,6 @@ function renderChildren(
     }
     return null;
   });
-}
-
-function shortHash(value: string): string {
-  return value.length > 12 ? `${value.slice(0, 12)}…` : value;
 }
 
 function DocumentContents({ entries }: { entries: TocEntry[] }) {
@@ -366,10 +374,7 @@ const SpecDocument = createComponentImplementation(
               </div>
             )}
             <p>{props.summary}</p>
-            <details className="spec-document-details"><summary>Technical details</summary><dl className="spec-toc__meta">
-              <div><dt>Document</dt><dd>{props.documentId}</dd></div>
-              <div title={props.sourceRevisionHash}><dt>Revision</dt><dd><code>{shortHash(props.sourceRevisionHash)}</code></dd></div>
-            </dl><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify({ document_id: props.documentId, revision: props.sourceRevisionHash }))}>Copy identifiers</button></details>
+
           </header>
           {renderChildren(props.children, buildChild)}
         </article>
@@ -378,20 +383,8 @@ const SpecDocument = createComponentImplementation(
   },
 );
 
-function dispatchEntityAction(entityRef: EntityRef): void {
-  window.dispatchEvent(new CustomEvent(SPEC_HARDWARE_ACTION_EVENT, {
-    detail: { entityRef },
-  }));
-}
-
 function dispatchOpenCircuit(entityRef: EntityRef): void {
   window.dispatchEvent(new CustomEvent<SpecOpenCircuitEventDetail>(SPEC_OPEN_CIRCUIT_EVENT, {
-    detail: { entityRef },
-  }));
-}
-
-function dispatchLaunchActivity(entityRef: EntityRef): void {
-  window.dispatchEvent(new CustomEvent<SpecLaunchActivityEventDetail>(SPEC_LAUNCH_ACTIVITY_EVENT, {
     detail: { entityRef },
   }));
 }
@@ -418,6 +411,13 @@ function SectionOptionsMenu({
   portAvailability?: { enabled: boolean; reason: string };
 }) {
   const [open, setOpen] = useState(false);
+  const controller = useContext(CommandControllerContext);
+  const [commands, setCommands] = useState<{ actions: EntityAction[]; activities: EntityActivity[] }>({ actions: [], activities: [] });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [menuPlacement, setMenuPlacement] = useState({ above: false, height: 400 });
+  const pending = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuId = `${section.section_id}-options-menu`;
@@ -459,6 +459,48 @@ function SectionOptionsMenu({
     const firstItem = containerRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']:not(:disabled)");
     firstItem?.focus();
   }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const place = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const below = window.innerHeight - rect.bottom - 16;
+      const above = rect.top - 16;
+      const useAbove = below < 220 && above > below;
+      setMenuPlacement({ above: useAbove, height: Math.max(80, useAbove ? above : below) });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open]);
+
+  useEffect(() => {
+    let current = true;
+    setCommands({ actions: [], activities: [] });
+    setError("");
+    if (!open || !controller || !section.entity_ref) { setLoading(false); return; }
+    setLoading(true);
+    void controller.loadCommands(section.entity_ref).then(value => {
+      if (current) setCommands(value);
+    }).catch(caught => {
+      if (current) setError(caught instanceof Error ? caught.message : String(caught));
+    }).finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, [open, controller, section.entity_ref?.entity_kind, section.entity_ref?.entity_id]);
+
+  const invoke = async (run: () => Promise<void>) => {
+    if (pending.current) return;
+    pending.current = true;
+    setBusy(true);
+    setError("");
+    try { await run(); close(true); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { pending.current = false; setBusy(false); }
+  };
+  const hasOptions = Boolean(onCreate || onRename || onEditDetails || onAddInstance || onAddPort
+    || onAddSystemVerilog || circuitRef || (section.entity_ref && controller)
+    || commands.actions.length || commands.activities.length);
 
   const onMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "Escape") {
@@ -505,7 +547,8 @@ function SectionOptionsMenu({
       {open && (
         <div
           aria-label={`Options for ${section.title}`}
-          className="spec-options-menu"
+          className={`spec-options-menu${menuPlacement.above ? " spec-options-menu--above" : ""}`}
+          style={{ maxHeight: menuPlacement.height }}
           id={menuId}
           onKeyDown={onMenuKeyDown}
           role="menu"
@@ -573,7 +616,7 @@ function SectionOptionsMenu({
               {!instanceAvailability?.enabled && <small>No components</small>}
             </button>
           )}
-          {onAddPort && (["wire", "transactional", "structured"] as const).map((family) => (
+          {onAddPort && (["wire"] as const).map((family) => (
             <button
               disabled={!portAvailability?.enabled}
               key={family}
@@ -598,7 +641,7 @@ function SectionOptionsMenu({
               role="menuitem"
               type="button"
             >
-              Add section → SystemVerilog
+              Add SystemVerilog section…
             </button>
           )}
           {circuitRef && (
@@ -610,33 +653,34 @@ function SectionOptionsMenu({
               role="menuitem"
               type="button"
             >
-              Open circuit
+              <span>Open in Circuit Designer</span>
+              {section.entity_ref?.entity_kind === "component" && section.eyebrow !== "Composite component" && <small>Read-only preview</small>}
             </button>
           )}
-          {section.entity_ref && (
-            <button
-              onClick={() => {
-                close(true);
-                dispatchLaunchActivity(section.entity_ref as EntityRef);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              Launch activity…
+          {section.entity_ref && controller && (
+            <button role="menuitem" type="button" disabled={busy} onClick={() => void invoke(() => controller.explore(section.entity_ref!))}>
+              Explore with AI Assistant
             </button>
           )}
-          {section.entity_ref && (
-            <button
-              onClick={() => {
-                close(true);
-                dispatchEntityAction(section.entity_ref as EntityRef);
-              }}
-              role="menuitem"
-              type="button"
-            >
-              More actions…
+          {commands.actions.map(action => (
+            <button key={action.action_id} role="menuitem" type="button" disabled={busy}
+              onClick={() => void invoke(() => controller!.executeAction(section.entity_ref!, action))}>
+              {action.title}
             </button>
-          )}
+          ))}
+          {commands.activities.map(item => (
+            <button key={item.definition.activity_id} role="menuitem" type="button"
+              disabled={busy || !item.availability.available}
+              title={[item.definition.description, ...item.availability.diagnostics].join("\n")}
+              onClick={() => void invoke(() => controller!.launchActivity(section.entity_ref!, item))}>
+              <span>{item.definition.title}</span>
+              {!!item.availability.diagnostics.length && <small>{item.availability.diagnostics.join("; ")}</small>}
+            </button>
+          ))}
+          {loading && <button role="menuitem" type="button" disabled>Checking available commands…</button>}
+          {error && <p className="spec-edit-error" role="alert">{error}</p>}
+          {!loading && !hasOptions && <button role="menuitem" type="button" disabled>No options available</button>}
+
         </div>
       )}
     </div>
@@ -698,8 +742,6 @@ type SectionEditMode = ""
   | "rename"
   | "metadata"
   | "add-wire-port"
-  | "add-transactional-port"
-  | "add-structured-port"
   | "add-sv";
 
 interface SectionEditState {
@@ -801,7 +843,7 @@ function ComponentInstanceForm({ state }: { state: SectionEditState }) {
     const trimmedName = name.trim();
     if (!design || !state.controller) return;
     if (!trimmedName) {
-      setError("Instance name is required.");
+      setError("Instance ID is required.");
       return;
     }
     if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(trimmedName)) {
@@ -834,7 +876,7 @@ function ComponentInstanceForm({ state }: { state: SectionEditState }) {
   return (
     <form className="spec-inline-editor spec-instance-editor" onSubmit={submit}>
       <div>
-        <label htmlFor={`${state.editorId}-name`}>Instance name</label>
+        <label htmlFor={`${state.editorId}-name`}>Instance ID</label>
         <input
           autoComplete="off"
           id={`${state.editorId}-name`}
@@ -1063,7 +1105,7 @@ const SpecSection = createComponentImplementation(
                 ? () => begin("add-component-instance")
                 : undefined}
               onAddPort={section.entity_ref?.entity_kind === "component" && coordinator.controller
-                ? (family) => begin(`add-${family}-port`)
+                ? () => begin("add-wire-port")
                 : undefined}
               onAddSystemVerilog={coordinator.controller
                 && (section.available_section_types ?? []).some((item) => item.section_type === "sv")
@@ -1088,7 +1130,6 @@ const SpecSection = createComponentImplementation(
             })}
             finish={cancel}
           />}
-          {section.entity_ref && <details><summary>Technical details</summary><pre>{JSON.stringify({ reference: section.entity_ref, identity: section.facts.filter(fact => HIDDEN_IDENTITY_FACTS.has(fact.label)) }, null, 2)}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(JSON.stringify(section.entity_ref))}>Copy reference</button></details>}
           {missingLeafRtl && (
             <p className="spec-implementation-status">RTL implementation missing. Generation produces a compile-safe scaffold; functional behavior is unimplemented.</p>
           )}
@@ -1253,7 +1294,7 @@ export function DocumentTableView({
     return (
       <section className="spec-ports-empty" aria-labelledby={`${table.table_id}-title`}>
         <h4 id={`${table.table_id}-title`}>Ports</h4>
-        <p>No wire, transactional, or structured ports have been defined.</p>
+        <p>No ports have been defined.</p>
       </section>
     );
   }
@@ -1315,8 +1356,6 @@ function titleCase(value: string): string {
 
 const PORT_FAMILY_BY_MODE: Partial<Record<SectionEditMode, PortFamily>> = {
   "add-wire-port": "wire",
-  "add-transactional-port": "transactional",
-  "add-structured-port": "structured",
 };
 
 function portDefinition(row: DocumentTable["rows"][number], family: PortFamily): React.ReactNode {
@@ -1355,9 +1394,9 @@ function ComponentPortsTable({
         <table>
           <thead>
             <tr>
-              <th scope="col">Name</th>
+              <th scope="col">ID</th>
               <th scope="col">Family</th>
-              <th scope="col">Display name</th>
+              <th scope="col">Port name (optional)</th>
               <th scope="col">Definition</th>
               <th scope="col">Description</th>
               <th scope="col"><span className="spec-visually-hidden">Actions</span></th>
@@ -1379,7 +1418,7 @@ function ComponentPortsTable({
               />
             ))}
             {!table.rows.length && !addFamily && (
-              <tr><td className="spec-table-empty" colSpan={6}>No wire, transactional, or structured ports have been defined.</td></tr>
+              <tr><td className="spec-table-empty" colSpan={6}>No ports have been defined.</td></tr>
             )}
           </tbody>
         </table>
@@ -1406,7 +1445,7 @@ function ComponentPortRow({
   const editorId = `${sectionEdit?.section.section_id ?? table.table_id}-port-${name}`;
   const family = rowText(row, "family") as PortFamily;
   const editingSupported = Boolean(sectionEdit?.controller);
-  const canEdit = Boolean(sectionEdit?.portAvailability.enabled && sectionEdit.controller);
+  const canEdit = Boolean(family === "wire" && sectionEdit?.portAvailability.enabled && sectionEdit.controller);
   if (editing && sectionEdit) {
     return (
       <tr className="spec-port-editor-row">
@@ -1448,7 +1487,7 @@ function ComponentPortRow({
             Edit
           </button>
         ) : editingSupported ? (
-          <small title={sectionEdit?.portAvailability.reason}>
+          <small title={family !== "wire" ? "This port family is read-only in the Spec Editor." : sectionEdit?.portAvailability.reason}>
             Read-only
           </small>
         ) : null}
@@ -1499,7 +1538,7 @@ function PortEditorCard({
   const save = async () => {
     if (!sectionEdit.controller || !ref) return;
     if (!name.trim()) {
-      setError("Port name is required.");
+      setError("Port ID is required.");
       return;
     }
     if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name.trim())) {
@@ -1563,7 +1602,7 @@ function PortEditorCard({
       <div className="spec-port-editor-grid">
         {adding && (
           <div>
-            <label htmlFor={`${idPrefix}-name`}>Port name</label>
+            <label htmlFor={`${idPrefix}-name`}>Port ID</label>
             <input
               autoComplete="off"
               id={`${idPrefix}-name`}
@@ -1574,7 +1613,7 @@ function PortEditorCard({
           </div>
         )}
         <div>
-          <label htmlFor={`${idPrefix}-display-name`}>Display name</label>
+          <label htmlFor={`${idPrefix}-display-name`}>Port name (optional)</label>
           <input id={`${idPrefix}-display-name`} onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
         </div>
         {family !== "transactional" && (
@@ -1850,7 +1889,6 @@ const LiveView = createComponentImplementation(
         <div>
           <NarrativeExploreButton block={block} documentId={props.documentId} />
           <strong>{block.text || "Live design view"}</strong>
-          <details><summary>Technical details</summary><p>Renderer: <code>{block.renderer_id || "default"}</code></p></details>
           {block.entity_refs.map((ref) => (
             <a
               href={`#${ref.entity_kind.replaceAll("_", "-")}-${ref.entity_id}`}
@@ -1866,19 +1904,16 @@ const LiveView = createComponentImplementation(
 );
 
 function NarrativeExploreButton({ block, documentId }: { block: NarrativeBlockData; documentId: string }) {
-  return (
-    <button
-      className="spec-narrative-action"
-      type="button"
-      onClick={() => dispatchEntityAction({
-        document_id: documentId,
-        entity_id: block.block_id,
-        entity_kind: "narrative_block",
-      })}
-    >
-      Actions
-    </button>
-  );
+  const controller = useContext(CommandControllerContext);
+  const [error, setError] = useState("");
+  if (!controller) return null;
+  return <>
+    <button className="spec-narrative-action" type="button" onClick={() => {
+      void controller.explore({ document_id: documentId, entity_id: block.block_id, entity_kind: "narrative_block" })
+        .catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
+    }}>Explore with AI Assistant</button>
+    {error && <p className="spec-edit-error" role="alert">{error}</p>}
+  </>;
 }
 
 export const specDocumentCatalog = new Catalog(
@@ -1901,10 +1936,12 @@ export function createDocumentMessageProcessor(batch: A2UIDocumentBatch) {
 export function A2UIDocumentSurface({
   batch,
   editController,
+  commandController,
   onEditingChange,
 }: {
   batch: A2UIDocumentBatch;
   editController?: SpecDocumentEditController;
+  commandController?: SpecDocumentCommandController;
   onEditingChange?: (editing: boolean) => void;
 }) {
   const processor = useMemo(() => createDocumentMessageProcessor(batch), [batch]);
@@ -1918,7 +1955,11 @@ export function A2UIDocumentSurface({
       onEditingChange={onEditingChange}
       resetKey={batch.source_revision_hash}
     >
-      <A2uiSurface surface={surface} />
+      <CommandControllerContext.Provider value={commandController}>
+        <A2uiSurface surface={surface} />
+      </CommandControllerContext.Provider>
     </EditCoordinatorProvider>
   );
 }
+
+export { captureSpecTextEditTarget, type SpecTextEditTarget } from "./text-editing";

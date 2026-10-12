@@ -89,7 +89,7 @@ uv run python scripts/generate_rtl_examples.py --update
 ### Run RTL Generation in Spec Editor
 1. Open a specification in Spec Editor.
 2. Select the top-level Design or Component.
-3. Click **Options → More actions… → Launch activity… → Generate RTL**.
+3. Click **Options → Generate RTL**.
 4. The Activity executes and publishes output files into the generated project directory.
 
 ### Compile and Verify with Verilator

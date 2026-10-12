@@ -24,7 +24,8 @@ Spec Editor provides a structured engineering interface for hardware specificati
 - Tables support horizontal scrolling on narrow screens without hiding action buttons.
 - Editing a port opens an inline draft directly inside the table row.
 - Click **Save to Spec** to commit a draft, or click **Cancel** to discard edits.
-- Technical details and Section identifiers remain available in collapsible panels.
+- The document view does not show Technical details panels. Job history, artifact records, and reviews retain their diagnostic details.
+- Existing transaction and structured ports are read-only in Spec Editor. Create and edit wire ports from the Component Options menu.
 
 ---
 
@@ -44,17 +45,17 @@ flowchart LR
 - **AI Assistant Button**:
   - When a specification is open: Opens an Assistant conversation permanently bound to the active document.
   - When no specification is open: Opens an unbound conversation without attaching source context.
-- **Component / Design Menus**: Use **More actions → Explore with AI Assistant** to open a conversation focused on a single entity.
+- **Component / Design Menus**: Use **Options → Explore with AI Assistant** to open a conversation focused on a single entity.
 
 ### Menu Operations
 - **File Menu**:
   - **New Spec (`Ctrl+N` / `Cmd+N`)**: Prompts for a human-readable title and server path, then initializes an empty `.spec` file.
   - **Open Spec (`Ctrl+O` / `Cmd+O`)**: Opens an existing `.spec` package from the host filesystem.
   - **Refresh From Disk**: Reloads the active package from disk, discarding unsaved UI state.
-  - Valid transactions save automatically; persistent **Save** is therefore disabled during normal operation.
+  - Use **Save to Spec** in each draft to validate and save the change. File has no separate Save command.
 - **Edit Menu**:
   - Supports standard clipboard copy for text and tables.
-  - Field inputs support native Cut, Copy, and Paste shortcuts.
+  - Cut and Paste work in editable text fields and the SystemVerilog editor. Menu actions retain the field selection; native keyboard shortcuts remain available.
 - **Circuit Menu**:
   - Lists launchable entry designs, sub-designs, and leaf components.
   - Selecting an item opens the projected topology in Circuit Designer.
@@ -167,3 +168,27 @@ bash scripts/serve-all.sh start --require-designer-approval
 - If another client or tool modifies the file first, the hashes do not match.
 - The service rejects the stale transaction with HTTP 409 Conflict.
 - The client must read the fresh context before submitting a new candidate.
+
+## Diagnostic sample Activity
+
+Use **Options → Export target details (JSON)** on a Component or Design. This runs
+the sample `reference.spec_summary` Activity, version `2.0.0`, against the saved
+Spec. Unsaved drafts are excluded.
+
+The JSON file contains all source Sections for the selected target and its
+dependencies. This includes metadata, nested narrative, tables, protocol data,
+and SystemVerilog content. The export does not run RTL validation or change source.
+
+Open the Activity view and use **Download JSON** on **Target Section details**.
+The artifact role is `spec.summary` and remains visible in Technical details.
+The export records the snapshot and source revision. Downloads remain bound to
+the same Spec.
+
+Options lists each compatible Activity directly. It keeps availability warnings
+and disabled reasons. An empty menu shows **No options available**.
+
+### Release validation note
+
+The release checks require fast, scoped integration, and regression profiles.
+The existing `docs/testing-strategy.md` contains conflict markers. Resolve that
+documentation issue before release; a test pass does not resolve it.

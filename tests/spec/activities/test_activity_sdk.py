@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 
 import pydantic
@@ -100,7 +101,10 @@ def test_reference_extensions_register_invoke_and_render() -> None:
 
     assert result.report["component_count"] == 3
     assert result.artifacts[0].role == "spec.summary"
-    assert b"Components: 3" in result.artifacts[0].data
+    exported = json.loads(result.artifacts[0].data)
+    assert exported["schema_version"] == "spec2gds.section-diagnostics.v1"
+    assert exported["target"] == snapshot.target.model_dump(mode="json")
+    assert result.artifacts[0].media_type == "application/json"
     assert rendered.snapshot_id == snapshot.manifest.snapshot_id
     assert "DEPENDENCIES" in rendered.text
 
@@ -158,3 +162,77 @@ def test_result_validation_rejects_undeclared_artifact_roles() -> None:
     registry.register_activity(bad_role)
     with pytest.raises(ValueError, match="undeclared artifact role"):
         invoke_activity(registry, "tests.bad_role", ActivitySnapshot.create(revision()))
+
+
+def test_diagnostic_export_retains_complete_source_sections_and_filters_targets(monkeypatch) -> None:
+    from spec2gds.spec.spec_format import document
+    from spec2gds.spec.spec_format.models import NarrativeBlock
+    from spec2gds.spec.spec_format.sections import upsert_systemverilog_section
+    from spec2gds.spec.spec_format.transactions import (
+        AddComponentPort, SpecEditTransaction, StructuredPortInput, TransactionalPortInput,
+    )
+
+    package = build_test_package()
+    source = SpecRevision.from_package(package)
+    leaf = source.by_vlnv("component", "spec2gds.example:demo:leaf:1.0")
+    result = SpecEditTransaction(source.source_revision_hash, (
+        AddComponentPort(leaf.ref, "service", TransactionalPortInput("provides", kind="custom", custom_kind="service_type", bus_width="DATA_WIDTH")),
+        AddComponentPort(leaf.ref, "bundle", StructuredPortInput("out")),
+    )).apply(source)
+    assert result.succeeded
+    package = result.revision.to_package()
+    upsert_systemverilog_section(package, leaf.ref, "// Diagnostic source\nassign irq = irq_in;\n")
+    package.narrative.blocks.append(NarrativeBlock(
+        block_id="export_nested", type="section", text="Target notes", entity_refs=[leaf.ref],
+        children=[NarrativeBlock(block_id="export_nested_child", type="paragraph", text="Nested detail")],
+    ))
+    source = SpecRevision.from_package(package)
+    before = source.to_package().to_bytes()
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Diagnostic export must not invoke validation or Circuit projection")
+
+    monkeypatch.setattr(document, "validate_revision_sections", forbidden)
+    monkeypatch.setattr(document, "project_source_to_circuit", forbidden)
+    registry = SpecExtensionRegistry()
+    register_extensions(registry)
+    for entity in (*source.components, *source.designs):
+        snapshot = ActivitySnapshot.create(source, entity.ref)
+        first = invoke_activity(registry, "reference.spec_summary", snapshot)
+        second = invoke_activity(registry, "reference.spec_summary", snapshot)
+        assert first.artifacts[0].data == second.artifacts[0].data
+        value = json.loads(first.artifacts[0].data)
+        closure = source.dependency_closure(entity.ref)
+        expected = {tuple(item.model_dump().values()) for item in closure}
+        assert {tuple(section["entity_ref"].values()) for section in value["sections"]} == expected
+        assert value["source_revision_hash"] == source.source_revision_hash
+        assert value["snapshot_id"] == snapshot.manifest.snapshot_id
+        assert "activity/" not in first.artifacts[0].data.decode()
+        if entity.ref == leaf.ref:
+            assert first.report["narrative_block_count"] == 2
+        if leaf.ref in closure:
+            exported_leaf = next(section for section in value["sections"] if section["entity_ref"]["entity_id"] == leaf.ref.entity_id)
+            assert any(section["payload"].get("content") == "// Diagnostic source\nassign irq = irq_in;\n" for section in exported_leaf["content_sections"])
+            expected_digest = source.entity_sections_for(leaf.ref, "sv")[0].source_sha256
+            assert any(section["payload"].get("source_sha256") == expected_digest for section in exported_leaf["content_sections"])
+            assert "Nested detail" in json.dumps(exported_leaf["narrative"])
+            ports = next(table for table in exported_leaf["tables"] if table["kind"] == "component_ports")
+            assert {row["cells"]["family"]["value"] for row in ports["rows"]} == {"wire", "transactional", "structured"}
+    full = SpecAccess(source).low.document_projection()
+    assert any(section.entity_ref and section.entity_ref.entity_kind == "bus_definition" for section in full.sections)
+    assert any(table.kind == "bus_interfaces" for section in full.sections for table in section.tables)
+    full.sections[0].title = "Changed returned copy"
+    assert SpecAccess(source).low.document_projection().sections[0].title == "Overview"
+    assert source.to_package().to_bytes() == before
+
+
+def test_diagnostic_export_honors_cancellation_before_publishing() -> None:
+    class Cancelled:
+        def raise_if_cancelled(self):
+            raise RuntimeError("Cancelled export")
+
+    registry = SpecExtensionRegistry()
+    register_extensions(registry)
+    source = revision()
+    with pytest.raises(RuntimeError, match="Cancelled export"):
+        invoke_activity(registry, "reference.spec_summary", ActivitySnapshot.create(source, source.components[0].ref), cancellation=Cancelled())

@@ -74,7 +74,7 @@ Timestamps and host paths are excluded to guarantee deterministic snapshot hashe
 The `ActivityContext` exposes two distinct read interfaces:
 
 ### High-Level API (`context.spec.high`)
-Use `context.spec.high` for general hardware analysis and LLM prompt rendering:
+Use `context.spec.high` for general hardware analysis and model context rendering:
 
 ```python
 # Query entities by kind
@@ -111,38 +111,57 @@ It never exposes raw XML or mutable write handles.
 
 ## 4. Define and Register an Activity
 
-Use the `@activity` decorator to register an Activity function:
+Use the public decorator and registration hook. Activities receive one immutable
+`ActivityContext`; they return a typed report and staged artifacts.
 
 ```python
 from pydantic import BaseModel
-from spec2gds.spec.activities import activity, ActivityContext, ActivityResult
+from spec2gds.spec.activities import activity, ActivityScopes, ActivityResult
 
-class LintParams(BaseModel):
-    strict: bool = True
+class CountReport(BaseModel):
+    count: int
 
 @activity(
-    id="hardware.lint",
-    title="Hardware Spec Linter",
-    description="Validates port conventions and naming rules.",
+    activity_id="example.count_components",
     version="1.0.0",
-    params_model=LintParams,
+    title="Count Components",
+    description="Count source Components in an immutable snapshot.",
+    scopes=ActivityScopes(document=True),
+    report_model=CountReport,
 )
-def run_linter(context: ActivityContext, params: LintParams) -> ActivityResult:
-    warnings = []
-    for component in context.spec.low.components:
-        if not component.ports:
-            warnings.append(f"Component {component.name} has no ports defined.")
-            
-    return ActivityResult(
-        summary=f"Lint completed with {len(warnings)} warnings.",
-        report_markdown="\n".join(f"- {w}" for w in warnings) if warnings else "Clean.",
-    )
+def count_components(context):
+    context.cancellation.raise_if_cancelled()
+    count = len(context.spec.high.entities(kind="component"))
+    return ActivityResult(summary=f"Found {count} Components.", report={"count": count})
+
+def register_extensions(registry):
+    registry.register_activity(count_components)
 ```
 
----
+## 5. Diagnostic export sample
 
-## 5. Execution Rules and Determinism
+The default `reference.spec_summary` Activity, version `2.0.0`, exports selected
+Component or Design details as JSON. Its display command is **Export target
+details (JSON)**.
 
-- **No Network / Process Side Effects**: Activities must be pure deterministic functions of their snapshot and inputs.
-- **Scratch Directory**: Use `context.scratch_dir` for temporary compiler files. Scratch files are deleted after execution.
-- **Artifact Publishing**: Save persistent outputs through `context.publish_artifact(name, data)`. Artifacts are stored in the `.spec` container sidecar.
+`context.spec.low.document_projection()` returns a defensive source projection.
+It includes all Section records and tables, including protocol data hidden from
+Spec Editor. It does not filter for editor visibility, add Circuit topology, or
+invoke RTL validation.
+
+The sample selects the target dependency closure and preserves Section order,
+nested narrative, source values, and SystemVerilog payloads. The artifact uses
+role `spec.summary` and media type `application/json`. Its schema is
+`spec2gds.section-diagnostics.v1`, with `snapshot_id`, `document_id`,
+`source_revision_hash`, `target`, `dependency_closure`, `sections`, and
+`linked_narrative`. Host paths, timestamps, and job history are excluded.
+
+## 6. Execution rules
+
+- Read source through `context.spec.high` and `context.spec.low`.
+- Check `context.cancellation.raise_if_cancelled()` before and during work.
+- Publish artifacts through `context.outputs.add_text`, `add_json`, or `add_bytes`.
+- Activities that need generated project files declare `requires_workspace_output`
+  and use the constrained `context.workspace` writer.
+- Return typed proposals for source changes. An Activity cannot approve its own
+  changes.

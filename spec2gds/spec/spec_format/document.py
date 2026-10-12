@@ -906,6 +906,7 @@ def _content_sections(
     root: etree._Element,
     *,
     port_count: int | None = None,
+    validate: bool = True,
 ) -> tuple[list[EntityContentSection], list[AvailableSectionType]]:
     """Project adapter-backed and persisted content in registry order."""
     values = [
@@ -938,14 +939,15 @@ def _content_sections(
         item.section_id: item for item in validate_revision_sections(
             revision, {item.section_id for item in persisted}
         )
-    }
+    } if validate else {}
     values.extend(EntityContentSection(
         section_id=item.section_id,
         section_type=item.section_type,
         type_version=item.type_version,
         title=item.title,
         parent=item.parent,
-        payload={"content": item.content, "media_type": item.media_type, "source_path": item.source_path},
+        payload={"content": item.content, "media_type": item.media_type, "source_path": item.source_path,
+                 **({"source_sha256": item.source_sha256} if not validate else {})},
         editable=SECTION_TYPES[item.section_type].editable,
         deletable=SECTION_TYPES[item.section_type].deletable,
         validation_status=typing.cast(typing.Any, validation[item.section_id].status) if item.section_id in validation else "unverified",
@@ -965,8 +967,10 @@ def _content_sections(
     return values, available
 
 
-def build_document_projection(revision: SpecRevision) -> DocumentProjection:
-    """Build the deterministic unified document from one validated revision."""
+def build_document_projection(
+    revision: SpecRevision, *, source_only: bool = False
+) -> DocumentProjection:
+    """Project source; source_only excludes UI filtering, topology and RTL lint."""
     roots = _document_roots(revision)
     def named_block(block: NarrativeBlock) -> dict[str, typing.Any]:
         value = block.model_dump(mode="json")
@@ -983,7 +987,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
                 labels[f"{ref.entity_kind}:{ref.entity_id}"] = {"name": "Unavailable reference", "anchor": ""}
         value["entity_labels"] = labels
         value["children"] = [named_block(child) for child in block.children]
-        if block.type == "live_view":
+        if block.type == "live_view" and not source_only:
             value["options"] = {**value["options"], "document_name": document_name(revision)}
         return value
     overview_narrative, attached, cross_cutting = _split_narrative(revision.narrative.blocks)
@@ -1015,13 +1019,13 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     ]
     for design in ordered_designs:
         root = roots[design.ref.entity_id]
-        content_sections, available_section_types = _content_sections(revision, design.ref, root)
+        content_sections, available_section_types = _content_sections(revision, design.ref, root, validate=not source_only)
         narrative = _topology_live_views(
             revision,
             design.ref,
             attached.pop(design.ref.entity_id, []),
             synthesize=True,
-        )
+        ) if not source_only else attached.pop(design.ref.entity_id, [])
         sections.append(DocumentSection(
             section_id=_anchor("design", design.ref.entity_id),
             title=entity_name(design),
@@ -1040,7 +1044,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
     for component in revision.components:
         root = roots[component.ref.entity_id]
         content_sections, available_section_types = _content_sections(
-            revision, component.ref, root, port_count=len(component.ports)
+            revision, component.ref, root, port_count=len(component.ports), validate=not source_only
         )
         facts = _identity_facts(root, component.vlnv)
         if component.ref.entity_id in composition:
@@ -1057,7 +1061,7 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
             component.ref,
             attached.pop(component.ref.entity_id, []),
             synthesize=False,
-        )
+        ) if not source_only else attached.pop(component.ref.entity_id, [])
         sections.append(DocumentSection(
             section_id=_anchor("component", component.ref.entity_id),
             title=entity_name(component),
@@ -1126,7 +1130,8 @@ def build_document_projection(revision: SpecRevision) -> DocumentProjection:
                 for cell in row.cells.values():
                     if cell.kind == "reference" and cell.reference_anchor:
                         cell.display_text = names_by_vlnv.get(str(cell.value), "Unavailable reference")
-    sections = _editor_sections(sections)
+    if not source_only:
+        sections = _editor_sections(sections)
 
     return DocumentProjection(
         document_id=revision.document_id,

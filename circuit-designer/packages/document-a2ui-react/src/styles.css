@@ -1069,9 +1069,6 @@
 .spec-cover > p { margin: 0; align-self: center; color: var(--spec-muted); font-size: 0.8125rem; }
 .spec-title-editor { grid-column: 1 / -1; margin: 0; }
 .spec-cover .spec-title-edit-button { margin: 0; }
-.spec-document-details { justify-self: end; font-size: 0.8125rem; }
-.spec-document-details[open] { grid-column: 1 / -1; justify-self: stretch; }
-.spec-document-details summary { min-height: 2.25rem; cursor: pointer; padding: 0.5rem; }
 .spec-toc__meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; font-size: 0.8125rem; }
 .spec-section__header { align-items: center; gap: 1rem; }
 .spec-section__header > div { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem 0.75rem; min-width: 0; }
@@ -1131,7 +1128,6 @@
   .spec-topology-card__actions button { flex: 1 1 auto; }
 }
 @media (max-width: 620px), (pointer: coarse) {
-  .spec-document-details summary { min-height: 2.75rem; }
 }
 @media print {
   .spec-document { display: block; max-width: none; padding: 0; }
@@ -1140,3 +1136,13 @@
   .spec-table-scroll { overflow: visible; }
   .spec-ports-table table { min-width: 0; }
 }
+
+.spec-options-menu {
+  max-width: min(34rem, calc(100vw - 2rem));
+  max-height: min(70vh, 42rem);
+  overflow-y: auto;
+}
+.spec-options-menu button { white-space: normal; }
+.spec-options-menu small { max-width: 16rem; }
+
+.spec-options-menu--above { top: auto; bottom: calc(100% + 0.35rem); }

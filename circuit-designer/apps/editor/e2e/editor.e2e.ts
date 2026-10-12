@@ -404,6 +404,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     activityExecutions: [],
     circuits: [],
     createdPaths: [],
+    artifacts: [] as Array<Record<string, unknown>>,
+    proposals: [] as Array<Record<string, unknown>>,
     createdTitles: [],
     openedPaths: [],
     transactions: [],
@@ -491,7 +493,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
       currentBatch.source_revision_hash = state.currentRevision;
       return json(path === "/documents/view" ? {
         snapshot: { ...snapshot, source_revision_hash: state.currentRevision, narrative: { ...snapshot.narrative, title: state.currentTitle } },
-        a2ui: currentBatch, activity: { executions: state.activityExecutions, artifacts: [], proposals: [], assistant_changes: [] },
+        a2ui: currentBatch, activity: { executions: state.activityExecutions, artifacts: state.artifacts, proposals: state.proposals, assistant_changes: [] },
         approval_policy: "automatic", event_cursor: state.transactions.length, source_revision_hash: state.currentRevision,
       } : currentBatch);
     }
@@ -510,8 +512,13 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
       return json({ committed: true, snapshot: { ...snapshot, source_revision_hash: state.currentRevision } });
     }
     if (path === "/executions") return json({ executions: state.activityExecutions });
-    if (path === "/artifacts") return json({ artifacts: [] });
-    if (path === "/proposals") return json({ proposals: [] });
+    if (path === "/artifacts") return json({ artifacts: state.artifacts });
+    if (path === "/proposals") return json({ proposals: state.proposals });
+    if (path === "/proposals/proposal_draft_review/accept") {
+      state.currentRevision = "sha256:reviewed-source";
+      state.proposals[0].review_status = "accepted";
+      return json({ snapshot: { ...snapshot, source_revision_hash: state.currentRevision } });
+    }
     if (path === "/assistant/changes") return json({ assistant_changes: [] });
     if (path === "/assistant/launch/document") {
       const body = request.postDataJSON() as { attach_active_document: boolean };
@@ -644,7 +651,7 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   expect(state.createdTitles).toEqual(["New editor specification"]);
 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Refresh From Disk" }).click();
   await expect.poll(() => state.openedPaths).toEqual([
     "/home/designer/specifications/Project Alpha/new-editor-specification.spec",
@@ -720,7 +727,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
 
   const timer = page.locator("#component-component_timer");
   await timer.locator(".spec-options-trigger").click();
-  await page.getByRole("menuitem", { name: "Add section → SystemVerilog" }).click();
+  await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
   const newEditor = timer.locator(".cm-content");
   await expect(newEditor).toBeVisible();
   await newEditor.fill("assign irq = 1'b0;\n");
@@ -810,7 +817,7 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   await card.getByText("1 unsupported item omitted from this preview").click();
   await expect(card.getByText("Interface connection: control_bus")).toBeVisible();
 
-  await card.getByRole("button", { name: "Open Circuit Designer" }).click();
+  await card.getByRole("button", { name: "Open in Circuit Designer" }).click();
   await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
 
   const firstImageUrl = await image.getAttribute("src");
@@ -860,7 +867,7 @@ test("adds an available top-level component instance to the entry design", async
 
   await options.click();
   await design.getByRole("menuitem", { name: "Add component instance…" }).click();
-  await design.getByLabel("Instance name").fill("timer0");
+  await design.getByLabel("Instance ID").fill("timer0");
   await expect(design.getByLabel("Component", { exact: true })).toContainText("Timer");
   await design.getByLabel("Component", { exact: true }).selectOption("acme:blocks:Timer:1.0");
   await design.getByRole("button", { name: "Add instance" }).click();
@@ -894,9 +901,9 @@ test("keeps Edit state-aware and provides working Copy and Select All", async ({
     document.dispatchEvent(new Event("selectionchange"));
   });
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Undo Coming later" })).toBeDisabled();
-  await expect(page.getByRole("menuitem", { name: /Cut Use keyboard in fields/ })).toBeDisabled();
-  await expect(page.getByRole("menuitem", { name: "Find Coming soon" })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Undo" })).toHaveCount(0);
+  await expect(page.getByRole("menuitem", { name: "Cut", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Find" })).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Copy", exact: true }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("Editor Test");
 
@@ -921,45 +928,41 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(overview.getByText("Source revision", { exact: true })).toHaveCount(0);
   await overview.getByRole("button", { name: "Options" }).click();
   await expect(overview.getByRole("menuitem", { name: /Launch activity/ })).toHaveCount(0);
-  await expect(overview.getByRole("menuitem", { name: "Open circuit" })).toHaveCount(0);
+  await expect(overview.getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
   await expect(overview.getByRole("menuitem", { name: /More actions/ })).toHaveCount(0);
+  await expect(overview.getByRole("menuitem", { name: "No options available" })).toBeDisabled();
+  await expect(page.locator(".spec-paper summary").filter({ hasText: "Technical details" })).toHaveCount(0);
 
   const design = page.locator("#design-design_top");
   await design.getByRole("button", { name: "Options" }).click();
-  await design.getByRole("menuitem", { name: "Launch activity…" }).click();
-  const activityDialog = page.getByRole("dialog", { name: "Launch activity" });
-  await expect(activityDialog.getByText("Generate RTL", { exact: true })).toBeVisible();
-  await expect(activityDialog.getByText(/dut.clk is unconnected/)).toBeVisible();
-  await activityDialog.getByRole("button", { name: "Run" }).click();
+  await expect(design.getByRole("menuitem", { name: /Generate RTL/ })).toBeVisible();
+  await expect(design.getByText(/dut.clk is unconnected/)).toBeVisible();
+  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
   await expect(page.getByText("Generate RTL", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Document", exact: true }).click();
 
   await design.getByRole("button", { name: "Options" }).click();
-  await design.getByRole("menuitem", { name: /More actions/ }).click();
-  const actionDialog = page.getByRole("dialog", { name: /Actions for Processor/ });
-  await expect(actionDialog).toBeVisible();
-  await expect(actionDialog.getByText("Explore with AI Assistant", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Close" }).click();
-  await design.getByRole("button", { name: "Options" }).click();
-  await design.getByRole("menuitem", { name: "Open circuit" }).click();
+  await expect(design.getByRole("menuitem", { name: /More actions|Launch activity/ })).toHaveCount(0);
+  await expect(design.getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
+  await design.getByRole("menuitem", { name: "Open in Circuit Designer" }).click();
   await expect.poll(() => state.circuits.length).toBe(2);
 
   const bus = page.locator("#bus-definition-bus_control");
   await bus.getByRole("button", { name: "Options" }).click();
-  await expect(bus.getByRole("menuitem", { name: "Open circuit" })).toHaveCount(0);
-  await expect(bus.getByRole("menuitem", { name: /More actions/ })).toBeVisible();
+  await expect(bus.getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
+  await expect(bus.getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
 });
 
-test("creates entities and edits all three port families inline", async ({ page }) => {
+test("creates entities, edits wire ports, and keeps other port families read-only", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
 
   const composite = page.locator("#component-component_subsystem");
   await composite.getByRole("button", { name: "Options" }).click();
   await expect(composite.getByRole("menuitem", { name: /Add wire port.*Composite/ })).toBeDisabled();
-  await expect(composite.getByRole("menuitem", { name: /Add transactional port.*Composite/ })).toBeDisabled();
-  await expect(composite.getByRole("menuitem", { name: /Add structured port.*Composite/ })).toBeDisabled();
+  await expect(composite.getByRole("menuitem", { name: /Add transactional port/ })).toHaveCount(0);
+  await expect(composite.getByRole("menuitem", { name: /Add structured port/ })).toHaveCount(0);
 
   const components = page.locator("#components");
   await components.getByRole("button", { name: "Options" }).click();
@@ -1007,8 +1010,8 @@ test("creates entities and edits all three port families inline", async ({ page 
   await component.getByRole("button", { name: "Options" }).click();
   await component.getByRole("menuitem", { name: "Add wire port…" }).click();
   const draftCard = component.locator(".spec-port-editor");
-  await draftCard.getByLabel("Port name").fill("count");
-  await draftCard.getByLabel("Display name").fill("Current count");
+  await draftCard.getByLabel("Port ID").fill("count");
+  await draftCard.getByLabel("Port name (optional)").fill("Current count");
   await draftCard.getByLabel("Direction").selectOption("out");
   await draftCard.getByLabel("Range").fill("31:0");
   await draftCard.getByLabel("Description").fill("Current counter value");
@@ -1030,8 +1033,8 @@ test("creates entities and edits all three port families inline", async ({ page 
   const existingCard = component.locator(".spec-port-row", { hasText: "irq" });
   await existingCard.getByRole("button", { name: "Edit" }).click();
   const editCard = component.locator(".spec-port-editor");
-  await expect(editCard.getByLabel("Port name")).toHaveCount(0);
-  await editCard.getByLabel("Display name").fill("Interrupt request line");
+  await expect(editCard.getByLabel("Port ID")).toHaveCount(0);
+  await editCard.getByLabel("Port name (optional)").fill("Interrupt request line");
   await editCard.getByLabel("Direction").selectOption("inout");
   await editCard.getByLabel("Description").fill("Bidirectional interrupt");
   await editCard.getByRole("button", { name: "Save to Spec" }).click();
@@ -1049,54 +1052,11 @@ test("creates entities and edits all three port families inline", async ({ page 
     },
   });
 
-  await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: "Add transactional port…" }).click();
-  const transactionalDraft = component.locator(".spec-port-editor");
-  await transactionalDraft.getByLabel("Port name").fill("service");
-  await transactionalDraft.getByLabel("Display name").fill("Timer service");
-  await transactionalDraft.getByLabel("Initiative").selectOption("provides");
-  await transactionalDraft.getByLabel("Kind").selectOption("custom");
-  await transactionalDraft.getByLabel("Custom kind name").fill("timer_service");
-  await transactionalDraft.getByLabel("Bus width").fill("DATA_WIDTH");
-  await transactionalDraft.getByLabel("Description").fill("Transaction-level timer service");
-  await transactionalDraft.getByRole("button", { name: "Save to Spec" }).click();
-  await expect.poll(() => state.transactions.length).toBe(5);
-  expect(state.transactions[4]?.operations[0]).toEqual({
-    type: "add_component_port",
-    component: componentRef,
-    port: {
-      name: "service",
-      family: "transactional",
-      display_name: "Timer service",
-      initiative: "provides",
-      kind: "custom",
-      custom_kind: "timer_service",
-      bus_width: "DATA_WIDTH",
-      description: "Transaction-level timer service",
-    },
-  });
+  await expect(transactionalRow.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(transactionalRow).toContainText("Read-only");
+  await expect(structuredRow.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+  await expect(structuredRow).toContainText("Read-only");
 
-  await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: "Add structured port…" }).click();
-  const structuredDraft = component.locator(".spec-port-editor");
-  await structuredDraft.getByLabel("Port name").fill("response");
-  await structuredDraft.getByLabel("Display name").fill("Response bundle");
-  await structuredDraft.getByLabel("Direction").selectOption("out");
-  await expect(structuredDraft).toContainText("Packed struct");
-  await structuredDraft.getByLabel("Description").fill("Packed response fields");
-  await structuredDraft.getByRole("button", { name: "Save to Spec" }).click();
-  await expect.poll(() => state.transactions.length).toBe(6);
-  expect(state.transactions[5]?.operations[0]).toEqual({
-    type: "add_component_port",
-    component: componentRef,
-    port: {
-      name: "response",
-      family: "structured",
-      display_name: "Response bundle",
-      direction: "out",
-      description: "Packed response fields",
-    },
-  });
 });
 
 test("validates port drafts, enforces one active editor, and restores focus", async ({ page }) => {
@@ -1108,7 +1068,7 @@ test("validates port drafts, enforces one active editor, and restores focus", as
   await options.click();
   await component.getByRole("menuitem", { name: "Add wire port…" }).click();
   const draft = component.locator(".spec-port-editor");
-  await draft.getByLabel("Port name").fill("invalid_range");
+  await draft.getByLabel("Port ID").fill("invalid_range");
   await draft.getByLabel("Range").fill("31::0");
   await draft.getByRole("button", { name: "Save to Spec" }).click();
   await expect(draft.getByRole("alert")).toContainText("left:right expression pair");
@@ -1148,7 +1108,7 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "Help", exact: true }).click();
   await page.getByRole("menuitem", { name: "Getting Started" }).click();
-  await expect(page.getByRole("dialog", { name: "Getting started" })).toContainText("persisted automatically");
+  await expect(page.getByRole("dialog", { name: "Getting started" })).toContainText("Use Save to Spec");
   await page.getByRole("button", { name: "Close" }).click();
   await expect(page.getByRole("button", { name: "Menu", exact: true })).toBeFocused();
   await page.getByRole("button", { name: "Menu", exact: true }).click();
@@ -1179,7 +1139,7 @@ test("keeps mixed-family tables contained, IDs exact, and row actions readable",
   await component.locator(".spec-port-row").first().getByRole("button", { name: "Edit", exact: true }).click();
   const draft = component.locator(".spec-port-editor");
   await expect(draft).toBeVisible();
-  for (const control of [draft.getByLabel("Display name"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
+  for (const control of [draft.getByLabel("Port name (optional)"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
     const box = await control.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);
@@ -1243,4 +1203,222 @@ test("keeps a long Spec name and its edit action reachable at narrow widths", as
     const box = await action.boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
   }
+});
+
+test("Cut and Paste retain input and textarea selections and save their results", async ({ context, page }) => {
+  const origin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  const field = component.getByLabel("Port ID", { exact: true });
+  await field.fill("abcdef");
+  await field.evaluate((input: HTMLInputElement) => { input.setSelectionRange(3, 6); document.dispatchEvent(new Event("selectionchange")); });
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Cut", exact: true }).click();
+  await expect(field).toHaveValue("abc");
+  await expect(field).toBeFocused();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe("def");
+  await page.evaluate(() => navigator.clipboard.writeText("xyz"));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(field).toHaveValue("abcxyz");
+  await component.getByRole("button", { name: "Save to Spec" }).click();
+  expect(state.transactions[0]?.operations[0].port.name).toBe("abcxyz");
+
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  const text = component.getByLabel("Component explanation");
+  await text.fill("one two");
+  await text.evaluate((input: HTMLTextAreaElement) => { input.setSelectionRange(4, 7); document.dispatchEvent(new Event("selectionchange")); });
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Cut", exact: true }).click();
+  await expect(text).toHaveValue("one ");
+  await page.evaluate(() => navigator.clipboard.writeText("three\nfour"));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(text).toHaveValue("one three\nfour");
+  await text.evaluate((input: HTMLTextAreaElement) => { input.setSelectionRange(0, input.value.length); document.dispatchEvent(new Event("selectionchange")); });
+  await page.evaluate(() => navigator.clipboard.writeText(""));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(text).toHaveValue("one three\nfour");
+  await component.getByRole("button", { name: "Save to Spec" }).click();
+  expect(state.transactions[1]?.operations[0].description).toBe("one three\nfour");
+});
+
+test("clipboard denial preserves a draft and SystemVerilog uses its editor model", async ({ context, page }) => {
+  const origin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
+  const code = component.locator(".cm-content");
+  await code.fill("// first\n// second");
+  await code.press("ControlOrMeta+a");
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Cut", exact: true }).click();
+  await expect(code).toHaveText("");
+  await page.evaluate(() => navigator.clipboard.writeText("// replacement\n// saved"));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(code).toContainText("// replacement");
+  await expect(code).toContainText("// saved");
+  await code.press("ControlOrMeta+a");
+  await page.evaluate(() => Object.defineProperty(navigator.clipboard, "writeText", { value: async () => { throw new DOMException("Denied", "NotAllowedError"); } }));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Cut", exact: true }).click();
+  await expect(page.getByRole("alert").first()).toContainText("Could not cut text");
+  await expect(code).toContainText("// replacement");
+  await expect(code).toBeFocused();
+  await page.evaluate(() => Object.defineProperty(navigator.clipboard, "readText", { value: async () => { throw new DOMException("Denied", "NotAllowedError"); } }));
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Paste", exact: true }).click();
+  await expect(page.getByRole("alert").first()).toContainText("Could not paste text");
+  await expect(code).toContainText("// saved");
+  await component.getByRole("button", { name: "Add section", exact: true }).click();
+  expect(state.transactions[0]?.operations[0].payload.content).toBe("// replacement\n// saved");
+});
+
+test("does not reuse late commands from a closed menu and shows unavailable Activity reasons", async ({ page }) => {
+  await mockEditorApi(page);
+  let release: () => void = () => {};
+  const held = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/entities/design/design_top/activities**", async route => {
+    await held;
+    await route.fulfill({ json: { activities: [{
+      definition: { activity_id: "test.old", title: "Old target Activity", description: "Old response", version: "1.0.0" },
+      availability: { available: true, diagnostics: [] },
+    }] } });
+  });
+  await page.route("**/entities/component/component_timer/activities**", route => route.fulfill({ json: { activities: [{
+    definition: { activity_id: "test.unavailable", title: "Unavailable Activity", description: "Needs a source section", version: "1.0.0" },
+    availability: { available: false, diagnostics: ["Add a SystemVerilog section first."] },
+  }] } }));
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await expect(design.getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options" }).click();
+  release();
+  const unavailable = component.getByRole("menuitem", { name: /Unavailable Activity/ });
+  await expect(unavailable).toBeDisabled();
+  await expect(unavailable).toContainText("Add a SystemVerilog section first.");
+  await expect(page.getByRole("menuitem", { name: "Old target Activity" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(component.getByRole("button", { name: "Options" })).toBeFocused();
+});
+
+test("ignores a command catalogue response from an earlier source revision", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  let release: () => void = () => {};
+  const oldResponse = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  await page.route("**/entities/design/design_top/activities**", async route => {
+    const first = ++requests === 1;
+    if (first) await oldResponse;
+    await route.fulfill({ json: { activities: [{
+      definition: { activity_id: first ? "test.old_revision" : "test.current_revision", title: first ? "Earlier revision Activity" : "Current revision Activity", description: "Source revision check", version: "1.0.0" },
+      availability: { available: true, diagnostics: [] },
+    }] } });
+  });
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await expect(design.getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  state.currentRevision = `sha256:${"9".repeat(64)}`;
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Refresh From Disk", exact: true }).click();
+  await expect.poll(() => state.openedPaths.length).toBe(2);
+  await design.getByRole("button", { name: "Options" }).click();
+  await expect(design.getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
+  release();
+  await expect(page.getByRole("menuitem", { name: "Earlier revision Activity", exact: true })).toHaveCount(0);
+  await expect(design.getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
+});
+
+test("preserves an unsaved draft while inspecting an Activity and disables editing hidden fields", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  await design.getByLabel("Design explanation").fill("Keep this private draft.");
+  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await expect.poll(() => state.activityExecutions.length).toBe(1);
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+  const draft = design.getByLabel("Design explanation");
+  await expect(draft).toHaveValue("Keep this private draft.");
+  await draft.click();
+  await draft.evaluate((input: HTMLTextAreaElement) => { input.setSelectionRange(0, input.value.length); document.dispatchEvent(new Event("selectionchange")); });
+  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Cut", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Paste", exact: true })).toBeDisabled();
+  await expect(page.getByRole("menuitem", { name: "Copy", exact: true })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+  await expect(design.getByLabel("Design explanation")).toHaveValue("Keep this private draft.");
+  expect(state.transactions).toHaveLength(0);
+});
+
+test("refreshes artifacts after completion without requiring a source change or reconnect", async ({ page }) => {
+  await page.addInitScript(() => {
+    const sources: TestSource[] = [];
+    class TestSource extends EventTarget {
+      url: string;
+      constructor(url: string) { super(); this.url = url; sources.push(this); }
+      close() { sources.splice(sources.indexOf(this), 1); }
+    }
+    Object.defineProperty(window, "EventSource", { value: TestSource });
+    (window as unknown as { emitActivity: (record: object) => void }).emitActivity = record => {
+      sources.filter(source => source.url.includes("/activity-events")).forEach(source => {
+        source.dispatchEvent(new MessageEvent("activity.execution.changed", { data: JSON.stringify(record) }));
+      });
+    };
+  });
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await expect(page.getByText("No generated artifacts.")).toBeVisible();
+  state.artifacts.push({ artifact_id: "artifact_summary", role: "spec.summary", media_type: "application/json", size: 42, source_entities: [designRef] });
+  const finished = { ...state.activityExecutions[0], status: "succeeded", artifact_ids: ["artifact_summary"] };
+  state.activityExecutions[0] = finished;
+  await page.evaluate(record => (window as unknown as { emitActivity: (record: object) => void }).emitActivity(record), finished);
+  await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
+  await expect(page.getByText("Target Section details", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download JSON" })).toHaveAttribute("href", /owner_document_key=/);
+});
+
+test("proposal review preserves a private draft and its authored revision", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const authoredRevision = state.currentRevision;
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  await design.getByLabel("Design explanation").fill("Keep the authored draft.");
+  state.proposals.push({ proposal_id: "proposal_draft_review", review_status: "pending", rationale: "Add a saved note", operations: [{ type: "upsert_narrative_block", block: { block_id: "review_note", type: "paragraph", text: "Saved source note" } }] });
+  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await page.getByRole("button", { name: "Accept", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Proposal accepted." })).toBeVisible();
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+  await expect(design.getByLabel("Design explanation")).toHaveValue("Keep the authored draft.");
+  state.staleNextTransaction = true;
+  await design.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect.poll(() => state.transactions.length).toBe(1);
+  expect(state.transactions[0].expected_source_revision_hash).toBe(authoredRevision);
+  await expect(design.getByLabel("Design explanation")).toHaveValue("Keep the authored draft.");
 });

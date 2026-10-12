@@ -33,7 +33,7 @@ test("@smoke creates a Component and wire port through the UI and reopens saved 
   const component = await addComponent(page, stack);
   const initial = await stack.snapshot();
   const draft = await portDraft(component);
-  await draft.getByLabel("Port name").fill("count");
+  await draft.getByLabel("Port ID").fill("count");
   await draft.getByLabel("Direction").selectOption("out");
   await draft.getByLabel("Range").fill("31:0");
   await draft.getByLabel("Description").fill("Current count");
@@ -55,7 +55,7 @@ test("@smoke preserves an invalid draft, cancels it, and saves a corrected draft
   const before = await stack.snapshot();
   const source = stack.archive(stack.path());
   let draft = await portDraft(component);
-  await draft.getByLabel("Port name").fill("count");
+  await draft.getByLabel("Port ID").fill("count");
   await draft.getByLabel("Range").fill("31::0");
   await draft.getByRole("button", { name: "Save to Spec" }).click();
   await expect(draft.getByRole("alert")).toContainText("left:right expression pair");
@@ -65,7 +65,7 @@ test("@smoke preserves an invalid draft, cancels it, and saves a corrected draft
   await expect(component.getByRole("button", { name: "Options" })).toBeFocused();
   expect(stack.archive(stack.path())).toEqual(source);
   draft = await portDraft(component);
-  await draft.getByLabel("Port name").fill("count");
+  await draft.getByLabel("Port ID").fill("count");
   await draft.getByLabel("Range").fill("7:0");
   await draft.getByRole("button", { name: "Save to Spec" }).click();
   await openSpec(page, stack);
@@ -74,31 +74,31 @@ test("@smoke preserves an invalid draft, cancels it, and saves a corrected draft
 });
 
 for (const family of ["wire", "transactional", "structured"]) {
-  test(`saves and reopens a ${family} port without changing its ID or family`, async ({ page, stack }) => {
+  test(`preserves saved ${family} ports with the release editing policy`, async ({ page, stack }) => {
     await newSpec(page, stack);
     const component = await addComponent(page, stack);
-    const draft = await portDraft(component, family);
-    await draft.getByLabel("Port name").fill("interface0");
-    await draft.getByLabel("Display name").fill("Interface zero");
-    await draft.getByLabel("Description").fill("Interface contract");
-    if (family === "wire") await draft.getByLabel("Range").fill("WIDTH-1:0");
-    if (family === "transactional") {
-      await draft.getByLabel("Initiative").selectOption("provides");
-      await draft.getByLabel("Kind", { exact: true }).selectOption("custom");
-      await draft.getByLabel("Custom kind name").fill("service0");
-      await draft.getByLabel("Bus width").fill("DATA_WIDTH");
-    }
-    if (family === "structured") await draft.getByLabel("Direction").selectOption("out");
-    await draft.getByRole("button", { name: "Save to Spec" }).click();
+    const initial = await stack.snapshot();
+    const port = family === "transactional"
+      ? { name: "interface0", family, initiative: "provides", kind: "custom", custom_kind: "service0", bus_width: "DATA_WIDTH", description: "Interface contract" }
+      : { name: "interface0", family, direction: "out", description: "Interface contract", ...(family === "wire" ? { range: "WIDTH-1:0" } : {}) };
+    await stack.commit([{ type: "add_component_port", component: initial.components[0].ref, port }]);
+    await openSpec(page, stack);
     const row = component.locator(".spec-port-row", { hasText: "interface0" });
     await expect(row).toContainText("Interface contract");
-    await row.getByRole("button", { name: "Edit", exact: true }).click();
-    await expect(draft.getByLabel("Port name")).toHaveCount(0);
-    await draft.getByLabel("Description").fill("Updated interface contract");
-    await draft.getByRole("button", { name: "Save to Spec" }).click();
+    if (family === "wire") {
+      await row.getByRole("button", { name: "Edit", exact: true }).click();
+      const draft = component.locator(".spec-port-editor");
+      await expect(draft.getByLabel("Port ID")).toHaveCount(0);
+      await draft.getByLabel("Description").fill("Updated interface contract");
+      await draft.getByRole("button", { name: "Save to Spec" }).click();
+    } else {
+      await expect(row.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
+      await expect(row).toContainText("Read-only");
+      const { name, ...update } = port;
+      await stack.commit([{ type: "update_component_port", component: initial.components[0].ref, name, port: { ...update, description: "Updated interface contract" } }]);
+    }
     await openSpec(page, stack);
-    const port = (await stack.snapshot()).components[0].ports[0];
-    expect(port).toMatchObject({ name: "interface0", style: family, description: "Updated interface contract" });
+    expect((await stack.snapshot()).components[0].ports[0]).toMatchObject({ name: "interface0", style: family, description: "Updated interface contract" });
     expect(Object.values(stack.archive(stack.path())).join("\n")).toContain("Updated interface contract");
   });
 }
@@ -184,7 +184,7 @@ test("creates an entry Design and Component instance through the UI and reopens 
   const design = page.locator(`#design-${saved.designs[0].ref.entity_id.replaceAll("_", "-")}`);
   await design.getByRole("button", { name: "Options" }).click();
   await design.getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
-  await design.getByLabel("Instance name").fill("counter0");
+  await design.getByLabel("Instance ID").fill("counter0");
   await design.getByLabel("Component", { exact: true }).selectOption(before.components[0].vlnv);
   await design.getByRole("button", { name: "Add instance", exact: true }).click();
   await expect(design).toContainText("counter0");
@@ -199,7 +199,7 @@ test("SystemVerilog add, edit, delete and reopen use real source", async ({ page
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
   await component.getByRole("button", { name: "Options" }).click();
-  await page.getByRole("menuitem", { name: "Add section → SystemVerilog" }).click();
+  await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
   await component.locator(".cm-content").fill("logic saved_marker;\n");
   await component.getByRole("button", { name: "Add section", exact: true }).click();
   await expect(component.locator(".cm-content")).toHaveCount(0);
@@ -309,8 +309,7 @@ test("an Activity retains its enqueued source after source editing and service r
   const component = await addComponent(page, stack);
   const baseline = await stack.snapshot();
   await component.getByRole("button", { name: "Options" }).click();
-  await component.getByRole("menuitem", { name: /Launch activity/ }).click();
-  await page.locator(".action-option").filter({ hasText: "Controlled barrier" }).getByRole("button", { name: "Run", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Controlled barrier", exact: true }).click();
   await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
   await stack.commit([{ type: "set_entity_metadata", entity: baseline.components[0].ref, description: "Later source description" }]);
   const current = await stack.snapshot();
@@ -333,9 +332,7 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     const component = await addComponent(page, stack);
     const before = await stack.snapshot();
     await component.getByRole("button", { name: "Options" }).click();
-    await component.getByRole("menuitem", { name: /Launch activity/ }).click();
-    const option = page.locator(".action-option").filter({ hasText: title });
-    await option.getByRole("button", { name: "Run", exact: true }).click();
+    await component.getByRole("menuitem", { name: title, exact: true }).click();
     if (status === "cancelled") {
       await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
       await page.getByRole("button", { name: /^Activity \d/ }).click();
@@ -368,3 +365,31 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
   });
 }
+
+test("exports target Section details as a downloadable saved JSON artifact", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const component = await addComponent(page, stack);
+  const initial = await stack.snapshot();
+  const target = initial.components[0].ref;
+  await stack.commit([{
+    type: "set_entity_metadata", entity: target, description: "Saved diagnostic explanation",
+  }]);
+  await openSpec(page, stack);
+  const before = await stack.snapshot();
+  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("menuitem", { name: "Export target details (JSON)", exact: true }).click();
+  await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe("succeeded");
+  await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
+  const event = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download JSON" }).click();
+  const download = await event;
+  expect(download.suggestedFilename()).toMatch(/-section-details\.json$/);
+  const value = JSON.parse(readFileSync((await download.path())!, "utf8"));
+  expect(value).toMatchObject({ schema_version: "spec2gds.section-diagnostics.v1", target, source_revision_hash: before.source_revision_hash });
+  expect(JSON.stringify(value.sections)).toContain("Saved diagnostic explanation");
+  expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
+  await stack.restart("spec");
+  await openSpec(page, stack);
+  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
+});

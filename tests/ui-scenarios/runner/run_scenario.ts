@@ -350,8 +350,7 @@ async function run(): Promise<void> {
         await openEditor(editor, owner, generatedPackage);
         const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
         await section.getByRole("button", { name: "Options" }).click();
-        await section.getByRole("menuitem", { name: "Launch activity…", exact: true }).click();
-        await editor.locator(".action-option").filter({ hasText: "rtl.generate" }).getByRole("button", { name: "Run", exact: true }).click();
+        await section.getByRole("menuitem", { name: /Generate RTL/ }).click();
         let execution: any;
         await expect.poll(async () => {
           execution = (await json(`${owner}/executions?owner_document_key=${encodeURIComponent(generatedKey)}`)).executions.filter((item: any) => item.activity_id === "rtl.generate").at(-1);
@@ -544,7 +543,7 @@ async function run(): Promise<void> {
           await capture(editor, "06_spec_editor_topology.png", "Spec Editor", "Spec Editor derives a circuit preview from two instances and the declared bit-zero connection.");
           const popup = context.waitForEvent("page");
           await designCard.getByRole("button", { name: "Options" }).click();
-          await designCard.getByRole("menuitem", { name: "Open circuit", exact: true }).click();
+          await designCard.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
           const circuit = await popup;
           observePage(circuit);
           await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
@@ -587,10 +586,8 @@ async function run(): Promise<void> {
       await openEditor(editor, owner, packagePath);
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
       await component.getByRole("button", { name: "Options" }).click();
-      await component.getByRole("menuitem", { name: "Launch activity…", exact: true }).click();
       await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
-      const activity = editor.locator(".action-option").filter({ hasText: "rtl.generate" });
-      await activity.getByRole("button", { name: "Run", exact: true }).click();
+      await component.getByRole("menuitem", { name: /Generate RTL/ }).click();
       let launched: any;
       await expect.poll(async () => {
         const executions = (await json(`${owner}/executions`)).executions;

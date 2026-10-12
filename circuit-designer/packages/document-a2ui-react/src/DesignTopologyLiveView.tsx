@@ -152,7 +152,7 @@ export function DesignTopologyLiveView({
           <span>Derived from the current specification revision</span>
         </div>
         <div className="spec-topology-card__actions">
-          {onOpenCircuit && <button onClick={onOpenCircuit} type="button">Open Circuit Designer</button>}
+          {onOpenCircuit && <button onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
           <button disabled={!imageUrl} onClick={() => setExpanded(true)} ref={expandRef} type="button">Expand</button>
           <a
             aria-disabled={!imageUrl}

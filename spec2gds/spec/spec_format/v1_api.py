@@ -37,6 +37,7 @@ from spec2gds.spec.activities import (
     load_extension_modules,
 )
 from spec2gds.spec.activities.contracts import ActivityResult
+from spec2gds.spec.activities.reference import specification_summary
 from spec2gds.spec.activities.rtl import register_extensions as register_rtl
 from spec2gds.spec.activities.systemc_at import register_extensions as register_systemc_at
 from spec2gds.spec.activities.systemc_rtl import (
@@ -357,6 +358,7 @@ def _path_lock(path: str) -> threading.RLock:
 
 def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtensionRegistry:
     registry = SpecExtensionRegistry()
+    registry.register_activity(specification_summary)
     register_rtl(registry)
     register_systemc_at(registry)
     register_systemc_rtl(registry)
@@ -1438,14 +1440,15 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         }
 
     @app.get("/entities/{kind}/{entity_id}/activities")
-    def entity_activities(kind: str, entity_id: str) -> dict[str, typing.Any]:
+    def entity_activities(kind: str, entity_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """List target-compatible Activities with pure availability preflight."""
-        target = ref(kind, entity_id)
+        session = bound_session(owner_document_key)
+        target = EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id)
         try:
-            active().revision.resolve(target)
+            session.revision.resolve(target)
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
-        snapshot = ActivitySnapshot.create(active().revision, target)
+        snapshot = ActivitySnapshot.create(session.revision, target)
         values: list[dict[str, typing.Any]] = []
         for definition in activity_registry.activities():
             if not definition.scopes.supports(target):
@@ -1470,32 +1473,34 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         entity_id: str,
         activity_id: str,
         request: ActivityExecutionRequest,
+        owner_document_key: str | None = None,
     ) -> dict[str, typing.Any]:
         """Capture the current source revision and enqueue one Activity execution."""
-        session = active()
-        if request.expected_source_revision_hash != session.revision.source_revision_hash:
-            raise fastapi.HTTPException(status_code=409, detail="Expected source revision hash is stale.")
-        target = ref(kind, entity_id)
-        try:
-            definition = activity_registry.activity(activity_id).definition
-            if not definition.scopes.supports(target):
-                raise ValueError("Activity does not support the selected entity kind.")
-            snapshot = ActivitySnapshot.create(session.revision, target)
-            availability = activity_availability(activity_registry, activity_id, snapshot)
-            if not availability.available:
-                raise ValueError("Activity is unavailable: " + "; ".join(availability.diagnostics))
-            record = activity_jobs.enqueue(
-                activity_id=activity_id,
-                snapshot=snapshot,
-                package_path=session.path,
-                sidecar_root=str(session.sidecar.root),
-                workspace_root=Path(session.path).parent,
-            )
-            return _jsonable(record)
-        except KeyError as exc:
-            raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
-        except (ValueError, SpecValidationError) as exc:
-            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        session = bound_session(owner_document_key)
+        with session.lock:
+            if request.expected_source_revision_hash != session.revision.source_revision_hash:
+                raise fastapi.HTTPException(status_code=409, detail="Expected source revision hash is stale.")
+            target = EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id)
+            try:
+                definition = activity_registry.activity(activity_id).definition
+                if not definition.scopes.supports(target):
+                    raise ValueError("Activity does not support the selected entity kind.")
+                snapshot = ActivitySnapshot.create(session.revision, target)
+                availability = activity_availability(activity_registry, activity_id, snapshot)
+                if not availability.available:
+                    raise ValueError("Activity is unavailable: " + "; ".join(availability.diagnostics))
+                record = activity_jobs.enqueue(
+                    activity_id=activity_id,
+                    snapshot=snapshot,
+                    package_path=session.path,
+                    sidecar_root=str(session.sidecar.root),
+                    workspace_root=Path(session.path).parent,
+                )
+                return _jsonable(record)
+            except KeyError as exc:
+                raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+            except (ValueError, SpecValidationError) as exc:
+                raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.get("/activity-events")
     async def activity_events(owner_document_key: str | None = None) -> typing.Any:
@@ -1623,51 +1628,54 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         )
 
     @app.get("/entities/{kind}/{entity_id}/actions")
-    def entity_actions(kind: str, entity_id: str) -> dict[str, typing.Any]:
+    def entity_actions(kind: str, entity_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """List action definitions compatible with a resolved source entity."""
-        target = ref(kind, entity_id)
+        session = bound_session(owner_document_key)
+        target = EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id)
         try:
-            active().revision.resolve(target)
+            session.revision.resolve(target)
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
         return {
             "actions": [
                 _jsonable(action)
-                for action in active().actions.registry.list()
+                for action in session.actions.registry.list()
                 if kind in action.target_entity_kinds
             ]
         }
 
     @app.post("/entities/{kind}/{entity_id}/actions/{action_id}/preconditions")
-    def action_preconditions(kind: str, entity_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
+    def action_preconditions(kind: str, entity_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Validate action inputs and preconditions without executing a command."""
+        session = bound_session(owner_document_key)
         try:
-            action = active().actions.registry.get(action_id)
-            snapshot = active().actions.create_snapshot(
-                active().revision,
+            action = session.actions.registry.get(action_id)
+            snapshot = session.actions.create_snapshot(
+                session.revision,
                 action,
-                ref(kind, entity_id),
+                EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id),
                 request.inputs,
                 tuple(request.input_artifact_ids),
-                active().activity,
+                session.activity,
             )
             return {"can_execute": True, "snapshot_id": snapshot.snapshot_id, "dependency_closure": [_jsonable(item) for item in snapshot.dependency_closure]}
         except (KeyError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/entities/{kind}/{entity_id}/actions/{action_id}/executions")
-    def action_execution(kind: str, entity_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
+    def action_execution(kind: str, entity_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Execute one trusted local action against an immutable snapshot."""
+        session = bound_session(owner_document_key)
         try:
-            execution = active().actions.execute(
-                active().revision,
-                active().activity,
+            execution = session.actions.execute(
+                session.revision,
+                session.activity,
                 action_id,
-                ref(kind, entity_id),
+                EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id),
                 request.inputs,
                 tuple(request.input_artifact_ids),
             )
-            active().save()
+            session.save()
             return _jsonable(execution)
         except SpecDiskConflict:
             raise
@@ -1728,13 +1736,14 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         return {"lineage": [_jsonable(item) for item in lineage]}
 
     @app.get("/artifacts/{artifact_id}/content")
-    def artifact_content(artifact_id: str) -> typing.Any:
+    def artifact_content(artifact_id: str, owner_document_key: str | None = None) -> typing.Any:
         """Serve verified sidecar bytes for one immutable artifact."""
-        artifact = next((item for item in active().activity.state.artifacts if item.artifact_id == artifact_id), None)
+        session = bound_session(owner_document_key)
+        artifact = next((item for item in session.activity.state.artifacts if item.artifact_id == artifact_id), None)
         if artifact is None:
             raise fastapi.HTTPException(status_code=404, detail="Unknown artifact.")
         try:
-            data = active().sidecar.read(artifact)
+            data = session.sidecar.read(artifact)
         except (FileNotFoundError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
         return fastapi.Response(content=data, media_type=artifact.media_type)
@@ -1805,36 +1814,36 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         except (OSError, ValueError, SpecValidationError):
             continue
     @app.get("/components/{component_id}/activities")
-    def component_activities(component_id: str) -> dict[str, typing.Any]:
-        return entity_activities("component", component_id)
+    def component_activities(component_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return entity_activities("component", component_id, owner_document_key)
 
     @app.get("/components/{component_id}/actions")
-    def component_actions(component_id: str) -> dict[str, typing.Any]:
-        return entity_actions("component", component_id)
+    def component_actions(component_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return entity_actions("component", component_id, owner_document_key)
 
     @app.post("/components/{component_id}/actions/{action_id}/preconditions")
-    def component_action_preconditions(component_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
-        return action_preconditions("component", component_id, action_id, request)
+    def component_action_preconditions(component_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return action_preconditions("component", component_id, action_id, request, owner_document_key)
 
     @app.post("/components/{component_id}/actions/{action_id}/executions")
-    def component_action_execution(component_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
-        return action_execution("component", component_id, action_id, request)
+    def component_action_execution(component_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return action_execution("component", component_id, action_id, request, owner_document_key)
 
     @app.get("/designs/{design_id}/activities")
-    def design_activities(design_id: str) -> dict[str, typing.Any]:
-        return entity_activities("design", design_id)
+    def design_activities(design_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return entity_activities("design", design_id, owner_document_key)
 
     @app.get("/designs/{design_id}/actions")
-    def design_actions(design_id: str) -> dict[str, typing.Any]:
-        return entity_actions("design", design_id)
+    def design_actions(design_id: str, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return entity_actions("design", design_id, owner_document_key)
 
     @app.post("/designs/{design_id}/actions/{action_id}/preconditions")
-    def design_action_preconditions(design_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
-        return action_preconditions("design", design_id, action_id, request)
+    def design_action_preconditions(design_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return action_preconditions("design", design_id, action_id, request, owner_document_key)
 
     @app.post("/designs/{design_id}/actions/{action_id}/executions")
-    def design_action_execution(design_id: str, action_id: str, request: ActionInputRequest) -> dict[str, typing.Any]:
-        return action_execution("design", design_id, action_id, request)
+    def design_action_execution(design_id: str, action_id: str, request: ActionInputRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        return action_execution("design", design_id, action_id, request, owner_document_key)
 
     return app
 

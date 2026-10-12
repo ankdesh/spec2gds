@@ -534,7 +534,7 @@ export class SpecEditorHttpClient {
   }
 
   listEntityActivities(ref: EntityRef): Promise<{ activities: EntityActivity[] }> {
-    return this.request(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities`);
+    return this.request(this.documentPath(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities`));
   }
 
   launchEntityActivity(
@@ -543,7 +543,7 @@ export class SpecEditorHttpClient {
     expectedSourceRevisionHash: string,
   ): Promise<Record<string, unknown>> {
     return this.request(
-      `/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities/${encodeURIComponent(activityId)}/executions`,
+      this.documentPath(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/activities/${encodeURIComponent(activityId)}/executions`),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -553,16 +553,20 @@ export class SpecEditorHttpClient {
   }
 
   cancelExecution(executionId: string): Promise<Record<string, unknown>> {
-    return this.request(`/executions/${encodeURIComponent(executionId)}/cancel`, { method: "POST" });
+    return this.request(this.documentPath(`/executions/${encodeURIComponent(executionId)}/cancel`), { method: "POST" });
+  }
+
+  artifactContentUrl(artifactId: string, documentKey = this.serviceDocumentKey): string {
+    return `${this.baseUrl}${this.documentPath(`/artifacts/${encodeURIComponent(artifactId)}/content`, documentKey)}`;
   }
 
   listEntityActions(ref: EntityRef): Promise<{ actions: EntityAction[] }> {
-    return this.request(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/actions`);
+    return this.request(this.documentPath(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/actions`));
   }
 
   executeEntityAction(ref: EntityRef, actionId: string): Promise<Record<string, unknown>> {
     return this.request(
-      `/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/actions/${encodeURIComponent(actionId)}/executions`,
+      this.documentPath(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/actions/${encodeURIComponent(actionId)}/executions`),
       {
         method: "POST",
         headers: { "content-type": "application/json" },
