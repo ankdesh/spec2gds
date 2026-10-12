@@ -542,9 +542,16 @@ secrets from exported diagnostics.
 Do not call a writable document conversation read-only. Keep architecture decisions,
 proposal state, and errors visible after tool traces collapse and after reload.
 A later error must not hide a pending architecture card. Use service-derived change
-summaries and exact stored artifacts for diffs. Put internal IDs/hashes in technical
-details; keep useful hardware names visible. A model's success sentence is not a
-saved-state indicator.
+summaries and exact stored service previews for diffs. Keep Before and After side
+by side, including on narrow screens. Show all changed fields, narrative text,
+and SystemVerilog without requiring expansion. Large comparisons scroll without
+removing content. Show readable architecture cards and interface tables.
+
+Keep internal IDs, hashes, fixed prompts, context payloads, and complete diagnostics
+in persistent records and developer logs. The Assistant has no technical inspection
+panels. Progress uses recorded phases and domain actions. Mark content as Saved
+only after a matching service receipt; a model's success sentence is not evidence
+of a save. Spec content decisions remain in Spec Editor.
 
 ## 7. Execution, persistence, and Circuit serviceship
 

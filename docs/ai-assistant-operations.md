@@ -231,20 +231,17 @@ use `node deployment/request.mjs` with the same interface.
 
 ## Event configuration, monitoring, and recovery
 
-Start a bound goal/orchestrated conversation. In the new-conversation chooser, select an event
-template. **Configure event template** opens visual fields and their canonical
-JSON text. JSON is a YAML subset. Inspect the primary, analyst, reviewer, permitted
-routes/tools, typed events, and subscriptions. Keep the required causal review chain.
+Start a bound goal/orchestrated conversation. In the new-conversation chooser,
+select an event template. Developer template authoring uses the existing
+`/spec2gds-api/event-templates` catalogue and its `/:key/preview` and `/:key/save`
+APIs. Save the exact previewed content, revision, and review digest. Built-in edits
+create a separate named template. A new conversation pins the selected revision;
+later edits do not change its prompts, tools, or budget.
 
-Change a prompt, apply text to the visual editor if needed, then select **Validate
-and preview**. Inspect warnings and the exact diff. **Save reviewed template** saves
-that exact revision. Built-in edits create a separate named template. Start the conversation
-to pin it. Later edits do not change the conversation's prompts, tools, or budget.
-
-Use **Inspect configuration and execution** to inspect configuration digest, causal
-event ancestry, delivery/activation attempts, waits, request charges, sources, and
-native member transcripts. Historic charge records may lack per-request member
-attribution; do not infer it.
+The Assistant shows readable progress and paired proposal comparisons. Fixed
+prompts, raw payloads, configuration digests, causal event ancestry, request charges,
+and native member records remain in developer logs and persistent storage.
+Historic charge records may lack per-request member attribution; do not infer it.
 
 In **Monitor service endpoint**, keep the bound-service URL and revision pointer.
 Select changed/equality, supply a JSON value for equality, and choose an interval.
@@ -327,7 +324,8 @@ never replace stored snapshots to hide it.
 
 ## Investigate an error
 
-First capture the visible error and **Technical details**. Record the exact conversation,
+First capture the visible error, then read the developer logs and persistent records.
+Record the exact conversation,
 binding, user request, failure stage, tool call, proposal/review/creation ID, source
 revision, operation-schema digest, and effective model limits. Preserve the last
 confirmed receipt. Do not reproduce by editing a developer's live document.

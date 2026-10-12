@@ -109,6 +109,36 @@ async function prompt(page: Page, message: string): Promise<void> {
   await expect(input).toBeVisible(); await input.fill(message);
   await page.getByRole("button", { name: "Send message", exact: true }).click();
 }
+
+/** Check the shipped product slots in the real Harness shell, including replay. */
+async function checkAssistantPresentation(page: Page, output: string): Promise<void> {
+  const reviews = page.locator('[data-s2g-flow-review]');
+  await expect(reviews.last()).toBeVisible();
+  await expect(reviews.last().getByRole("region", { name: "Flow actions", exact: true })).toBeVisible();
+  await expect.poll(() => reviews.last().locator('.s2g-comparison').count()).toBeGreaterThan(0);
+  await expect.poll(() => reviews.last().locator('.s2g-code-line').count()).toBeGreaterThan(0);
+  await expect(reviews.last()).toContainText("Large proposal complete.");
+  for (const name of ["Technical details", "System prompt", "Context injection", "Decision details"]) await expect(page.getByText(name, { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toHaveCount(0);
+  const flowId = await reviews.last().getAttribute("data-s2g-flow-review");
+  await page.reload();
+  await expect(reviews.last()).toHaveAttribute("data-s2g-flow-review", flowId!);
+  await expect(reviews.last()).toContainText("Large proposal complete.");
+  await expect(reviews.last()).toContainText("Changes saved");
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.setViewportSize({ width: 390, height: 844 });
+    const comparison = reviews.last().locator('.s2g-change .s2g-comparison-scroll').first();
+    await comparison.focus();await expect(comparison).toBeFocused();
+    const bounds = await comparison.evaluate(element => ({ width: element.clientWidth, content: element.scrollWidth,
+      columns: [...element.querySelectorAll('thead th')].map(cell => ({ text: cell.textContent, left: cell.getBoundingClientRect().left, top: cell.getBoundingClientRect().top })) }));
+    assert.ok(bounds.content > bounds.width, "Narrow comparisons scroll inside the paired panes.");
+    const before = bounds.columns.find(column => column.text === "Before")!, after = bounds.columns.find(column => column.text === "After")!;
+    assert.ok(after.left > before.left);assert.equal(before.top, after.top);
+    await comparison.screenshot({ path: join(output, `assistant-comparison-${colorScheme}.png`) });
+  }
+  await page.emulateMedia({ colorScheme: "light" });await page.setViewportSize({ width: 1440, height: 900 });
+}
 function savedSnapshot(path: string): any {
   const saved = spawnSync("uv", ["run", "--no-sync", "--project", root, "python", "-c",
     "import json,sys; from spec2gds.spec.spec_format.v1_api import V1Session,_snapshot; print(json.dumps(_snapshot(V1Session(sys.argv[1]))))", path], { cwd: root, encoding: "utf8" });
@@ -454,6 +484,7 @@ async function run(): Promise<void> {
       const componentId = (await snapshot()).components[0].ref.entity_id;
       assert.match(componentId, /^component_timer_core_/);
       await expect(conversation.locator('[data-s2g-flow-status="succeeded"]')).toHaveCount(1);
+      if (args.includes("--assistant-presentation-checks")) await checkAssistantPresentation(conversation, output);
       if(scenario === "automatic") await conversation.getByRole("button",{name:"Open Spec conversation",exact:true}).click();
       assert.equal((await history()).items.length, 1, "Creation must submit exactly once.");
       if (presentation) {

@@ -11,7 +11,7 @@ for (const mode of ["automatic", "restricted"]) {
     const output = info.outputPath("native");
     const log = createWriteStream(info.outputPath("native.log"));
     const child = spawn(process.execPath, ["--import", "tsx", "runner/run_scenario.ts", "--scenario", mode,
-      "--large-proposal", "--output", output], {
+      "--large-proposal", "--assistant-presentation-checks", "--output", output], {
       cwd: `${root}/tests/ui-scenarios`, env: process.env, detached: true, stdio: ["ignore", "pipe", "pipe"],
     });
     child.stdout?.pipe(log, { end: false }); child.stderr?.pipe(log, { end: false });

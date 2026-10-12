@@ -5,6 +5,7 @@
 
     - id: ui-flow
       name: '@deepseek-ai/dsh-client-ui-flow'
+      disabled: true
 
     - id: spec2gds-ui
       name: '@spec2gds/harness-web'
@@ -31,6 +32,10 @@
     trustedHosts: !!js ctx.webStartup.trustedHosts
 
 - id: ui-settings-models
+  disabled: true
+
+# Developer inspection stays in durable logs; product slots render progress.
+- id: ui-trajectory
   disabled: true
 
 - id: ui-workspace

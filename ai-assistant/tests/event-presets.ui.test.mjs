@@ -97,44 +97,34 @@ async function chooser(page,preset) {
   await expect(dialog.getByLabel('Target',{exact:true})).toBeVisible();
   await dialog.getByLabel('Assistant preset').selectOption(preset);return dialog;
 }
-async function customTemplate(page,dialog,preset) {
-  await dialog.getByRole('button',{name:'Configure event template',exact:true}).click();
-  const editor=page.getByRole('dialog',{name:`Event setup · ${preset}`});
-  await expect(editor, await page.locator('body').innerText()).toBeVisible({timeout:3000});
-  await editor.getByLabel('Template name',{exact:true}).fill(`${preset} browser template`);
-  await editor.getByLabel('Prompt · primary',{exact:true}).fill((await editor.getByLabel('Prompt · primary',{exact:true}).inputValue())+'\nUse concise explanations for the browser tutorial.');
-  await editor.getByRole('button',{name:'Validate and preview'}).click();
-  await expect(editor.getByRole('region',{name:'Configuration review'})).toContainText('Validation passed');
-  await editor.getByRole('button',{name:'Save reviewed template'}).click();
-  await expect(editor).not.toBeVisible();
-}
 async function start(page,dialog) {const previous=await page.evaluate(()=>window.currentSession);await dialog.getByRole('button',{name:'Start conversation',exact:true}).click();await page.waitForFunction(old=>window.currentSession&&window.currentSession!==old,previous);await expect(page.locator('[data-s2g-execution]')).toBeVisible();return page.evaluate(()=>window.currentSession);}
-async function inspect(page) {await page.locator('.s2g-inspector > summary').click();}
+async function noDiagnostics(page) {
+  await expect(page.getByText('Technical details',{exact:true})).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Configure event template/})).toHaveCount(0);
+  await expect(page.locator('pre')).toHaveCount(0);
+  assert.doesNotMatch(await page.locator('#dock').innerText(), /digest|subscription|tokens|sha256|Pinned prompts/);
+}
 
-test('orchestrated UI saves text-backed reactions, runs analyst/reviewer, and explains causal deliveries', {timeout:45000},async()=>{
+test('orchestrated progress retains read-only reactions and revision-checked controls without diagnostics', {timeout:45000},async()=>{
   const f=await fixture();try {
-    const dialog=await chooser(f.page,'orchestrated');await customTemplate(f.page,dialog,'orchestrated');const id=await start(f.page,dialog);
+    const id=await start(f.page,await chooser(f.page,'orchestrated'));
     await f.page.getByRole('button',{name:'Send request',exact:true}).click();
     await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).events.some(event=>event.type==='review.ready'));
-    await inspect(f.page);const state=f.runtime.ctx.eventSystems.get(SessionId(id));
-    assert.equal(state.members.length,3);assert.ok(state.definition.agents[0].prompt.includes('browser tutorial'));assert.equal(f.mutations,0);assert.equal(f.previews,0);
-    const review=state.events.find(event=>event.type==='review.ready');
-    await f.page.getByLabel('Inspect event',{exact:true}).selectOption(review.id);
-    await expect(f.page.locator('[data-causal-event]')).toContainText('user.requested (human) → analysis.ready (analyst) → review.ready (reviewer)');
-    await expect(f.page.locator('[data-causal-event]')).toContainText('Matched prepare: exact review.ready → primary');
-    await expect(f.page.getByRole('table',{name:'Model request charges'})).toBeVisible();
+    const state=f.runtime.ctx.eventSystems.get(SessionId(id));
+    assert.equal(state.members.length,3);assert.equal(f.mutations,0);assert.equal(f.previews,0);
     await waitFor(()=>f.runtime.ctx.eventSystems.get(SessionId(id)).deliveries.every(item=>item.state==='completed'));
-    await f.page.waitForTimeout(2100); // Let the dock observe the committed review decision before its CAS action.
+    await f.page.waitForTimeout(2100);
+    await noDiagnostics(f.page);
     await f.page.getByRole('button',{name:'Pause',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','paused');
     await f.page.getByRole('button',{name:'Resume',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','active');
     assert.deepEqual(f.runtime.ctx.eventSystems.get(SessionId(id)).definition,state.definition);
-    await screenshot(f.page,"01-orchestrated-final");
+    await screenshot(f.page,'01-orchestrated-final');
   }finally{await f.close();}
 });
 
-test('goal UI retains one native primary, completes read-only analysis, and controls model-free HTTP checks', {timeout:45000},async()=>{
+test('goal progress controls model-free source checks without exposing prompts or payloads', {timeout:45000},async()=>{
   const f=await fixture();try {
-    const dialog=await chooser(f.page,'goal');await customTemplate(f.page,dialog,'goal');const id=await start(f.page,dialog);
+    const id=await start(f.page,await chooser(f.page,'goal'));
     await f.page.getByRole('button',{name:'Send request',exact:true}).click();
     await waitFor(()=>f.runtime.ctx.goals.get(f.runtime.ctx.agents.get(SessionId(id)))?.phase==='complete');
     assert.equal(f.runtime.ctx.eventSystems.get(SessionId(id)).members.length,1);assert.equal(f.mutations,0);assert.equal(f.previews,0);
@@ -145,48 +135,35 @@ test('goal UI retains one native primary, completes read-only analysis, and cont
     await f.runtime.ctx.agents.get(SessionId(id)).whenIdle();const requests=f.runtime.adapter.requests.length;
     await f.page.waitForTimeout(2100);assert.equal(f.runtime.adapter.requests.length,requests);
     await f.page.getByRole('button',{name:'Disable monitor',exact:true}).click();await expect(f.page.getByRole('button',{name:'Enable monitor',exact:true})).toBeVisible();
-    await inspect(f.page);await expect(f.page.getByText('Pinned event configuration',{exact:true})).toBeVisible();
+    await noDiagnostics(f.page);
     await f.page.getByRole('button',{name:'Stop',exact:true}).click();await expect(f.page.locator('[data-s2g-execution]')).toHaveAttribute('data-s2g-execution','stopped');
-    await screenshot(f.page,"02-goal-final");
+    await screenshot(f.page,'02-goal-final');
   }finally{await f.close();}
 });
 
-test('both preset UIs reject permission escalation and preserve pinned text when saved templates change', {timeout:60000},async()=>{
+test('preset selection preserves pinned definitions while developer APIs enforce template permissions', {timeout:60000},async()=>{
   const f=await fixture();try {
     for(const preset of ['goal','orchestrated']) {
-      const dialog=await chooser(f.page,preset);await customTemplate(f.page,dialog,preset);const id=await start(f.page,dialog);await inspect(f.page);
+      const catalog=(await f.runtime.api('/event-templates')).value.templates;
+      const template=catalog.find(item=>item.builtin&&JSON.parse(item.text).preset===preset&&JSON.parse(item.text).domain==='spec');
+      const id=await start(f.page,await chooser(f.page,preset));
       const original=f.runtime.ctx.eventSystems.get(SessionId(id));
-      await f.page.getByRole('button',{name:'Configure event templates',exact:true}).click();const editor=f.page.getByRole('dialog',{name:`Event setup · ${preset}`});
-      const catalog=(await f.runtime.api('/event-templates')).value.templates;const template=catalog.find(item=>item.name===`${preset} browser template`);
-      await editor.getByLabel('Template',{exact:true}).selectOption(template.key);
-      await f.page.keyboard.press('Shift+Tab');await expect(editor.getByRole('button',{name:'Validate and preview'})).toBeFocused();
-      await f.page.keyboard.press('Tab');await expect(editor.getByLabel('Template',{exact:true})).toBeFocused();
-      await editor.getByText('Text definition (JSON / YAML subset)',{exact:true}).click();
       const document=JSON.parse(template.text);document.definition.agents[0].tools.push('run_shell');
-      await editor.getByLabel('Configuration text',{exact:true}).fill(JSON.stringify(document));await editor.getByRole('button',{name:'Validate and preview'}).click();
-      await expect(editor.getByRole('alert')).toContainText('Unapproved');await expect(editor.getByRole('button',{name:'Save reviewed template'})).toBeDisabled();
+      const denied=await f.runtime.api(`/event-templates/${encodeURIComponent(template.key)}/preview`,{revision:template.revision,text:JSON.stringify(document)});
+      assert.equal(denied.status,422);assert.match(denied.value.error,/Unapproved/);
       document.definition.agents[0].tools.pop();document.definition.agents[0].prompt+='\nA later template revision.';
-      if(preset==='orchestrated') {
-        document.definition.agents.push({id:'observer',prompt:'Observe review preparation without mutations.',tools:['get_bound_context','get_event_system'],publishes:[]});
-        document.definition.subscriptions.push({id:'observe-prepared',event:'review.prepared',target:'observer'});
-      }
-      await editor.getByLabel('Configuration text',{exact:true}).fill(JSON.stringify(document));await editor.getByRole('button',{name:'Apply text to visual editor'}).click();
-      await expect(editor.getByLabel('Prompt · primary',{exact:true})).toHaveValue(document.definition.agents[0].prompt);
-      await editor.getByRole('button',{name:'Validate and preview'}).click();await editor.getByRole('button',{name:'Save reviewed template'}).click();
+      const preview=await f.runtime.api(`/event-templates/${encodeURIComponent(template.key)}/preview`,{revision:template.revision,text:JSON.stringify(document)});
+      assert.equal(preview.status,200);
+      const saved=await f.runtime.api(`/event-templates/${encodeURIComponent(template.key)}/save`,{revision:template.revision,text:preview.value.after,reviewDigest:preview.value.reviewDigest,name:`${preset} browser template`});
+      assert.equal(saved.status,200);
       assert.deepEqual(f.runtime.ctx.eventSystems.get(SessionId(id)).definition,original.definition);
-      const reopened=await chooser(f.page,preset);await reopened.getByLabel('Event template',{exact:true}).selectOption(template.key);const next=await start(f.page,reopened);
-      const configured=f.runtime.ctx.eventSystems.get(SessionId(next));
-      assert.ok(configured.definition.agents[0].prompt.includes('later template revision'));
-      if(preset==='orchestrated')assert.equal(configured.members.length,4);
-      await inspect(f.page);
+      const reopened=await chooser(f.page,preset);await reopened.getByLabel('Event template',{exact:true}).selectOption(saved.value.template.key);
+      // Focus remains inside the designer's conversation chooser.
+      await f.page.keyboard.press('Tab');assert.ok(await reopened.evaluate(element=>element.contains(document.activeElement)));
+      const next=await start(f.page,reopened);
+      assert.ok(f.runtime.ctx.eventSystems.get(SessionId(next)).definition.agents[0].prompt.includes('later template revision'));
+      await noDiagnostics(f.page);
       await screenshot(f.page,`03-configuration-pinning-${preset}-final`);
-      if(preset==='orchestrated'&&process.env.ASSISTANT_UI_SCREENSHOT_DIR){
-        await f.page.getByRole('button',{name:'Configure event templates',exact:true}).click();
-        const editor=f.page.getByRole('dialog',{name:`Event setup · ${preset}`});
-        await editor.getByLabel('Template',{exact:true}).selectOption(template.key);
-        await screenshot(f.page,'04-orchestrated-topology-editor');
-        await editor.getByRole('button',{name:'Close',exact:true}).click();
-      }
     }
   }finally{await f.close();}
 });

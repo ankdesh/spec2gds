@@ -388,7 +388,8 @@ test("execution dock sends exact retry, answer, and source-control identities", 
     slots: { inject: (_name: string, fn: () => void) => fn(), register: (slot: any, component: any) => { if (slot.id === "execution") dock = component; } } });
   const buttons: any[] = [];
   function visit(node: any): void { if (!node || typeof node !== "object") return; if (node.type === "button") buttons.push(node); for (const child of node.children ?? []) visit(child); }
-  visit(dock({ sessionId: "session/x" }));
+  const element = dock({ sessionId: "session/x" });
+  visit(element.type(element.props));
   for (const label of ["Acknowledge uncertainty and retry", "Answer", "Disable monitor"]) {
     const button = buttons.find(item => item.children.includes(label)); assert.ok(button);
     await button.props.onClick(); await new Promise(resolve => setImmediate(resolve));

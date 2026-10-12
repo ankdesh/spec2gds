@@ -205,12 +205,13 @@ test('browser reload and closure preserve the host flow and Spec Editor approval
       ['/react.js', await readFile(resolve(nativeDependencies.resolve('react/package.json'), '../umd/react.development.js'), 'utf8')],
       ['/react-dom.js', await readFile(resolve(nativeDependencies.resolve('react-dom/package.json'), '../umd/react-dom.development.js'), 'utf8')],
     ]);
-    const shell = `<!doctype html><html><head><script src="/react.js"></script><script src="/react-dom.js"></script></head><body><div id="dock"></div><script>
+    const shell = `<!doctype html><html><head><script src="/react.js"></script><script src="/react-dom.js"></script></head><body><div id="dock"></div><div id="review"></div><script>
       const slots={};window.__ModuleLoader__={load(definition){const plugin=definition.factory(()=>React);plugin.apply({
         uiSession:{registerNewSessionHandler(){}},uiConversation:{events:{register(){}}},
-        slots:{inject(name,register){if(name==='conversation.input.dock')register();},register(options,component){slots[options.id||options.name]=component;return ()=>{};}},
+        slots:{inject(name,register){if(name==='conversation.input.dock'||name==='conversation.chat.turnTail')register();},register(options,component){slots[options.id||options.name]=component;return ()=>{};}},
         sessions:{list:{getSnapshot:()=>({byId:{}})},open(){}},workspaces:{list:{getSnapshot:()=>({items:[]})}}
-      });ReactDOM.createRoot(document.querySelector('#dock')).render(React.createElement(slots['flow-approvals'],{sessionId:'source'}));}};
+      });ReactDOM.createRoot(document.querySelector('#dock')).render(React.createElement(slots['flow-approvals'],{sessionId:'source'}));
+      ReactDOM.createRoot(document.querySelector('#review')).render(React.createElement(slots['conversation.chat.turnTail'],{sessionId:'source',matched:{flowExecutionId:${JSON.stringify(waiting.id)}}}));}};
       </script><script src="/product.js"></script></body></html>`;
     app = createHttpServer(async (request, response) => {
       try {
@@ -224,9 +225,12 @@ test('browser reload and closure preserve the host flow and Spec Editor approval
     browser = await chromium.launch(browserOptions); const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${app.address().port}`);
     await expect(page.getByRole('button', { name: 'Approve architecture', exact: true })).toBeVisible();
+    await expect(page.locator('#review pre')).toHaveCount(0);
+    await expect(page.locator('#review')).toContainText('Unsigned adder');
     await page.reload();
     await page.getByRole('button', { name: 'Approve architecture', exact: true }).click();
     await expect(page.getByRole('link', { name: 'Review in Spec Editor' })).toBeVisible({ timeout: 30000 });
+    await expect.poll(() => page.locator('#review .s2g-comparison').count()).toBeGreaterThan(0);
     const editorUrl = await page.getByRole('link', { name: 'Review in Spec Editor' }).getAttribute('href');
     await browser.close(); browser = undefined;
     const pending = runtime.ctx.flows.get(waiting.id, { kind: 'host', sessionId: source.id });

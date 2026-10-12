@@ -8,6 +8,7 @@ import { summarizeFlow } from "@deepseek-ai/dsh-flow";
 import type { FlowRuntime, FlowExecutionId } from "@deepseek-ai/dsh-flow";
 import type {} from "@deepseek-ai/dsh-flow-model-native";
 import { SpecFlows } from "./spec-flows.js";
+import { flowPresentation, relatedFlowViews } from "./flow-presentation.js";
 import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import type EventSystemService from "@deepseek-ai/dsh-event-system";
@@ -646,10 +647,15 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         const flowList = path.match(/^\/spec2gds-api\/flows\/([^/]+)$/);
         if (flowList && request.method === "GET") {
           const sessionId = SessionId(decodeURIComponent(flowList[1]!));
-          return writeJson(response, 200, { flows: (ctx as unknown as Context).get("flows")?.list({ kind: "human", sessionId }).slice(-10).map(flow => ({
+          const runtime = (ctx as unknown as Context).get("flows");
+          const exactId = requestUrl.searchParams.get("execution_id");
+          const actor = { kind: "human" as const, sessionId };
+          const visible = runtime ? exactId ? relatedFlowViews(runtime.get(exactId as FlowExecutionId, actor), runtime.list(actor)) : runtime.list(actor).slice(-10) : [];
+          return writeJson(response, 200, { flows: visible.map(flow => ({
             ...summarizeFlow(flow), definition_id: flow.definition.id,
+            progress: flowPresentation(flow, flow.conversations.flatMap(id => state.listReviews(id)), state.getBinding(sessionId)?.sourceName),
             creation_confirmation: specFlows?.creationConfirmation(flow), architecture_review_id: state.listArchitectureReviews().findLast(review => review.flow_execution_id === flow.id)?.reviewId,
-          })) ?? [] });
+          })) });
         }
         const flowAction = path.match(/^\/spec2gds-api\/flow-runs\/([^/]+)\/(pause|resume|cancel|trace)$/);
         if (flowAction) {

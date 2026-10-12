@@ -73,6 +73,29 @@ export interface ProposalChangeSummary {
   diagnostics: string[];
 }
 
+/** Display data derived from service previews, never from inferred source values. */
+export interface PresentedChange {
+  id: string;
+  label: string;
+  change: "added" | "changed" | "removed";
+  kind: "value" | "text" | "code";
+  before: unknown;
+  after: unknown;
+  beforeAvailable: boolean;
+  afterAvailable: boolean;
+}
+
+export interface ProposalPresentation {
+  summary: string;
+  rationale: string;
+  assumptions: string[];
+  warnings: string[];
+  previewAvailable: boolean;
+  errorMessage: string;
+  saved: boolean;
+  groups: Array<{ label: string; changes: PresentedChange[] }>;
+}
+
 export interface ProposalReview {
   proposalId: string;
   sessionId: string;
@@ -93,6 +116,7 @@ export interface ProposalReview {
 
 export type PublicProposalReview = Omit<ProposalReview, "artifactDigest"> & {
   changeSummary: ProposalChangeSummary;
+  presentation: ProposalPresentation;
   reviewNumber?: number;
 };
 

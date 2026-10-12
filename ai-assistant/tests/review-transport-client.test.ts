@@ -17,7 +17,7 @@ async function fixture(meta: any, text: string) {
     useEffect: (effect: any, keys: any[]) => { const i = cursor++; const key = JSON.stringify(keys); if (deps.get(i) !== key) { deps.set(i, key); effects.push(effect); } },
   };
   vm.runInNewContext(readFileSync(new URL("../client/index.js", import.meta.url), "utf8"), {
-    window: { __ModuleLoader__: { load: (v: any) => { definition = v; } } }, URL, URLSearchParams,
+    window: { __ModuleLoader__: { load: (v: any) => { definition = v; } } }, URL, URLSearchParams, setInterval: () => 0, clearInterval() {},
     location: { pathname: "/", search: "", hash: "" }, document: { title: "", createElement: () => ({ dataset: {} }), head: { appendChild() {} } }, queueMicrotask() {},
     fetch: async (path: string) => {
       calls.push(path);

@@ -69,8 +69,7 @@ export async function runSmoke(context: SmokeContext): Promise<void> {
       "The model attempted Spec creation instead of refining the bound Spec.");
     const pending = conversation.locator('[data-s2g-architecture-review="pending"]').last();
     if (await pending.isVisible()) {
-      const decision = JSON.parse(await pending.locator("details pre").last().textContent() || "{}");
-      const id = decision.architecture_review_id;
+      const id = await pending.getAttribute("data-s2g-architecture-review-id");
       assert.equal(typeof id, "string", "A review must expose its stable decision ID.");
       if (!architectureApprovals.has(id)) {
         assert.ok(architectureApprovals.size < 2, "A short live check permits at most two architecture decisions.");
