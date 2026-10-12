@@ -248,7 +248,7 @@ a:focus-visible {
   border: 0;
   border-radius: 0.35rem;
   background: transparent;
-  color: #e4e4e7;
+  color: var(--spec-text, #e4e4e7);
   cursor: pointer;
   font-size: var(--spec-font-small);
   text-align: left;
@@ -1423,10 +1423,32 @@ button:disabled {
   color: #183f32;
 }
 
+[data-theme="clean"] .editor-menu__panel > button {
+  color: #202925;
+}
+
 [data-theme="clean"] .editor-menu__panel > button:hover:not(:disabled),
 [data-theme="clean"] .editor-menu__panel > button:focus-visible {
   background: #eef3f0;
   color: #183f32;
+}
+
+[data-theme="clean"] .editor-menu__panel > button:disabled {
+  color: #8c9993;
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+[data-theme="clean"] .editor-menu__panel small {
+  color: #58645f;
+}
+
+[data-theme="clean"] .editor-menu__separator {
+  background: var(--spec-line);
+}
+
+[data-theme="clean"] .editor-menu__group {
+  color: #58645f;
 }
 
 [data-theme="clean"] .action-dialog,

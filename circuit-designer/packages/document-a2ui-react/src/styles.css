@@ -1359,6 +1359,64 @@
   color: #202925;
 }
 
+[data-theme="clean"] .spec-table-scroll {
+  background: #ffffff;
+  border-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-table-scroll th {
+  background: var(--spec-table-head, #f5f7f6);
+  color: #58645f;
+  border-bottom-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-table-scroll td {
+  color: #202925;
+  border-bottom-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-table-scroll tbody tr:hover {
+  background: #f8faf9;
+}
+
+[data-theme="clean"] .spec-narrative {
+  color: #202925;
+}
+
+[data-theme="clean"] .spec-callout {
+  background: #eef7f3;
+  border-left-color: #246b5a;
+}
+
+[data-theme="clean"] .spec-callout p {
+  color: #202925;
+}
+
+[data-theme="clean"] .spec-callout__icon {
+  color: #246b5a;
+}
+
+[data-theme="clean"] .spec-topology-card {
+  background: #ffffff;
+  border-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-topology-card > figcaption {
+  background: var(--spec-table-head, #f5f7f6);
+  border-bottom-color: var(--spec-line);
+}
+
+[data-theme="clean"] .spec-topology-card > figcaption h4 {
+  color: #202925;
+}
+
+[data-theme="clean"] .spec-topology-card__actions button,
+[data-theme="clean"] .spec-topology-card__actions a {
+  background: #ffffff;
+  border-color: var(--spec-line-strong);
+  color: #202925;
+}
+
 [data-theme="clean"] .spec-ports-table thead th:last-child,
 [data-theme="clean"] .spec-port-row-actions {
   background: #ffffff;

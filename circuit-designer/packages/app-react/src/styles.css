@@ -137,10 +137,11 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
 .circuit-menu > button:hover, .circuit-menu > button:focus-visible, .circuit-menu > button[aria-expanded="true"] { outline: none; background: #e6eeeb; color: #154f50; }
 .circuit-menu__panel { position: absolute; z-index: 50; top: calc(100% - 1px); left: 0; display: grid; min-width: 235px; border: 1px solid #aeb8b6; border-radius: 0 0 4px 4px; background: #fffef9; padding: 5px; box-shadow: 0 12px 28px rgb(23 43 48 / 20%); }
 .circuit-menu__panel--nested { top: -6px; left: calc(100% + 4px); border-radius: 4px; }
-.circuit-menu__panel > button, .circuit-submenu > button { display: flex; align-items: center; justify-content: space-between; gap: 22px; width: 100%; border: 0; border-radius: 2px; background: transparent; padding: 7px 8px; color: #294a4d; text-align: left; font-size: 10px; }
-.circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover, .circuit-submenu > button:focus-visible { outline: none; background: #dcece7; color: #164f50; }
-.circuit-menu__panel > button small, .circuit-submenu > button small { color: #748287; font: 8px ui-monospace; white-space: nowrap; }
-.circuit-menu__separator { height: 1px; margin: 4px 3px; background: #daddd7; }
+.circuit-menu__panel > button, .circuit-submenu > button { display: flex; align-items: center; justify-content: space-between; gap: 22px; width: 100%; border: 0; border-radius: 2px; background: transparent; padding: 7px 8px; color: var(--cd-text, #294a4d); text-align: left; font-size: 10px; }
+.circuit-menu__panel > button:disabled, .circuit-submenu > button:disabled { color: var(--cd-text-muted, #748287); opacity: 0.55; cursor: not-allowed; }
+.circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover:not(:disabled), .circuit-submenu > button:focus-visible { outline: none; background: #dcece7; color: #164f50; }
+.circuit-menu__panel > button small, .circuit-submenu > button small { color: var(--cd-text-muted, #748287); font: 8px ui-monospace; white-space: nowrap; }
+.circuit-menu__separator { height: 1px; margin: 4px 3px; background: var(--cd-border, #daddd7); }
 .circuit-context-menu { position: fixed; z-index: 1000; }
 .circuit-context-menu > .circuit-menu__panel { position: relative; inset: auto; min-width: 220px; border-radius: 4px; }
 .circuit-context-menu .circuit-menu__panel--nested { position: absolute; top: -6px; left: calc(100% + 4px); }
@@ -206,7 +207,45 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
 .inspector code { color: #9eb6c7; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--cd-focus); outline-offset: 2px; }
 .circuit-menu__panel, .circuit-dialog, .action-settings__table { border-color: var(--cd-border); background: var(--cd-surface); }
-.circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover, .circuit-submenu > button:focus-visible { background: #e4f3f3; color: #075b64; }
+.circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover:not(:disabled), .circuit-submenu > button:focus-visible { background: #e4f3f3; color: #075b64; }
+[data-theme="obsidian"] .circuit-menu__panel > button:hover:not(:disabled),
+[data-theme="obsidian"] .circuit-menu__panel > button:focus-visible,
+[data-theme="obsidian"] .circuit-submenu > button:hover:not(:disabled),
+[data-theme="obsidian"] .circuit-submenu > button:focus-visible {
+  background: #27272a;
+  color: #f4f4f5;
+}
+[data-theme="obsidian"] .circuit-menu > button:hover,
+[data-theme="obsidian"] .circuit-menu > button:focus-visible,
+[data-theme="obsidian"] .circuit-menu > button[aria-expanded="true"] {
+  background: #27272a;
+  color: #ffffff;
+}
+[data-theme="obsidian"] .circuit-dialog > header {
+  background: #141416;
+  border-bottom-color: var(--cd-border);
+}
+[data-theme="obsidian"] .circuit-dialog > header h2 {
+  color: var(--cd-text);
+}
+[data-theme="obsidian"] .circuit-dialog button:not(.primary) {
+  border-color: var(--cd-border-strong);
+  background: #27272a;
+  color: var(--cd-text);
+}
+[data-theme="obsidian"] .circuit-dialog .dialog-close {
+  color: var(--cd-text);
+}
+[data-theme="obsidian"] .preference-toggle {
+  background: #141416;
+  border-color: var(--cd-border);
+}
+[data-theme="obsidian"] .preference-toggle strong {
+  color: var(--cd-text);
+}
+[data-theme="obsidian"] .preference-toggle small {
+  color: var(--cd-text-muted);
+}
 .timing-analysis-list article[data-status="cdc"], .timing-analysis-list article[data-status="backward"] { border-color: var(--cd-warning); background: var(--cd-warning-surface); }
 
 @container circuit-app (max-width: 960px) {

@@ -776,8 +776,6 @@ export default function EditorMenuBar({
               <MenuAction disabled={!canPaste} onActivate={activate(() => { void editClipboard("paste"); })}>Paste</MenuAction>
               <MenuAction disabled={!snapshot} onActivate={activate(selectAll)}>Select All</MenuAction>
               <div className="editor-menu__separator" role="separator" />
-              <MenuAction disabled status="Coming soon">Find</MenuAction>
-              <div className="editor-menu__separator" role="separator" />
               <MenuAction onActivate={activate(() => setDialog("preferences"))} shortcut="Ctrl/⌘ ,">Preferences…</MenuAction>
             </TopMenu>
             <TopMenu id="circuit" label="Circuit" openMenu={openMenu} setOpenMenu={setOpenMenu}>
