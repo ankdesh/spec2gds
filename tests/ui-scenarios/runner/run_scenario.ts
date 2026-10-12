@@ -329,7 +329,7 @@ async function run(): Promise<void> {
         assert.ok(approvedResponse.ok(), "The architecture decision must be saved by the Assistant service.");
         const architectureReview = (await approvedResponse.json()).architecture_review;
         assert.equal(architectureReview.status, "approved");
-        assertEvaluationInterface(architectureReview.plan, evalCase.ports);
+        assertEvaluationInterface(architectureReview.plan, evalCase.ports, architectureReview.elaborations);
         records.push({ approved_architecture: architectureReview });
         let generatedPackage = "";
         await expect.poll(() => {
@@ -446,7 +446,11 @@ async function run(): Promise<void> {
         await conversation.goto(`${assistant}/launch`);
         await prompt(conversation, `Create a new spec document ${documentId} titled ${documentTitle}. Add timer_core with scalar clk and rst_n inputs and an 8-bit irq output replicating clk & rst_n combinationally.`);
         if (presentation) await expect(conversation.locator('[data-s2g-architecture-review="pending"]')).toBeVisible();
-        await architectureCapture("01_ai_assistant_architecture.png", "Review the Components, Design, concrete widths, and signal connection before creating the Spec.");
+        await expect(conversation.getByRole("heading", { name: "Configuration", exact: true })).toHaveCount(0);
+      const interfaceTables = conversation.getByRole("region", { name: "Port interface", exact: true });
+      await expect(interfaceTables.last().getByRole("columnheader", { name: "Port ID", exact: true })).toBeVisible();
+      await expect(interfaceTables.last().getByRole("row", { name: /irq/ })).toContainText("out · 7:0");
+      await architectureCapture("01_ai_assistant_architecture.png", "Review the Components, Design, concrete widths, and signal connection before creating the Spec.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => {
           try { initial = await json(`${owner}/documents/snapshot`); return true; }
@@ -510,6 +514,9 @@ async function run(): Promise<void> {
         await editor.locator(`#component-${componentId.replaceAll("_", "-")}`).evaluate(element => element.scrollIntoView({ block: "start" }));
         await capture(editor, "03b_spec_editor_component.png", "Spec Editor", "The Component combines an 8-bit IRQ interface, an explanation, and its SystemVerilog content in one Spec.");
       }
+      const componentView = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
+      await expect(componentView.getByRole("columnheader", { name: "Port name (optional)", exact: true })).toHaveCount(0);
+      await expect(componentView.locator(".spec-port-row", { hasText: "irq" })).toContainText("Replicated input conjunction");
       assert.equal(current.components[0].ports.find((port: any) => port.name === "irq").range, "7:0");
       assert.equal(current.entity_sections[0].content, "assign irq = {8{clk & rst_n}};");
       if (scenario === "restricted") {

@@ -98,7 +98,6 @@ class WirePortInput:
 
     direction: typing.Literal["in", "out", "inout"]
     range: str | None = None
-    display_name: str | None = None
     description: str | None = None
     family: typing.Literal["wire"] = "wire"
 
@@ -111,7 +110,6 @@ class TransactionalPortInput:
     kind: typing.Literal["tlm_port", "tlm_socket", "simple_socket", "multi_socket", "custom"] | None = None
     custom_kind: str | None = None
     bus_width: str | None = None
-    display_name: str | None = None
     description: str | None = None
     family: typing.Literal["transactional"] = "transactional"
 
@@ -121,7 +119,6 @@ class StructuredPortInput:
     """Editable fields for one opaque packed structured port."""
 
     direction: typing.Literal["in", "out", "inout"]
-    display_name: str | None = None
     description: str | None = None
     family: typing.Literal["structured"] = "structured"
 
@@ -427,6 +424,30 @@ class SpecEditTransaction:
             if isinstance(operation, UpsertSection) and operation.section_type == "sv"
         }
         updated_owners.update(created_sv_owners)
+        old_components = {component.ref: component for component in revision.components}
+        for component in next_revision.components:
+            previous = old_components.get(component.ref)
+            if previous is None or component.ports != previous.ports or component.parameters != previous.parameters:
+                updated_owners.add(component.ref)
+        from dataclasses import asdict
+        from spec2gds.spec.spec_format.rtl_interface import resolve_interface
+        for component in next_revision.components:
+            if component.ref not in updated_owners:
+                continue
+            body = "\n".join(section.content for section in next_revision.entity_sections_for(component.ref, "sv"))
+            if not body and not component.parameters:
+                continue
+            try:
+                resolved = resolve_interface(
+                    [{"name": port.name, "direction": port.direction,
+                      "range": port.width[1:-1] if isinstance(port.width, str) else None}
+                     for port in component.ports if port.style == "wire"],
+                    [asdict(parameter) for parameter in component.parameters], body,
+                )
+            except (ValueError, OSError) as exc:
+                return EditResult(revision=None, diagnostics=(str(exc),))
+            if resolved["status"] != "resolved":
+                return EditResult(revision=None, diagnostics=tuple(item["message"] for item in resolved["diagnostics"]))
         updated_ids = {
             item.section_id for owner in updated_owners
             for item in next_revision.entity_sections_for(owner, "sv")

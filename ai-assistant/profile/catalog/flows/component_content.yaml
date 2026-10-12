@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.component_content",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Author and save a complete Component.",
   "inputSchema": {
     "type": "object",
@@ -52,7 +52,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.authoring_context",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "inputs"
@@ -83,6 +83,7 @@
             "type": "array",
             "items": {
               "type": "object",
+              "additionalProperties": false,
               "properties": {
                 "name": {
                   "type": "string"
@@ -95,16 +96,28 @@
                     "inout"
                   ]
                 },
-                "width": {
-                  "type": "integer"
+                "range": {
+                  "description": "Exact bounds; null is scalar. Never rebase a supplied range.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Concise purpose from supplied RTL or requirements."
                 }
               },
               "required": [
                 "name",
                 "direction",
-                "width"
-              ],
-              "additionalProperties": false
+                "range",
+                "description"
+              ]
             }
           },
           "description": {
@@ -115,6 +128,33 @@
           },
           "systemverilog": {
             "type": "string"
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "rtl_type": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "rtl_type",
+                "value",
+                "description"
+              ]
+            }
           }
         },
         "required": [
@@ -122,7 +162,8 @@
           "ports",
           "description",
           "narrative",
-          "systemverilog"
+          "systemverilog",
+          "parameters"
         ],
         "additionalProperties": false
       }
@@ -132,7 +173,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.submit_component",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "session_id": {
@@ -196,7 +237,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.require_saved",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.saved"

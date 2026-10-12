@@ -33,7 +33,7 @@ def model_fixture():
             if tools == {"structured_output"}:
                 name = "structured_output"
                 args = {"title": "Timer architecture", "components": [{"name": "timer", "purpose": "Replicate the input."}],
-                        "designs": [], "interfaces": [{"component": "timer", "ports": [{"name": "a", "direction": "in", "width": 1}, {"name": "q", "direction": "out", "width": 1}]}],
+                        "designs": [], "interfaces": [{"component": "timer", "ports": [{"name": "a", "direction": "in", "range": None, "description": "Input signal"}, {"name": "q", "direction": "out", "range": None, "description": "Replicated output"}], "parameters": [], "constant_context": ""}],
                         "clocks_resets": [], "decomposition_rationale": "One combinational leaf.", "assumptions": [], "open_questions": [], "concrete_configuration": {"width": 1}}
             elif not any(message.get("role") == "tool" for message in body["messages"]):
                 name, args = "get_bound_context", {}

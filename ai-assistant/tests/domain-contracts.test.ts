@@ -197,7 +197,7 @@ test("wire edits reject snapshot-only fields before service submission", () => {
   const source = JSON.parse(readFileSync(new URL("../../spec2gds/spec/spec_format/assistant_operation_schema.json", import.meta.url), "utf8"));
   const contract = parseServiceOperationContract({ schema_version: 1, digest: `sha256:${"c".repeat(64)}`, operation_schema: source });
   const operation = { operation_id: "wire", type: "upsert_component_port", component: { document_id: "doc", entity_kind: "component", entity_id: "core" },
-    port: { name: "irq", family: "wire", direction: "out", range: "15:0", display_name: "IRQ output", description: "Smoke check output." } };
+    port: { name: "irq", family: "wire", direction: "out", range: "15:0", description: "Smoke check output." } };
   assert.doesNotThrow(() => validateServiceOperations(contract, [operation]));
   for (const field of [{ style: "wire" }, { packed: false }, { width: 16 }]) {
     assert.throws(() => validateServiceOperations(contract, [{ ...operation, port: { ...operation.port, ...field } }]), /published schema/);

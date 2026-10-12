@@ -91,7 +91,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
     const call = (name, args, id) => ({ tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: JSON.stringify(args) } }] });
     const delta = looping ? call("get_bound_context", {}, `call_context_${toolResults}`)
       : phase ? call("structured_output", { title: "Timer", components: [{ name: "timer", purpose: "Timing control" }], designs: [],
-        interfaces: [{ component: "timer", ports: [{ name: "clk", direction: "in", width: 1 }] }], clocks_resets: ["Rising-edge clock"],
+        interfaces: [{ component: "timer", ports: [{ name: "clk", direction: "in", range: null, description: "Port purpose" }], parameters: [], constant_context: "" }], clocks_resets: ["Rising-edge clock"],
         decomposition_rationale: "One leaf", assumptions: [], open_questions: [], concrete_configuration: { width: 8 } }, "architecture")
       : flowRequest ? call("flow_add_component", { title: "Timer", request: "Start timer flow: add a complete timer Component" }, "flow_start")
       : toolResults === 0 ? call("get_bound_context", {}, "call_context")

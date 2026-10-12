@@ -1004,14 +1004,14 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await expect(component.locator(".spec-port-row", { hasText: "irq" })).toBeVisible();
   const transactionalRow = component.locator(".spec-port-row", { hasText: "request_stream" });
   await expect(transactionalRow).toContainText("Transactional");
-  await expect(transactionalRow).toContainText("Request stream");
+  await expect(transactionalRow).toContainText("request_stream");
   await expect(transactionalRow).toContainText("provides");
   await expect(transactionalRow).toContainText("timer_service");
   await expect(transactionalRow).toContainText("DATA_WIDTH");
   await expect(transactionalRow).toContainText("Streams timer requests");
   const structuredRow = component.locator(".spec-port-row", { hasText: "status_bundle" });
   await expect(structuredRow).toContainText("Structured");
-  await expect(structuredRow).toContainText("Status bundle");
+  await expect(structuredRow).toContainText("status_bundle");
   await expect(structuredRow).toContainText("Packed struct");
   await expect(structuredRow).toContainText("Packed status fields");
   await component.getByRole("button", { name: "Options" }).click();
@@ -1031,7 +1031,7 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await component.getByRole("menuitem", { name: "Add wire port…" }).click();
   const draftCard = component.locator(".spec-port-editor");
   await draftCard.getByLabel("Port ID").fill("count");
-  await draftCard.getByLabel("Port name (optional)").fill("Current count");
+  await expect(draftCard.getByLabel("Port name (optional)")).toHaveCount(0);
   await draftCard.getByLabel("Direction").selectOption("out");
   await draftCard.getByLabel("Range").fill("31:0");
   await draftCard.getByLabel("Description").fill("Current counter value");
@@ -1043,7 +1043,6 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
     port: {
       name: "count",
       family: "wire",
-      display_name: "Current count",
       direction: "out",
       range: "31:0",
       description: "Current counter value",
@@ -1054,7 +1053,7 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await existingCard.getByRole("button", { name: "Edit" }).click();
   const editCard = component.locator(".spec-port-editor");
   await expect(editCard.getByLabel("Port ID")).toHaveCount(0);
-  await editCard.getByLabel("Port name (optional)").fill("Interrupt request line");
+  await expect(editCard.getByLabel("Port name (optional)")).toHaveCount(0);
   await editCard.getByLabel("Direction").selectOption("inout");
   await editCard.getByLabel("Description").fill("Bidirectional interrupt");
   await editCard.getByRole("button", { name: "Save to Spec" }).click();
@@ -1065,7 +1064,6 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
     name: "irq",
     port: {
       family: "wire",
-      display_name: "Interrupt request line",
       direction: "inout",
       range: null,
       description: "Bidirectional interrupt",
@@ -1159,7 +1157,7 @@ test("keeps mixed-family tables contained, IDs exact, and row actions readable",
   await component.locator(".spec-port-row").first().getByRole("button", { name: "Edit", exact: true }).click();
   const draft = component.locator(".spec-port-editor");
   await expect(draft).toBeVisible();
-  for (const control of [draft.getByLabel("Port name (optional)"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
+  for (const control of [draft.getByLabel("Description"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
     const box = await control.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(390);

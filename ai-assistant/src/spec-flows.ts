@@ -18,7 +18,7 @@ import { submitSpecChangeCommand, recoverSpecSubmission, requiresSpecArchitectur
 import { validateServiceOperations, parseServiceOperationContract } from "./service-operation-schema.js";
 import type { SessionBinding, AssistantPreset } from "./types.js";
 import { isRecord } from "./types.js";
-import { normalizeSpecFormatting } from "./normalize.js";
+import { compactWireRange, normalizeSpecFormatting } from "./normalize.js";
 import { validateArchitectureOperations } from "./architecture-review.js";
 
 const object: JsonSchemaNode = { type: "object", additionalProperties: true };
@@ -35,32 +35,40 @@ export interface SpecFlowOptions {
   activate(id: string): Promise<SessionBinding>;
 }
 /** Build one complete atomic batch; model output never selects service commands. */
-export function approvedComponentInterface(plan: Record<string, any>): { name: string; ports: { name: string; direction: string; width: number }[] } {
+export function approvedComponentInterface(plan: Record<string, any>) {
   if (!Array.isArray(plan.components) || plan.components.length !== 1 || !Array.isArray(plan.designs) || plan.designs.length) throw new Error("This flow requires exactly one approved leaf Component.");
   const name = plan.components[0].name;
-  const interfaces = Array.isArray(plan.interfaces) ? plan.interfaces.filter((item: Record<string, any>) => item.component === name) : [];
-  if (interfaces.length !== 1 || !Array.isArray(interfaces[0].ports)) throw new Error("The approved Component requires one concrete interface.");
-  const ports = interfaces[0].ports;
-  if (typeof name !== "string" || !name.trim() || ports.some((port: Record<string, any>) => typeof port.name !== "string" || !port.name.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1) || new Set(ports.map((port: Record<string, any>) => port.name)).size !== ports.length) throw new Error("The approved Component requires unique ports with positive concrete widths and directions.");
-  return { name, ports: ports.map((port: Record<string, any>) => ({ name: port.name, direction: port.direction, width: port.width })) };
+  const groups = Array.isArray(plan.interfaces) ? plan.interfaces.filter((item: Record<string, any>) => item.component === name) : [];
+  if (groups.length !== 1 || !Array.isArray(groups[0].ports)) throw new Error("The approved Component requires one exact interface.");
+  const group = groups[0];
+  if (typeof name !== "string" || !name.trim() || !Array.isArray(group.parameters) || typeof group.constant_context !== "string"
+    || group.ports.some((port: Record<string, any>) => !port.name?.trim() || !["in", "out", "inout"].includes(port.direction)
+      || !Object.hasOwn(port, "range") || !(port.range === null || typeof port.range === "string") || !port.description?.trim() || Object.hasOwn(port, "width"))
+    || new Set(group.ports.map((port: Record<string, any>) => port.name)).size !== group.ports.length) {
+    throw new Error("Prepare a new interface review with exact port ranges, descriptions, and parameters. Width-only reviews cannot authorize creation.");
+  }
+  return structuredClone({ name, ports: group.ports, parameters: group.parameters, constant_context: group.constant_context });
 }
 
 export function componentFlowOperations(documentId: string, plan: Record<string, any>, draft: Record<string, any>, identity: string): Record<string, unknown>[] {
   const approved = approvedComponentInterface(plan);
   if (draft.name !== approved.name) throw new Error(`The draft Component name must be exactly ${JSON.stringify(approved.name)} from the approved interface.`);
   if (!draft.description?.trim() || !draft.systemverilog?.trim()) throw new Error("The complete Component requires description and functional SystemVerilog.");
-  if (!Array.isArray(draft.ports) || draft.ports.some((port: Record<string, any>) => !port.name?.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1) || new Set(draft.ports.map((port: Record<string, any>) => port.name)).size !== draft.ports.length) throw new Error("The complete Component requires unique ports with positive concrete widths and directions.");
+  const canonicalPorts = (ports: Record<string, any>[]) => ports.map(port => ({ ...port, range: compactWireRange(port.range) }));
+  if (!Array.isArray(draft.ports) || artifactDigest(canonicalPorts(draft.ports)) !== artifactDigest(canonicalPorts(approved.ports)) || artifactDigest(draft.parameters) !== artifactDigest(approved.parameters)) throw new Error("Draft ports or parameters differ from the approved exact interface. Prepare a revised architecture review.");
   const entity = { document_id: documentId, entity_kind: "component", entity_id: "flow_component" };
   const operations: Record<string, unknown>[] = [
     { operation_id: "create_component", type: "create_entity", kind: "component", name: draft.name, entity_id: "flow_component", instances: [],
-      ports: draft.ports.map((p: Record<string, any>) => ({ name: p.name, family: "wire", direction: p.direction, ...(p.width > 1 ? { range: `${p.width - 1}:0` } : {}) })), systemverilog: draft.systemverilog },
+      ports: approved.ports.map((p: Record<string, any>) => ({ ...p, family: "wire" })), systemverilog: [approved.constant_context, draft.systemverilog].filter(Boolean).join("\n") },
     { operation_id: "describe_component", type: "set_entity_metadata", entity, description: draft.description },
+    ...approved.parameters.map((parameter: Record<string, any>, index: number) => ({ operation_id: `parameter_${index}`, type: "upsert_parameter", entity, parameter })),
   ];
   if (draft.narrative?.trim()) operations.push({ operation_id: "component_narrative", type: "upsert_narrative_block", block: {
     block_id: "flow_narrative_" + artifactDigest(identity).replace(/^sha256:/, "").slice(0, 24), type: "paragraph", text: draft.narrative, entity_refs: [entity] } });
   validateArchitectureOperations(plan, operations);
   return operations;
 }
+
 function record(input: JsonValue): Record<string, any> { if (!isRecord(input)) throw new Error("Flow operation requires an object."); return input; }
 function json(value: unknown): JsonValue { const output = snapshotJsonValue(value); if (output === undefined) throw new Error("Flow result is not JSON."); return output as JsonValue; }
 function known(error: unknown): never { if (error instanceof FlowOperationError) throw error; throw new FlowOperationError(error instanceof Error ? error.message : String(error), error instanceof ServiceError && error.uncertain); }
@@ -207,7 +215,7 @@ export class SpecFlows {
     const { flows, state, owners, creations } = this.options;
     const add = (id: string, inputSchema: JsonSchemaNode, outputSchema: JsonSchemaNode, effect: "read" | "write", execute: (inputs: Record<string, any>, context: FlowOperationContext) => Promise<unknown>, reconcile?: (inputs: Record<string, any>, context: FlowOperationContext) => Promise<unknown | undefined>) => {
       const run = async (input: JsonValue, context: FlowOperationContext): Promise<JsonValue> => { try { return json(await execute(record(input), context)); } catch (error) { return known(error); } };
-      this.options.ctx.effect(() => flows.registerOperation({ id: "spec2gds." + id, version: "2.0.0", inputSchema, outputSchema, effect, cancellation: effect === "read" ? "cooperative" : "await-settlement", recovery: effect === "read" ? "repeat" : reconcile ? "receipt" : "manual", execute: run,
+      this.options.ctx.effect(() => flows.registerOperation({ id: "spec2gds." + id, version: "3.0.0", inputSchema, outputSchema, effect, cancellation: effect === "read" ? "cooperative" : "await-settlement", recovery: effect === "read" ? "repeat" : reconcile ? "receipt" : "manual", execute: run,
         ...(reconcile ? { reconcile: async (input: JsonValue, context: FlowOperationContext) => { const result = await reconcile(record(input), context); return result === undefined ? undefined : json(result); } } : {}) }));
     };
     add("bound_document", shape({}), shape({ session_id: string }), "read", async (_input, context) => { const binding = this.binding(String(context.sourceSessionId)); if (binding.scope !== "document") throw new Error("Component creation requires a document-bound Spec conversation."); return { session_id: binding.sessionId }; });
@@ -219,7 +227,7 @@ export class SpecFlows {
         const binding = state.getBinding(previous.destinationSessionId) ?? { ...previous.reservation?.session, sessionId: previous.destinationSessionId, domain: "spec", scope: "document", status: "active", serviceUrl: previous.serviceBaseUrl, serviceDocumentKey: previous.serviceDocumentKey, documentId: previous.documentId } as SessionBinding;
         return { ...await this.contextPages(binding, context), existing_created_spec: true, destination_session_id: previous.destinationSessionId, service_document_key: previous.serviceDocumentKey };
       }
-      if (input.creation) return { new_spec: true, service: this.options.preferredService };
+      if (input.creation) return { new_spec: true, service: record(flows.get(context.executionId, { kind: "host", sessionId: context.sourceSessionId }).inputs).service_url ?? this.options.preferredService };
       const source = await this.contextPages(this.binding(String(context.sourceSessionId)), context);
       if (input.proposed_changes && input.proposed_changes.base_source_revision_hash !== source.source_revision_hash) throw new Error("The Spec changed after the edit draft. Start a new flow with fresh context.");
       return { ...source, ...(input.proposed_changes ? { proposed_changes: input.proposed_changes } : {}) };
@@ -227,12 +235,23 @@ export class SpecFlows {
     const saveArchitecture = async (input: Record<string, any>, context: FlowOperationContext) => {
       const instructions = this.options.instructionsFor(String(context.sourceSessionId));
       if (flows.get(context.executionId, { kind: "host", sessionId: context.sourceSessionId }).definition.id !== "spec2gds.edit_spec" && (input.plan.components.length !== 1 || input.plan.designs.length)) throw new Error("Select one leaf Component for this flow.");
+      const serviceUrl = input.context.service ?? state.getBinding(String(context.sourceSessionId))?.serviceUrl ?? this.options.preferredService;
+      const reviewPlan = structuredClone(input.plan);
+      for (const group of reviewPlan.interfaces) group.ports = group.ports.map((port: Record<string, any>) => ({ ...port, range: compactWireRange(port.range) }));
+      const elaborations = [];
+      for (const group of reviewPlan.interfaces) {
+        try {
+          const result = await owners.resolveInterface(serviceUrl, { ports: group.ports, parameters: group.parameters, systemverilog: group.constant_context }, context.signal);
+          elaborations.push({ component: group.component, ...result });
+          if (result.status !== "resolved") reviewPlan.open_questions.push(...(result.diagnostics ?? []).map((item: Record<string, any>) => item.message));
+        } catch (error) { reviewPlan.open_questions.push(`Cannot check ${group.component}: ${error instanceof Error ? error.message : String(error)}`); }
+      }
       const command = prepareArchitectureCommand({ id: String(context.sourceSessionId) }, state, owners, () => input.request,
         undefined, instructions, input.creation);
-      const output = record(json(await command.execute(input.plan, this.commandContext(context, String(context.sourceSessionId), input.plan))));
+      const output = record(json(await command.execute(reviewPlan, this.commandContext(context, String(context.sourceSessionId), reviewPlan))));
       if (!output.architecture_review) throw new Error(String(output.creation_error ?? "Architecture review failed."));
       const saved = output.architecture_review;
-      state.storeArchitecture({ ...saved, flow_execution_id: context.executionId,
+      state.storeArchitecture({ ...saved, elaborations, flow_execution_id: context.executionId,
         ...(input.context.proposed_changes ? { proposed_operations: normalizeSpecFormatting(input.context.proposed_changes.operations, input.context.document_id), approved_operations_digest: artifactDigest(normalizeSpecFormatting(input.context.proposed_changes.operations, input.context.document_id)) } : {}),
         ...(input.context?.existing_created_spec ? { destinationSessionId: input.context.destination_session_id, destinationSourceRevision: input.context.source_revision_hash, destinationServiceDocumentKey: input.context.service_document_key } : {}) });
       return { review_id: saved.reviewId };

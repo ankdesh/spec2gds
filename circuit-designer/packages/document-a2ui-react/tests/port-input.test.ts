@@ -9,13 +9,13 @@ function row(values: Record<string, string | null>): DocumentTable["rows"][numbe
 }
 
 it.each(["", "31:0", "WIDTH-1:0", "0:7"])("keeps a wire range intact in a private draft", range => {
-  const input = portInputFromRow(row({ name: "IRQ_ID", family: "wire", display_name: "Interrupt", description: "Saved text", direction: "out", range }));
-  expect(input).toEqual({ name: "IRQ_ID", family: "wire", display_name: "Interrupt", description: "Saved text", direction: "out", range: range || null });
+  const input = portInputFromRow(row({ name: "IRQ_ID", family: "wire", description: "Saved text", direction: "out", range }));
+  expect(input).toEqual({ name: "IRQ_ID", family: "wire", description: "Saved text", direction: "out", range: range || null });
 });
 
 it.each(["requires", "provides", "both"])("preserves transactional initiative and symbolic bus width", initiative => {
   expect(portInputFromRow(row({ name: "service", family: "transactional", initiative, transaction_kind: "custom", custom_kind: "svc_type", bus_width: "DATA_WIDTH" }))).toEqual({
-    name: "service", family: "transactional", display_name: "", description: "", initiative,
+    name: "service", family: "transactional", description: "", initiative,
     kind: "custom", custom_kind: "svc_type", bus_width: "DATA_WIDTH",
   });
 });
@@ -26,7 +26,7 @@ it("normalizes absent optional transactional fields without inventing a kind", (
 
 it.each(["in", "out", "inout"])("keeps a structured port direction and omits wire-only fields", direction => {
   const input = portInputFromRow(row({ name: "bundle", family: "structured", direction, range: "must_not_leak", bus_width: "must_not_leak" }));
-  expect(input).toEqual({ name: "bundle", family: "structured", display_name: "", description: "", direction });
+  expect(input).toEqual({ name: "bundle", family: "structured", description: "", direction });
 });
 
 it("does not mutate table cells while creating a draft", () => {
@@ -36,4 +36,10 @@ it("does not mutate table cells while creating a draft", () => {
   draft.description = "Private change";
   expect(saved).toEqual(before);
   expect(rowText(saved, "missing")).toBe("");
+});
+
+it("checks delimiters while allowing conditional expressions, scoped names, and bit selections", async () => {
+  const { wireRangeError } = await import("../src/port-input");
+  for (const range of ["", "4:1", "-1:-4", "(USE ? WIDTH:4)-1:0", "pkg::WIDTH-1:0", "VALUE[3:0]"]) expect(wireRangeError(range)).toBeNull();
+  for (const range of ["31::0", "31:", ":0", "31:0:1", "(WIDTH-1:0"]) expect(wireRangeError(range)).toContain("left:right expression pair");
 });

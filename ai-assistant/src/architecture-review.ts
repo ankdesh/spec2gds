@@ -1,6 +1,7 @@
 /** Durable architecture approval is separate from the service content policy. */
 
 import { defaultInstructions } from "./instructions.js";
+import { compactWireRange } from "./normalize.js";
 import { isRecord } from "./types.js";
 
 /** Bind creation to the names and concrete interfaces the human reviewed. */
@@ -20,11 +21,9 @@ export function validateArchitectureOperations(plan: Record<string, any>, operat
       if (!isRecord(descriptor) || typeof descriptor.name !== "string") throw new Error("Approved port descriptors require names.");
       const port = ports.find(item => isRecord(item) && item.name === descriptor.name);
       if (!isRecord(port) || (descriptor.direction !== undefined && descriptor.direction !== port.direction)) throw new Error(`Port ${String(operation.name)}.${descriptor.name} differs from its approved interface.`);
-      if (descriptor.width !== undefined) {
-        const range = typeof port.range === "string" ? /^(\d+):(\d+)$/.exec(port.range) : null;
-        const width = range ? Math.abs(Number(range[1]) - Number(range[2])) + 1 : port.range === undefined || port.range === null ? 1 : null;
-        if (width !== descriptor.width) throw new Error(`Port ${String(operation.name)}.${descriptor.name} width differs from its approved concrete configuration: expected ${String(descriptor.width)} bit(s), received range ${JSON.stringify(port.range)}. Use range "${Number(descriptor.width) - 1}:0" for a vector; omit range or use null for a scalar. Correct the proposal port, not the approved architecture.`);
-      }
+      if (!Object.hasOwn(descriptor, "range") || (typeof descriptor.description !== "string" || !descriptor.description.trim()) || Object.hasOwn(descriptor, "width")) throw new Error("Prepare a new interface review with exact ranges and descriptions.");
+      if (compactWireRange(port.range ?? null) !== compactWireRange(descriptor.range) || port.description !== descriptor.description) throw new Error(`Port ${String(operation.name)}.${descriptor.name} differs from its approved exact range or description.`);
+
     }
   }
 }

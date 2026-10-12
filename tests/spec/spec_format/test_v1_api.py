@@ -352,7 +352,6 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "port": {
                     "name": "count",
                     "family": "wire",
-                    "display_name": "Count",
                     "direction": "out",
                     "range": "31:0",
                     "description": "Current count",
@@ -385,7 +384,7 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
     )
     assert ports["rows"][0]["cells"]["family"]["value"] == "wire"
     assert ports["rows"][0]["cells"]["range"]["value"] == "31:0"
-    assert ports["rows"][0]["cells"]["display_name"]["value"] == "Count"
+    assert "display_name" not in ports["rows"][0]["cells"]
     assert ports["title"] == "Ports"
 
     updated = endpoints["transaction"](TransactionRequest(
@@ -396,7 +395,6 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
             "name": "count",
             "port": {
                 "family": "wire",
-                "display_name": "Count",
                 "direction": "inout",
                 "range": None,
                 "description": "Scalar count",
@@ -414,7 +412,6 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "port": {
                     "name": "service",
                     "family": "transactional",
-                    "display_name": "Service",
                     "description": "Submits work.",
                     "initiative": "provides",
                     "kind": "custom",
@@ -428,7 +425,6 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "port": {
                     "name": "response",
                     "family": "structured",
-                    "display_name": "Response",
                     "description": "Packed response aggregate.",
                     "direction": "out",
                 },
@@ -457,7 +453,6 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
                 "port": {
                     "name": "renamed",
                     "family": "wire",
-                    "display_name": "",
                     "direction": "out",
                     "range": None,
                     "description": "Not allowed",
@@ -691,7 +686,6 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
                 "port": {
                     "name": "assistant_service",
                     "family": "transactional",
-                    "display_name": "Assistant service",
                     "description": "Exercises the shared port mutation helper.",
                     "initiative": "provides",
                     "kind": "tlm_port",
@@ -726,7 +720,7 @@ def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path)
     )
     before = endpoints["document_snapshot"]()["source_revision_hash"]
     preview = endpoints["assistant_proposal_preview"](proposal)
-    assert preview["status"] == "valid"
+    assert preview["status"] == "valid", preview.get("diagnostics")
     assert preview["candidate_source_revision_hash"] != before
     assert endpoints["document_snapshot"]()["source_revision_hash"] == before
     assert preview["diff"]
@@ -855,7 +849,7 @@ def test_document_assistant_creates_design_with_initial_instances(tmp_path: Path
     assert {"create_entity", "set_entity_metadata", "upsert_component_port", "upsert_instance"} <= set(context["writable"]["document_operations"])
     before = endpoints["document_snapshot"]()["source_revision_hash"]
     preview = endpoints["assistant_proposal_preview"](proposal)
-    assert preview["status"] == "valid"
+    assert preview["status"] == "valid", preview.get("diagnostics")
     assert preview["candidate_source_revision_hash"] != before
     assert endpoints["document_snapshot"]()["source_revision_hash"] == before
     assert preview["diff"]
@@ -914,9 +908,9 @@ def test_document_assistant_creates_populated_component_atomically(tmp_path: Pat
             "entity_id": "component_and_gate_fixed",
             "instances": [],
             "ports": [
-                {"name": "A", "family": "wire", "display_name": None, "description": None, "direction": "in", "range": None},
-                {"name": "B", "family": "wire", "display_name": None, "description": None, "direction": "in", "range": None},
-                {"name": "Y", "family": "wire", "display_name": None, "description": None, "direction": "out", "range": None},
+                {"name": "A", "family": "wire", "description": None, "direction": "in", "range": None},
+                {"name": "B", "family": "wire", "description": None, "direction": "in", "range": None},
+                {"name": "Y", "family": "wire", "description": None, "direction": "out", "range": None},
             ],
             "systemverilog": "assign Y = A & B;\n",
         }],
@@ -1095,7 +1089,6 @@ def test_spec_assistant_port_edits_match_direct_editor_boundaries(tmp_path: Path
             {
                 "name": "response",
                 "family": "structured",
-                "display_name": "Response",
                 "description": "Packed response aggregate.",
                 "direction": "in",
             },
@@ -1110,7 +1103,6 @@ def test_spec_assistant_port_edits_match_direct_editor_boundaries(tmp_path: Path
             {
                 "name": "irq",
                 "family": "structured",
-                "display_name": None,
                 "description": None,
                 "direction": "out",
             },
@@ -1126,7 +1118,6 @@ def test_spec_assistant_port_edits_match_direct_editor_boundaries(tmp_path: Path
             {
                 "name": "boundary",
                 "family": "wire",
-                "display_name": None,
                 "description": None,
                 "direction": "inout",
                 "range": None,

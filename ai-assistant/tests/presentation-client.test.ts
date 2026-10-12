@@ -60,11 +60,11 @@ test('nested unknown values, false, zero, and removals render readable before/af
   assert.ok(!content(tree).includes('{'));assert.match(content(tree), /Removed/);
 });
 
-test('width comparisons show bit counts and preserve the exact source ranges', () => {
+test('range comparisons use the Spec Editor bounds format', () => {
   const f = plugin();
-  const tree = reviewTree(f, { id: 'width', label: 'Port a width', kind: 'value', change: 'changed', beforeAvailable: true, afterAvailable: true,
+  const tree = reviewTree(f, { id: 'width', label: 'Port a range', kind: 'value', change: 'changed', beforeAvailable: true, afterAvailable: true,
     before: '[3:0]', after: '[7:0]' });
-  assert.match(content(tree), /4 bits \(\[3:0\]\)/);assert.match(content(tree), /8 bits \(\[7:0\]\)/);
+  assert.match(content(tree), /3:0/);assert.match(content(tree), /7:0/);assert.ok(!content(tree).includes("bits"));
 });
 
 test('recorded flow tool results attach progress to their exact conversation turn', () => {
@@ -85,4 +85,18 @@ test('older inline reviews load the current read-only presentation from their st
   const node = element.type(element.props);
   assert.equal(node.type.name, 'StoredReviewCard');assert.equal(node.props.reference.proposalId, 'older-proposal');assert.equal(node.props.reference.sessionId, 'conversation');
   assert.ok(f.slots.has('tool.call.toolview:prepare_spec_proposal'));
+});
+
+test('architecture information relocates distinct settings without a Configuration section', () => {
+  const source = readFileSync(new URL('../client/index.js', import.meta.url), 'utf8');
+  const start = source.indexOf('  function architectureInformation('), end = source.indexOf('  function ArchitectureReviewCard(', start);
+  const project = vm.runInNewContext(source.slice(start, end) + '\narchitectureInformation', { record: (value: any) => value || {} });
+  const information = project({ components: [{ name: 'cla_4bit' }], interfaces: [{ component: 'cla_4bit', parameters: [], ports: [{ name: 'a', direction: 'in', range: '4:1', description: 'Operand' }] }], clocks_resets: [],
+    concrete_configuration: { module_name: 'cla_4bit', logic: 'combinational', a: { range: '[4:1]', width: 4, purpose: 'Operand' }, internal_signals: { p: { expression: 'a ^ b' } }, parameters: { unique_setting: 3 } } });
+  assert.equal(information.behavior.module_name, undefined);
+  assert.equal(information.behavior.logic, 'combinational');
+  assert.equal(information.behavior.internal_signals.p.expression, 'a ^ b');
+  assert.equal(information.behavior.parameters.unique_setting, 3);
+  assert.equal(information.interfaces[0].ports[0].details.range, undefined);
+  assert.equal(information.interfaces[0].ports[0].details.width, undefined);
 });

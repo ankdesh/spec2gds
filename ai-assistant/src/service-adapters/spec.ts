@@ -1,5 +1,5 @@
 import { ServiceAdapter } from "./metadata.js";
-/** Known spec service API actions. This adapter grants no capabilities. */
+/** Known Spec service API actions. This adapter grants no capabilities. */
 export const specActions = {
   "health": {
     "method": "GET",
@@ -291,6 +291,21 @@ export const specActions = {
         "owner_document_key"
       ],
       "body": []
+    },
+    "response_kind": "object"
+  },
+  "resolve_interface": {
+    "method": "POST",
+    "path": "/assistant/resolve-interface",
+    "parameters": {
+      "path": [],
+      "query": [],
+      "body": [
+        "ports",
+        "parameters",
+        "systemverilog",
+        "overrides"
+      ]
     },
     "response_kind": "object"
   }

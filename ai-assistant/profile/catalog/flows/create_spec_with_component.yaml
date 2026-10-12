@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.create_spec_with_component",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Create a new Spec containing one complete leaf Component. Obtain architecture approval, then save its ports, description, narrative and functional SystemVerilog.",
   "inputSchema": {
     "type": "object",
@@ -51,7 +51,7 @@
       "kind": "flow",
       "flow": {
         "id": "spec2gds.architecture",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "title": {
@@ -68,7 +68,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.prepare_creation",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "title": {
@@ -88,7 +88,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.create_spec",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.destination"
@@ -99,7 +99,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.ensure_conversation",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.create"
@@ -110,7 +110,7 @@
       "kind": "flow",
       "flow": {
         "id": "spec2gds.component_content",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "session_id": {

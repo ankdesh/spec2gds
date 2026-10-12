@@ -10,7 +10,7 @@ import { ProductState } from '../lib/state.js';
 import { boot } from './support/event-runtime.mjs';
 const counter = {
   title: '16-bit counter', components: [{ name: 'counter', purpose: 'Synchronous counter' }], designs: [],
-  interfaces: [{ component: 'counter', ports: [{ name: 'clk', direction: 'in', width: 1 }, { name: 'count', direction: 'out', width: 16 }] }],
+  interfaces: [{ component: 'counter', ports: [{ name: 'clk', direction: 'in', range: null, description: "Port purpose" }, { name: 'count', direction: 'out', range: "15:0", description: "Port purpose" }], parameters: [], constant_context: "" }],
   clocks_resets: ['Rising-edge clk'], decomposition_rationale: 'One leaf.', assumptions: ['Wrap modulo 65536.'],
   open_questions: [], concrete_configuration: { width: 16 },
 };

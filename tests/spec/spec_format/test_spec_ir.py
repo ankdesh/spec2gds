@@ -239,7 +239,6 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
         (AddComponentPort(sink.ref, "status", WirePortInput(
             direction="out",
             range="7:0",
-            display_name="Status",
             description="Status vector",
         )),),
     ).apply(revision)
@@ -254,7 +253,6 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
         (UpdateComponentPort(sink.ref, "status", WirePortInput(
             direction="inout",
             range=None,
-            display_name="Status",
             description="Scalar status",
         )),),
     ).apply(updated)
@@ -310,12 +308,10 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
                 kind="custom",
                 custom_kind="demo_rpc",
                 bus_width="64",
-                display_name="Service",
                 description="Submits work.",
             )),
             AddComponentPort(sink.ref, "response", StructuredPortInput(
                 direction="out",
-                display_name="Response",
                 description="Opaque packed result.",
             )),
             AddComponentPort(sink.ref, "indexed", WirePortInput(direction="in", range="0")),
@@ -330,13 +326,12 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
         "transactional", "requires", "64",
     )
     assert (
-        by_name["service"].display_name,
         by_name["service"].description,
         by_name["service"].kind,
         by_name["service"].custom_kind,
-    ) == ("Service", "Submits work.", "custom", "demo_rpc")
+    ) == ("Submits work.", "custom", "demo_rpc")
     assert (by_name["response"].style, by_name["response"].direction) == ("structured", "out")
-    assert (by_name["response"].display_name, by_name["response"].packed) == ("Response", True)
+    assert by_name["response"].packed is True
     assert by_name["indexed"].width == "[0:0]"
     assert by_name["indexed"].range == "0"
 

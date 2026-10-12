@@ -125,6 +125,11 @@ def normalize_xml(xml_bytes: bytes) -> bytes:
             copied.set(key, value)
         copied.text = node.text
         for child in node:
+            if (_local_name(node) == "port" and node.getparent() is not None
+                    and node.getparent().getparent() is not None
+                    and _local_name(node.getparent().getparent()) == "model"
+                    and _local_name(child) == "displayName"):
+                continue
             copied_child = clone(child)
             copied_child.tail = child.tail
             copied.append(copied_child)

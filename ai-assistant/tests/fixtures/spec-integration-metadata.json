@@ -295,9 +295,24 @@
         "body": []
       },
       "response_kind": "object"
+    },
+    "resolve_interface": {
+      "method": "POST",
+      "path": "/assistant/resolve-interface",
+      "parameters": {
+        "path": [],
+        "query": [],
+        "body": [
+          "ports",
+          "parameters",
+          "systemverilog",
+          "overrides"
+        ]
+      },
+      "response_kind": "object"
     }
   },
   "operation_schema_action": "operation_schema",
   "capabilities_action": "capabilities",
-  "digest": "sha256:44757b78929574c8293f825b63eefe926114d216f1360b53de836f30232d58a9"
+  "digest": "sha256:c4852330252e8c76eb9f803cafb2a2c924ea0fb57f4dec55f78198368e84e02d"
 }

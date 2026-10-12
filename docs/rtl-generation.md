@@ -16,9 +16,29 @@ flowchart LR
 ## 1. Supported Source Profile
 
 ### Hardware Ports
-- Ports must be physical wires with scalar or explicit decimal ranges (such as `[7:0]`).
-- Symbolic ranges (for example, `DATA_WIDTH-1:0`) and ascending ranges are rejected before generation.
+- Ports must be physical wires with scalar or one packed range. Preserve the declared bounds, including `4:1`, `0:3`, negative bounds, and indexed one-bit ranges.
+- Symbolic ranges such as `DATA_WIDTH-1:0` use stored Component parameters and the local constants and constant functions in the SystemVerilog Section. Verilator elaboration resolves the bounds for validation. Generated RTL retains the source expressions. Missing values or dependencies stop generation with a diagnostic.
+- Literal bounds need no compiler elaboration. Calculate width as the absolute difference between evaluated bounds plus one; a scalar has width one.
 - Transactional and packed structured ports are rejected; direct wire connections only are supported.
+
+### Interface elaboration
+
+The Spec service provides the read-only `POST /assistant/resolve-interface` operation.
+Send `ports` with their IDs, directions, and source ranges, `parameters` with their
+stored declaration types and default expressions, and `systemverilog` with the
+required local constants and constant functions. The optional `overrides` object
+maps declared parameter IDs to explicit values.
+
+The result reports the parameter values used, evaluated bounds, calculated
+widths, and compiler diagnostics. It retains each source range. Literal ranges
+and scalars need no compiler elaboration. Symbolic bounds require Verilator;
+a missing value, dependency, or compiler stops approval with a clear diagnostic.
+Elaboration does not save a Spec or run simulation.
+
+Assistant creation checks this interface before approval. Spec preview checks it
+again when ports, parameters, or the SystemVerilog Section change. RTL creation
+uses the same declarations and source ranges. Existing nonblocking compiler
+warnings remain warnings.
 
 ### Connections and Wiring
 - Only IP-XACT ad-hoc wire connections are supported.
@@ -35,7 +55,7 @@ Components and Designs store behavioral code in the inline **SystemVerilog** sec
 ### Section Rules
 - The stored code block contains only declarations and sequential logic (such as `logic`, `always_ff`, and `assign`).
 - Do **not** include `module`, `endmodule`, or port list headers in the section.
-- The `rtl.generate` tool reads ports from IP-XACT and automatically constructs the ANSI port list.
+- The `rtl.generate` Activity reads ports and Component parameters from IP-XACT and constructs the module parameter declarations and ANSI port list. Parameter types, signedness, and default expressions are retained. Local constants and constant functions remain in the SystemVerilog Section.
 - If a component has no SystemVerilog section, the generator emits tie-offs (`'0` for outputs) so the module compiles cleanly.
 
 ### Example: Single-Cycle Registered Pipeline

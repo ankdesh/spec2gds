@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.architecture",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Prepare and review hardware architecture with the exact proposed batch for structural edits.",
   "inputSchema": {
     "type": "object",
@@ -44,7 +44,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.architecture_context",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "inputs"
@@ -119,7 +119,7 @@
           },
           "interfaces": {
             "type": "array",
-            "description": "Use exactly one {component, ports:[{name,direction,width}]} group per affected Component.",
+            "description": "Exactly one group per Component with exact ports, parameters and constant_context.",
             "items": {
               "type": "object",
               "additionalProperties": false,
@@ -139,29 +139,73 @@
                       },
                       "direction": {
                         "type": "string",
-                        "description": "Spec port direction: in, out or inout.",
                         "enum": [
                           "in",
                           "out",
                           "inout"
                         ]
                       },
-                      "width": {
-                        "type": "integer",
-                        "description": "Positive concrete width in bits; use 1 for a scalar."
+                      "range": {
+                        "description": "Exact bounds; null is scalar. Never rebase a supplied range.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "description": {
+                        "type": "string",
+                        "description": "Concise purpose from supplied RTL or requirements."
                       }
                     },
                     "required": [
                       "name",
                       "direction",
-                      "width"
+                      "range",
+                      "description"
                     ]
                   }
+                },
+                "parameters": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      },
+                      "rtl_type": {
+                        "type": "string"
+                      },
+                      "value": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "name",
+                      "rtl_type",
+                      "value",
+                      "description"
+                    ]
+                  }
+                },
+                "constant_context": {
+                  "type": "string",
+                  "description": "Supplied localparams, typedefs and constant functions needed for bounds; empty string if none. Do not include module wrappers or parameter declarations."
                 }
               },
               "required": [
                 "component",
-                "ports"
+                "ports",
+                "parameters",
+                "constant_context"
               ]
             }
           },
@@ -211,7 +255,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.record_architecture",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "plan": {
@@ -268,7 +312,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.approved_architecture",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.approval"

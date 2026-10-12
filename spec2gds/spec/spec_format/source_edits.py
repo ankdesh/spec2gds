@@ -51,7 +51,6 @@ def set_entity_metadata(
 _PORT_FIELDS = {
     "name",
     "family",
-    "display_name",
     "description",
     "direction",
     "range",
@@ -136,7 +135,6 @@ def _normalize_component_port(
     normalized: dict[str, typing.Any] = {
         "name": name,
         "family": family,
-        "display_name": _optional_text(value.get("display_name")),
         "description": _optional_text(value.get("description")),
     }
     if family == "wire":
@@ -180,14 +178,8 @@ def parse_wire_range(value: typing.Any) -> tuple[str | None, str | None]:
         expression = expression[1:-1].strip()
         if not expression:
             raise ValueError("Wire port Range cannot be empty.")
-    if expression.count(":") > 1:
-        raise ValueError("Wire port Range must contain at most one colon.")
-    if ":" not in expression:
-        return expression, expression
-    left, right = (item.strip() for item in expression.split(":", 1))
-    if not left or not right:
-        raise ValueError("Wire port Range requires expressions on both sides of the colon.")
-    return left, right
+    from spec2gds.spec.spec_format.rtl_interface import split_range
+    return split_range(expression)
 
 
 def format_wire_range(left: str | None, right: str | None) -> str:
@@ -202,8 +194,6 @@ def _build_port(value: dict[str, typing.Any]) -> etree._Element:
     family = typing.cast(str, value["family"])
     port = etree.Element(_q("port"))
     etree.SubElement(port, _q("name")).text = name
-    if value.get("display_name") is not None:
-        etree.SubElement(port, _q("displayName")).text = typing.cast(str, value["display_name"])
     if value.get("description") is not None:
         etree.SubElement(port, _q("description")).text = typing.cast(str, value["description"])
     style_node = etree.SubElement(port, _q(family))

@@ -63,7 +63,6 @@ class PortIR:
     width: int | str | None = None
     initiative: str = ""
     bus_width: str = ""
-    display_name: str = ""
     description: str = ""
     range: str = ""
     kind: str = ""
@@ -83,6 +82,16 @@ class InterfaceIR:
 
 
 @dataclass(frozen=True)
+class ParameterIR:
+    """Explicit Component parameter declaration used by RTL generation."""
+
+    name: str
+    value: str
+    rtl_type: str = ""
+    description: str = ""
+
+
+@dataclass(frozen=True)
 class ComponentIR:
     """Semantic component definition derived from one embedded IP-XACT document."""
 
@@ -91,6 +100,7 @@ class ComponentIR:
     ports: tuple[PortIR, ...]
     interfaces: tuple[InterfaceIR, ...]
     display_name: str = ""
+    parameters: tuple[ParameterIR, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -488,7 +498,6 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
                 width=width,
                 initiative=initiative,
                 bus_width=bus_width,
-                display_name=_text(port, "displayName"),
                 description=_text(port, "description"),
                 range=range_value,
                 kind=kind_value,
@@ -507,7 +516,14 @@ def _component_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> ComponentI
             physical = _first(port_map.xpath("./*[local-name()='physicalPort']/*[local-name()='name']"))
             port_maps.append(((logical.text or "").strip() if logical is not None else "", (physical.text or "").strip() if physical is not None else ""))
         interfaces.append(InterfaceIR(_text(interface, "name"), _vlnv(bus), _vlnv(abstraction), role, tuple(port_maps)))
-    return ComponentIR(ref=ref, vlnv=vlnv, ports=tuple(ports), interfaces=tuple(interfaces), display_name=_text(root, "displayName"))
+    from spec2gds.spec.spec_format.rtl_interface import RTL_NAMESPACE
+    parameters = tuple(ParameterIR(
+        name=_text(parameter, "name"), value=_text(parameter, "value"),
+        rtl_type=parameter.get(f"{{{RTL_NAMESPACE}}}type", parameter.get("type", ""))
+            + (" " + parameter.get("sign") if parameter.get("sign") else ""),
+        description=_text(parameter, "description"),
+    ) for parameter in root.xpath("./*[local-name()='parameters']/*[local-name()='parameter']"))
+    return ComponentIR(ref=ref, vlnv=vlnv, ports=tuple(ports), interfaces=tuple(interfaces), parameters=parameters, display_name=_text(root, "displayName"))
 
 
 def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:

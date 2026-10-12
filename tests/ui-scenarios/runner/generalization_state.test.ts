@@ -14,9 +14,10 @@ test("an empty creation or failed hardware flow stops evaluation without waiting
 
 test("testbench contracts reject reset aliases while accepting approved port order changes", () => {
   const ports = [{ name: "clk", direction: "in", width: 1 }, { name: "reset", direction: "in", width: 1 }];
-  const plan = { components: [{ name: "pipeline" }], designs: [], interfaces: [{ component: "pipeline", ports: [...ports].reverse() }] };
+  const interfaces = ports.map(({ width, ...port }) => ({ ...port, range: null, description: "Control signal" }));
+  const plan = { components: [{ name: "pipeline" }], designs: [], interfaces: [{ component: "pipeline", ports: [...interfaces].reverse(), parameters: [], constant_context: "" }] };
   assertEvaluationInterface(plan, ports);
-  assert.throws(() => assertEvaluationInterface({ ...plan, interfaces: [{ component: "pipeline", ports: [ports[0], { ...ports[1], name: "rst" }] }] }, ports), /testbench contract/);
+  assert.throws(() => assertEvaluationInterface({ ...plan, interfaces: [{ component: "pipeline", ports: [interfaces[0], { ...interfaces[1], name: "rst" }], parameters: [], constant_context: "" }] }, ports), /testbench contract/);
 });
 
 test("evaluation uses the created Spec receipt when another Spec is active", () => {
@@ -38,4 +39,11 @@ test("selected live cases keep requested order and reject silent partial selecti
   assert.throws(() => selectedEvaluationCases(cases, "adder_8,unknown"), /Unknown/);
   assert.throws(() => selectedEvaluationCases(cases, "adder_8,adder_8"), /Duplicate/);
   assert.throws(() => selectedEvaluationCases(cases, "adder_8,"), /nonempty/);
+});
+
+test("evaluation uses checked bounds for constant expressions without requiring literal source ranges", () => {
+  const plan = { components: [{ name: "adder" }], designs: [], interfaces: [{ component: "adder", ports: [{ name: "a", direction: "in", range: "WIDTH-1:0" }] }] };
+  const elaborations = [{ component: "adder", status: "resolved", ports: [{ name: "a", left: 12, right: 0, width: 13 }] }];
+  assertEvaluationInterface(plan, [{ name: "a", direction: "in", width: 13 }], elaborations);
+  assert.throws(() => assertEvaluationInterface(plan, [{ name: "a", direction: "in", width: 8 }], elaborations), /testbench contract/);
 });

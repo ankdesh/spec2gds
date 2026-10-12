@@ -44,7 +44,7 @@ function displayValue(value: unknown, names: ReadonlyMap<string, string> = new M
   }
   if (value.kind === "boundary" && typeof value.terminal_id === "string") return names.get(value.terminal_id) ?? "Boundary terminal";
   const used = new Set<string>();
-  return Object.fromEntries(Object.entries(value).filter(([key]) => !hiddenFields.has(key)).map(([key, item]) => {
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !hiddenFields.has(key) && !(key === "display_name" && Object.hasOwn(value, "family") && Object.hasOwn(value, "name"))).map(([key, item]) => {
     const baseLabel = names.get(key) ?? displayLabel(key);
     let label = baseLabel, count = 2;
     while (used.has(label)) label = `${baseLabel} (${count++})`;
@@ -66,7 +66,7 @@ function specChanges(review: ProposalReview): Array<{ group: string; change: Pre
   const changes = rows(preview.diff);
   return changes.filter(item => {
     const path = text(item.path), leaf = path.split(".").at(-1) ?? "";
-    return !hiddenFields.has(leaf) && !(leaf === "display_text" && changes.some(other => other.path === path.replace(/display_text$/, "value")));
+    return !(path.includes("-ports]") && path.includes(".cells.display_name.")) && !hiddenFields.has(leaf) && !(leaf === "display_text" && changes.some(other => other.path === path.replace(/display_text$/, "value")));
   }).flatMap((item, index) => {
     const path = text(item.path);
     const field = /\.cells\.([^.[\]]+)\.(?:value|display_text)$/.exec(path)?.[1];

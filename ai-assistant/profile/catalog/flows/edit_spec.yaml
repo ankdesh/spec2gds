@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.edit_spec",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Edit the bound Spec or selected Component or Design through a reviewed, revision-checked atomic save.",
   "inputSchema": {
     "type": "object",
@@ -45,7 +45,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.edit_context",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {}
     },
@@ -121,7 +121,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.validate_edit",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "context": {
@@ -147,7 +147,7 @@
       "kind": "flow",
       "flow": {
         "id": "spec2gds.architecture",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "title": {
@@ -167,7 +167,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.submit_edit",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "session_id": {
@@ -231,7 +231,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.require_saved",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.saved_architecture"
@@ -246,7 +246,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.submit_edit",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "session_id": {
@@ -308,7 +308,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.require_saved",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.saved_content"

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { ToolRunContext } from "../tool-registry.js";
-export interface ArchitectureInputs { title: string; components: Array<{ name: string; purpose?: string; description?: string }>; designs: Array<{ name: string; purpose?: string; description?: string }>; interfaces: Array<{ component: string; ports: Array<{ name: string; direction: "in" | "out" | "inout"; width: number }> }>; clocks_resets: string[]; decomposition_rationale: string; assumptions: string[]; open_questions: string[]; concrete_configuration: Record<string, unknown>; }
+export interface InterfacePort { name: string; direction: "in" | "out" | "inout"; range: string | null; description: string; }
+export interface InterfaceParameter { name: string; rtl_type: string; value: string; description: string; }
+export interface ArchitectureInputs { title: string; components: Array<{ name: string; purpose?: string; description?: string }>; designs: Array<{ name: string; purpose?: string; description?: string }>; interfaces: Array<{ component: string; ports: InterfacePort[]; parameters: InterfaceParameter[]; constant_context: string }>; clocks_resets: string[]; decomposition_rationale: string; assumptions: string[]; open_questions: string[]; concrete_configuration: Record<string, unknown>; }
+
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
 import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
 import { artifactDigest, ProductState } from "../state.js";
@@ -19,7 +22,7 @@ export function prepareArchitectureCommand(
         if (!args.title.trim()) throw new Error("title must be nonempty.");
         if (!args.decomposition_rationale.trim()) throw new Error("decomposition_rationale must be nonempty.");
         if (!args.components.length) throw new Error("components must contain at least one named component.");
-        if (!args.interfaces.length) throw new Error("interfaces must contain {component, ports:[{name,direction,width}]} for each component; use ports:[] for a portless component.");
+        if (!args.interfaces.length) throw new Error("interfaces must contain {component, ports:[{name,direction,range,description}]} for each component; use ports:[] for a portless component.");
         if (!Object.keys(args.concrete_configuration).length) throw new Error("concrete_configuration must contain concrete values such as width, reset behavior or overflow behavior.");
         for (const [field, entities] of [["components", args.components], ["designs", args.designs]] as const) {
           if (entities.some(entity => !isRecord(entity) || typeof entity.name !== "string" || !entity.name.trim())
@@ -35,11 +38,12 @@ export function prepareArchitectureCommand(
         }
         const portLists = groups.flatMap(item => "ports" in item ? [item.ports] : []);
         for (const ports of portLists) {
-          if (ports.some(port => !port.name.trim() || !["in", "out", "inout"].includes(port.direction) || !Number.isSafeInteger(port.width) || port.width < 1)
+          if (ports.some(port => !port.name.trim() || !["in", "out", "inout"].includes(port.direction) || !(port.range === null || typeof port.range === "string") || !port.description?.trim() || Object.hasOwn(port, "width"))
             || new Set(ports.map(port => port.name)).size !== ports.length) {
-            throw new Error("Interface ports require distinct nonempty names and positive integer widths.");
+            throw new Error("Interface ports require distinct IDs, directions, exact ranges, and descriptions; width is calculated from bounds.");
           }
         }
+        if (groups.some(group => !Array.isArray(group.parameters) || typeof group.constant_context !== "string")) throw new Error("Prepare a new interface review with parameters and constant context.");
         const old = state.architectureForCall(String(agent.id), String(exec.callId));
         if (old && old.digest !== artifactDigest(args)) throw new Error("This review call ID was reused with changed architecture.");
         let record = old;

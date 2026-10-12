@@ -33,9 +33,10 @@ function normalizeNarrativeBlock(value: unknown): void {
 /** HDL-style brackets are common in model output; the Spec API stores compact ranges. */
 export function compactWireRange(value: unknown): unknown {
   if (typeof value !== "string") return value;
-  const bracketed = /^\[\s*([^\[\]]+?)\s*\]$/.exec(value.trim());
-  const range = bracketed ? bracketed[1]!.trim() : value.trim();
-  return range.replace(/\s*:\s*/g, ":");
+  const text = value.trim();
+  const range = text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1).trim() : text;
+  return range.split(/("(?:\\.|[^"\\])*")/g).map((part, index) => index % 2 ? part : part.replace(/\s*:\s*/g, ":")).join("");
+
 }
 
 /** Only remove presentation fences; never erase HDL declarations or directives. */

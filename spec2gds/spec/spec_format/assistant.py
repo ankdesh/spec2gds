@@ -895,11 +895,8 @@ def _initial_component_port(value: typing.Any) -> InitialComponentPort:
         raise ValueError("Every initial component port must be an object.")
     name = str(value.get("name", ""))
     family = str(value.get("family", ""))
-    common = {"name", "family", "display_name", "description"}
-    display_name = value.get("display_name")
+    common = {"name", "family", "description"}
     description = value.get("description")
-    if display_name is not None and not isinstance(display_name, str):
-        raise ValueError("Initial component port display_name must be a string or null.")
     if description is not None and not isinstance(description, str):
         raise ValueError("Initial component port description must be a string or null.")
     if family == "wire":
@@ -910,7 +907,7 @@ def _initial_component_port(value: typing.Any) -> InitialComponentPort:
         port_range = value.get("range")
         if port_range is not None and not isinstance(port_range, str):
             raise ValueError("Initial wire port range must be a string or null.")
-        port = WirePortInput(typing.cast(typing.Any, direction), port_range, display_name, description)
+        port = WirePortInput(typing.cast(typing.Any, direction), port_range, description)
     elif family == "transactional":
         _reject_unknown_keys(
             value,
@@ -925,7 +922,6 @@ def _initial_component_port(value: typing.Any) -> InitialComponentPort:
             typing.cast(typing.Any, value.get("kind")),
             typing.cast(str | None, value.get("custom_kind")),
             typing.cast(str | None, value.get("bus_width")),
-            display_name,
             description,
         )
     elif family == "structured":
@@ -933,7 +929,7 @@ def _initial_component_port(value: typing.Any) -> InitialComponentPort:
         direction = str(value.get("direction", ""))
         if direction not in {"in", "out", "inout"}:
             raise ValueError("Initial structured port direction must be in, out, or inout.")
-        port = StructuredPortInput(typing.cast(typing.Any, direction), display_name, description)
+        port = StructuredPortInput(typing.cast(typing.Any, direction), description)
     else:
         raise ValueError("Initial component port family must be wire, transactional, or structured.")
     return InitialComponentPort(name=name, port=port)
@@ -1097,7 +1093,7 @@ def _set_metadata(root: etree._Element, operation: dict[str, typing.Any]) -> Non
 
 
 def _upsert_parameter(root: etree._Element, value: dict[str, typing.Any]) -> None:
-    allowed = {"name", "value", "resolve", "data_type", "choice_ref", "minimum", "maximum", "description"}
+    allowed = {"name", "value", "resolve", "data_type", "rtl_type", "sign", "choice_ref", "minimum", "maximum", "description"}
     _reject_unknown_keys(value, allowed, "parameter")
     name = str(value.get("name", "")).strip()
     if not name:
@@ -1107,12 +1103,15 @@ def _upsert_parameter(root: etree._Element, value: dict[str, typing.Any]) -> Non
     if existing is not None:
         container.remove(existing)
     parameter = etree.Element(_q("parameter"))
+    if "rtl_type" in value:
+        from spec2gds.spec.spec_format.rtl_interface import RTL_NAMESPACE
+        parameter.set(f"{{{RTL_NAMESPACE}}}type", str(value["rtl_type"]))
     etree.SubElement(parameter, _q("name")).text = name
     if value.get("description"):
         etree.SubElement(parameter, _q("description")).text = str(value["description"])
     result = etree.SubElement(parameter, _q("value"))
     result.text = str(value.get("value", ""))
-    for api_name, xml_name in (("resolve", "resolve"), ("data_type", "type"), ("choice_ref", "choiceRef"), ("minimum", "minimum"), ("maximum", "maximum")):
+    for api_name, xml_name in (("resolve", "resolve"), ("data_type", "type"), ("sign", "sign"), ("choice_ref", "choiceRef"), ("minimum", "minimum"), ("maximum", "maximum")):
         if value.get(api_name) not in (None, ""):
             parameter.set(xml_name, str(value[api_name]))
     container.append(parameter)

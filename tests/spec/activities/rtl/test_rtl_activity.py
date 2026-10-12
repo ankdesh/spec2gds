@@ -405,7 +405,7 @@ def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
     [
         (build_test_package, "design_top_a", ("bus interface",)),
         (lambda: _rtl_package(nonwire=True), "design_rtl_top", ("transactional",)),
-        (lambda: _rtl_package(symbolic=True), "design_rtl_top", ("symbolic range",)),
+        (lambda: _rtl_package(symbolic=True), "design_rtl_top", ("WIDTH",)),
         (lambda: _rtl_package(mismatch=True), "design_rtl_top", ("incompatible ranges",)),
         (lambda: _rtl_package(multiple_driver=True), "design_rtl_top", ("multiple ordinary drivers",)),
         (lambda: _rtl_package(reused_endpoint=True), "design_rtl_top", ("reuses endpoint",)),

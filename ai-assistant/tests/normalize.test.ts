@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeCircuitOperations, normalizeSpecOperations } from "../src/normalize.js";
+import { compactWireRange, normalizeCircuitOperations, normalizeSpecOperations } from "../src/normalize.js";
 
 test("normalizes Spec maps, clear fields, and server-owned identities", () => {
   const [operation] = normalizeSpecOperations([{
@@ -119,4 +119,9 @@ test("conflicting metadata and bus set/clear values cannot silently erase author
   assert.throws(() => normalizeSpecOperations([{ type: "update_bus_definition", properties: { description: "Requested description", clear_fields: ["description"] } }]), /Cannot set and clear bus field description/);
   const [clear] = normalizeSpecOperations([{ type: "set_entity_metadata", description: null, clear_fields: ["description"] }]);
   assert.equal(clear!.description, null);
+});
+
+test("range formatting retains bit selections and string constants inside formulas", () => {
+  assert.equal(compactWireRange('[VALUE[3:0]:0]'), 'VALUE[3:0]:0');
+  assert.equal(compactWireRange('$bits("a : b")-1 : 0'), '$bits("a : b")-1:0');
 });

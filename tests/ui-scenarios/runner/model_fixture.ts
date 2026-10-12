@@ -68,16 +68,16 @@ export async function modelFixture(documentId: string, options: { title?: string
       let text="Read-only analysis is complete. Flow acceptance does not confirm a saved change.";
       const composition = options.presentation && (phase?.inputs.request || userText).includes("entry Design");
       const width=component && !composition?16:8;
-      const ports=[{name:"clk",direction:"in",width:1},{name:"rst_n",direction:"in",width:1},{name:"irq",direction:"out",width}];
+      const ports=[{name:"clk",direction:"in",range: null, description: "Port purpose"},{name:"rst_n",direction:"in",range: null, description: "Port purpose"},{name:"irq",direction:"out",range:`${width-1}:0`,description:"Replicated input conjunction"}];
       if(phase){
         if(toolNames.size!==1 || !toolNames.has("structured_output"))throw new Error("A flow phase must expose only structured_output.");
         name="structured_output";
-        if(phase.phase.endsWith("architecture/draft"))args={title:`Timer architecture (${width} bits)`,components:[{name:"timer_core",purpose:"Replicate clk & rst_n"}],designs:composition?[{name:"irq_pipeline",purpose:"Connect two existing timer instances."}]:[],interfaces:[{component:"timer_core",ports}],clocks_resets:["Combinational inputs, without state."],decomposition_rationale:"One cohesive combinational leaf.",assumptions:[],open_questions:[],concrete_configuration:{width}};
+        if(phase.phase.endsWith("architecture/draft"))args={title:`Timer architecture (${width} bits)`,components:[{name:"timer_core",purpose:"Replicate clk & rst_n"}],designs:composition?[{name:"irq_pipeline",purpose:"Connect two existing timer instances."}]:[],interfaces:[{component:"timer_core",ports, parameters: [], constant_context: "" }],clocks_resets:["Combinational inputs, without state."],decomposition_rationale:"One cohesive combinational leaf.",assumptions:[],open_questions:[],concrete_configuration:{width}};
         else if(phase.phase==="draft"){
           if(!component)throw new Error("The edit phase has no authoritative timer Component.");
           const oldPort=component.ports?.find((port:any)=>port.name==="irq");
           args={supported:true,unsupported_reason:null,base_source_revision_hash:context.source_revision_hash,title:"Refine timer",summary:"Set IRQ width to sixteen bits.",rationale:"Requested refinement.",assumptions:[],operations:[
-            {operation_id:"port",type:"upsert_component_port",component:component.ref,port:{name:"irq",family:"wire",direction:"out",range:"15:0",...(oldPort?.display_name?{display_name:oldPort.display_name}:{}),...(oldPort?.description?{description:oldPort.description}:{})}},
+            {operation_id:"port",type:"upsert_component_port",component:component.ref,port:{name:"irq",family:"wire",direction:"out",range:"15:0",...(oldPort?.description?{description:oldPort.description}:{})}},
             {operation_id:"section",type:"upsert_entity_section",owner:component.ref,section_type:"sv",type_version:1,payload:{content:"assign irq = {16{clk & rst_n}};"}}]};
           if(composition){
             const design={document_id:context.document_id,entity_kind:"design",entity_id:"local_pipeline"};
@@ -88,8 +88,9 @@ export async function modelFixture(documentId: string, options: { title?: string
           }
         }else{
           const approved=context.architecture.interfaces[0].ports;
-          const approvedWidth=approved.find((port:any)=>port.name==="irq").width;
-          args={name:"timer_core",ports:approved,description:componentDescription(options.largeProposal),narrative:"IRQ replicates the conjunction of the two scalar inputs.",systemverilog:`assign irq = {${approvedWidth}{clk & rst_n}};`};
+          const bounds=approved.find((port:any)=>port.name==="irq").range.split(":").map(Number);
+          const approvedWidth=Math.abs(bounds[0]-bounds[1])+1;
+          args={name:"timer_core",ports:approved,parameters:context.approved_component.parameters,description:componentDescription(options.largeProposal),narrative:"IRQ replicates the conjunction of the two scalar inputs.",systemverilog:`assign irq = {${approvedWidth}{clk & rst_n}};`};
         }
       }else if(toolNames.has("flow_create_spec_with_component") && !toolNames.has("get_bound_context")){
         name="flow_create_spec_with_component";args={title:options.title || "Iterative scenario",request:userText};

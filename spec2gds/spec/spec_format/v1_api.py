@@ -654,6 +654,14 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "section_validation": [item.as_json() for item in result.section_validation],
         })
 
+    @app.post(ASSISTANT_ACTIONS["resolve_interface"]["path"])
+    def resolve_assistant_interface(payload: dict[str, typing.Any]) -> dict[str, typing.Any]:
+        from spec2gds.spec.spec_format.rtl_interface import resolve_interface
+        try:
+            return resolve_interface(**payload)
+        except (ValueError, TypeError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
     @app.get("/assistant/integration-metadata")
     def assistant_integration_metadata() -> dict[str, typing.Any]:
         return integration_metadata()
@@ -2002,10 +2010,9 @@ def _decode_component_port_input(
 ) -> WirePortInput | TransactionalPortInput | StructuredPortInput:
     """Decode the strict public discriminated port union."""
     family = str(value.get("family", ""))
-    common = {"family", "display_name", "description"}
+    common = {"family", "description"}
     if include_name:
         common.add("name")
-    display_name = _optional_text(value.get("display_name"))
     description = _optional_text(value.get("description"))
     if family == "wire":
         _reject_operation_fields(value, common | {"direction", "range"}, "wire port")
@@ -2015,7 +2022,6 @@ def _decode_component_port_input(
         return WirePortInput(
             direction=typing.cast(typing.Any, direction),
             range=_optional_text(value.get("range")),
-            display_name=display_name,
             description=description,
         )
     if family == "transactional":
@@ -2035,7 +2041,6 @@ def _decode_component_port_input(
             kind=typing.cast(typing.Any, transaction_kind),
             custom_kind=_optional_text(value.get("custom_kind")),
             bus_width=_optional_text(value.get("bus_width")),
-            display_name=display_name,
             description=description,
         )
     if family == "structured":
@@ -2045,7 +2050,6 @@ def _decode_component_port_input(
             raise ValueError("Structured port direction must be in, out, or inout.")
         return StructuredPortInput(
             direction=typing.cast(typing.Any, direction),
-            display_name=display_name,
             description=description,
         )
     raise ValueError("Port family must be wire, transactional, or structured.")

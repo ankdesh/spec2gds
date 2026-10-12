@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.add_component",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Add one complete leaf Component to this document-bound Spec after architecture approval. Save its ports, description, narrative and functional SystemVerilog together.",
   "inputSchema": {
     "type": "object",
@@ -48,7 +48,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.bound_document",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {}
     },
@@ -57,7 +57,7 @@
       "kind": "flow",
       "flow": {
         "id": "spec2gds.architecture",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "title": {
@@ -74,7 +74,7 @@
       "kind": "flow",
       "flow": {
         "id": "spec2gds.component_content",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "session_id": {

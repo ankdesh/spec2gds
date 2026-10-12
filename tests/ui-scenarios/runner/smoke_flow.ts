@@ -43,7 +43,7 @@ export async function runSmoke(context: SmokeContext): Promise<void> {
       description: "Baseline smoke description." },
     { type: "add_component_port", component: reference,
       port: { name: "irq", family: "wire", direction: "out", range: "7:0",
-        display_name: "IRQ output", description: "Smoke check output." } },
+        description: "Smoke check output." } },
   ]);
   const readSnapshot = () => json(scoped("/documents/snapshot"));
   const marker = restricted ? "Restricted live smoke saved." : "Automatic live smoke saved.";

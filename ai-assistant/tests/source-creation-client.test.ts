@@ -19,5 +19,7 @@ for (const name of ["prepare_spec_document_creation","prepare_architecture_revie
   state=tracker.update({state},{event:{type:"tool/call",data:{callId:"old",name}}});
   state=tracker.update({state},{event:{type:"tool/result",seq:3,data:{message:{source:{callId:"old"},content:[{content:[{type:"text",text:JSON.stringify({source_creation:{requestId:"old"},architecture_review:{reviewId:"old"},review:{domain:"spec",state:"ready"}})}]}]}}}});
   const location=tracker.buildLocationData({state},"turn",null);
-  assert.equal(tail.options.select({seq:4,turn:{data:{get:()=>location.value}}}),null);
+  const selected=tail.options.select({seq:4,turn:{data:{get:()=>location.value}}});
+  if(name === "prepare_spec_proposal") assert.equal(selected?.review?.state,"ready");
+  else assert.equal(selected,null);
 });

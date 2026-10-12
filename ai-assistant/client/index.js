@@ -355,7 +355,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     }
     if (/\b(width|range)\b/i.test(field)) {
       const range = /^\[?(\d+):(\d+)\]?$/.exec(String(value));
-      if (range) { const width = Math.abs(Number(range[1]) - Number(range[2])) + 1; return h("span", null, `${width} ${width === 1 ? "bit" : "bits"} (${value})`); }
+      if (range) { const width = Math.abs(Number(range[1]) - Number(range[2])) + 1; return h("span", null, String(value).replace(/^\[|\]$/g, "")); }
       if (typeof value === "number") return h("span", null, `${value} ${value === 1 ? "bit" : "bits"}`);
     }
     if (/\bdirection$/i.test(field) && ["in", "out", "inout"].includes(value)) return h("span", null, ({ in: "Input", out: "Output", inout: "Input/output" })[value]);
@@ -564,6 +564,36 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
           h("div", { className: "s2g-actions" }, h("button", { className: "primary", type: "submit" }, value.submit_label || "Continue proposal"))));
   }
 
+  function architectureInformation(plan, elaborations = []) {
+    const configuration = record(plan.concrete_configuration);
+    const literalWidth = range => {
+      if (range === null) return 1;
+      const match = /^\[?([+-]?\d+)(?::([+-]?\d+))?\]?$/.exec(String(range).trim());
+      return match ? Math.abs(Number(match[1]) - Number(match[2] ?? match[1])) + 1 : undefined;
+    };
+    const interfaces = (Array.isArray(plan.interfaces) ? plan.interfaces : []).map(group => {
+      const evaluated = elaborations.find(item => item.component === group.component && item.status === "resolved");
+      return { ...group, ports: (group.ports || []).map(port => {
+        const bounds = evaluated?.ports?.find(item => item.name === port.name);
+        const width = bounds?.width ?? literalWidth(port.range) ?? port.width;
+        const details = { ...record(configuration[port.name]) };
+        if (details.width === width) delete details.width;
+        if (details.range === port.range || details.range === `[${port.range}]`) delete details.range;
+        for (const key of ["name", "direction", "description"]) if (details[key] === port[key]) delete details[key];
+        if (!Object.hasOwn(port, "range") && port.width !== undefined) details.width = port.width;
+        return { ...port, details, evaluated: bounds, calculatedWidth: width };
+      }) };
+    });
+    const vectors = interfaces.flatMap(group => group.ports).filter(port => port.range !== null && port.calculatedWidth > 1);
+    const behavior = Object.fromEntries(Object.entries(configuration).filter(([key, value]) =>
+      !(key === "module_name" && (plan.components || []).some(item => item.name === value))
+      && !interfaces.some(group => group.ports.some(port => port.name === key))
+      && !(key === "width" && vectors.length && vectors.every(port => port.calculatedWidth === value))
+      && !(key === "clocks_resets" && JSON.stringify(value) === JSON.stringify(plan.clocks_resets))
+      && !(key === "parameters" && interfaces.some(group => JSON.stringify(group.parameters) === JSON.stringify(value)))));
+    return { interfaces, behavior, parameters: interfaces.flatMap(group => (group.parameters || []).map(parameter => ({ component: group.component, ...parameter }))) };
+  }
+
   function ArchitectureReviewCard({ request, flow, sessionId, historical = false }) {
     const [value, setValue] = React.useState(request);
     const [feedback, setFeedback] = React.useState("");
@@ -587,19 +617,25 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       finally { setBusy(false); }
     }
     const plan = record(value.plan);
+    const information = architectureInformation(plan, value.elaborations);
     const actionable = !historical && value.status === "pending" && flow.status === "waiting" && flow.pending?.request?.review_id === value.reviewId;
     return h("article", { className: "s2g-review", "data-s2g-architecture-review": historical ? "historical" : value.status, "data-s2g-architecture-review-id": value.reviewId },
       h("header", null, h("h4", null, `${value.reviewNumber ? `Review ${value.reviewNumber} · ` : ""}${plan.title || "Architecture review"}`), h("span", { className: "s2g-state" }, label(value.status))),
-      ["components", "designs"].map(key => h("section", { key }, h("h5", null, label(key)), (Array.isArray(plan[key]) ? plan[key] : []).map((item, index) =>
-        h("article", { key: index, className: "s2g-content-card" }, h("h6", null, item.name || label(key).replace(/s$/, "")), h(ValueTree, { value: item }))))),
-      h("section", null, h("h5", null, "Interfaces"), (Array.isArray(plan.interfaces) ? plan.interfaces : []).map((item, index) => h("article", { key: index, className: "s2g-content-card" },
-        h("h6", null, item.component || item.name || "Interface"), Array.isArray(item.ports) ? h("div", { className: "s2g-comparison-scroll", tabIndex: 0, role: "region", "aria-label": "Port interface" },
-          h("table", { className: "s2g-comparison" }, h("thead", null, h("tr", null, ["Port", "Direction", "Width", "Details"].map(column => h("th", { key: column, scope: "col" }, column)))),
+      ["components", "designs"].filter(key => plan[key]?.length).map(key => h("section", { key }, h("h5", null, label(key)), (Array.isArray(plan[key]) ? plan[key] : []).map((item, index) =>
+        h("article", { key: index, className: "s2g-content-card" }, h("h6", null, item.name || label(key).replace(/s$/, "")), h(ValueTree, { value: Object.fromEntries(Object.entries(item).filter(([field]) => field !== "name")) }))))),
+      h("section", null, h("h5", null, "Interfaces"), information.interfaces.map((item, index) => h("article", { key: index, className: "s2g-content-card" },
+        h("h6", null, item.component || "Interface"), h("div", { className: "s2g-comparison-scroll", tabIndex: 0, role: "region", "aria-label": "Port interface" },
+          h("table", { className: "s2g-comparison" }, h("thead", null, h("tr", null, ["Port ID", "Definition", "Description"].map(column => h("th", { key: column, scope: "col" }, column)))),
             h("tbody", null, item.ports.map((port, portIndex) => h("tr", { key: portIndex }, h("th", { scope: "row" }, port.name),
-              h("td", null, ({ in: "Input", out: "Output", inout: "Input/output" })[port.direction] || port.direction), h("td", null, port.width === undefined ? "Not specified" : `${port.width} ${port.width === 1 ? "bit" : "bits"}`),
-              h("td", null, h(ValueTree, { value: Object.fromEntries(Object.entries(port).filter(([key]) => !["name", "direction", "width"].includes(key))) }))))))) : h(ValueTree, { value: item })))),
-      ["clocks_resets", "decomposition_rationale", "assumptions", "open_questions", "concrete_configuration"].map(key =>
-        h("section", { key }, h("h5", null, ({ clocks_resets: "Clocks and resets", decomposition_rationale: "Reason for this architecture", concrete_configuration: "Configuration" })[key] || label(key)), h(ValueTree, { value: plan[key] }))),
+              h("td", null, port.direction, Object.hasOwn(port, "range") ? (port.range ? ` · ${String(port.range).replace(/^\[|\]$/g, "")}` : "") : " · Range not recorded",
+                port.evaluated && port.range && !/^\[?[+-]?\d+(?::[+-]?\d+)?\]?$/.test(port.range) ? h("small", { style: { display: "block" } }, `At defaults: ${port.evaluated.left}:${port.evaluated.right}`) : null),
+              h("td", null, port.description || "Description not recorded", Object.keys(port.details).length ? h(ValueTree, { value: port.details }) : null))))))))),
+      information.parameters.length ? h("section", null, h("h5", null, "Parameters"), information.parameters.map((parameter, index) => h("article", { key: index, className: "s2g-content-card" },
+        h("h6", null, parameter.name), h("p", null, `${parameter.rtl_type || "Untyped"} · Default: ${parameter.value}`), parameter.description ? h("p", null, parameter.description) : null))) : null,
+      Object.keys(information.behavior).length ? h("section", null, h("h5", null, "Behavior"), h(ValueTree, { value: information.behavior })) : null,
+      information.interfaces.filter(group => group.constant_context?.trim()).map((group, index) => h("section", { key: `constants-${index}` }, h("h5", null, `${group.component} · Interface constants`), h("pre", null, group.constant_context))),
+      ["clocks_resets", "decomposition_rationale", "assumptions", "open_questions"].filter(key => plan[key]?.length).map(key =>
+        h("section", { key }, h("h5", null, ({ clocks_resets: "Clocks and resets", decomposition_rationale: "Reason for this architecture" })[key] || label(key)), h(ValueTree, { value: plan[key] }))),
       Array.isArray(value.proposed_operations) ? h("section", null, h("h5", null, "Planned changes"), value.proposed_operations.map((operation, index) =>
         h("article", { key: index, className: "s2g-content-card" }, h("h6", null, operationLabel(operation)), h(ValueTree, { value: Object.fromEntries(Object.entries(operation).filter(([key]) => key !== "type")) })))) : null,
       actionable ? h("div", null,

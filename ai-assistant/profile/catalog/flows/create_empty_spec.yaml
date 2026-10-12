@@ -1,6 +1,6 @@
 {
   "id": "spec2gds.create_empty_spec",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Create an empty Spec only when the designer explicitly requests no hardware content. For a requested hardware function, use flow_create_spec_with_component instead.",
   "inputSchema": {
     "type": "object",
@@ -51,7 +51,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.prepare_creation",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "title": {
@@ -69,7 +69,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.create_spec",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.destination"
@@ -80,7 +80,7 @@
       "kind": "call",
       "operation": {
         "id": "spec2gds.ensure_conversation",
-        "version": "2.0.0"
+        "version": "3.0.0"
       },
       "inputs": {
         "$ref": "nodes.create"

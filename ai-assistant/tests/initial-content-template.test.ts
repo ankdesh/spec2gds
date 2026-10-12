@@ -15,7 +15,7 @@ for (const width of [4, 8, 13]) test(`approved ${width}-bit leaf authoring prese
     plan: { title: "Unsigned adder", components: [{ name: "adder" }], designs: [], assumptions: [],
       interfaces: [{ component: "adder", ports: [
         { name: "a", direction: "in", width }, { name: "b", direction: "in", width },
-        { name: "cin", direction: "in", width: 1 }, { name: "sum", direction: "out", width }, { name: "cout", direction: "out", width: 1 },
+        { name: "cin", direction: "in", range: null, description: "Port purpose" }, { name: "sum", direction: "out", width }, { name: "cout", direction: "out", range: null, description: "Port purpose" },
       ] }] } };
   const template = initialContentTemplate(binding, review, "sha256:initial")!;
   assert.equal(template.architecture_review_id, review.reviewId);

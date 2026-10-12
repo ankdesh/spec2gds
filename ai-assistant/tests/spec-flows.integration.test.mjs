@@ -13,10 +13,10 @@ import { ProductState } from '../lib/state.js';
 import { ServiceClients, ServiceError } from '../lib/service-clients.js';
 import { boot, waitFor } from './support/event-runtime.mjs';
 const root = resolve(import.meta.dirname, '../..');
-const ports = [{ name: 'a', direction: 'in', width: 8 }, { name: 'b', direction: 'in', width: 8 }, { name: 'sum', direction: 'out', width: 9 }];
+const ports = [{ name: 'a', direction: 'in', range: "7:0", description: "Port purpose" }, { name: 'b', direction: 'in', range: "7:0", description: "Port purpose" }, { name: 'sum', direction: 'out', range: "8:0", description: "Port purpose" }];
 const rtl = "assign sum = {1'b0, a} + {1'b0, b};";
 function plan(name) { return { title: 'Unsigned adder', components: [{ name, purpose: 'Add two unsigned bytes.' }], designs: [],
-  interfaces: [{ component: name, ports }], clocks_resets: [], decomposition_rationale: 'One combinational leaf.', assumptions: [], open_questions: [], concrete_configuration: { width: 8, sum_width: 9 } }; }
+  interfaces: [{ component: name, ports, parameters: [], constant_context: "" }], clocks_resets: [], decomposition_rationale: 'One combinational leaf.', assumptions: [], open_questions: [], concrete_configuration: { width: 8, sum_width: 9 } }; }
 function saved(path) {
   const result = spawnSync(join(root, '.venv/bin/python'), ['-c',
     "import sys,json,zipfile; from spec2gds.spec.spec_format.ir import SpecRevision; r=SpecRevision.load(sys.argv[1]); z=zipfile.ZipFile(sys.argv[1]); print(json.dumps({'revision':r.source_revision_hash,'components':[{'id':c.ref.entity_id,'name':c.display_name,'ports':[(p.name,p.direction,p.width) for p in c.ports]} for c in r.components],'source':'\\n'.join(z.read(p).decode() for p in z.namelist() if p.endswith(('.xml','.json')))}))", path], { cwd: root, encoding: 'utf8' });
@@ -39,7 +39,11 @@ async function service(directory, policy) {
   }
   child.kill('SIGKILL'); throw new Error('Spec service did not become ready: ' + log);
 }
-function script(runtime, toolName, title, component, invalidDraft = false) {
+function script(runtime, toolName, title, component, invalidDraft = false, interfaceOptions = {}) {
+  const scriptPorts = interfaceOptions.ports ?? ports;
+  const parameters = interfaceOptions.parameters ?? [];
+  const constant_context = interfaceOptions.constant_context ?? "";
+  const body = interfaceOptions.body ?? rtl;
   runtime.adapter.stream = async function* (options) {
     this.requests.push(options);
     const last = options.messages.at(-1); let name, args;
@@ -51,11 +55,11 @@ function script(runtime, toolName, title, component, invalidDraft = false) {
       const data = JSON.parse(last.content.find(block => block.type === 'text').text);
       name = 'structured_output';
       if (!data.phase.startsWith('architecture/')) {
-        assert.deepEqual(data.inputs.authoring_context.approved_component.ports, ports);
+        assert.deepEqual(data.inputs.authoring_context.approved_component.ports, scriptPorts);
         assert.equal(data.inputs.authoring_context.operation_schema, undefined);
         assert.equal(data.inputs.authoring_context.pages, undefined);
       }
-      args = data.phase.startsWith('architecture/') ? plan(component) : { name: component, ports, description: invalidDraft ? '' : 'Adds two unsigned 8-bit inputs and retains the carry bit.', narrative: 'The sum includes the carry bit.', systemverilog: rtl };
+      args = data.phase.startsWith('architecture/') ? { ...plan(component), interfaces: [{ component, ports: scriptPorts, parameters, constant_context }] } : { name: component, ports: scriptPorts, parameters, description: invalidDraft ? '' : 'Adds two unsigned 8-bit inputs and retains the carry bit.', narrative: 'The sum includes the carry bit.', systemverilog: body };
     } else if (last?.source.kind === 'user') { assert.equal(options.tools.some(tool => ['prepare_spec_document_creation', 'prepare_architecture_review', 'prepare_spec_proposal'].includes(tool.name)), false, 'Spec has no legacy mutation tools'); assert.match(options.messages.filter(message => message.role === 'system').flatMap(message => message.content).filter(block => block.type === 'text').map(block => block.text).join('\n'), /flow_create_empty_spec|flow_add_component/, 'Native complete prompts must expose the available flow guidance'); name = toolName; args = { title, request: 'Create ' + component + ' with ports, description, narrative and functional SystemVerilog.' }; }
     if (name) {
       yield { type: 'block-start', index: 0, blockType: 'tool-call' };
@@ -461,4 +465,38 @@ test('manual empty-Spec start is idempotent and does not call a model', { timeou
     assert.equal(runtime.adapter.requests.length, 0); assert.equal(saved(complete.result.path).components.length, 0);
     assert.equal((await runtime.api('/flow-runs/start', { ...command, inputs: { ...command.inputs, title: 'Changed' } })).status, 409);
   } finally { if (runtime) await runtime.ctx.fiber.dispose(); if (owner) await owner.close(); await rm(directory, { recursive: true, force: true }); }
+});
+
+test('parameterized Component creation checks defaults and saves source expressions through the real service', { timeout: 60000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'flow-parameters-'));
+  const owner = await service(directory, 'automatic');
+  const runtime = await boot(directory, owner.url);
+  runtime.directory = directory;
+  try {
+    const handle = await runtime.ctx.agents.create({ sessionId: SessionId('parameter-source'), meta: { agentPreset: 'focused' }, agentOptions: { provider: 'mock', model: 'mock' } });
+    const ports = [
+      { name: 'a', direction: 'in', range: 'LAST:BASE', description: 'First unsigned operand' },
+      { name: 'b', direction: 'in', range: 'LAST:BASE', description: 'Second unsigned operand' },
+      { name: 'sum', direction: 'out', range: 'WIDTH+1:1', description: 'Sum including carry' },
+    ];
+    script(runtime, 'flow_create_spec_with_component', 'Parameterized adder', 'parameter_adder', false, {
+      ports, parameters: [{ name: 'WIDTH', rtl_type: 'int unsigned', value: '4', description: 'Operand width' }],
+      constant_context: 'localparam int BASE=1, LAST=WIDTH;', body: "assign sum = {1'b0,a}+{1'b0,b};",
+    });
+    const pending = await start(runtime, handle.agent);
+    const state = new ProductState(join(directory, 'assistant.sqlite3'));
+    try {
+      const review = state.architectureReview(pending.pending.request.review_id);
+      assert.equal(review.elaborations[0].status, 'resolved');
+      assert.deepEqual(review.elaborations[0].ports.map(port => port.width), [4,4,5]);
+      assert.equal(review.elaborations[0].parameter_values.WIDTH, 4);
+    } finally { state.close(); }
+    const complete = await approve(runtime, pending, 'automatic');
+    assert.equal(complete.result.state, 'applied');
+    const records = new ProductState(join(directory, 'assistant.sqlite3'));
+    let creation;
+    try { creation = records.database.prepare('SELECT request_json FROM source_creation_requests').all().map(row => JSON.parse(row.request_json)).find(request => request.flowExecutionId === complete.id); }
+    finally { records.close(); }
+    assert.deepEqual(saved(creation.destination).components[0].ports, [['a','in','[LAST:BASE]'],['b','in','[LAST:BASE]'],['sum','out','[WIDTH+1:1]']]);
+  } finally { await runtime.ctx.fiber.dispose(); await owner.close(); await rm(directory, { recursive: true, force: true }); }
 });

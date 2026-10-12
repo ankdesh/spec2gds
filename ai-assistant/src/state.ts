@@ -157,6 +157,10 @@ export class ProductState {
       return record;
     }
     if (record.status !== "pending") throw new Error("This review has already been decided. Prepare a new review to change its architecture.");
+    if (decision === "approved" && record.plan.interfaces.some((group: Record<string, any>) => !Array.isArray(group.parameters)
+      || typeof group.constant_context !== "string" || group.ports.some((port: Record<string, any>) => !Object.hasOwn(port, "range") || !port.description?.trim() || Object.hasOwn(port, "width")))) {
+      throw new Error("Prepare a new architecture review with exact port ranges, descriptions, and parameters.");
+    }
     if (decision === "approved" && record.plan.open_questions.length) throw new Error("Resolve essential open questions in a revised architecture before approval.");
     const updated = { ...record, status: decision, feedback, decidedAt: now() };
     this.database.exec("BEGIN IMMEDIATE");

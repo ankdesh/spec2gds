@@ -236,6 +236,21 @@ export class ServiceClients {
     }), undefined, signal);
   }
 
+  async resolveInterface(serviceUrl: string, input: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, any>> {
+    const ports = Array.isArray(input.ports) ? input.ports as Record<string, any>[] : [];
+    const literal = (value: unknown) => value === null || typeof value === "string" && /^\s*\[?[+-]?\d+(?:\s*:\s*[+-]?\d+)?\]?\s*$/.test(value);
+    const parameters = Array.isArray(input.parameters) ? input.parameters as Record<string, any>[] : [];
+    if (parameters.some(parameter => !parameter.name?.trim() || !parameter.value?.trim())) throw new Error("Parameters need supplied IDs and default values before approval.");
+    if (ports.every(port => literal(port.range))) {
+      return { status: "resolved", compiler_required: false, parameter_values: {}, diagnostics: [], ports: ports.map(port => {
+        const bounds = port.range === null ? null : String(port.range).trim().replace(/^\[|\]$/g, "").split(":").map(Number);
+        const left = bounds?.[0] ?? null, right = bounds?.[1] ?? left;
+        return { name: port.name, range: port.range, left, right, width: left === null ? 1 : Math.abs(left - right!) + 1 };
+      }) };
+    }
+    return this.request("POST", `${serviceUrl.replace(/\/$/, "")}/assistant/resolve-interface`, input, signal);
+  }
+
   async operationContract(binding: SessionBinding, signal?: AbortSignal): Promise<Record<string, unknown>> {
     this.assertStoredBinding(binding);
     const query = new URLSearchParams({ document_id: binding.documentId, scope: binding.scope });

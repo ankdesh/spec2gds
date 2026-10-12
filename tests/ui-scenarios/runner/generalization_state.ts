@@ -9,13 +9,19 @@ export function assertEvaluationCreationFlow(definition: string | null, status: 
   assert.ok(!["failed", "needs-reconcile", "cancelled"].includes(status || ""), `Evaluation creation flow ${status}: ${error || "no diagnostic"}`);
 }
 
-export function assertEvaluationInterface(plan: any, ports: { name: string; direction: string; width: number }[]): void {
+export function assertEvaluationInterface(plan: any, ports: { name: string; direction: string; width: number }[], elaborations: any[] = []): void {
   assert.equal(plan.components.length, 1, "Evaluation requires one approved leaf Component.");
   assert.equal(plan.designs.length, 0, "Evaluation uses the published leaf creation flow.");
   const groups = plan.interfaces.filter((item: any) => item.component === plan.components[0].name);
   assert.equal(groups.length, 1, "Evaluation requires one complete approved interface.");
   const ordered = (items: typeof ports) => items.map(({ name, direction, width }) => ({ name, direction, width })).sort((a, b) => a.name.localeCompare(b.name));
-  assert.deepEqual(ordered(groups[0].ports), ordered(ports), "Approved ports differ from the declared testbench contract.");
+  const actual = groups[0].ports.map((port: any) => {
+    const bounds = port.range === null ? null : /^(-?\d+):(-?\d+)$/.exec(port.range);
+    const evaluated = elaborations.find(group => group.component === groups[0].component && group.status === "resolved")?.ports.find((item: any) => item.name === port.name);
+    assert.ok(port.range === null || bounds || evaluated, `The evaluation interface needs resolved bounds for ${port.name}.`);
+    return { name: port.name, direction: port.direction, width: evaluated?.width ?? (bounds ? Math.abs(Number(bounds[1]) - Number(bounds[2])) + 1 : 1) };
+  });
+  assert.deepEqual(ordered(actual), ordered(ports), "Approved ports differ from the declared testbench contract.");
 }
 
 export function generatedSpecReceipt(receipts: any[], destination: string, reviewId: string): any | null {

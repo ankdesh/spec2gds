@@ -51,16 +51,6 @@
                     "type": "string",
                     "const": "wire"
                   },
-                  "display_name": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
                   "description": {
                     "oneOf": [
                       {
@@ -102,16 +92,6 @@
                   "family": {
                     "type": "string",
                     "const": "transactional"
-                  },
-                  "display_name": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   },
                   "description": {
                     "oneOf": [
@@ -181,16 +161,6 @@
                   "family": {
                     "type": "string",
                     "const": "structured"
-                  },
-                  "display_name": {
-                    "oneOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   },
                   "description": {
                     "oneOf": [
@@ -425,6 +395,16 @@
                   "type": "null"
                 }
               ]
+            },
+            "rtl_type": {
+              "type": "string"
+            },
+            "sign": {
+              "type": "string",
+              "enum": [
+                "signed",
+                "unsigned"
+              ]
             }
           },
           "required": [],
@@ -529,16 +509,6 @@
                   "type": "string",
                   "const": "wire"
                 },
-                "display_name": {
-                  "oneOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
-                },
                 "description": {
                   "oneOf": [
                     {
@@ -580,16 +550,6 @@
                 "family": {
                   "type": "string",
                   "const": "transactional"
-                },
-                "display_name": {
-                  "oneOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 },
                 "description": {
                   "oneOf": [
@@ -659,16 +619,6 @@
                 "family": {
                   "type": "string",
                   "const": "structured"
-                },
-                "display_name": {
-                  "oneOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
                 },
                 "description": {
                   "oneOf": [

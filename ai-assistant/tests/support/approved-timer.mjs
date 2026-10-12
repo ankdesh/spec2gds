@@ -7,7 +7,7 @@ export function approveTimer(directory, sessionId, revision = 'sha256:test', rev
   try {
     state.storeArchitecture({ reviewId, sessionId, callId: reviewId,
       status: 'pending', sourceRevision: revision, originalRequest: 'Add timer',
-      plan: { components: [{ name: 'timer' }], designs: [], interfaces: [{ component: 'timer', ports: [] }],
+      plan: { components: [{ name: 'timer' }], designs: [], interfaces: [{ component: 'timer', ports: [], parameters: [], constant_context: "" }],
         open_questions: [], concrete_configuration: { implemented: false } } });
     state.decideArchitecture(reviewId, 'approved', 'Test human accepts this architecture.');
   } finally { state.close(); }

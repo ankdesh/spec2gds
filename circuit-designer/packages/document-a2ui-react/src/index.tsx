@@ -30,7 +30,7 @@ import {
   type PersistedEntitySectionType,
 } from "./section-registry";
 import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
-import { portInputFromRow, rowText } from "./port-input";
+import { portInputFromRow, rowText, wireRangeError } from "./port-input";
 export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./section-registry";
 
 import type {
@@ -1396,7 +1396,6 @@ function ComponentPortsTable({
             <tr>
               <th scope="col">ID</th>
               <th scope="col">Family</th>
-              <th scope="col">Port name (optional)</th>
               <th scope="col">Definition</th>
               <th scope="col">Description</th>
               <th scope="col"><span className="spec-visually-hidden">Actions</span></th>
@@ -1405,7 +1404,7 @@ function ComponentPortsTable({
           <tbody>
             {addFamily && sectionEdit && (
               <tr className="spec-port-editor-row">
-                <td colSpan={6}><PortEditorCard adding family={addFamily} sectionEdit={sectionEdit} /></td>
+                <td colSpan={5}><PortEditorCard adding family={addFamily} sectionEdit={sectionEdit} /></td>
               </tr>
             )}
             {table.rows.map((row) => (
@@ -1418,7 +1417,7 @@ function ComponentPortsTable({
               />
             ))}
             {!table.rows.length && !addFamily && (
-              <tr><td className="spec-table-empty" colSpan={6}>No ports have been defined.</td></tr>
+              <tr><td className="spec-table-empty" colSpan={5}>No ports have been defined.</td></tr>
             )}
           </tbody>
         </table>
@@ -1449,7 +1448,7 @@ function ComponentPortRow({
   if (editing && sectionEdit) {
     return (
       <tr className="spec-port-editor-row">
-        <td colSpan={6}>
+        <td colSpan={5}>
           <PortEditorCard
             family={family}
             initial={portInputFromRow(row)}
@@ -1464,14 +1463,12 @@ function ComponentPortRow({
       </tr>
     );
   }
-  const displayName = rowText(row, "display_name");
   const description = rowText(row, "description");
   const changed = changedPaths.some((path) => path.includes(table.table_id) || path.includes(row.row_id));
   return (
     <tr className={`spec-port-row${changed ? " spec-proposal-changed" : ""}`}>
       <th scope="row"><strong>{name}</strong></th>
       <td><span className="spec-port-family">{titleCase(family)}</span></td>
-      <td>{displayName || "—"}</td>
       <td>{portDefinition(row, family)}</td>
       <td className="spec-port-text">{description || "—"}</td>
       <td className="spec-port-row-actions">
@@ -1510,7 +1507,6 @@ function PortEditorCard({
   sectionEdit: SectionEditState;
 }) {
   const [name, setName] = useState(initial?.name ?? "");
-  const [displayName, setDisplayName] = useState(initial?.display_name ?? "");
   const [direction, setDirection] = useState<"in" | "out" | "inout">(
     initial && initial.family !== "transactional" ? initial.direction : "in",
   );
@@ -1545,12 +1541,9 @@ function PortEditorCard({
       setError("Use a letter or underscore first, followed by letters, numbers, dots, underscores, or hyphens.");
       return;
     }
-    if (family === "wire" && (
-      range.trim().split(":").length > 2
-      || (range.includes(":") && range.split(":").some((part) => !part.trim()))
-    )) {
-      setError("Range must be empty, one expression, or a left:right expression pair.");
-      return;
+    if (family === "wire") {
+      const message = wireRangeError(range);
+      if (message) { setError(message); return; }
     }
     if (family === "transactional" && transactionKind === "custom" && !customKind.trim()) {
       setError("Custom transactional ports require a custom kind name.");
@@ -1558,7 +1551,7 @@ function PortEditorCard({
     }
     setBusy(true);
     setError("");
-    const common = { name: name.trim(), display_name: displayName, description };
+    const common = { name: name.trim(), description };
     const value: ComponentPortInput = family === "wire"
       ? { ...common, family, direction, range: range.trim() || null }
       : family === "transactional"
@@ -1612,10 +1605,6 @@ function PortEditorCard({
             />
           </div>
         )}
-        <div>
-          <label htmlFor={`${idPrefix}-display-name`}>Port name (optional)</label>
-          <input id={`${idPrefix}-display-name`} onChange={(event) => setDisplayName(event.target.value)} value={displayName} />
-        </div>
         {family !== "transactional" && (
           <div>
             <label htmlFor={`${idPrefix}-direction`}>Direction</label>

@@ -167,6 +167,13 @@ ASSISTANT_ACTIONS = {'health': {'method': 'GET',
              'response_kind': 'object'}}
 
 
+ASSISTANT_ACTIONS["resolve_interface"] = {
+    "method": "POST", "path": "/assistant/resolve-interface",
+    "parameters": {"path": [], "query": [], "body": ["ports", "parameters", "systemverilog", "overrides"]},
+    "response_kind": "object",
+}
+
+
 def integration_metadata():
     value = {"format_version": 1, "service_kind": "spec", "interface_version": "1.0.0",
              "actions": ASSISTANT_ACTIONS, "operation_schema_action": "operation_schema",

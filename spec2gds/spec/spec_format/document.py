@@ -350,7 +350,7 @@ def _configuration_tables(root: etree._Element, prefix: str) -> list[DocumentTab
             "name": _cell(_text(parameter, "name"), "/parameters/parameter/name"),
             "value": _cell(_text(value), "/parameters/parameter/value", kind="expression"),
             "resolve": _cell(parameter.get("resolve", ""), "/parameters/parameter/@resolve", kind="enum"),
-            "type": _cell(parameter.get("type", ""), "/parameters/parameter/@type", kind="enum"),
+            "type": _cell(parameter.get("{urn:spec2gds:rtl}type", parameter.get("type", "")), "/parameters/parameter/@type", kind="enum"),
             "choice": _cell(parameter.get("choiceRef", ""), "/parameters/parameter/@choiceRef", kind="reference"),
             "minimum": _cell(parameter.get("minimum", ""), "/parameters/parameter/@minimum", kind="expression"),
             "maximum": _cell(parameter.get("maximum", ""), "/parameters/parameter/@maximum", kind="expression"),
@@ -461,7 +461,6 @@ def _component_tables(
         row = {
             "name": _cell(name, "/model/ports/port/name"),
             "family": _cell(family, "/model/ports/port/(wire|transactional|structured)", kind="enum"),
-            "display_name": _cell(_text(port, "displayName"), "/model/ports/port/displayName"),
             "direction": _cell(
                 _text(wire, "direction") if wire is not None else (struct.get("direction", "") if struct is not None else ""),
                 "/model/ports/port/(wire/direction|structured/struct/@direction)",
@@ -485,7 +484,6 @@ def _component_tables(
         columns=_columns(
             ("name", "Name", "/model/ports/port/name"),
             ("family", "Family", "/model/ports/port/(wire|transactional|structured)"),
-            ("display_name", "Display name", "/model/ports/port/displayName"),
             ("direction", "Direction", "/model/ports/port/(wire/direction|structured/struct/@direction)"),
             ("range", "Range", "/model/ports/port/wire/vectors/vector"),
             ("initiative", "Initiative", "/model/ports/port/transactional/initiative"),

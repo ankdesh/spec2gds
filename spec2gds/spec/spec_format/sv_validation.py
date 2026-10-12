@@ -177,9 +177,13 @@ def _lint_standalone_component(
             return _unverified(section, "RTL_PROFILE_UNSUPPORTED", "The component uses ports outside the supported wire-only RTL profile.")
         range_text = "" if port.width == 1 else f" {port.width}"
         ports.append(f"    {directions[port.direction]}{range_text} {port.name}")
-    declaration = "module section_lint;"
-    if ports:
-        declaration = "module section_lint (\n" + ",\n".join(ports) + "\n);"
+    from dataclasses import asdict
+    from spec2gds.spec.spec_format.rtl_interface import module_declaration
+    declaration = module_declaration("section_lint", [
+        {"name": port.name, "direction": port.direction,
+         "range": port.width[1:-1] if isinstance(port.width, str) else None}
+        for port in entity.ports
+    ], [asdict(parameter) for parameter in entity.parameters])
     scaffold: list[str] = []
     if not has_body:
         scaffold.extend(

@@ -182,7 +182,6 @@ export interface EntityMetadataInput {
 
 export interface PortCommonInput {
   name: string;
-  display_name?: string | null;
   description?: string | null;
 }
 

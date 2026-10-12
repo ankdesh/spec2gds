@@ -414,6 +414,7 @@ class _RtlModule:
     component_sv: SectionIR | None = None
     design_sv: SectionIR | None = None
     assignments: tuple[str, ...] = ()
+    parameters: tuple = ()
 
 
 class _IdentifierPool:
@@ -545,6 +546,23 @@ class _Analyzer:
             self.errors.append(
                 f"Component {entity_name(component)} declares unsupported bus interface {interface.name}."
             )
+        from dataclasses import asdict
+        from spec2gds.spec.spec_format.rtl_interface import resolve_interface
+        try:
+            resolved = resolve_interface(
+                [{"name": port.name, "direction": port.direction,
+                  "range": port.width[1:-1] if isinstance(port.width, str) else None}
+                 for port in component.ports if port.style == "wire"],
+                [asdict(parameter) for parameter in component.parameters],
+                section.content if section is not None else "",
+            )
+        except (ValueError, OSError) as exc:
+            self.errors.append(f"Component {entity_name(component)} interface: {exc}")
+            return
+        if resolved["status"] != "resolved":
+            self.errors.extend(item["message"] for item in resolved["diagnostics"])
+            return
+        shapes = {item["name"]: item for item in resolved["ports"]}
         for port in component.ports:
             if section is not None and section.content.strip() and not _is_plain_identifier(port.name):
                 self.errors.append(
@@ -555,7 +573,11 @@ class _Analyzer:
                     f"Component {entity_name(component)} port {port.name} is {port.style}; only wire ports are supported."
                 )
                 continue
-            shape = _port_shape(port)
+            evaluated = shapes.get(port.name)
+            shape = _PortShape(
+                port.width if isinstance(port.width, str) else "",
+                (evaluated["left"], evaluated["right"]) if evaluated and evaluated["left"] is not None else None,
+            ) if evaluated else None
             if shape is None:
                 self.errors.append(
                     f"Component {entity_name(component)} port {port.name} uses unsupported symbolic range {port.width}."
@@ -716,6 +738,7 @@ class _Normalizer:
             nets=(),
             instances=(),
             leaf=True,
+            parameters=component.parameters,
             component_sv=self.analysis.sections_by_parent.get(component.ref.entity_id),
         )
 
@@ -829,6 +852,7 @@ class _Normalizer:
             assignments=tuple(assignments),
             instances=tuple(instances),
             leaf=False,
+            parameters=parent.parameters if parent is not None else (),
             component_sv=(
                 self.analysis.sections_by_parent.get(parent.ref.entity_id)
                 if parent is not None else None
@@ -844,7 +868,7 @@ class _Normalizer:
                 source_name=port.name,
                 name=self.port_names[(component.ref.entity_id, port.name)],
                 direction=port.direction,
-                range_text=_port_shape(port).text,
+                range_text=port.width if isinstance(port.width, str) else "",
             )
             for port in component.ports
         )
@@ -985,10 +1009,16 @@ def _render_module(module: _RtlModule) -> str:
         for port in module.ports
         if module.leaf and not has_body and port.direction in {"out", "inout"}
     )
-    module_declaration = f"module {module.name};"
+    from dataclasses import asdict
+    from spec2gds.spec.spec_format.rtl_interface import parameter_declarations
+    header = f"module {module.name}"
+    declarations = parameter_declarations([asdict(parameter) for parameter in module.parameters])
+    if declarations:
+        header += f" #(\n    {declarations}\n)"
+    module_declaration = header + ";"
     if port_lines:
         module_declaration = (
-            f"module {module.name} (\n" + ",\n".join(port_lines) + "\n);"
+            header + " (\n" + ",\n".join(port_lines) + "\n);"
         )
     sections: list[str] = []
     if net_lines:
