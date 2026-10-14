@@ -83,6 +83,35 @@ def component_revision(source_range, body, parameters=()):
     return candidate
 
 
+def test_add_sv_body_with_symbolic_ports_saves_and_rejects_invalid_edits(tmp_path):
+    from spec2gds.spec.spec_format.transactions import SpecEditTransaction, UpsertSection
+
+    revision = component_revision("WIDTH-1:0", "", [
+        {"name": "WIDTH", "rtl_type": "int unsigned", "value": "8"},
+    ])
+    parent = revision.components[0].ref
+    body = "assign sum = a + b;\n"
+    added = SpecEditTransaction(revision.source_revision_hash, (
+        UpsertSection(parent, "sv", {"content": body}),
+    )).apply(revision)
+    assert added.succeeded, added.diagnostics
+    assert added.section_validation and not any(item.blocking for item in added.section_validation)
+    destination = tmp_path / "symbolic-body.spec"
+    added.revision.to_package().save(destination)
+    saved = destination.read_bytes()
+    reopened = SpecRevision.from_package(SpecPackage.load(destination))
+    assert reopened.entity_sections_for(parent, "sv")[0].content == body
+    assert reopened.components[0].ports[0].width == "[WIDTH-1:0]"
+
+    rejected = SpecEditTransaction(reopened.source_revision_hash, (
+        UpsertSection(parent, "sv", {"content": "assign sum = missing_signal;"}),
+    )).apply(reopened)
+    assert not rejected.succeeded and rejected.revision is None
+    assert "missing_signal" in " ".join(rejected.diagnostics)
+    assert reopened.entity_sections_for(parent, "sv")[0].content == body
+    assert destination.read_bytes() == saved
+
+
 @pytest.mark.parametrize("source_range,parameters", [("4:1",[]),("WIDTH:1",[{"name":"WIDTH","rtl_type":"int unsigned","value":"4","description":"Operand upper bound"}])])
 def test_saved_interface_generated_rtl_and_simulation_agree(tmp_path,source_range,parameters):
     revision=component_revision(source_range,"assign sum = a + b;",parameters)

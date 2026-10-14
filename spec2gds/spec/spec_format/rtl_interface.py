@@ -97,7 +97,7 @@ def module_declaration(name: str, ports, parameters=()) -> str:
     return header + (" (\n" + ",\n".join(port_lines) + "\n);" if port_lines else ";")
 
 
-def resolve_interface(ports, parameters=None, systemverilog="", overrides=None):
+def resolve_interface(ports, parameters=None, systemverilog="", overrides=None, *, module_sources=None):
     """Resolve bounds from explicit source; never save or simulate a Spec."""
     if not isinstance(ports, list) or not isinstance(parameters or [], list):
         raise ValueError("Ports and parameters must be arrays.")
@@ -105,6 +105,12 @@ def resolve_interface(ports, parameters=None, systemverilog="", overrides=None):
     overrides = overrides or {}
     if not isinstance(overrides, dict) or not isinstance(systemverilog, str):
         raise ValueError("Overrides must be an object and SystemVerilog must be text.")
+    module_sources = module_sources or {}
+    if not isinstance(module_sources, dict) or any(
+        not isinstance(name, str) or not IDENTIFIER.fullmatch(name) or not isinstance(source, str)
+        for name, source in module_sources.items()
+    ):
+        raise ValueError("Module sources must map RTL identifiers to SystemVerilog text.")
     parameter_declarations(parameters)
     names = set()
     literal_ports = []
@@ -137,7 +143,8 @@ def resolve_interface(ports, parameters=None, systemverilog="", overrides=None):
         return {"status": "unresolved", "ports": [], "parameter_values": {}, "compiler_required": True,
                 "diagnostics": [{"code": "VERILATOR_MISSING", "message": "Verilator is required to resolve the symbolic port bounds.", "blocking": True}]}
     version = subprocess.run([executable, "--version"], capture_output=True, text=True, timeout=5).stdout.strip()
-    payload = json.dumps({"ports": ports, "parameters": parameters, "systemverilog": systemverilog, "overrides": overrides}, sort_keys=True)
+    payload = json.dumps({"ports": ports, "parameters": parameters, "systemverilog": systemverilog, "overrides": overrides,
+                          "module_sources": module_sources}, sort_keys=True)
     return json.loads(_elaborate(executable, version, payload))
 
 
@@ -146,11 +153,27 @@ def _elaborate(executable, version, payload):
     data = json.loads(payload)
     source = module_declaration("interface_check", data["ports"], data["parameters"]) + "\n" + data["systemverilog"] + "\nendmodule\n"
     diagnostics = []
+    # XML was removed in 5.046. Keep the established XML reader for older
+    # releases; unknown/newer versions use the supported JSON interface.
+    release = re.search(r"\bVerilator\s+(?:Devel\s+)?(\d+)\.(\d+)", version)
+    use_json = release is None or tuple(map(int, release.groups())) >= (5, 46)
     with tempfile.TemporaryDirectory(prefix="spec2gds-interface-") as directory:
         root = Path(directory)
-        input_path, output_path = root / "interface.sv", root / "interface.xml"
+        input_path = root / "interface.sv"
+        output_path = root / ("interface.json" if use_json else "interface.xml")
         input_path.write_text(source)
-        command = [executable, "--xml-only", "--xml-output", str(output_path), "--top-module", "interface_check", "--Mdir", str(root / "obj"), "-Wno-fatal"]
+        output_options = (
+            ["--json-only", "--json-only-output", str(output_path),
+             "--json-only-meta-output", str(root / "interface.meta.json")]
+            if use_json else ["--xml-only", "--xml-output", str(output_path)]
+        )
+        command = [executable, *output_options, "--top-module", "interface_check", "--Mdir", str(root / "obj"), "-Wno-fatal"]
+        if data["module_sources"]:
+            library = root / "modules"
+            library.mkdir()
+            for name, source in data["module_sources"].items():
+                (library / f"{name}.sv").write_text(source)
+            command.extend(["-y", str(library), "+libext+.sv"])
         command.extend(f"-G{name}={value}" for name, value in data["overrides"].items())
         try:
             run = subprocess.run([*command, str(input_path)], capture_output=True, text=True, timeout=30)
@@ -167,10 +190,13 @@ def _elaborate(executable, version, payload):
             if not diagnostics:
                 diagnostics.append({"code": "ELABORATION_FAILED", "message": run.stderr[:2000] or "Verilator could not resolve the interface.", "blocking": True})
             return json.dumps(result)
-        tree = ET.parse(output_path)
-        types = {node.get("id"): node for node in tree.findall(".//typetable/*")}
-        module = tree.find(".//netlist/module[@name='interface_check']")
-        variables = {node.get("name"): node for node in module.findall("var")} if module is not None else {}
+        try:
+            variables, types = _read_json_interface(output_path) if use_json else _read_xml_interface(output_path)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError, ET.ParseError):
+            diagnostics.append({"code": "ELABORATION_OUTPUT_INVALID",
+                                "message": f"Could not read interface data from {version}; the compiler output format is invalid or unsupported.",
+                                "blocking": True})
+            return json.dumps(result)
         for port in data["ports"]:
             variable = variables.get(port["name"])
             dtype = types.get(variable.get("dtype_id")) if variable is not None else None
@@ -190,7 +216,7 @@ def _elaborate(executable, version, payload):
                                    "width": abs(left - right) + 1 if left is not None else 1})
         for parameter in data["parameters"]:
             variable = variables.get(parameter["name"])
-            constant = variable.find("const") if variable is not None else None
+            constant = variable.get("constant") if variable is not None else None
             if constant is not None:
                 dtype = types.get(variable.get("dtype_id"))
                 visited = set()
@@ -200,11 +226,59 @@ def _elaborate(executable, version, payload):
                 # Verilator can emit an unsigned constant for a signed parameter,
                 # or a signed initializer for an unsigned declaration. The declared
                 # type determines the parameter value used by the interface.
-                signed = dtype.get("signed") == "true" if dtype is not None else None
-                result["parameter_values"][parameter["name"]] = _constant_value(constant.get("name", ""), signed)
+                signed = dtype.get("signed", False) if dtype is not None else None
+                result["parameter_values"][parameter["name"]] = _constant_value(constant, signed)
         result["status"] = "resolved"
         result["input_digest"] = hashlib.sha256(payload.encode()).hexdigest()
         return json.dumps(result)
+
+
+def _read_xml_interface(path):
+    """Normalize legacy XML to the same variable/type records as JSON."""
+    tree = ET.parse(path)
+    types = {
+        node.get("id"): {**node.attrib, "signed": node.get("signed") == "true"}
+        for node in tree.findall(".//typetable/*")
+    }
+    module = tree.find(".//netlist/module[@name='interface_check']")
+    variables = {}
+    for node in module.findall("var") if module is not None else ():
+        constant = node.find("const")
+        variables[node.get("name")] = {
+            **node.attrib,
+            "constant": constant.get("name", "") if constant is not None else None,
+        }
+    return variables, types
+
+
+def _read_json_interface(path):
+    """Read the elaborated top module and exact bounds, not inferred widths."""
+    tree = json.loads(path.read_text())
+    module = next((node for node in tree["modulesp"]
+                   if node["type"] == "MODULE" and node["name"] == "interface_check"), None)
+    table = next((node for node in tree["miscsp"] if node["type"] == "TYPETABLE"), None)
+    if module is None or table is None:
+        raise ValueError("Missing elaborated module or type table")
+    types = {}
+    for node in table["typesp"]:
+        # Ports produced by module_declaration use a single basic packed type.
+        # Refuse unsupported types rather than inventing bounds from a width.
+        if node["type"] != "BASICDTYPE":
+            continue
+        bounds = node.get("range")
+        left, right = (int(value) for value in bounds.split(":")) if bounds else (None, None)
+        types[node["addr"]] = {
+            "id": node["addr"], "left": left, "right": right,
+            "signed": node.get("signed", False),
+        }
+    variables = {}
+    for node in module["stmtsp"]:
+        if node["type"] != "VAR":
+            continue
+        constant = next((value["name"] for value in node.get("valuep", [])
+                         if value["type"] == "CONST"), None)
+        variables[node["name"]] = {"dtype_id": node["dtypep"], "constant": constant}
+    return variables, types
 
 
 def _constant_value(value, signed=None):
