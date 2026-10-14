@@ -165,37 +165,16 @@ def _lint_standalone_component(
     entity = revision.resolve(section.parent)
     if not isinstance(entity, ComponentIR):
         return _unverified(section, "RTL_CONTEXT_UNAVAILABLE", "No generated module context is available for this section.")
-    has_body = bool(section.content.strip())
-    directions = {
-        "in": "input logic" if has_body else "input wire",
-        "out": "output logic" if has_body else "output wire",
-        "inout": "inout wire",
-    }
-    ports: list[str] = []
-    for port in entity.ports:
-        if port.style != "wire" or not isinstance(port.width, (int, str)):
-            return _unverified(section, "RTL_PROFILE_UNSUPPORTED", "The component uses ports outside the supported wire-only RTL profile.")
-        range_text = "" if port.width == 1 else f" {port.width}"
-        ports.append(f"    {directions[port.direction]}{range_text} {port.name}")
-    from dataclasses import asdict
-    from spec2gds.spec.spec_format.rtl_interface import module_declaration
-    declaration = module_declaration("section_lint", [
-        {"name": port.name, "direction": port.direction,
-         "range": port.width[1:-1] if isinstance(port.width, str) else None}
-        for port in entity.ports
-    ], [asdict(parameter) for parameter in entity.parameters])
-    scaffold: list[str] = []
-    if not has_body:
-        scaffold.extend(
-            f"assign {port.name} = {'\'0' if port.direction == 'out' else '\'z'};"
-            for port in entity.ports if port.direction in {"out", "inout"}
-        )
-    source = (
-        declaration + f"\n`line 1 \"{section.source_path}\" 0\n"
-        + section.content + "\n" + "\n".join(scaffold) + "\nendmodule\n"
-    ).encode("utf-8")
-    files = {"rtl/section_lint.sv": source, "rtl/files.f": b"section_lint.sv\n"}
-    return _status(section, _run_project(files, "section_lint", executable, section))
+    if any(port.style != "wire" or not isinstance(port.width, (int, str)) for port in entity.ports):
+        return _unverified(section, "RTL_PROFILE_UNSUPPORTED", "The component uses ports outside the supported wire-only RTL profile.")
+    from spec2gds.spec.activities.rtl.codegen import generate_project
+    from spec2gds.spec.activities.view import SpecAccess
+
+    try:
+        project = generate_project(SpecAccess(revision, entity.ref), entity.ref)
+    except (KeyError, TypeError, ValueError) as exc:
+        return _status(section, [SectionDiagnostic("RTL_CONTEXT_INVALID", str(exc), blocking=True)])
+    return _status(section, _run_project(project.files, project.top_module, executable, section))
 
 
 def _run_project(

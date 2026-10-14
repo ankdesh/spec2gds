@@ -176,7 +176,7 @@ def _elaborate(executable, version, payload):
             command.extend(["-y", str(library), "+libext+.sv"])
         command.extend(f"-G{name}={value}" for name, value in data["overrides"].items())
         try:
-            run = subprocess.run([*command, str(input_path)], capture_output=True, text=True, timeout=30)
+            run = subprocess.run([*command, str(input_path)], cwd=root, capture_output=True, text=True, timeout=30)
         except subprocess.TimeoutExpired:
             return json.dumps({"status": "unresolved", "ports": [], "parameter_values": {}, "compiler_required": True,
                                "diagnostics": [{"code": "ELABORATION_TIMEOUT", "message": "Port-bound elaboration did not finish within 30 seconds.", "blocking": True}]})

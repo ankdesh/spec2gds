@@ -430,6 +430,8 @@ class SpecEditTransaction:
             if previous is None or component.ports != previous.ports or component.parameters != previous.parameters:
                 updated_owners.add(component.ref)
         from dataclasses import asdict
+
+        from spec2gds.spec.spec_format.rtl_dependencies import dependency_sources
         from spec2gds.spec.spec_format.rtl_interface import resolve_interface
         for component in next_revision.components:
             if component.ref not in updated_owners:
@@ -443,6 +445,7 @@ class SpecEditTransaction:
                       "range": port.width[1:-1] if isinstance(port.width, str) else None}
                      for port in component.ports if port.style == "wire"],
                     [asdict(parameter) for parameter in component.parameters], body,
+                    module_sources=dependency_sources(next_revision, body),
                 )
             except (ValueError, OSError) as exc:
                 return EditResult(revision=None, diagnostics=(str(exc),))

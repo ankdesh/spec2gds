@@ -19,6 +19,7 @@ from spec2gds.spec.spec_format.ir import (
 )
 from spec2gds.spec.spec_format.models import EntityRef, sha256_digest
 from spec2gds.spec.spec_format.naming import entity_name
+from spec2gds.spec.spec_format.rtl_dependencies import dependency_sources, referenced_components
 from spec2gds.spec.spec_format.sections import SectionIR
 
 ACTIVITY_ID = "rtl.generate"
@@ -471,18 +472,38 @@ class _Analyzer:
 
         root_parent = entity if isinstance(entity, ComponentIR) else self.parent_by_design_id.get(entity.ref.entity_id)
         seen_components: set[str] = set()
+        active_components: set[str] = set()
         design_pairs: dict[str, tuple[DesignIR, ComponentIR | None]] = {}
 
         def visit_component(component: ComponentIR) -> None:
+            if component.ref.entity_id in active_components:
+                self.errors.append(f"Recursive Component dependency involving {component.vlnv}.")
+                return
             if component.ref.entity_id in seen_components:
                 return
             seen_components.add(component.ref.entity_id)
+            active_components.add(component.ref.entity_id)
+            visit_body(component.ref)
             internal = self.spec.low.internal_design(component)
             if internal is not None:
                 visit_design(internal, component)
+            active_components.remove(component.ref.entity_id)
+
+        def visit_body(reference: EntityRef) -> None:
+            section = self.sections_by_parent.get(reference.entity_id)
+            if section is None:
+                return
+            try:
+                dependencies = referenced_components(self.spec.low, section.content)
+            except ValueError as exc:
+                self.errors.append(str(exc))
+                return
+            for dependency in dependencies:
+                visit_component(dependency)
 
         def visit_design(design: DesignIR, parent: ComponentIR | None) -> None:
             design_pairs.setdefault(design.ref.entity_id, (design, parent))
+            visit_body(design.ref)
             for instance in design.instances:
                 visit_component(self.components_by_vlnv[instance.component_vlnv])
 
@@ -496,8 +517,9 @@ class _Analyzer:
             for component in self.spec.low.components
             if component.ref.entity_id in seen_components
         ]
-        for component in components:
-            self._validate_component(component)
+        if not self.errors:
+            for component in components:
+                self._validate_component(component)
 
         design_analyses = tuple(
             self._analyze_design(design, parent) for design, parent in design_pairs.values()
@@ -547,6 +569,7 @@ class _Analyzer:
                 f"Component {entity_name(component)} declares unsupported bus interface {interface.name}."
             )
         from dataclasses import asdict
+
         from spec2gds.spec.spec_format.rtl_interface import resolve_interface
         try:
             resolved = resolve_interface(
@@ -555,6 +578,7 @@ class _Analyzer:
                  for port in component.ports if port.style == "wire"],
                 [asdict(parameter) for parameter in component.parameters],
                 section.content if section is not None else "",
+                module_sources=dependency_sources(self.spec, section.content) if section is not None else None,
             )
         except (ValueError, OSError) as exc:
             self.errors.append(f"Component {entity_name(component)} interface: {exc}")
@@ -671,6 +695,19 @@ class _Normalizer:
 
     def normalize(self) -> tuple[tuple[_RtlModule, ...], str, bool]:
         """Build rendering-only modules and select the generated top."""
+        # Stored source spells module names explicitly, so it cannot follow
+        # identifier renaming performed for a conflicting structural name.
+        source_parents = {
+            entity.ref.entity_id for entity in (
+                *self.analysis.components, *(item.design for item in self.analysis.designs)
+            )
+        }
+        raw_references = {
+            dependency.ref.entity_id
+            for section in self.analysis.sections_by_parent.values()
+            if section.parent.entity_id in source_parents
+            for dependency in referenced_components(self.analysis, section.content)
+        }
         for component in self.analysis.components:
             source_name = component.vlnv.split(":")[2]
             module_name = self._allocate(
@@ -681,6 +718,8 @@ class _Normalizer:
                 f"component:{component.ref.entity_id}",
             )
             self.module_names[component.ref.entity_id] = module_name
+            if component.ref.entity_id in raw_references and module_name != source_name:
+                raise ValueError(f"SV module reference {source_name!r} conflicts with another generated module name.")
             port_pool = _IdentifierPool()
             for port in component.ports:
                 self.port_names[(component.ref.entity_id, port.name)] = self._allocate(
@@ -1010,6 +1049,7 @@ def _render_module(module: _RtlModule) -> str:
         if module.leaf and not has_body and port.direction in {"out", "inout"}
     )
     from dataclasses import asdict
+
     from spec2gds.spec.spec_format.rtl_interface import parameter_declarations
     header = f"module {module.name}"
     declarations = parameter_declarations([asdict(parameter) for parameter in module.parameters])
