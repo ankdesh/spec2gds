@@ -12,6 +12,7 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 
 ## 2. Specification System
 
+- [Spec IR and Spec API](spec-ir-and-api.md): Source design, class relationships, Python read APIs, HTTP transactions, and worked examples.
 - [Spec Editor and Spec Service](spec-editor.md): User interface, section registry (text, ports, SystemVerilog), package layout, transactions, and approval modes.
 
 ## 3. Circuit Designer
