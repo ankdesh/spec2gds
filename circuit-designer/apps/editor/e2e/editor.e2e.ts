@@ -416,6 +416,7 @@ type ApiState = {
   transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
   currentRevision: string;
   currentTitle: string;
+  currentSummary?: string;
   staleNextTransaction: boolean;
 };
 
@@ -431,6 +432,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     transactions: [],
     currentRevision: revision,
     currentTitle: snapshot.narrative.title,
+    currentSummary: undefined,
     staleNextTransaction: false,
   };
   await page.route("**/api/**", async (route: Route) => {
@@ -493,7 +495,11 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     if (path === "/documents/a2ui" || path === "/documents/view") {
       const currentBatch = structuredClone(batch);
       const components = currentBatch.messages[1].updateComponents.components as Array<Record<string, any>>;
-      components.find(component => component.component === "SpecDocument").title = state.currentTitle;
+      const doc = components.find(component => component.component === "SpecDocument");
+      doc.title = state.currentTitle;
+      if (state.currentSummary !== undefined) {
+        doc.summary = state.currentSummary;
+      }
       const liveView = components.find((component) => component.component === "LiveView");
       if (options.topologyUnavailable) {
         liveView.block.options = {
@@ -1530,5 +1536,105 @@ test("renders SystemVerilog edit box with full width and aligns Explore button t
 
   await svForm.scrollIntoViewIfNeeded();
   await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_sv_full_width.png" });
+});
+
+test("TS-UI-001 and TS-UI-002: renders canonical Spec Editor branding and inflects document entity counts", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  // Set uninflected summary to verify formatDocumentSummary converts "1 components" -> "1 component"
+  state.currentSummary = "1 components · 0 designs";
+
+  await page.goto("/");
+  await expect(page).toHaveTitle("spec2gds · Spec Editor");
+
+  await openSample(page);
+  await expect(page).toHaveTitle("spec2gds · Spec Editor");
+
+  const summary = page.locator(".spec-cover p");
+  await expect(summary).toBeVisible();
+  await expect(summary).toHaveText("1 component · 0 designs");
+});
+
+test("TS-UI-004: dialogs enforce ARIA modal focus trapping, Escape dismissal, and return focus to trigger", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+
+  // Test Help -> About spec2gds dialog
+  await page.getByRole("menuitem", { name: "Help", exact: true }).click();
+  await page.getByRole("menuitem", { name: "About spec2gds", exact: true }).click();
+
+  const aboutDialog = page.getByRole("dialog", { name: "About spec2gds" });
+  await expect(aboutDialog).toBeVisible();
+  await expect(aboutDialog).toHaveAttribute("aria-modal", "true");
+
+  const closeButton = aboutDialog.getByRole("button", { name: "Close" });
+  await expect(closeButton).toBeFocused();
+
+  // Press Escape to dismiss and verify focus returns to Help menu trigger
+  await page.keyboard.press("Escape");
+  await expect(aboutDialog).not.toBeVisible();
+  await expect(page.locator("#editor-help-menu-trigger")).toBeFocused();
+
+  // Test Help -> Keyboard shortcuts dialog
+  await page.getByRole("menuitem", { name: "Help", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Keyboard Shortcuts", exact: true }).click();
+
+  const shortcutsDialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+  await expect(shortcutsDialog).toBeVisible();
+  await expect(shortcutsDialog).toHaveAttribute("aria-modal", "true");
+
+  await page.keyboard.press("Escape");
+  await expect(shortcutsDialog).not.toBeVisible();
+  await expect(page.locator("#editor-help-menu-trigger")).toBeFocused();
+});
+
+test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus across light and dark themes", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+
+  const getContrastRatio = async (fgSelector: string, bgSelector: string) => {
+    return await page.evaluate(({ fgSel, bgSel }) => {
+      const parseRgb = (color: string) => {
+        const match = color.match(/\d+(\.\d+)?/g);
+        return match ? match.slice(0, 3).map(Number) : [0, 0, 0];
+      };
+      const luminance = ([r, g, b]: number[]) => {
+        const a = [r, g, b].map((v) => {
+          const c = v / 255;
+          return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return a[0] * 0.2126 + a[1] * 0.7152 + a[2] * 0.0722;
+      };
+
+      const fgEl = document.querySelector(fgSel);
+      const bgEl = document.querySelector(bgSel);
+      if (!fgEl || !bgEl) return 0;
+
+      const fgColor = window.getComputedStyle(fgEl).color;
+      let bgTarget: HTMLElement | null = bgEl as HTMLElement;
+      let bgColor = window.getComputedStyle(bgTarget).backgroundColor;
+      while (bgTarget && (bgColor === "transparent" || bgColor === "rgba(0, 0, 0, 0)")) {
+        bgTarget = bgTarget.parentElement;
+        if (bgTarget) bgColor = window.getComputedStyle(bgTarget).backgroundColor;
+      }
+
+      const l1 = luminance(parseRgb(fgColor));
+      const l2 = luminance(parseRgb(bgColor));
+      const brighter = Math.max(l1, l2);
+      const darker = Math.min(l1, l2);
+      return (brighter + 0.05) / (darker + 0.05);
+    }, { fgSel: fgSelector, bgSel: bgSelector });
+  };
+
+  // Check Obsidian (dark theme) table header contrast
+  const obsidianThRatio = await getContrastRatio(".spec-table-scroll th", ".spec-table-scroll th");
+  expect(obsidianThRatio).toBeGreaterThanOrEqual(4.5);
+
+  // Switch to Clean (light theme)
+  await page.locator(".theme-quick-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "clean");
+
+  // Check Clean (light theme) table header contrast
+  const cleanThRatio = await getContrastRatio(".spec-table-scroll th", ".spec-table-scroll th");
+  expect(cleanThRatio).toBeGreaterThanOrEqual(4.5);
 });
 
