@@ -39,12 +39,17 @@ function escapeXml(value: string): string {
     .replaceAll("'", "&apos;");
 }
 
-const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }) => [
-  `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/>`,
-  `<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow">${escapeXml(component.id)}</text>`,
-  `<text x="${geometry.x + 13}" y="${geometry.y + 49}" class="component-symbol">${component.appearance.renderer_key === "register" ? "▣" : component.appearance.renderer_key === "constant" ? "1" : component.appearance.renderer_key === "not" ? "▷○" : "◈"}</text>`,
-  `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label">${escapeXml(label)}</text>`,
-].join("");
+const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }) => {
+  const displayName = component.label || component.id;
+  const maxChars = Math.max(4, Math.floor((geometry.width - 26) / 7.2));
+  const eyebrow = displayName.length > maxChars ? `${displayName.slice(0, maxChars - 1)}…` : displayName;
+  return [
+    `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/>`,
+    `<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`,
+    `<text x="${geometry.x + 13}" y="${geometry.y + 49}" class="component-symbol">${component.appearance.renderer_key === "register" ? "▣" : component.appearance.renderer_key === "constant" ? "1" : component.appearance.renderer_key === "not" ? "▷○" : "◈"}</text>`,
+    `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label">${escapeXml(label)}</text>`,
+  ].join("");
+};
 
 export const defaultRendererRegistry = new RendererRegistry();
 for (const key of ["generic", "buffer", "not", "and", "nand", "or", "nor", "xor", "xnor", "mux", "register", "constant", "splitter", "combiner"]) {

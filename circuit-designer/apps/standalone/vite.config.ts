@@ -17,5 +17,12 @@ export default defineConfig({
       "/api": circuitServiceOrigin,
     },
   },
-  preview: { host: circuitUiHost, port: circuitUiPort, allowedHosts: true },
+  preview: {
+    host: circuitUiHost,
+    port: circuitUiPort,
+    allowedHosts: true,
+    proxy: {
+      "/api": circuitServiceOrigin,
+    },
+  },
 });

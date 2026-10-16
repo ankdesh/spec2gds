@@ -80,8 +80,9 @@ export class Stack {
     };
     this.commands.set("spec", [join(root, ".venv/bin/spec2gds-spec-service"), ["--host", "127.0.0.1", "--port", String(spec)], root, `${this.spec}/health`]);
     this.commands.set("verification", [join(root, ".venv/bin/verification-planner"), ["--host", "127.0.0.1", "--port", String(planner), "--storage-dir", join(this.directory, "planner")], root, `${this.planner}/api/verification/v1/health`]);
-    this.commands.set("circuit", ["npm", ["run", "service"], join(root, "circuit-designer"), `${this.circuit}/api/circuit-designer/v1/health`]);
-    this.commands.set("circuit-ui", ["npm", ["run", "dev:standalone"], join(root, "circuit-designer"), `${this.circuitUI}/api/circuit-designer/v1/health`]);
+    const uiMode = process.env.CIRCUIT_DESIGNER_UI_MODE ?? (existsSync(join(root, "circuit-designer/apps/standalone/dist/index.html")) ? "preview" : "dev");
+    const uiScript = uiMode === "dev" ? "dev:standalone" : "preview:standalone";
+    this.commands.set("circuit-ui", ["npm", ["run", uiScript], join(root, "circuit-designer"), `${this.circuitUI}/api/circuit-designer/v1/health`]);
   }
 
   static async create(info: TestInfo): Promise<Stack> {

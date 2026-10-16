@@ -647,6 +647,7 @@ async function openSample(page: Page): Promise<void> {
 test("creates, opens, refreshes, and exposes truthful File menu state", async ({ page }) => {
   const state = await mockEditorApi(page);
   await page.goto("/");
+  await expect(page).toHaveTitle("spec2gds · Spec Editor");
 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Spec/ }).click();
@@ -1466,13 +1467,23 @@ test("toggles themes via quick toggle and Preferences dialog with persistence", 
   await expect(preferencesDialog).toBeVisible();
   await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_preferences_dialog.png" });
 
+  // Verify focus trap wraps between first and last focusable elements
+  const closeButton = preferencesDialog.getByRole("button", { name: "Close" });
+  const doneButton = preferencesDialog.getByRole("button", { name: "Done" });
+  await doneButton.focus();
+  await page.keyboard.press("Tab");
+  await expect(closeButton).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(doneButton).toBeFocused();
+
   // Switch back to Obsidian in the dialog
   await preferencesDialog.getByRole("radio", { name: /Obsidian/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
 
-  // Close dialog
-  await preferencesDialog.getByRole("button", { name: "Done" }).click();
+  // Close dialog via Escape and verify focus restores to Edit menu trigger
+  await page.keyboard.press("Escape");
   await expect(preferencesDialog).not.toBeVisible();
+  await expect(page.locator("#editor-edit-menu-trigger")).toBeFocused();
 
   // Reload page to verify persistence in localStorage
   await page.reload();

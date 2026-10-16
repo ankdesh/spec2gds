@@ -207,8 +207,9 @@ async function run(): Promise<void> {
     await Promise.all([healthy(`${owner}/health`, ownerProcess), healthy(`${assistant}/readyz`, assistantProcess)]);
     if (presentation) {
       const circuitService = start("circuit-service", "npm", ["run", "service"], join(root, "circuit-designer"), env);
-      await healthy(`http://127.0.0.1:${circuitPort}/api/circuit-designer/v1/health`, circuitService);
-      const circuitUi = start("circuit-ui", "npm", ["run", "dev:standalone"], join(root, "circuit-designer"), env);
+      const uiMode = process.env.CIRCUIT_DESIGNER_UI_MODE ?? (existsSync(join(root, "circuit-designer/apps/standalone/dist/index.html")) ? "preview" : "dev");
+      const uiScript = uiMode === "dev" ? "dev:standalone" : "preview:standalone";
+      const circuitUi = start("circuit-ui", "npm", ["run", uiScript], join(root, "circuit-designer"), env);
       await healthy(`http://127.0.0.1:${circuitUiPort}/api/circuit-designer/v1/health`, circuitUi);
     }
     assert.equal((await json(`${owner}/assistant/capabilities`)).approval_policy, approval);

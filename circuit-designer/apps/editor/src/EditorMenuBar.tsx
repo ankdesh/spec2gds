@@ -882,6 +882,7 @@ export default function EditorMenuBar({
           currentThemeId={themeId}
           onClose={() => setDialog(null)}
           onThemeChange={onSelectTheme}
+          restoreFocusId="editor-edit-menu-trigger"
         />
       )}
       {dialog && !["new", "open", "preferences"].includes(dialog) && (

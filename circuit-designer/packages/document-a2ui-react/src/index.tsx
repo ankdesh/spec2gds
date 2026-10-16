@@ -288,6 +288,14 @@ function DocumentContents({ entries }: { entries: TocEntry[] }) {
   </aside>;
 }
 
+/** Format entity count summary with correct singular / plural inflection (UI-SPEC-012). */
+export function formatDocumentSummary(summary: string): string {
+  if (!summary) return summary;
+  return summary
+    .replace(/(\d+)\s+components?\b/gi, (_, count) => `${count} ${Number(count) === 1 ? "component" : "components"}`)
+    .replace(/(\d+)\s+designs?\b/gi, (_, count) => `${count} ${Number(count) === 1 ? "design" : "designs"}`);
+}
+
 const SpecDocument = createComponentImplementation(
   SpecDocumentApi,
   ({ props, buildChild }) => {
@@ -373,7 +381,7 @@ const SpecDocument = createComponentImplementation(
                 )}
               </div>
             )}
-            <p>{props.summary}</p>
+            <p>{formatDocumentSummary(props.summary)}</p>
 
           </header>
           {renderChildren(props.children, buildChild)}

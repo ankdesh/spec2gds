@@ -54,4 +54,24 @@ describe("Circuit Designer visual export", () => {
     expect(svg).toContain('data-terminal-id="boundary:request"');
     expect(svg).toContain('data-terminal-id="boundary:response"');
   });
+
+  it("renders human-readable component labels in SVG eyebrow and preserves internal ID in diagnostics (UI-CIRCUIT-007)", () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry = {
+      producer_0: { x: 20, y: 40, width: 140, height: 100, pinned: true },
+    };
+    const comp = document.components.find((item) => item.id === "producer");
+    if (comp) {
+      comp.id = "long_internal_uuid_producer_hw_block_1234567890";
+      comp.label = "Sensor Stream Producer";
+      document.design.instances[0].component_id = comp.id;
+    }
+    const svg = renderCircuitSvg(document);
+    // Eyebrow should prefer the readable label rather than raw long ID as visible text
+    expect(svg).toContain("Sensor Stream");
+    expect(svg).not.toMatch(/class="component-eyebrow"[^>]*>long_internal_uuid/);
+    // Internal ID should be preserved in diagnostics (<title> and data-component-id)
+    expect(svg).toContain('data-component-id="long_internal_uuid_producer_hw_block_1234567890"');
+    expect(svg).toContain("<title>long_internal_uuid_producer_hw_block_1234567890</title>");
+  });
 });

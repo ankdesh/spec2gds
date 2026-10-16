@@ -5,28 +5,64 @@ interface PreferencesDialogProps {
   currentThemeId: SpecEditorThemeId;
   onThemeChange: (themeId: SpecEditorThemeId) => void;
   onClose: () => void;
+  restoreFocusId?: string;
 }
 
 export function PreferencesDialog({
   currentThemeId,
   onThemeChange,
   onClose,
+  restoreFocusId,
 }: PreferencesDialogProps) {
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const menuTrigger = previousFocus?.closest(".editor-menu")?.querySelector<HTMLElement>(":scope > button");
+
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(
+        dialogRef.current?.querySelectorAll<HTMLElement>(
+          "button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex='-1'])",
+        ) ?? [],
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
       }
     };
     document.addEventListener("keydown", handleKeyDown);
-    dialogRef.current?.querySelector<HTMLElement>("button, input")?.focus();
+    requestAnimationFrame(() => {
+      const preferred = dialogRef.current?.querySelector<HTMLElement>(
+        "[autofocus], .preferences-theme-card--selected, button, input",
+      );
+      preferred?.focus();
+    });
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      if (previousFocus?.isConnected && previousFocus !== document.body && previousFocus.getClientRects().length) {
+        previousFocus.focus();
+      } else if (restoreFocusId && document.getElementById(restoreFocusId)) {
+        document.getElementById(restoreFocusId)?.focus();
+      } else if (menuTrigger?.isConnected) {
+        menuTrigger.focus();
+      }
     };
-  }, [onClose]);
+  }, [restoreFocusId]);
 
   return (
     <div className="editor-dialog-backdrop" onMouseDown={onClose} role="presentation">

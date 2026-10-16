@@ -11,6 +11,7 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
+    const menuTrigger = previousFocus?.closest(".circuit-menu")?.querySelector<HTMLElement>(":scope > button");
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault(); onCloseRef.current(); return;
@@ -32,7 +33,11 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
     requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("[autofocus], button, input, select")?.focus());
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      if (previousFocus?.isConnected && previousFocus !== document.body) previousFocus.focus();
+      if (previousFocus?.isConnected && previousFocus !== document.body) {
+        previousFocus.focus();
+      } else if (menuTrigger?.isConnected) {
+        menuTrigger.focus();
+      }
     };
   }, []);
 

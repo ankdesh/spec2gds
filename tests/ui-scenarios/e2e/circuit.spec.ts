@@ -102,3 +102,16 @@ test("standalone circuit roundtrip and malformed open preserve authoritative dat
   await expect(page.locator(".notice")).toContainText("Could not open circuit file");
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
 });
+
+test("dialogs trap focus and Escape returns focus to triggering menu", async ({ page, stack }) => {
+  await page.goto(stack.circuitUI);
+  await menu(page, "Help", "About Circuit Designer");
+  const dialog = page.getByRole("dialog", { name: "About Circuit Designer" });
+  await expect(dialog).toBeVisible();
+  const closeButton = dialog.getByRole("button", { name: "Close" });
+  await expect(closeButton).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#circuit-help-menu-trigger")).toBeFocused();
+});
+

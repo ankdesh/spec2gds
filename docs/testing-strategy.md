@@ -7,7 +7,12 @@ This document defines the software test pyramid, local execution profiles, and c
 Software tests validate platform reliability, revision safety, and cross-application boundaries.
 Software tests are separate from the hardware **Test Plan** artifact produced by **Verification Planner**.
 
-<<<<<<< HEAD
+```mermaid
+flowchart TD
+    E2E["End-to-End Scenarios (Playwright / Real Services)"] --> INT["Subsystem Integration Tests (FastAPI / REST APIs)"]
+    INT --> UNIT["Unit & Contract Tests (Python pytest / Vitest)"]
+```
+
 Use layered, risk-based testing. Put a check at the lowest layer that can detect
 the fault reliably. Use integration and browser checks when the fault depends
 on communication, persistence, or designer interaction. Do not set fixed test
@@ -32,48 +37,9 @@ Prioritise source integrity, atomic changes, revision control, approval rules,
 and separation between Spec and Circuit domains. During detailed test design,
 use state-transition, boundary-value, negative-input, and property-based methods
 where they fit the risk. Use exploratory review for usability and unexpected
-behaviour. See [the coverage matrix](test-coverage-matrix.md) for implemented
-flows, local rules, conditional checks and known failures.
-
-## Local commands
-
-Run commands from the repository root after `scripts/setup-all.sh`. Profiles need
-Python 3.12+, the root uv environment, Node.js 24.2+, installed npm dependencies,
-the linked DeepSeek Harness source, and Playwright Chromium as applicable.
-Use `nvm use 24` if the active Node version is older. No CI or scheduled run is
-installed by these commands.
-
-For full document-import coverage, run `uv sync --extra document-import` before
-the profiles. Their `--no-sync` Python commands retain these optional dependencies.
-An import skip caused by missing Docling remains unverified. Live RTL evaluation
-records creation, hardware simulation, and saved refinement separately in
-`live-generalization/summary.json`; a simulation pass alone is not a complete flow pass.
-
-```bash
-scripts/test-all.sh fast
-scripts/test-all.sh integration --scope spec
-scripts/test-all.sh integration --scope spec,assistant
-scripts/test-all.sh regression
-scripts/test-all.sh regression --dry-run
-scripts/test-all.sh regression --rtl-cases adder_4,adder_8,adder_13
-scripts/test-all.sh fast --output /tmp/spec2gds-fast-evidence
-scripts/test-all.sh integration --scope spec --coverage
-=======
-```mermaid
-flowchart TD
-    E2E["End-to-End Scenarios (Playwright / Real Services)"] --> INT["Subsystem Integration Tests (FastAPI / REST APIs)"]
-    INT --> UNIT["Unit & Contract Tests (Python pytest / Vitest)"]
->>>>>>> 0b25af6 (Update docs)
-```
-
-### Test Layers
-
-| Test Layer | Framework & Scope | Purpose |
-| --- | --- | --- |
-| **Unit & Contract** | `pytest`, `vitest` | Fast verification of local algorithms, state machines, and schema models |
-| **Service Integration** | Real FastAPI & REST test clients | Enforces revision conflicts, atomic file transactions, and API contracts |
-| **Browser End-to-End** | Playwright Chromium | Validates rendered canvas, forms, keyboard shortcuts, and responsiveness |
-| **Live Quality Checks** | Real model evaluation & Verilator | Evaluates live model tool calls and hardware compilation |
+behaviour. The capability mapping defined in `scripts/test_capabilities.py` and
+reported by `scripts/test_report.py` serves as the authoritative source for executed
+coverage across implemented flows, local rules, conditional checks, and known failures.
 
 ---
 
