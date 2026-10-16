@@ -554,3 +554,48 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
 });
 
+test("captures Circuit Designer visual baselines across canvas, menus, dialogs, and viewports", async ({ page }) => {
+  const saveBaseline = async (filename: string) => {
+    await page.screenshot({ path: `/home/ankdesh/explore/spec2gds/TEMP-UI-test-progress/visual-baselines/${filename}` });
+    await page.screenshot({ path: `/home/ankdesh/.gemini/antigravity/brain/3b94bdc5-13d9-4dfd-859e-0ccaddea4569/${filename}` });
+  };
+
+  // 1. Desktop 1440x900 Blueprint Slate
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/");
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Components", "New local component");
+  await page.getByLabel("Name", { exact: true }).fill("Baseline block");
+  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  await saveBaseline("circuit_designer_blueprint_slate_1440x900.png");
+
+  // 2. Desktop 1440x900 Obsidian (Dark)
+  const toggle = page.locator(".topbar .theme-quick-toggle");
+  await toggle.click();
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
+  await saveBaseline("circuit_designer_obsidian_1440x900.png");
+
+  // 3. Compact 1024x768
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await saveBaseline("circuit_designer_compact_1024x768.png");
+
+  // Restore desktop size
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 4. Action Menubar open state
+  await page.getByRole("menuitem", { name: "Components", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Components" })).toBeVisible();
+  await saveBaseline("circuit_designer_menu_open.png");
+
+  // 5. About Circuit Designer Dialog
+  await page.keyboard.press("Escape");
+  await menuAction(page, "Help", "About Circuit Designer");
+  const aboutDialog = page.getByRole("dialog", { name: "About Circuit Designer" });
+  await expect(aboutDialog).toBeVisible();
+  await saveBaseline("circuit_designer_about_dialog.png");
+  await page.keyboard.press("Escape");
+  await expect(aboutDialog).not.toBeVisible();
+});
+
+

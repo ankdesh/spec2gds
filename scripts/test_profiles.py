@@ -134,6 +134,9 @@ def suite_catalogue() -> dict[str, Suite]:
     add("spec-smoke", ["npm", "run", "test:e2e", "--", "--project", "spec", "--grep", "@smoke"],
         ["spec"], "end-to-end", "real-services", cwd="tests/ui-scenarios",
         dependencies=("build-circuit",), requirements=("python", "browser", "scenarios"), timeout=300)
+    add("circuit-smoke", ["npm", "run", "test:e2e", "--", "--project", "circuit", "--grep", "@smoke"],
+        ["spec", "circuit"], "end-to-end", "real-services", cwd="tests/ui-scenarios",
+        dependencies=("build-circuit",), requirements=("python", "browser", "scenarios"), timeout=300)
     # The presentation flow also starts Circuit service/UI and saves back to Spec.
     add("spec-circuit-flow", ["bash", "tests/ui-scenarios/run-test.sh", "--scenario", "automatic",
                               "--presentation", "--output", "{output}"], ["spec", "circuit"],
@@ -163,7 +166,7 @@ def select_suites(profile: str, scopes: set[str]) -> list[Suite]:
     fundamentals = ["python-fast", "circuit-units", "assistant-units", "scenario-units", "schema-check"]
     live = [f"live-{case}" for case in SMOKE_CASES]
     if profile == "fast":
-        selected = fundamentals + ["spec-smoke"] + live
+        selected = fundamentals + ["spec-smoke", "circuit-smoke"] + live
     elif profile == "regression":
         selected = fundamentals + ["python-extensive", "hardware-extensive", "harness", "spec-browser", "circuit-browser",
                                    "assistant-browser", "evaluation-catalogue", "spec-circuit-flow"]

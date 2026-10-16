@@ -47,7 +47,9 @@ def test_new_browser_projects_and_fast_smoke_are_selected_without_duplicate_exec
     fast = {suite.id for suite in runner.select_suites("fast", runner.SCOPES)}
     regression = {suite.id for suite in runner.select_suites("regression", runner.SCOPES)}
     assert "spec-smoke" in fast and "e2e-spec" not in fast
+    assert "circuit-smoke" in fast and "e2e-circuit" not in fast
     assert "spec-smoke" not in regression
+    assert "circuit-smoke" not in regression
     assert {"e2e-spec", "e2e-circuit", "e2e-assistant", "e2e-verification"} <= regression
     ordered = [suite.id for suite in runner.select_suites("regression", runner.SCOPES)]
     assert all(ordered.index(f"e2e-{project}") < ordered.index("live-generalization")
@@ -56,6 +58,8 @@ def test_new_browser_projects_and_fast_smoke_are_selected_without_duplicate_exec
     assert "e2e-verification" in verification and "e2e-assistant" not in verification
     smoke = runner.suite_catalogue()["spec-smoke"]
     assert smoke.command[-2:] == ("--grep", "@smoke")
+    circuit_smoke = runner.suite_catalogue()["circuit-smoke"]
+    assert circuit_smoke.command[-2:] == ("--grep", "@smoke")
 
 
 def test_coverage_dry_run_preserves_selection_and_does_not_write(tmp_path, monkeypatch, capsys):

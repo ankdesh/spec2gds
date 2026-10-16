@@ -1638,3 +1638,68 @@ test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus ac
   expect(cleanThRatio).toBeGreaterThanOrEqual(4.5);
 });
 
+test("captures Spec Editor visual baselines across themes, viewports, and dialogs", async ({ page }) => {
+  const saveBaseline = async (filename: string) => {
+    await page.screenshot({ path: `/home/ankdesh/explore/spec2gds/TEMP-UI-test-progress/visual-baselines/${filename}` });
+    await page.screenshot({ path: `/home/ankdesh/.gemini/antigravity/brain/3b94bdc5-13d9-4dfd-859e-0ccaddea4569/${filename}` });
+  };
+
+  await mockEditorApi(page);
+
+  // 1. Desktop 1440x900 Obsidian (Dark)
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openSample(page);
+  await saveBaseline("spec_editor_obsidian_1440x900.png");
+
+  // 2. Desktop 1440x900 Clean (Light)
+  await page.locator(".theme-quick-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "clean");
+  await saveBaseline("spec_editor_clean_1440x900.png");
+
+  // Switch back to dark for dialogs
+  await page.locator(".theme-quick-toggle").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
+
+  // 3. Compact 1024x768
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await saveBaseline("spec_editor_compact_1024x768.png");
+
+  // 4. Narrow 560x760
+  await page.setViewportSize({ width: 560, height: 760 });
+  await saveBaseline("spec_editor_narrow_560x760.png");
+
+  // Restore desktop size
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  // 5. Preferences Dialog
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Preferences/ }).click();
+  const preferencesDialog = page.getByRole("dialog", { name: "Preferences" });
+  await expect(preferencesDialog).toBeVisible();
+  await saveBaseline("spec_editor_preferences_dialog.png");
+  await page.keyboard.press("Escape");
+  await expect(preferencesDialog).not.toBeVisible();
+
+  // 6. About Dialog
+  await page.getByRole("menuitem", { name: "Help", exact: true }).click();
+  await page.getByRole("menuitem", { name: "About spec2gds", exact: true }).click();
+  const aboutDialog = page.getByRole("dialog", { name: "About spec2gds" });
+  await expect(aboutDialog).toBeVisible();
+  await saveBaseline("spec_editor_about_dialog.png");
+  await page.keyboard.press("Escape");
+  await expect(aboutDialog).not.toBeVisible();
+
+  // 7. Topology Preview Dialog
+  const design = page.locator("#design-design_top");
+  const card = design.locator(".spec-topology-card");
+  const expand = card.getByRole("button", { name: "Expand" });
+  await expand.scrollIntoViewIfNeeded();
+  await expand.click();
+  const topologyDialog = page.getByRole("dialog", { name: "Circuit topology" });
+  await expect(topologyDialog).toBeVisible();
+  await saveBaseline("spec_editor_topology_dialog.png");
+  await page.keyboard.press("Escape");
+  await expect(topologyDialog).not.toBeVisible();
+});
+
+

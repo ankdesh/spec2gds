@@ -24,7 +24,7 @@ async function launch(page: Page, stack: Stack, kind: string, id: string): Promi
   return launched;
 }
 
-test("saves Circuit topology to real Spec source and reopens both applications", async ({ page, stack }) => {
+test("@smoke saves Circuit topology to real Spec source and reopens both applications", async ({ page, stack }) => {
   const snapshot = await sourceDesign(stack);
   const ref = snapshot.designs[0].ref;
   await launch(page, stack, "design", ref.entity_id);
