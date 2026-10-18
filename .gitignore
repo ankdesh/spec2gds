@@ -236,3 +236,13 @@ __marimo__/
 # Browser-only test dependencies
 ai-assistant/.ui-test-tools/
 docs/evidence/
+
+# Temporary directories and artifacts (pics, specs, activity outputs, test progress)
+tmp/
+.tmp/
+temp/
+TEMP-*/
+artifacts/
+**/artifacts/
+*.artifacts/
+**/.spec2gds/

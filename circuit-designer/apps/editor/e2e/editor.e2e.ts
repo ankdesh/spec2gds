@@ -1,5 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 
 const documentId = "editor_test";
 const revision = "sha256:editor-test";
@@ -1639,9 +1641,10 @@ test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus ac
 });
 
 test("captures Spec Editor visual baselines across themes, viewports, and dialogs", async ({ page }) => {
+  const outputDir = process.env.UI_BASELINE_DIR || join(process.cwd(), "tmp/visual-baselines");
+  mkdirSync(outputDir, { recursive: true });
   const saveBaseline = async (filename: string) => {
-    await page.screenshot({ path: `/home/ankdesh/explore/spec2gds/TEMP-UI-test-progress/visual-baselines/${filename}` });
-    await page.screenshot({ path: `/home/ankdesh/.gemini/antigravity/brain/3b94bdc5-13d9-4dfd-859e-0ccaddea4569/${filename}` });
+    await page.screenshot({ path: join(outputDir, filename) });
   };
 
   await mockEditorApi(page);

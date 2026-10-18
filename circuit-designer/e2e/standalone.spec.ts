@@ -1,5 +1,7 @@
+import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
+import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createDefaultCircuitDesignerPreferences, simpleDocumentFixture } from "@spec2gds/circuit-core";
 
@@ -555,9 +557,10 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
 });
 
 test("captures Circuit Designer visual baselines across canvas, menus, dialogs, and viewports", async ({ page }) => {
+  const outputDir = process.env.UI_BASELINE_DIR || join(process.cwd(), "tmp/visual-baselines");
+  mkdirSync(outputDir, { recursive: true });
   const saveBaseline = async (filename: string) => {
-    await page.screenshot({ path: `/home/ankdesh/explore/spec2gds/TEMP-UI-test-progress/visual-baselines/${filename}` });
-    await page.screenshot({ path: `/home/ankdesh/.gemini/antigravity/brain/3b94bdc5-13d9-4dfd-859e-0ccaddea4569/${filename}` });
+    await page.screenshot({ path: join(outputDir, filename) });
   };
 
   // 1. Desktop 1440x900 Blueprint Slate
