@@ -5,6 +5,73 @@ import { documentImports } from "./import_flow.js";
 
 documentImports();
 
+test("manual authoring: readable names, pasted ports and explicit verification", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  await page.locator("#components").getByRole("button", { name: "Add Component", exact: true }).click();
+  await page.getByLabel("Component name").fill("Readable pass-through");
+  await page.getByRole("button", { name: "Create component", exact: true }).click();
+  await expect.poll(async () => (await stack.snapshot()).components.length).toBe(1);
+  const ref = (await stack.snapshot()).components[0].ref;
+  const component = page.locator(`#component-${ref.entity_id.replaceAll("_", "-")}`);
+  await component.getByRole("button", { name: "Paste rows", exact: true }).click();
+  await component.getByLabel("Paste port rows (TSV or Markdown)").fill("Port ID\tDirection\tRange\tDescription\na\tin\t7:0\tInput\ny\tout\t7:0\tOutput");
+  await component.getByRole("button", { name: "Add 2 ports", exact: true }).click();
+  await expect(component.locator(".spec-port-row")).toHaveCount(2);
+  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
+  await component.locator(".cm-content").fill("assign y = a;");
+  await component.getByRole("button", { name: "Add section", exact: true }).click();
+  await expect(component).not.toContainText("RTL implementation missing");
+  await expect(component.locator(".spec-validation-badge")).toHaveText("Not verified");
+  await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+  await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
+  await expect(component.getByText("Interface preview (read-only)", { exact: true })).toBeVisible();
+  const beforeTheme = (await stack.snapshot()).source_revision_hash;
+  for (const [theme, canvas] of [["clean", "#f7f9fc"], ["obsidian", "#09090b"]]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) {
+      await page.getByRole("button", { name: /Switch theme/ }).click();
+    }
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect.poll(async () => component.locator(".spec-topology-card__preview img").evaluate(async image =>
+      fetch((image as HTMLImageElement).src).then(response => response.text()))).toContain(`.canvas-background{fill:${canvas}}`);
+  }
+  expect((await stack.snapshot()).source_revision_hash).toBe(beforeTheme);
+  await component.locator(".spec-sv-section").getByRole("button", { name: "Edit", exact: true }).click();
+  await component.locator(".cm-content").fill("assign y = ;");
+  await component.locator(".spec-sv-section").getByRole("button", { name: "Save to Spec", exact: true }).click();
+  expect((await stack.snapshot()).entity_sections[0].content).toContain("assign y = ;");
+  await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+  await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint failed");
+  await openSpec(page, stack);
+  await expect(component.locator(".spec-sv-source")).toContainText("assign y = ;");
+});
+
+test("manual authoring: repeated ports, duplication and deletion retain saved rows", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const component = await addComponent(page, stack);
+  await component.getByRole("button", { name: "Add port", exact: true }).click();
+  let draft = component.locator(".spec-port-editor");
+  await expect(draft.getByLabel("Range", { exact: true })).toHaveValue("0:0");
+  await draft.getByLabel("Port ID").fill("a");
+  await draft.getByRole("button", { name: "Save and add another", exact: true }).click();
+  await expect(draft.getByLabel("Port ID")).toHaveValue("");
+  await draft.getByLabel("Port ID").fill("clk");
+  await draft.getByLabel("Range", { exact: true }).fill("");
+  await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  const row = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a", exact: true }) });
+  await row.getByRole("button", { name: "Duplicate", exact: true }).click();
+  draft = component.locator(".spec-port-editor");
+  await expect(draft.getByLabel("Port ID")).toHaveValue("a_2");
+  await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(component.locator(".spec-port-row")).toHaveCount(3);
+  page.once("dialog", dialog => dialog.accept());
+  await component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a_2", exact: true }) }).getByRole("button", { name: "Delete port", exact: true }).click();
+  await expect(component.locator(".spec-port-row")).toHaveCount(2);
+  const saved = (await stack.snapshot()).components[0].ports;
+  expect(saved.map((port: any) => port.name)).toEqual(["a", "clk"]);
+  expect(saved.find((port: any) => port.name === "clk").width).toBe(1);
+});
+
 async function addComponent(page: Page, stack: Stack): Promise<Locator> {
   const section = page.locator("#components");
   await section.getByRole("button", { name: "Options" }).click();

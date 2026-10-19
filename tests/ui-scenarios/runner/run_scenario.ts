@@ -380,6 +380,8 @@ async function run(): Promise<void> {
         const targetId = roots[0].ref.entity_id;
         await openEditor(editor, owner, generatedPackage);
         const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
+        await section.getByRole("button", { name: "Verify Component", exact: true }).click();
+        await expect(section.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
         await section.getByRole("button", { name: "Options" }).click();
         await section.getByRole("menuitem", { name: /Generate RTL/ }).click();
         let execution: any;
@@ -624,6 +626,8 @@ async function run(): Promise<void> {
       // Capture the execution queued by the UI; never substitute a CLI run.
       await openEditor(editor, owner, packagePath);
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
+      await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+      await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
       await component.getByRole("button", { name: "Options" }).click();
       await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
       await component.getByRole("menuitem", { name: /Generate RTL/ }).click();

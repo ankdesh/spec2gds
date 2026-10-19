@@ -171,6 +171,7 @@ export function App({
   const [endpointB, setEndpointB] = useState("");
   const [netName, setNetName] = useState("");
   const [sliceLsb, setSliceLsb] = useState(0);
+  const [sliceLsbB, setSliceLsbB] = useState(0);
   const [sliceWidth, setSliceWidth] = useState(0);
   const [proposals, setProposals] = useState<CircuitProposal[]>([]);
   const [stagedProposalId, setStagedProposalId] = useState<string>();
@@ -637,7 +638,7 @@ export function App({
     }, `Updated boundary port ${value.label}.`);
   }
 
-  function createNet(source: string, target: string, requestedName = "", lsb = sliceLsb, width = sliceWidth): boolean {
+  function createNet(source: string, target: string, requestedName = "", lsb = sliceLsb, width = sliceWidth, lsbB = lsb): boolean {
     if (!document || !source || !target || source === target) return false;
     const label = requestedName.trim() || `${sourceBinding ? "net_" : "net "}${document.design.nets.length + 1}`;
     if (!isSourceIdentifier(label)) {
@@ -653,7 +654,7 @@ export function App({
         label,
         endpoints: [
           endpointFromTerminal(source, lsb, width),
-          endpointFromTerminal(target, lsb, width),
+          endpointFromTerminal(target, lsbB, width),
         ],
       },
     }, `Created net “${label}”.`);
@@ -1034,12 +1035,13 @@ export function App({
   }
 
   function createConnectionFromDialog(): boolean {
-    const created = createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth);
+    const created = createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth, sliceLsbB);
     if (!created) return false;
     setNetName("");
     setEndpointA("");
     setEndpointB("");
     setSliceLsb(0);
+    setSliceLsbB(0);
     setSliceWidth(0);
     return true;
   }
@@ -1535,7 +1537,7 @@ export function App({
             viewport={viewport}
             onViewportChange={setViewport}
           />}
-          {layout && <div className="layout-time">Grid router · {layout.elapsed_ms} ms</div>}
+          {layout && <details className="layout-time"><summary>Layout diagnostics</summary>Grid router · {layout.elapsed_ms} ms</details>}
         </div>
       </div>
       {inspectorOpen && <aside className="inspector">
@@ -1622,9 +1624,11 @@ export function App({
       onEndpointBChange={setEndpointB}
       onNetNameChange={setNetName}
       onSliceLsbChange={setSliceLsb}
+      onSliceLsbBChange={setSliceLsbB}
       onSliceWidthChange={setSliceWidth}
       proposals={proposals}
       sliceLsb={sliceLsb}
+      sliceLsbB={sliceLsbB}
       sliceWidth={sliceWidth}
       sourceDescription={sourceDescription}
       sourceIdentifierPattern={sourceIdentifierPattern}

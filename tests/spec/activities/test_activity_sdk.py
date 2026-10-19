@@ -192,7 +192,7 @@ def test_diagnostic_export_retains_complete_source_sections_and_filters_targets(
     def forbidden(*args, **kwargs):
         raise AssertionError("Diagnostic export must not invoke validation or Circuit projection")
 
-    monkeypatch.setattr(document, "validate_revision_sections", forbidden)
+    monkeypatch.setattr(document, "cached_revision_sections", forbidden)
     monkeypatch.setattr(document, "project_source_to_circuit", forbidden)
     registry = SpecExtensionRegistry()
     register_extensions(registry)

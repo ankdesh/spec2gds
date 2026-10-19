@@ -31,6 +31,33 @@ _COMPONENT_ORDER = [
 ]
 
 
+def edit_parameter(root: etree._Element, value: dict[str, typing.Any] | None, name: str = "") -> None:
+    """Edit one explicit RTL parameter on a private source copy."""
+    from spec2gds.spec.spec_format.rtl_interface import RTL_NAMESPACE, parameter_declarations
+    container = _child(root, "parameters")
+    if value is not None:
+        _reject_unknown_keys(value, {"name", "rtl_type", "value", "description"}, "parameter")
+        parameter_declarations([value])
+        name = value["name"]
+    existing = _named(container, "parameter", "name", name) if container is not None else None
+    if value is None:
+        if existing is None or container is None:
+            raise KeyError(f"Unknown parameter: {name}")
+        container.remove(existing)
+        if not len(container):
+            root.remove(container)
+        return
+    if container is None:
+        container = _ensure_ordered(root, "parameters", _COMPONENT_ORDER)
+    parameter = existing if existing is not None else etree.SubElement(container, _q("parameter"))
+    parameter.set(f"{{{RTL_NAMESPACE}}}type", value.get("rtl_type", ""))
+    for field in ("name", "description", "value"):
+        child = _child(parameter, field)
+        if child is None:
+            child = _ensure_ordered(parameter, field, ["name", "displayName", "shortDescription", "description", "value"])
+        child.text = str(value.get(field, ""))
+
+
 def set_entity_metadata(
     root: etree._Element,
     *,

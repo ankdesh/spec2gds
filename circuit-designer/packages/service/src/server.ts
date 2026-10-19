@@ -285,6 +285,9 @@ export class CircuitDesignerService {
             throw new CircuitBackendError("validation_failed", "Source binding registration is invalid.");
           }
           await this.backend.get(documentId);
+          if (await this.backend.getLease(documentId)) {
+            throw new CircuitBackendError("lock_conflict", "Cancel or save the active draft before reopening its source binding.");
+          }
           this.sourceBindings.set(documentId, {
             binding: structuredClone(body.binding),
             provider: new HttpSourceDesignProvider(callback, body.token),

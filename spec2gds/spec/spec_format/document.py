@@ -37,7 +37,7 @@ from spec2gds.spec.spec_format.naming import (
 )
 from spec2gds.spec.spec_format.sections import SECTION_TYPES
 from spec2gds.spec.spec_format.source_edits import format_wire_range
-from spec2gds.spec.spec_format.sv_validation import validate_revision_sections
+from spec2gds.spec.spec_format.sv_validation import cached_revision_sections
 
 A2UI_PROTOCOL_VERSION = "v0.9"
 A2UI_CATALOG_ID = "urn:spec2gds:a2ui:document:v2"
@@ -170,6 +170,8 @@ class DocumentSection(pydantic.BaseModel):
     narrative: list[dict[str, typing.Any]] = pydantic.Field(default_factory=list)
     content_sections: list[EntityContentSection] = pydantic.Field(default_factory=list)
     available_section_types: list[AvailableSectionType] = pydantic.Field(default_factory=list)
+    implementation_kind: typing.Literal["sv", "internal_design", "missing"] | None = None
+    preview_mode: typing.Literal["interface", "design"] | None = None
 
 
 class TocEntry(pydantic.BaseModel):
@@ -859,6 +861,7 @@ def _topology_live_views(
             "status": "empty" if empty else "ready",
             "omitted_bus_items": list(projection.omitted_bus_items),
             "omitted_ports": list(projection.omitted_ports),
+            "read_only": projection.editable_design_id is None,
         }
         if not empty:
             derived_options["circuit_document"] = projection.document
@@ -934,7 +937,7 @@ def _content_sections(
         ))
     persisted = revision.entity_sections_for(owner)
     validation = {
-        item.section_id: item for item in validate_revision_sections(
+        item.section_id: item for item in cached_revision_sections(
             revision, {item.section_id for item in persisted}
         )
     } if validate else {}
@@ -1030,6 +1033,7 @@ def build_document_projection(
             level=2,
             eyebrow="Entry design" if design.ref.entity_id in entry_ids else "Design",
             entity_ref=design.ref,
+            preview_mode="design",
             facts=_identity_facts(root, design.vlnv),
             tables=_design_tables(design, root, anchors_by_vlnv),
             narrative=[named_block(block) for block in narrative],
@@ -1058,7 +1062,7 @@ def build_document_projection(
             revision,
             component.ref,
             attached.pop(component.ref.entity_id, []),
-            synthesize=False,
+            synthesize=component.ref.entity_id not in composition,
         ) if not source_only else attached.pop(component.ref.entity_id, [])
         sections.append(DocumentSection(
             section_id=_anchor("component", component.ref.entity_id),
@@ -1066,6 +1070,9 @@ def build_document_projection(
             level=2,
             eyebrow="Composite component" if component.ref.entity_id in composition else "Component",
             entity_ref=component.ref,
+            implementation_kind="internal_design" if component.ref.entity_id in composition else
+                "sv" if any(item.section_type == "sv" and item.payload.get("content", "").strip() for item in content_sections) else "missing",
+            preview_mode="design" if component.ref.entity_id in composition else "interface",
             facts=facts,
             tables=_component_tables(component, root, anchors_by_vlnv),
             narrative=[named_block(block) for block in narrative],

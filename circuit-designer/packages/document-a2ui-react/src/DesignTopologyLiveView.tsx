@@ -91,23 +91,32 @@ export function DesignTopologyLiveView({
   const [renderError, setRenderError] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [expanded, setExpanded] = useState(false);
+  const [themeId, setThemeId] = useState(() => typeof document !== "undefined" && document.documentElement.dataset.theme === "obsidian" ? "obsidian" : "blueprint-slate");
   const expandRef = useRef<HTMLButtonElement>(null);
-  const label = block.text || "Circuit topology";
+  const label = options?.read_only ? "Interface preview (read-only)" : block.text || "Circuit topology";
   const ref = block.entity_refs[0];
   const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
+
+  useEffect(() => {
+    const update = () => setThemeId(document.documentElement.dataset.theme === "obsidian" ? "obsidian" : "blueprint-slate");
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     let active = true;
     setRendered(undefined);
     setRenderError("");
     if (options?.status !== "ready" || !options.circuit_document) return () => { active = false; };
-    void renderDesignTopology(options.circuit_document).then((value) => {
+    void renderDesignTopology(options.circuit_document, themeId).then((value) => {
       if (active) setRendered(value);
     }).catch((reason) => {
       if (active) setRenderError(reason instanceof Error ? reason.message : String(reason));
     });
     return () => { active = false; };
-  }, [options]);
+  }, [options, themeId]);
 
   useEffect(() => {
     if (!rendered) {

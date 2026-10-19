@@ -12,6 +12,7 @@ type MenuId = "file" | "edit" | "circuit" | "help";
 type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | "preferences" | null;
 
 interface EditorMenuBarProps {
+  dialogError?: string;
   activityCount: number;
   diagnosticCount: number;
   launchingAssistant: boolean;
@@ -277,6 +278,7 @@ function Modal({
 }
 
 function PathDialog({
+  error,
   initialPath,
   loading,
   mode,
@@ -285,6 +287,7 @@ function PathDialog({
   onCreateDirectory,
   onSubmit,
 }: {
+  error?: string;
   initialPath: string;
   loading: boolean;
   mode: "new" | "open";
@@ -388,6 +391,7 @@ function PathDialog({
           Enter a <code>.spec</code> path visible to the server running spec2gds.
           {mode === "new" && " Generated output folders will be created beside this package."}
         </p>
+        {error && <p className="spec-edit-error" role="alert">{error}</p>}
         {browserOpen && (
           <section aria-label="Server directory browser" className="directory-browser">
             <header>
@@ -577,6 +581,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "op
 }
 
 export default function EditorMenuBar({
+  dialogError,
   activityCount,
   diagnosticCount,
   launchingAssistant,
@@ -636,6 +641,7 @@ export default function EditorMenuBar({
   const components = snapshot?.components ?? [];
 
   const openPathDialog = (mode: "new" | "open") => {
+    onError("");
     setOpenMenu(null);
     setMobileMenuOpen(false);
     setDialog(mode);
@@ -795,6 +801,7 @@ export default function EditorMenuBar({
                 <MenuAction
                   disabled={launchingCircuit}
                   key={`component-${component.ref.entity_id}`}
+                  status={snapshot?.component_compositions.some(item => item.component.entity_id === component.ref.entity_id) ? undefined : "Preview"}
                   onActivate={activate(() => { void onOpenCircuit("component", component.ref.entity_id); })}
                 >
                   {component.display_name || displayEntityName(component.vlnv)}
@@ -857,6 +864,7 @@ export default function EditorMenuBar({
 
       {dialog === "new" && (
         <PathDialog
+          error={dialogError}
           initialPath=""
           loading={loading}
           mode="new"
@@ -868,6 +876,7 @@ export default function EditorMenuBar({
       )}
       {dialog === "open" && (
         <PathDialog
+          error={dialogError}
           initialPath={path}
           loading={loading}
           mode="open"

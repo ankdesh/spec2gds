@@ -91,6 +91,7 @@ export interface CircuitDialogsProps {
   endpointA: string;
   endpointB: string;
   sliceLsb: number;
+  sliceLsbB: number;
   sliceWidth: number;
   componentName: string;
   onClose: () => void;
@@ -98,6 +99,7 @@ export interface CircuitDialogsProps {
   onEndpointAChange: (value: string) => void;
   onEndpointBChange: (value: string) => void;
   onSliceLsbChange: (value: number) => void;
+  onSliceLsbBChange: (value: number) => void;
   onSliceWidthChange: (value: number) => void;
   onCreateConnection: () => boolean;
   onComponentNameChange: (value: string) => void;
@@ -142,9 +144,9 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     return <CircuitModal onClose={props.onClose} title="Create connection">
       <form className="circuit-dialog__form" onSubmit={submit}>
         <label>Net label<input autoFocus value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
-        <label>Endpoint A<select value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
-        <label>Endpoint B<select value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
-        <div className="slice-row"><label>LSB<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
+        <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        <div className="slice-row"><label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label><label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.endpointA || !props.endpointB} type="submit">Create net</button></div>
       </form>
     </CircuitModal>;

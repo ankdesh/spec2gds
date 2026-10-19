@@ -35,6 +35,19 @@ describe("React Flow circuit model", () => {
     expect(buildCircuitFlowEdges(simpleFixture(), {})).toEqual([]);
   });
 
+  test("uses the existing boundary node ID for routes to containing ports", () => {
+    const graph = simpleFixture();
+    graph.terminals.push({ ...graph.terminals[0], id: "boundary:input", node_id: undefined });
+    graph.nets[0].endpoints[0] = { terminal_id: "boundary:input" };
+    const route: NetRoute = { vertices: [
+      { id: "a", kind: "endpoint", terminal_id: "boundary:input", point: { x: 0, y: 0 } },
+      { id: "b", kind: "endpoint", terminal_id: "consumer_0:data", point: { x: 100, y: 0 } },
+    ], segments: [{ from_vertex: "a", to_vertex: "b" }] };
+    expect(buildCircuitFlowEdges(graph, { data: route })[0]).toMatchObject({
+      source: "boundary:input", target: "consumer_0", sourceHandle: "boundary:input",
+    });
+  });
+
   test("uses one role-independent connection handle per terminal", () => {
     expect(terminalHandleId("node:port:data")).toBe("node:port:data");
     expect(terminalIdFromHandle("node:port:data")).toBe("node:port:data");

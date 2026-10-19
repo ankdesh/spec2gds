@@ -1562,3 +1562,59 @@
   border-color: var(--spec-accent);
   color: #123d33;
 }
+
+/* Focused authoring keeps the document readable at desktop and compact widths. */
+.spec-section--compact { padding-block: .75rem; }
+.spec-section--compact .spec-section__header { min-height: 2rem; }
+.spec-section--compact .spec-section__header h2 { font-size: 1rem; }
+.spec-hardware-controls { display: grid; gap: .5rem; }
+.spec-hardware-controls > details { padding-block: .35rem; }
+.spec-hardware-controls label { display: grid; gap: .4rem; margin-block: .5rem; }
+.spec-hardware-controls label:has(input[type="checkbox"]) { display: flex; align-items: center; }
+.spec-hardware-controls input[type="checkbox"] { width: auto; }
+.spec-hardware-controls input, .spec-hardware-controls select { max-width: 100%; min-width: 0; }
+.spec-port-row-actions { display: flex; flex-wrap: wrap; gap: .35rem; }
+.spec-table-block__heading { flex-wrap: wrap; gap: .5rem; }
+.spec-section__header > button { flex-shrink: 0; }
+.spec-edit-actions { flex-wrap: wrap; }
+.spec-inline-editor textarea { max-width: 100%; }
+.spec-section__header { justify-content: initial; }
+.spec-section__header > div:first-child { margin-right: auto; }
+.spec-section__header > button,
+.spec-hardware-controls button,
+.spec-table-block__heading button,
+.spec-port-row-actions button {
+  border: 1px solid var(--spec-line-strong);
+  border-radius: var(--spec-radius);
+  background: var(--spec-surface-subtle);
+  color: var(--spec-text);
+  font: inherit;
+  padding: .45rem .7rem;
+}
+.spec-section .spec-hardware-controls > details { margin: 0; padding: .2rem 0; }
+.spec-hardware-controls details[open] { padding-bottom: .6rem; }
+.spec-verification-details { overflow-wrap: anywhere; }
+.spec-hardware-controls .spec-delete-button { color: var(--spec-accent-orange); }
+[data-theme="clean"] .spec-options-trigger,
+[data-theme="clean"] .spec-cover button { background: var(--spec-surface-subtle); color: var(--spec-text); border-color: var(--spec-line-strong); }
+.spec-port-row-actions { display: table-cell; white-space: normal; }
+.spec-port-row-actions button { white-space: nowrap; margin: .15rem; }
+.spec-topology-dialog {
+  border-color: var(--spec-line-strong);
+  background: var(--spec-paper);
+  color: var(--spec-text);
+}
+.spec-topology-dialog h2 { color: var(--spec-text); }
+.spec-topology-dialog header button {
+  background: var(--spec-surface-subtle);
+  border-color: var(--spec-line-strong);
+  color: var(--spec-text);
+}
+.spec-topology-dialog__viewport { background: var(--spec-surface-subtle); }
+.spec-topology-dialog__viewport img {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  box-shadow: none;
+}

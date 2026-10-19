@@ -941,6 +941,7 @@ def publish_circuit_document(
     service_url: str,
     editor_url: str,
     timeout: float = 3.0,
+    refresh_existing: bool = True,
 ) -> CircuitLaunch:
     """Create or reuse one ephemeral Circuit Designer REST session."""
     base = service_url.rstrip("/")
@@ -965,7 +966,7 @@ def publish_circuit_document(
         ) from exc
 
     if reused:
-        if existing_snapshot is not None and existing_snapshot.get("document") != document:
+        if refresh_existing and existing_snapshot is not None and existing_snapshot.get("document") != document:
             replacement = urllib.request.Request(
                 document_url,
                 data=json.dumps({
@@ -1042,6 +1043,7 @@ def register_circuit_source_binding(
     callback_url: str,
     token: str,
     timeout: float = 3.0,
+    reload_source: bool = False,
 ) -> None:
     """Register a server-side source callback without exposing its token to the browser."""
     base = service_url.rstrip("/")
@@ -1058,9 +1060,28 @@ def register_circuit_source_binding(
     )
     try:
         with urllib.request.urlopen(request, timeout=timeout):
-            return
+            pass
+        if reload_source:
+            # Use the source protocol; ordinary document replacement correctly
+            # rejects source-bound writes. The newly registered callback also
+            # works after the Spec service restarts.
+            reload_request = urllib.request.Request(
+                f"{base}/documents/{urllib.parse.quote(document_id)}/source/reload",
+                data=b"{}", headers={"Content-Type": "application/json"}, method="POST",
+            )
+            with urllib.request.urlopen(reload_request, timeout=timeout) as response:
+                result = json.loads(response.read())
+            if not result.get("accepted"):
+                raise CircuitDesignerConnectionError(f"Circuit Designer could not reload source: {result}")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
+        if exc.code == 423:
+            try:
+                payload = json.loads(body)
+            except ValueError:
+                payload = None
+            if isinstance(payload, dict) and payload.get("code") == "lock_conflict" and isinstance(payload.get("message"), str):
+                raise CircuitDesignerConnectionError(payload["message"]) from exc
         raise CircuitDesignerConnectionError(
             f"Circuit Designer rejected the source binding with HTTP {exc.code}: {body}"
         ) from exc

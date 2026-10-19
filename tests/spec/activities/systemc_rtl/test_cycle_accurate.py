@@ -52,6 +52,20 @@ def test_activity_is_separate_design_scoped_activity() -> None:
     assert definition.requires_workspace_output
 
 
+def test_configured_activity_availability_does_not_start_compiler(monkeypatch: pytest.MonkeyPatch) -> None:
+    from spec2gds.spec.activities.systemc_rtl import codegen
+    revision = SpecRevision.load(str(_ONE))
+    target = revision.entry_designs()[0].ref
+    monkeypatch.setattr(codegen, "_tool_paths", lambda: (Path("frontend"), Path("emitter")))
+    def forbidden(*args, **kwargs):
+        raise AssertionError("Reading Activity availability must not start a compiler")
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    registry = SpecExtensionRegistry()
+    register_extensions(registry)
+    result = activity_availability(registry, "systemc.generate_cycle_accurate", ActivitySnapshot.create(revision, target))
+    assert result.available, result.diagnostics
+
+
 @pytest.mark.parametrize("path, instances", [(_ONE, 1), (_TWO, 2)])
 def test_existing_clocked_examples_assemble_without_rtl_activity(
     path: Path, instances: int

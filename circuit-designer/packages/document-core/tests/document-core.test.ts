@@ -138,8 +138,9 @@ describe("SpecEditorHttpClient", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const client = new SpecEditorHttpClient("/api");
+    client.bindDocument("exact_package");
     await expect(client.launchCircuitDesigner("design", "design_top")).resolves.toEqual(launch);
-    expect(fetchMock).toHaveBeenCalledWith("/api/circuit-designer/launch", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/circuit-designer/launch?owner_document_key=exact_package", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ entity_kind: "design", entity_id: "design_top" }),

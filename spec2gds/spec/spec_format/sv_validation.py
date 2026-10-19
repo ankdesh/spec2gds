@@ -18,6 +18,18 @@ from spec2gds.spec.spec_format.naming import qualified_reference_name
 from spec2gds.spec.spec_format.sections import SectionIR
 
 _CACHE: dict[tuple[str, str, str, str], "SectionValidation"] = {}
+
+
+def cached_revision_sections(revision: SpecRevision, section_ids: set[str] | None = None) -> tuple["SectionValidation", ...]:
+    """Read checked results without finding or starting a compiler."""
+    results = []
+    for section in revision.entity_sections:
+        if section.section_type != "sv" or section_ids is not None and section.section_id not in section_ids:
+            continue
+        found = next((result for key, result in reversed(tuple(_CACHE.items()))
+                      if key[:3] == (section.section_id, section.source_sha256, revision.source_revision_hash)), None)
+        results.append(found or SectionValidation(section.section_id, "unverified", ()))
+    return tuple(results)
 _SAFETY_WARNINGS = {
     "ALWCOMBORDER", "CASEINCOMPLETE", "CASEOVERLAP", "COMBDLY", "LATCH",
     "MULTIDRIVEN", "UNDRIVEN", "UNOPTFLAT", "WIDTH", "WIDTHCONCAT",
@@ -116,6 +128,8 @@ def _validate_revision_sections(
             results.append(cached)
             continue
         result = _validate_one(revision, section, executable)
+        if len(_CACHE) >= 512:
+            _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = result
         results.append(result)
     return tuple(results)

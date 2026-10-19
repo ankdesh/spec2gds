@@ -31,6 +31,8 @@ import {
 } from "./section-registry";
 import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
 import { portInputFromRow, rowText, wireRangeError } from "./port-input";
+import { parsePortRows } from "./port-paste";
+import type { DocumentSnapshot, EditorTransactionOperation, ParameterInput } from "@spec2gds/document-core";
 export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./section-registry";
 
 import type {
@@ -65,7 +67,11 @@ export interface SpecLaunchActivityEventDetail {
 
 export interface SpecDocumentEditController {
   updateDocumentTitle(title: string): Promise<void>;
-  createEntity(kind: "component" | "design", name: string): Promise<void>;
+  createEntity(kind: "component" | "design", name: string, entryDesign?: boolean): Promise<void>;
+  source?: DocumentSnapshot;
+  applyOperations?(operations: EditorTransactionOperation[]): Promise<void>;
+  addComponentPorts?(ref: EntityRef, values: ComponentPortInput[]): Promise<void>;
+  verify?(ref: EntityRef): Promise<void>;
   addComponentInstance(design: EntityRef, value: ComponentInstanceInput): Promise<void>;
   componentInstanceOptions(): ComponentInstanceOption[];
   updateEntityMetadata(ref: EntityRef, value: EntityMetadataInput): Promise<void>;
@@ -495,7 +501,7 @@ function SectionOptionsMenu({
       if (current) setError(caught instanceof Error ? caught.message : String(caught));
     }).finally(() => { if (current) setLoading(false); });
     return () => { current = false; };
-  }, [open, controller, section.entity_ref?.entity_kind, section.entity_ref?.entity_id]);
+  }, [open, controller?.revisionKey, section.entity_ref?.entity_kind, section.entity_ref?.entity_id]);
 
   const invoke = async (run: () => Promise<void>) => {
     if (pending.current) return;
@@ -656,12 +662,15 @@ function SectionOptionsMenu({
             <button
               onClick={() => {
                 close(true);
-                dispatchOpenCircuit(circuitRef);
+                if (section.preview_mode === "interface") {
+                  const preview = document.getElementById(section.section_id)?.querySelector<HTMLElement>(".spec-topology-card");
+                  preview?.scrollIntoView({ block: "center" });
+                } else dispatchOpenCircuit(circuitRef);
               }}
               role="menuitem"
               type="button"
             >
-              <span>Open in Circuit Designer</span>
+              <span>{section.preview_mode === "interface" ? "Preview interface" : "Open in Circuit Designer"}</span>
               {section.entity_ref?.entity_kind === "component" && section.eyebrow !== "Composite component" && <small>Read-only preview</small>}
             </button>
           )}
@@ -759,6 +768,7 @@ interface SectionEditState {
   controller: SpecDocumentEditController | null;
   portAvailability: { enabled: boolean; reason: string };
   cancel(): void;
+  begin?(mode: Exclude<SectionEditMode, "">): void;
 }
 
 const SectionEditContext = createContext<SectionEditState | null>(null);
@@ -779,6 +789,7 @@ function HardwareCreationForm({
   state: SectionEditState;
 }) {
   const [name, setName] = useState("");
+  const [entryDesign, setEntryDesign] = useState(true);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -790,14 +801,10 @@ function HardwareCreationForm({
       setError("Name is required.");
       return;
     }
-    if (!/^[A-Za-z_][A-Za-z0-9_.-]*$/.test(name.trim())) {
-      setError("Use a letter or underscore first, followed by letters, numbers, dots, underscores, or hyphens.");
-      return;
-    }
     setBusy(true);
     setError("");
     try {
-      await state.controller.createEntity(kind, name.trim());
+      await state.controller.createEntity(kind, name.trim(), kind === "design" ? entryDesign : undefined);
       state.cancel();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -822,6 +829,7 @@ function HardwareCreationForm({
         />
         <small>You can rename the section later without changing its hardware identifier.</small>
       </div>
+      {kind === "design" && <label><input type="checkbox" checked={entryDesign} onChange={event => setEntryDesign(event.target.checked)} /> Use as entry Design</label>}
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions">
         <button disabled={busy} type="submit">{busy ? "Creating…" : `Create ${kind}`}</button>
@@ -918,7 +926,7 @@ function ComponentInstanceForm({ state }: { state: SectionEditState }) {
 
 function HardwareMetadataForm({ state }: { state: SectionEditState }) {
   const [displayName] = useState(() => factValue(state.section, "Display name") || state.section.title);
-  const [shortDescription] = useState(() => factValue(state.section, "Short description"));
+  const [shortDescription, setShortDescription] = useState(() => factValue(state.section, "Short description"));
   const [description, setDescription] = useState(() => factValue(state.section, "Description"));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -947,6 +955,7 @@ function HardwareMetadataForm({ state }: { state: SectionEditState }) {
 
   return (
     <form className="spec-inline-editor spec-metadata-editor" onSubmit={submit}>
+      <div className="spec-edit-field-wide"><label htmlFor={`${state.editorId}-short`}>Short description</label><input id={`${state.editorId}-short`} value={shortDescription} onChange={event => setShortDescription(event.target.value)} /></div>
       <div className="spec-edit-field-wide">
         <label htmlFor={`${state.editorId}-description`}>{state.section.entity_ref?.entity_kind === "component" ? "Component explanation" : state.section.entity_ref?.entity_kind === "design" ? "Design explanation" : "Spec text"}</label>
         <textarea
@@ -1045,11 +1054,77 @@ function NewSystemVerilogForm({ state }: { state: SectionEditState }) {
       <small>Declarations, assignments, procedural blocks, tasks, functions, and assertions are accepted.</small>
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-edit-actions">
-        <button disabled={busy} type="submit">{busy ? "Validating…" : "Add section"}</button>
+        <button disabled={busy} type="submit">{busy ? "Saving…" : "Add section"}</button>
         <button disabled={busy} onClick={state.cancel} type="button">Cancel</button>
       </div>
     </form>
   );
+}
+
+function HardwareControls({ state }: { state: SectionEditState }) {
+  const coordinator = useContext(EditCoordinatorContext);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [parameter, setParameter] = useState<ParameterInput | null>(null);
+  const [originalParameter, setOriginalParameter] = useState("");
+  const ref = state.section.entity_ref!;
+  const source = state.controller?.source;
+  const component = ref.entity_kind === "component";
+  const isEntry = source?.entry_designs.some(item => item.ref.entity_id === ref.entity_id);
+  const internal = source?.component_compositions.find(item => item.component.entity_id === ref.entity_id)?.internal_design;
+  const result = source?.verifications?.find(item => item.target.entity_id === ref.entity_id);
+  const id = `${state.section.section_id}-controls`;
+  const run = async (operation: () => Promise<void>) => {
+    if (!coordinator.requestEditor(id)) return;
+    setBusy(true); setError("");
+    try { await operation(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); if (!parameter) coordinator.finishEditor(id); }
+  };
+  const apply = (operations: EditorTransactionOperation[]) => state.controller!.applyOperations!(operations);
+  const remove = () => {
+    if (!window.confirm(`Delete ${state.section.title}? Referenced hardware cannot be deleted.`)) return;
+    void run(() => apply([
+      ...(!component && isEntry ? [{ type: "remove_entry_design" as const, design: ref }] : []),
+      { type: "delete_document", ref },
+    ]));
+  };
+  return <div className="spec-hardware-controls">
+    <div className="spec-edit-actions">
+      {state.controller?.verify && <button type="button" disabled={busy || !!parameter} onClick={() => void run(() => state.controller!.verify!(ref))}>{busy ? "Working…" : component ? "Verify Component" : "Verify Design"}</button>}
+      <span role="status">{result ? ({ passed: "Lint passed", failed: "Lint failed", unverified: "Not verified", stale: "Out of date" } as const)[result.status] : "Not verified"}</span>
+    </div>
+    {result && <details className="spec-verification-details">
+      <summary>Verification details</summary>
+      <p>Checked target: <code>{result.target.entity_id}</code></p>
+      <p>Source revision: <code>{result.source_revision_hash}</code></p>
+      <p>{result.tool_version} · Functional simulation unverified</p>
+      {result.interfaces?.map(item => <div key={item.component}><strong>{item.component}: {item.status}</strong>{item.ports.map(port => <p key={port.name}><code>{port.name}</code> · {port.range || "scalar"} · {port.width ?? "unresolved"} bits</p>)}</div>)}
+      {result.diagnostics.map((item, index) => <p key={index}>{item.code}: {item.message}</p>)}
+    </details>}
+    <details><summary>Hardware settings</summary>
+      {!component && <label><input type="checkbox" checked={!!isEntry} disabled={busy} onChange={event => void run(() => apply([{ type: event.target.checked ? "add_entry_design" : "remove_entry_design", design: ref }]))} /> Entry Design</label>}
+      {component && <label>Internal Design<select aria-label="Internal Design" value={internal?.entity_id ?? ""} disabled={busy} onChange={event => {
+        const design = source?.designs.find(item => item.ref.entity_id === event.target.value);
+        void run(() => apply([design ? { type: "set_internal_design", component: ref, internal_design: design.ref } : { type: "clear_internal_design", component: ref }]));
+      }}><option value="">No internal Design</option>{source?.designs.map(item => <option key={item.ref.entity_id} value={item.ref.entity_id}>{item.display_name || item.vlnv}</option>)}</select></label>}
+      {component && internal && <button type="button" disabled={busy} onClick={() => void run(() => apply([{ type: "clear_internal_design", component: ref }]))}>Clear assignment</button>}
+      <button className="spec-delete-button" type="button" disabled={busy} onClick={remove}>Delete {component ? "Component" : "Design"}</button>
+    </details>
+    {component && <details><summary>Parameters</summary>
+      {(source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters ?? []).map(item => <div className="spec-edit-actions" key={item.name}><code>{item.name}: {item.rtl_type || "untyped"} = {item.value}</code><button type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(item.name); setParameter({ ...item, rtl_type: item.rtl_type || "", description: item.description || "" }); } }}>Edit parameter {item.name}</button><button type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete parameter ${item.name}?`)) void run(() => apply([{ type: "delete_parameter", component: ref, name: item.name }])); }}>Delete parameter {item.name}</button></div>)}
+      {!parameter && <button type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(""); setParameter({ name: "", rtl_type: "int unsigned", value: "1", description: "" }); } }}>Add parameter</button>}
+      {parameter && <form className="spec-inline-editor" onSubmit={event => { event.preventDefault(); void run(async () => {
+        if (!originalParameter && source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters?.some(item => item.name === parameter.name)) throw new Error(`Parameter ${parameter.name} already exists.`);
+        await apply([{ type: "update_parameter", component: ref, parameter }]);
+        setParameter(null); coordinator.finishEditor(id);
+      }); }}>
+        {([ ["name", "Parameter ID"], ["rtl_type", "RTL type"], ["value", "Default expression"], ["description", "Parameter description"] ] as const).map(([field, label]) => <label key={field}>{label}<input required={field === "name" || field === "value"} disabled={field === "name" && !!originalParameter} value={parameter[field]} onChange={event => setParameter({ ...parameter, [field]: event.target.value })} /></label>)}
+        <button type="submit" disabled={busy}>Save parameter to Spec</button><button type="button" disabled={busy} onClick={() => { setParameter(null); coordinator.finishEditor(id); setError(""); }}>Cancel parameter</button>
+      </form>}
+    </details>}
+    {error && <p className="spec-edit-error" role="alert">{error}</p>}
+  </div>;
 }
 
 const SpecSection = createComponentImplementation(
@@ -1067,8 +1142,6 @@ const SpecSection = createComponentImplementation(
     const instanceAvailability = instanceOptions.length
       ? { enabled: true, reason: "" }
       : { enabled: false, reason: "Create a component before adding an instance." };
-    const isEntryDesign = section.entity_ref?.entity_kind === "design"
-      && section.eyebrow === "Entry design";
 
     const begin = (nextMode: Exclude<SectionEditMode, "">) => {
       const nextEditorId = `${section.section_id}-${nextMode}`;
@@ -1086,20 +1159,18 @@ const SpecSection = createComponentImplementation(
       controller: coordinator.controller,
       portAvailability,
       cancel,
+      begin,
     };
     const entityIsEditable = coordinator.controller
       && section.entity_ref
       && ["component", "design"].includes(section.entity_ref.entity_kind);
     const sectionText = factValue(section, "Description");
-    const missingLeafRtl = section.entity_ref?.entity_kind === "component"
-      && !factValue(section, "Internal design")
-      && !(section.content_sections ?? []).some((item) =>
-        item.section_type === "sv" && item.payload.content?.trim());
+    const missingLeafRtl = section.implementation_kind === "missing";
 
     return (
       <SectionEditContext.Provider value={editState}>
         <section
-          className={`spec-section spec-section--level-${section.level}`}
+          className={`spec-section spec-section--level-${section.level}${!section.entity_ref && !sectionText && !section.narrative.length ? " spec-section--compact" : ""}`}
           id={section.section_id}
         >
           <header className="spec-section__header">
@@ -1107,9 +1178,11 @@ const SpecSection = createComponentImplementation(
               <Heading tabIndex={-1}>{section.title}</Heading>
               {section.entity_ref && <span className="spec-section-type">{section.eyebrow || titleCase(section.entity_ref.entity_kind)}</span>}
             </div>
+            {coordinator.controller && section.section_id === "components" && <button type="button" onClick={() => begin("create-component")}>Add Component</button>}
+            {coordinator.controller && section.section_id === "designs" && <button type="button" onClick={() => begin("create-design")}>Add Design</button>}
             <SectionOptionsMenu
               instanceAvailability={instanceAvailability}
-              onAddInstance={isEntryDesign && coordinator.controller
+              onAddInstance={section.entity_ref?.entity_kind === "design" && coordinator.controller
                 ? () => begin("add-component-instance")
                 : undefined}
               onAddPort={section.entity_ref?.entity_kind === "component" && coordinator.controller
@@ -1128,6 +1201,7 @@ const SpecSection = createComponentImplementation(
               section={section}
             />
           </header>
+          {section.entity_ref && coordinator.controller?.applyOperations && <HardwareControls state={editState} />}
           {mode === "rename" && entityIsEditable && <RenameForm
             id={editorId}
             name={section.title}
@@ -1204,7 +1278,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
         <div>
           <h4 id={`${section.section_id}-title`}>{section.title}</h4>
           <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
-            {section.validation_status}
+            {{ verified: "Section lint passed", warnings: "Lint warnings", unverified: "Not verified", errors: "Lint failed" }[section.validation_status]}
           </span>
         </div>
         {!editing && coordinator.controller && (
@@ -1223,7 +1297,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
         <div className="spec-sv-editor-form">
           <SystemVerilogCodeEditor diagnostics={section.diagnostics} onChange={setDraft} value={draft} />
           <div className="spec-edit-actions">
-            <button className="spec-save-button" disabled={busy} onClick={() => void save()} type="button">{busy ? "Validating…" : "Save to Spec"}</button>
+            <button className="spec-save-button" disabled={busy} onClick={() => void save()} type="button">{busy ? "Saving…" : "Save to Spec"}</button>
             <button disabled={busy} onClick={cancel} type="button">Cancel</button>
           </div>
         </div>
@@ -1392,12 +1466,20 @@ function ComponentPortsTable({
   sectionEdit: SectionEditState | null;
 }) {
   const addFamily = sectionEdit ? PORT_FAMILY_BY_MODE[sectionEdit.mode] : undefined;
+  const [pasting, setPasting] = useState(false);
+  const coordinator = useContext(EditCoordinatorContext);
+  const pasteId = `${table.table_id}-paste`;
   return (
     <section className="spec-table-block spec-ports-table" aria-labelledby={`${table.table_id}-title`}>
       <div className="spec-table-block__heading">
         <h4 id={`${table.table_id}-title`}>Ports</h4>
         <span>{table.rows.length} {table.rows.length === 1 ? "port" : "ports"}</span>
+        {sectionEdit?.portAvailability.enabled && sectionEdit.controller && <div className="spec-edit-actions">
+          <button type="button" onClick={() => sectionEdit.begin?.("add-wire-port")}>Add port</button>
+          {sectionEdit.controller.addComponentPorts && <button type="button" onClick={() => { if (coordinator.requestEditor(pasteId)) setPasting(true); }}>Paste rows</button>}
+        </div>}
       </div>
+      {pasting && sectionEdit && <PortPasteEditor state={sectionEdit} existing={table.rows.map(row => rowText(row, "name"))} finish={() => { setPasting(false); coordinator.finishEditor(pasteId); }} />}
       <div className="spec-table-scroll" role="group" aria-labelledby={`${table.table_id}-title`} tabIndex={0}>
         <table>
           <thead>
@@ -1447,6 +1529,8 @@ function ComponentPortRow({
 }) {
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [error, setError] = useState("");
   const buttonRef = useRef<HTMLButtonElement>(null);
   const name = rowText(row, "name");
   const editorId = `${sectionEdit?.section.section_id ?? table.table_id}-port-${name}`;
@@ -1458,8 +1542,9 @@ function ComponentPortRow({
       <tr className="spec-port-editor-row">
         <td colSpan={5}>
           <PortEditorCard
+            adding={duplicating}
             family={family}
-            initial={portInputFromRow(row)}
+            initial={duplicating ? { ...portInputFromRow(row), name: (() => { let n = 2; while (table.rows.some(item => rowText(item, "name") === `${name}_${n}`)) n++; return `${name}_${n}`; })() } : portInputFromRow(row)}
             onFinished={() => {
               coordinator.finishEditor(editorId);
               setEditing(false);
@@ -1484,7 +1569,7 @@ function ComponentPortRow({
           <button
             className="spec-port-edit-button"
             onClick={() => {
-              if (coordinator.requestEditor(editorId)) setEditing(true);
+              if (coordinator.requestEditor(editorId)) { setDuplicating(false); setEditing(true); }
             }}
             ref={buttonRef}
             type="button"
@@ -1496,6 +1581,14 @@ function ComponentPortRow({
             Read-only
           </small>
         ) : null}
+        {canEdit && sectionEdit && <><button type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(true); setEditing(true); } }}>Duplicate</button>
+          {sectionEdit.controller?.applyOperations && <button className="spec-delete-button" type="button" onClick={async () => {
+            if (!window.confirm(`Delete port ${name}? Connected or mapped ports cannot be deleted.`) || !coordinator.requestEditor(editorId)) return;
+            try { await sectionEdit.controller!.applyOperations!([{ type: "delete_component_port", component: sectionEdit.section.entity_ref!, name }]); }
+            catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+            finally { coordinator.finishEditor(editorId); }
+          }}>Delete port</button>}</>}
+        {error && <p role="alert">{error}</p>}
       </td>
     </tr>
   );
@@ -1518,7 +1611,7 @@ function PortEditorCard({
   const [direction, setDirection] = useState<"in" | "out" | "inout">(
     initial && initial.family !== "transactional" ? initial.direction : "in",
   );
-  const [range, setRange] = useState(initial?.family === "wire" ? initial.range ?? "" : "");
+  const [range, setRange] = useState(initial?.family === "wire" ? initial.range ?? "" : adding ? "0:0" : "");
   const [initiative, setInitiative] = useState<"requires" | "provides" | "both">(
     initial?.family === "transactional" ? initial.initiative : "requires",
   );
@@ -1539,7 +1632,7 @@ function PortEditorCard({
   const finish = onFinished ?? sectionEdit.cancel;
   const ref = sectionEdit.section.entity_ref;
 
-  const save = async () => {
+  const save = async (another = false) => {
     if (!sectionEdit.controller || !ref) return;
     if (!name.trim()) {
       setError("Port ID is required.");
@@ -1578,7 +1671,10 @@ function PortEditorCard({
         const { name: _immutableName, ...update } = value;
         await sectionEdit.controller.updateComponentPort(ref, value.name, update);
       }
-      finish();
+      if (another && adding) {
+        setName(""); setDescription("");
+        formRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+      } else finish();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -1677,10 +1773,31 @@ function PortEditorCard({
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-port-actions">
           <button disabled={busy} type="submit">{busy ? "Saving…" : "Save to Spec"}</button>
+          {adding && <button disabled={busy} type="button" onClick={() => void save(true)}>Save and add another</button>}
           <button disabled={busy} onClick={finish} type="button">Cancel</button>
       </div>
     </form>
   );
+}
+
+function PortPasteEditor({ state, existing, finish }: { state: SectionEditState; existing: string[]; finish(): void }) {
+  const [text, setText] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const rows = parsePortRows(text, existing);
+  return <form className="spec-inline-editor" onSubmit={async event => {
+    event.preventDefault(); setError(""); setBusy(true);
+    try { await state.controller!.addComponentPorts!(state.section.entity_ref!, rows.map(row => row.port)); finish(); }
+    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
+    finally { setBusy(false); }
+  }}>
+    <label htmlFor={`${state.section.section_id}-paste-text`}>Paste port rows (TSV or Markdown)</label>
+    <textarea id={`${state.section.section_id}-paste-text`} rows={5} value={text} onChange={event => setText(event.target.value)} placeholder={'Port ID\tDirection\tRange\tDescription'} />
+    <small>Columns: Port ID, Direction, Range, Description. Omitted ranges use 0:0; blank ranges stay scalar. Edit the pasted text to correct rows.</small>
+    {!!rows.length && <div className="spec-table-scroll"><table><thead><tr><th>ID</th><th>Direction</th><th>Range</th><th>Description</th><th>Review</th></tr></thead><tbody>{rows.map((row, index) => <tr key={index}><td>{row.port.name}</td><td>{row.port.direction}</td><td>{row.port.range ?? "scalar"}</td><td>{row.port.description}</td><td>{row.errors.join(" ") || "Ready"}</td></tr>)}</tbody></table></div>}
+    {error && <p role="alert">{error}</p>}
+    <div className="spec-edit-actions"><button type="submit" disabled={busy || !rows.length || rows.some(row => row.errors.length > 0)}>Add {rows.length} ports</button><button type="button" disabled={busy} onClick={finish}>Cancel paste</button></div>
+  </form>;
 }
 
 function safeHref(value: string): string | undefined {
@@ -1883,7 +2000,7 @@ const LiveView = createComponentImplementation(
       return <DesignTopologyLiveView
         block={block}
         documentId={props.documentId}
-        onOpenCircuit={circuitRef && (circuitRef.entity_kind === "design" || circuitRef.entity_kind === "component")
+        onOpenCircuit={!block.options.read_only && circuitRef && (circuitRef.entity_kind === "design" || circuitRef.entity_kind === "component")
           ? () => dispatchOpenCircuit(circuitRef)
           : undefined}
       />;

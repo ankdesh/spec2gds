@@ -1501,3 +1501,21 @@ button:disabled {
   background: rgba(19, 27, 23, 0.48);
 }
 
+
+/* Use the selected theme for every control surface. */
+.app-header, .view-switcher, .view-tabs, .editor-tabs { background: var(--spec-surface-subtle); }
+.utility-panel > summary { padding: 1rem; cursor: pointer; color: var(--spec-text); }
+.utility-panel > summary strong { font-weight: 600; }
+.utility-panel > summary span { color: var(--spec-muted); }
+.activity-history { margin-top: 1rem; }
+.spec-status-bar details { max-width: 50%; }
+[data-theme="clean"] .app-header [role="tablist"],
+[data-theme="clean"] .app-header nav[aria-label="Editor views"] { background: var(--spec-surface-subtle); }
+[data-theme="clean"] .app-header button:not(.assistant-launch) { color: var(--spec-text); }
+@media (max-width: 620px) {
+  .spec-status-bar details { display: none; }
+  .activity-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.utility-panel > summary h2 { display: inline; margin: 0; font-size: 1rem; font-weight: 600; }
+[data-theme="clean"] .view-nav { background: var(--spec-surface-subtle); }
+.app-shell:has(.editor-dialog) > .app-error { display: none; }

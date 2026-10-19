@@ -127,6 +127,7 @@ export interface DesignTopologyLiveViewOptionsV1 {
   omitted_bus_items: string[];
   omitted_ports: string[];
   message?: string;
+  read_only?: boolean;
 }
 
 export interface DocumentSectionData {
@@ -140,6 +141,8 @@ export interface DocumentSectionData {
   narrative: NarrativeBlock[];
   content_sections: EntityContentSection[];
   available_section_types: AvailableSectionType[];
+  implementation_kind?: "sv" | "internal_design" | "missing" | null;
+  preview_mode?: "interface" | "design" | null;
 }
 
 export interface TocEntry {
@@ -167,6 +170,7 @@ export interface HardwareEntitySummary {
   ref: EntityRef;
   vlnv: string;
   display_name?: string;
+  parameters?: ParameterInput[];
 }
 
 export interface ComponentComposition {
@@ -222,8 +226,26 @@ export interface ComponentInstanceInput {
   component_vlnv: string;
 }
 
+export interface ParameterInput { name: string; rtl_type: string; value: string; description: string }
+export interface ComponentVerification {
+  target: EntityRef;
+  source_revision_hash: string;
+  status: "passed" | "failed" | "unverified" | "stale";
+  tool_version: string;
+  diagnostics: Array<{ code: string; message: string; blocking?: boolean; line?: number | null; column?: number | null }>;
+  functional_simulation: "unverified";
+  interfaces?: Array<{ component: string; status: string; ports: Array<{ name: string; range: string | null; width: number | null }> }>;
+}
+
 export type EditorTransactionOperation =
-  | { type: "create_entity"; kind: "component" | "design"; name: string }
+  | { type: "create_entity"; kind: "component" | "design"; name: string; entry_design?: boolean }
+  | { type: "delete_document"; ref: EntityRef }
+  | { type: "delete_component_port"; component: EntityRef; name: string }
+  | { type: "update_parameter"; component: EntityRef; parameter: ParameterInput }
+  | { type: "delete_parameter"; component: EntityRef; name: string }
+  | { type: "add_entry_design" | "remove_entry_design"; design: EntityRef }
+  | { type: "set_internal_design"; component: EntityRef; internal_design: EntityRef }
+  | { type: "clear_internal_design"; component: EntityRef }
   | { type: "set_document_title"; title: string }
   | { type: "upsert_narrative_block"; block: NarrativeBlock }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
@@ -261,6 +283,7 @@ export interface TransactionResult {
 }
 
 export interface DocumentSnapshot {
+  verifications?: ComponentVerification[];
   owner_document_key: string;
   schema_version: string;
   document_id: string;
@@ -482,14 +505,23 @@ export class SpecEditorHttpClient {
   applyTransaction(
     expectedSourceRevisionHash: string,
     operations: EditorTransactionOperation[],
+    validationMode: "strict" | "authoring" = "strict",
   ): Promise<TransactionResult> {
     return this.request(this.documentPath("/transactions"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
+        ...(validationMode === "authoring" ? { validation_mode: validationMode } : {}),
         expected_source_revision_hash: expectedSourceRevisionHash,
         operations,
       }),
+    });
+  }
+
+  verifyComponent(ref: EntityRef, revision: string): Promise<ComponentVerification> {
+    return this.request(this.documentPath(`/entities/${ref.entity_kind}/${encodeURIComponent(ref.entity_id)}/verify`), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expected_source_revision_hash: revision }),
     });
   }
 
@@ -521,7 +553,7 @@ export class SpecEditorHttpClient {
   }
 
   launchCircuitDesigner(entityKind: "component" | "design", entityId: string): Promise<CircuitDesignerLaunch> {
-    return this.request("/circuit-designer/launch", {
+    return this.request(this.documentPath("/circuit-designer/launch"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ entity_kind: entityKind, entity_id: entityId }),

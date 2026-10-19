@@ -59,7 +59,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
             available=False,
             diagnostics=("Cycle-accurate SystemC generation requires a selected design.",),
         )
-    diagnostics = validate_project(context.spec, context.target)
+    diagnostics = validate_project(context.spec, context.target, check_compiler=False)
     return ActivityAvailability(available=not diagnostics, diagnostics=diagnostics)
 
 

@@ -384,10 +384,14 @@ def _compile(prepared: PreparedProject) -> tuple[bytes, dict[str, str]]:
         return header.read_bytes(), versions
 
 
-def validate_project(spec: SpecAccess, target: EntityRef) -> tuple[str, ...]:
+def validate_project(spec: SpecAccess, target: EntityRef, *, check_compiler: bool = True) -> tuple[str, ...]:
     """Reject unsupported source and toolchains before a workspace is touched."""
     try:
-        _compile(prepare_project(spec, target))
+        prepared = prepare_project(spec, target)
+        if check_compiler:
+            _compile(prepared)
+        else:
+            _tool_paths()
     except (KeyError, TypeError, ValueError) as exc:
         return (str(exc),)
     return ()

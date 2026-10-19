@@ -29,6 +29,8 @@ const snapshot = {
   diagnostics: { source: [], artifacts: [] },
   entity_sections: [],
   section_validation: [],
+  // These tests exercise commands on a previously checked source fixture.
+  verifications: [{ target: designRef, source_revision_hash: revision, status: "passed", tool_version: "fixture", diagnostics: [], functional_simulation: "unverified" }],
 };
 
 function section(
@@ -1414,10 +1416,14 @@ test("refreshes artifacts after completion without requiring a source change or 
   });
   const state = await mockEditorApi(page);
   await openSample(page);
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Refresh From Disk", exact: true }).click();
+  await expect.poll(() => state.openedPaths.length).toBe(2);
   const design = page.locator("#design-design_top");
   await design.getByRole("button", { name: "Options" }).click();
   await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await page.getByText("Artifacts", { exact: true }).click();
   await expect(page.getByText("No generated artifacts.")).toBeVisible();
   state.artifacts.push({ artifact_id: "artifact_summary", role: "spec.summary", media_type: "application/json", size: 42, source_entities: [designRef] });
   const finished = { ...state.activityExecutions[0], status: "succeeded", artifact_ids: ["artifact_summary"] };
@@ -1704,5 +1710,3 @@ test("captures Spec Editor visual baselines across themes, viewports, and dialog
   await page.keyboard.press("Escape");
   await expect(topologyDialog).not.toBeVisible();
 });
-
-

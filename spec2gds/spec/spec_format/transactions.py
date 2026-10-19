@@ -185,6 +185,22 @@ class DeleteComponentPort:
 
 
 @dataclass(frozen=True)
+class UpdateParameter:
+    """Create or update a declared parameter through a manual transaction."""
+
+    component: EntityRef
+    parameter: dict[str, typing.Any]
+
+
+@dataclass(frozen=True)
+class DeleteParameter:
+    """Remove one declared parameter without rewriting its consumers."""
+
+    component: EntityRef
+    name: str
+
+
+@dataclass(frozen=True)
 class UpsertInstance:
     """Add or replace a component instance in one design."""
 
@@ -364,6 +380,8 @@ EditOperation = typing.Union[
     UpdateComponentPort,
     RenameComponentPort,
     DeleteComponentPort,
+    UpdateParameter,
+    DeleteParameter,
     UpsertInstance,
     DeleteInstance,
     RenameInstance,
@@ -394,6 +412,7 @@ class SpecEditTransaction:
 
     base_source_revision_hash: str
     operations: tuple[EditOperation, ...]
+    validation_mode: typing.Literal["strict", "authoring"] = "strict"
 
     def apply(self, revision: SpecRevision) -> "EditResult":
         """Apply all edits atomically or return diagnostics with no new revision."""
@@ -418,6 +437,8 @@ class SpecEditTransaction:
         except (KeyError, ValueError, SpecValidationError, etree.LxmlError) as exc:
             diagnostics = exc.diagnostics if isinstance(exc, SpecValidationError) else (str(exc),)
             return EditResult(revision=None, diagnostics=tuple(diagnostics))
+        if self.validation_mode == "authoring":
+            return EditResult(revision=next_revision, diagnostics=())
         updated_owners = {
             operation.parent
             for operation in self.operations
@@ -520,6 +541,12 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRe
         _rename_component_port(package, operation)
     elif isinstance(operation, DeleteComponentPort):
         _delete_component_port(package, operation)
+    elif isinstance(operation, (UpdateParameter, DeleteParameter)):
+        from spec2gds.spec.spec_format.source_edits import edit_parameter
+        root = _editable_component_root(package, operation.component, allow_composite=True)
+        edit_parameter(root, operation.parameter if isinstance(operation, UpdateParameter) else None,
+                       operation.name if isinstance(operation, DeleteParameter) else "")
+        package.add_document("component", _serialize(root))
     elif isinstance(operation, UpsertInstance):
         root, entry = _design_root(package, operation.design)
         _upsert_instance(root, operation.instance)
@@ -909,6 +936,16 @@ def _rename_component_port(package: SpecPackage, operation: RenameComponentPort)
 def _delete_component_port(package: SpecPackage, operation: DeleteComponentPort) -> None:
     """Delete an unreferenced component port; callers provide dependency policy."""
     component_vlnv = _component_vlnv(package, operation.component)
+    revision = SpecRevision.from_package(package)
+    internal_ids = {item.internal_design.entity_id for item in revision.manifest.component_compositions
+                    if item.component.entity_id == operation.component.entity_id}
+    for design in revision.designs:
+        instances = {item.name for item in design.instances if item.component_vlnv == component_vlnv}
+        for connection in design.connections:
+            if any(item.instance_name in instances and item.port_name == operation.name for item in connection.port_endpoints) or (
+                design.ref.entity_id in internal_ids and any(item.port_name == operation.name for item in connection.external_ports)
+            ):
+                raise ValueError(f"Port {operation.name} is used by connection {connection.name}. Remove that connection first.")
     component_root = _editable_component_root(package, operation.component, allow_composite=True)
     if component_root.xpath(
         ".//*[local-name()='physicalPort']/*[local-name()='name' and normalize-space(text())=$name]",

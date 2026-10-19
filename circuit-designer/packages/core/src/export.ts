@@ -43,11 +43,13 @@ const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }
   const displayName = component.label || component.id;
   const maxChars = Math.max(4, Math.floor((geometry.width - 26) / 7.2));
   const eyebrow = displayName.length > maxChars ? `${displayName.slice(0, maxChars - 1)}…` : displayName;
+  const titleChars = Math.max(4, Math.floor((geometry.width - 44) / 8));
+  const shortLabel = label.length > titleChars ? `${label.slice(0, titleChars - 1)}…` : label;
   return [
     `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/>`,
     `<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`,
     `<text x="${geometry.x + 13}" y="${geometry.y + 49}" class="component-symbol">${component.appearance.renderer_key === "register" ? "▣" : component.appearance.renderer_key === "constant" ? "1" : component.appearance.renderer_key === "not" ? "▷○" : "◈"}</text>`,
-    `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label">${escapeXml(label)}</text>`,
+    `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label"><title>${escapeXml(label)}</title>${escapeXml(shortLabel)}</text>`,
   ].join("");
 };
 
@@ -74,7 +76,7 @@ type ExportTerminal = {
 };
 
 function terminalDisplayLabel(terminal: ExportTerminal["definition"]): string {
-  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.label;
+  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.width > 1 ? `${terminal.label} · ${terminal.width} bits` : terminal.label;
 }
 
 function terminalPoint(terminal: ExportTerminal): Point {
@@ -169,14 +171,16 @@ function exportTerminals(
 function terminalMarkup(terminal: ExportTerminal): string {
   const point = terminalPoint(terminal);
   const box = terminal.geometry;
-  const label = escapeXml(terminalDisplayLabel(terminal.definition));
+  const fullLabel = terminalDisplayLabel(terminal.definition);
+  const limit = terminal.key.startsWith("boundary:") ? 26 : 13;
+  const label = escapeXml(fullLabel.length > limit ? `${fullLabel.slice(0, limit - 1)}…` : fullLabel);
   const side = terminal.placement.side;
   const labelPosition = side === "WEST" ? { x: box.x + 8, y: point.y + 3, anchor: "start" }
     : side === "EAST" ? { x: box.x + box.width - 8, y: point.y + 3, anchor: "end" }
       : side === "NORTH" ? { x: point.x, y: box.y + 12, anchor: "middle" }
         : { x: point.x, y: box.y + box.height - 5, anchor: "middle" };
   return [
-    `<text x="${labelPosition.x}" y="${labelPosition.y}" text-anchor="${labelPosition.anchor}" class="port-label">${label}</text>`,
+    `<text x="${labelPosition.x}" y="${labelPosition.y}" text-anchor="${labelPosition.anchor}" class="port-label"><title>${escapeXml(fullLabel)}</title>${label}</text>`,
     `<circle cx="${point.x}" cy="${point.y}" r="5" class="port" data-terminal-id="${escapeXml(terminal.key)}"/>`,
   ].join("");
 }
@@ -243,7 +247,8 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   const timing = effectiveCircuitTiming(document);
   const cycleEdges = document.timing ? sortedCycleEdges(timing) : [];
   const padding = options.padding ?? 40;
-  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...routePoints.map((point) => point.x), ...cycleEdges.map((edge) => edge.x)];
+  const boundaryLabelExtents = terminals.filter(terminal => terminal.key.startsWith("boundary:")).flatMap(terminal => [terminal.geometry.x - 156, terminal.geometry.x + terminal.geometry.width + 156]);
+  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...boundaryLabelExtents, ...routePoints.map((point) => point.x), ...cycleEdges.map((edge) => edge.x)];
   const ys = [...boxes.flatMap((box) => [box.y, box.y + box.height]), ...routePoints.map((point) => point.y)];
   const minX = (xs.length ? Math.min(...xs) : 0) - padding;
   const minY = (ys.length ? Math.min(...ys) : 0) - padding;
@@ -263,11 +268,7 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   const boundaryMarkup = boundaries.flatMap((terminal) => {
     const geometry = boundaryGeometry[`boundary:${terminal.id}`] ?? boundaryGeometry[terminal.id];
     if (!geometry) return [];
-    const component: ComponentDefinition = {
-      id: "boundary", label: "boundary", origin: "local", editable: false,
-      terminals: [], parameters: [], appearance: { renderer_key: "generic", properties: {} },
-    };
-    return [`<g data-boundary-id="${escapeXml(terminal.id)}">${genericSvgRenderer({ component, geometry, label: terminal.label })}</g>`];
+    return [`<g data-boundary-id="${escapeXml(terminal.id)}"><rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/></g>`];
   }).join("");
   const portMarkup = terminals.map(terminalMarkup).join("");
   const cycleEdgeMarkup = [

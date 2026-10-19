@@ -2,6 +2,7 @@ import {
   renderCircuitSvg,
   validateCircuitDocument,
   publicFilenameStem,
+  getCircuitTheme,
   type CircuitDocument,
 } from "@spec2gds/circuit-core";
 import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
@@ -23,7 +24,7 @@ export function readDesignTopologyOptions(value: Record<string, unknown>): Desig
   return value as unknown as DesignTopologyLiveViewOptionsV1;
 }
 
-export async function renderDesignTopology(document: CircuitDocument): Promise<RenderedDesignTopology> {
+export async function renderDesignTopology(document: CircuitDocument, themeId = "blueprint-slate"): Promise<RenderedDesignTopology> {
   const validation = validateCircuitDocument(document);
   if (!validation.valid) {
     const details = validation.diagnostics.map((diagnostic) => diagnostic.message).join(" ");
@@ -34,7 +35,7 @@ export async function renderDesignTopology(document: CircuitDocument): Promise<R
     gridSize: 20,
     preserveNodeGeometry: "none",
   });
-  const svg = renderCircuitSvg(layout.document, { boundaryGeometry: layout.boundary_geometry });
+  const svg = renderCircuitSvg(layout.document, { boundaryGeometry: layout.boundary_geometry, theme: getCircuitTheme(themeId) });
   const dimensions = svg.match(/<svg[^>]+width="(\d+)"[^>]+height="(\d+)"/);
   if (!dimensions) throw new Error("The circuit renderer returned an SVG without dimensions.");
   return { svg, width: Number(dimensions[1]), height: Number(dimensions[2]) };

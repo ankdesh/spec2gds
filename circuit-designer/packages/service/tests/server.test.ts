@@ -427,6 +427,13 @@ describe("Circuit Designer REST service", () => {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ owner_id: "test" }),
       })).json() as { lease_id: string };
+      const savedBinding = await (await fetch(`${documentBase}/source-binding`)).json();
+      expect((await fetch(`${documentBase}/source-binding`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_url: `http://127.0.0.1:${providerPort}/source/`, token: "replacement-token",
+          binding: { ...savedBinding, binding_id: "replacement" } }),
+      })).status).toBe(423);
+      expect(await (await fetch(`${documentBase}/source-binding`)).json()).toEqual(savedBinding);
       const commitBody = {
         lease_id: lease.lease_id,
         batch: {

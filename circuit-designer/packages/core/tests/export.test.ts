@@ -53,6 +53,11 @@ describe("Circuit Designer visual export", () => {
     expect(svg).toContain('data-boundary-id="response"');
     expect(svg).toContain('data-terminal-id="boundary:request"');
     expect(svg).toContain('data-terminal-id="boundary:response"');
+    expect(svg).not.toContain('<title>boundary</title>');
+    // Outside pin labels fit in the exported view instead of being cut by it.
+    const view = svg.match(/viewBox="([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)"/)!;
+    expect(Number(view[1])).toBeLessThan(-40 - 156);
+    expect(Number(view[1]) + Number(view[3])).toBeGreaterThan(420 + 156);
   });
 
   it("renders human-readable component labels in SVG eyebrow and preserves internal ID in diagnostics (UI-CIRCUIT-007)", () => {

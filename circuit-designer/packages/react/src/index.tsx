@@ -23,6 +23,7 @@ import {
   ConnectionMode,
   Controls,
   Handle,
+  getViewportForBounds,
   Position,
   ReactFlow,
   SelectionMode,
@@ -103,7 +104,7 @@ export function circuitSelectionsEqual(left: CircuitCanvasSelection, right: Circ
 }
 
 export function terminalDisplayLabel(terminal: Pick<CircuitTerminal, "label" | "width">): string {
-  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.label;
+  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.width > 1 ? `${terminal.label} · ${terminal.width} bits` : terminal.label;
 }
 
 export interface CircuitDesignerCanvasProps {
@@ -208,11 +209,11 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
   const customRenderer = data.rendererRegistry?.renderer(rendererKey)
     ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
   return (
-    <div className="cd-node">
-      <div className="cd-node__eyebrow">{data.circuitNode.component_vlnv ?? data.circuitNode.component_id}</div>
-      <div className="cd-node__title">{customRenderer
+    <div className={data.contextTarget.kind === "boundary" ? "cd-node cd-node--boundary" : "cd-node"}>
+      {data.contextTarget.kind !== "boundary" && <><div className="cd-node__eyebrow">{data.circuitNode.component_vlnv ?? data.circuitNode.component_id}</div>
+      <div className="cd-node__title" title={data.circuitNode.display_name ?? data.circuitNode.label}>{customRenderer
         ? customRenderer({ node: data.circuitNode })
-        : data.circuitNode.display_name ?? data.circuitNode.label}</div>
+        : data.circuitNode.display_name ?? data.circuitNode.label}</div></>}
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
@@ -300,6 +301,8 @@ export interface BuildCircuitFlowEdgeOptions {
 }
 
 export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Record<string, NetRoute>, options: BuildCircuitFlowEdgeOptions = {}): CircuitFlowEdge[] {
+  const nodeId = (terminalId: string) => graph.terminals.find((terminal) => terminal.id === terminalId)?.node_id
+    ?? (terminalId.startsWith("boundary:") ? terminalId : `boundary:${terminalId}`);
   return graph.nets.flatMap((net) => {
     const route = netRoutes[net.id];
     if (!route || net.endpoints.length < 2) return [];
@@ -308,8 +311,8 @@ export function buildCircuitFlowEdges(graph: CircuitGraphSnapshot, netRoutes: Re
     return [{
       id: net.id,
       type: "circuit",
-      source: graph.terminals.find((terminal) => terminal.id === sourceTerminalId)?.node_id ?? `boundary:${sourceTerminalId}`,
-      target: graph.terminals.find((terminal) => terminal.id === targetTerminalId)?.node_id ?? `boundary:${targetTerminalId}`,
+      source: nodeId(sourceTerminalId),
+      target: nodeId(targetTerminalId),
       sourceHandle: terminalHandleId(sourceTerminalId, "source"),
       targetHandle: terminalHandleId(targetTerminalId, "target"),
       data: {
@@ -716,7 +719,27 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
   useImperativeHandle(forwardedRef, () => ({
     zoomIn: () => { void instanceRef.current?.zoomIn({ duration: 140 }); },
     zoomOut: () => { void instanceRef.current?.zoomOut({ duration: 140 }); },
-    fitView: () => { void instanceRef.current?.fitView({ padding: 0.2, duration: 180 }); },
+    fitView: () => {
+      const canvas = canvasRef.current;
+      const instance = instanceRef.current;
+      if (!canvas || !instance) return;
+      const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry)];
+      const points = [
+        ...geometry.flatMap(box => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]),
+        ...Object.values(netRoutes).flatMap(route => route.vertices.map(vertex => vertex.point)),
+      ];
+      if (!points.length) return;
+      // Boundary labels sit outside their small port boxes. Include them and
+      // route bends, and use the current canvas size after a window resize.
+      const x = Math.min(...points.map(point => point.x)) - 160;
+      const y = Math.min(...points.map(point => point.y)) - 40;
+      const next = getViewportForBounds({ x, y,
+        width: Math.max(...points.map(point => point.x)) - x + 160,
+        height: Math.max(...points.map(point => point.y)) - y + 40,
+      }, canvas.clientWidth, canvas.clientHeight, 0.08, 2.5, 0.1);
+      void instance.setViewport(next);
+      onViewportChange?.(next);
+    },
     cancelPendingConnection: () => setPendingTerminalId(undefined),
     centerSelection: () => {
       const instance = instanceRef.current;

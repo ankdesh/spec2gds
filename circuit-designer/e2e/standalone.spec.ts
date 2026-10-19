@@ -196,6 +196,69 @@ test("edits a writable specification binding and saves it through source preview
   expect(sourceProviderCalls).toEqual(["/source/preview", "/source/commit"]);
 });
 
+test("preserves independent endpoint offsets when creating a bus connection", async ({ page, request }) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `slice_offsets_${Date.now()}`;
+  document.design.nets = [];
+  for (const component of document.components) component.terminals[0].width = 16;
+  const created = await request.post(`${circuitApiUrl}/documents`, { data: { request_id: document.document_id, document } });
+  expect(created.ok()).toBe(true);
+  const binding = await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, { data: {
+    callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`, token: "browser-slice-token",
+    binding: { schema_version: 1, binding_id: `binding_${document.document_id}`, source_document_id: "slice_spec",
+      source_entity: { document_id: "slice_spec", entity_id: "design_top", entity_kind: "design" },
+      editable_design_id: "design_top", base_source_revision_hash: "sha256:slice-base", writable: true,
+      capabilities: ["topology", "layout"], omitted_bus_items: [], omitted_ports: [] },
+  } });
+  expect(binding.ok()).toBe(true);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator(".document-status")).toContainText("Specification bound");
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Connect", "New connection");
+  await page.getByLabel("Net label", { exact: true }).fill("upper_to_lower");
+  await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
+  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("LSB for A", { exact: true }).fill("8");
+  await page.getByLabel("LSB for B", { exact: true }).fill("0");
+  await page.getByLabel("Width (0=full)", { exact: true }).fill("8");
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await request.get(`${circuitApiUrl}/documents/${document.document_id}`);
+  const snapshot = await saved.json();
+  expect(snapshot.document.design.nets[0].endpoints.map((item: any) => item.slice)).toEqual([{ lsb: 8, width: 8 }, { lsb: 0, width: 8 }]);
+  await page.reload();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+});
+
+test("cancelling an unchanged draft preserves saved routes and source", async ({ page, request }) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `cancel_routes_${Date.now()}`;
+  document.label = document.document_id;
+  const created = await request.post(`${circuitApiUrl}/documents`, { data: { request_id: document.document_id, document } });
+  expect(created.ok()).toBe(true);
+  const binding = await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, { data: {
+    callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`, token: "browser-cancel-token",
+    binding: { schema_version: 1, binding_id: `binding_${document.document_id}`, source_document_id: "cancel_spec",
+      source_entity: { document_id: "cancel_spec", entity_id: "design_top", entity_kind: "design" },
+      editable_design_id: "design_top", base_source_revision_hash: "sha256:cancel-base", writable: true,
+      capabilities: ["topology", "layout"], omitted_bus_items: [], omitted_ports: [] },
+  } });
+  expect(binding.ok()).toBe(true);
+  const before = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await menuAction(page, "Edit", "Begin editing");
+  await expect(page.locator(".notice")).toContainText("Private draft opened");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await menuAction(page, "File", "Cancel changes");
+  await expect(page.locator(".notice")).toContainText("Draft cancelled");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  const after = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(after).toEqual(before);
+});
+
 test("saves shared shortcuts and Inspector visibility through the preference endpoint", async ({ page, request }) => {
   await page.goto("/");
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
@@ -600,5 +663,3 @@ test("captures Circuit Designer visual baselines across canvas, menus, dialogs, 
   await page.keyboard.press("Escape");
   await expect(aboutDialog).not.toBeVisible();
 });
-
-

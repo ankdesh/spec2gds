@@ -1,4 +1,4 @@
-# SE-FOCUS-12: Reject invalid SystemVerilog without losing saved logic
+# SE-FOCUS-12: Save unverified SystemVerilog and report explicit verification errors
 
 ## Case contract
 
@@ -27,14 +27,14 @@ capability remains a failed acceptance criterion; do not silently skip it.
 | Step | Designer action | Expected visible result | Evidence to retain |
 | ---: | --- | --- | --- |
 | 1 | Prepare the exact isolated starting fixture below. Record its identities and saved source/graph before the action. | The starting state matches the fixture and is separate from other cases; setup has not already performed the behavior under test. | Fixture, initial screenshot, source/graph inventory, and active binding. |
-| 2 | Edit the SV Section, replace its draft with the invalid text, and attempt Save to Spec. | A relevant source diagnostic appears; the invalid draft remains available for correction. | Step 2 screenshot/recording and observable state. |
-| 3 | Inspect the saved view from a second browser context without modifying it. | The original valid body is still authoritative; no partial or empty replacement was saved. | Step 3 screenshot/recording and observable state. |
-| 4 | Restore the complete add32 body from the input pack, save, and reopen. | The corrected body persists with all five ports and the original Component identity. | Step 4 screenshot/recording and observable state. |
-| 5 | Inspect the final visible state and saved result specified below; record ratings and any missing capability. | Saved valid arithmetic survives the failed edit; a corrected draft can be saved without losing other Sections. | Final screenshot, relevant read-only service/archive comparison, and criterion ratings. |
+| 2 | Edit the SV Section, replace its draft with the invalid text, and attempt Save to Spec. | The incomplete body saves as unverified. Select Verify Component: relevant lint diagnostics appear, the status is Lint failed, and the saved text remains available for correction. | Step 2 screenshot/recording and observable state. |
+| 3 | Inspect the saved view from a second browser context without modifying it. | The deliberately saved incomplete body is authoritative and retained exactly. The current cached receipt shows Lint failed; after a service restart it can show Not verified. No current passing result is shown. | Step 3 screenshot/recording and observable state. |
+| 4 | Restore the complete add32 body from the input pack, save, select Verify Component, and reopen. | The corrected body persists with all five ports and the original Component identity; explicit verification passes for that revision. | Step 4 screenshot/recording and observable state. |
+| 5 | Inspect the final visible state and saved result specified below; record ratings and any missing capability. | Saved incomplete text survives failed verification; corrected arithmetic can be saved and explicitly verified without losing other Sections. | Final screenshot, relevant read-only service/archive comparison, and criterion ratings. |
 
 ## Expected final Spec and Circuit
 
-Saved valid arithmetic survives the failed edit; a corrected draft can be saved without losing other Sections.
+Saved incomplete text survives failed verification; corrected arithmetic can be saved and explicitly verified without losing other Sections.
 
 Keep all unmentioned source Sections, definition references, instance IDs, and
 connections unchanged. If this is an interface-only or intentionally incomplete
@@ -44,7 +44,7 @@ its published `make lint`; keep simulation marked unverified.
 
 ## Automation-ready assertions
 
-A relevant source diagnostic appears; the invalid draft remains available for correction. The original valid body is still authoritative; no partial or empty replacement was saved. The corrected body persists with all five ports and the original Component identity.
+The incomplete body saves as unverified. Select Verify Component: relevant lint diagnostics appear, the status is Lint failed, and the saved text remains available for correction. The deliberately saved incomplete body is authoritative and retained exactly. The current cached receipt shows Lint failed; after a service restart it can show Not verified. No current passing result is shown. The corrected body persists with all five ports and the original Component identity; explicit verification passes for that revision.
 
 Use semantic roles/labels and stable item references. Assert the visible result
 and the relevant real saved data. Use condition-based waits rather than sleeps.
@@ -57,9 +57,9 @@ mocking successful writes. Preserve the original failing evidence on reruns.
 
 | Criterion ID | Observable criterion | Weight | Mandatory | Rating kind | Required evidence |
 | --- | --- | ---: | --- | --- | --- |
-| SE-FOCUS-12-C01 | The protected source, identity, graph, or draft identified in setup survives the failed/cancelled operation: Saved valid arithmetic survives the failed edit; a corrected draft can be saved without losing other Sections. | 40 | yes | 0 or 4 | Before/after saved-state and identity comparison. |
-| SE-FOCUS-12-C02 | The attempted operation is rejected, cancelled, or isolated exactly as specified: A relevant source diagnostic appears; the invalid draft remains available for correction. | 25 | yes | 0 or 4 | Browser action and rejection/state evidence. |
-| SE-FOCUS-12-C03 | The case-specific recovery or final valid operation completes without a hidden bypass: The corrected body persists with all five ports and the original Component identity. | 20 | yes | 0 or 4 | Recovery recording and reopened result. |
+| SE-FOCUS-12-C01 | The protected source, identity, graph, or draft identified in setup survives the failed/cancelled operation: Saved incomplete text survives failed verification; corrected arithmetic can be saved and explicitly verified without losing other Sections. | 40 | yes | 0 or 4 | Before/after saved-state and identity comparison. |
+| SE-FOCUS-12-C02 | Verification failure is reported without losing the saved incomplete source: The incomplete body saves as unverified. Select Verify Component: relevant lint diagnostics appear, the status is Lint failed, and the saved text remains available for correction. | 25 | yes | 0 or 4 | Browser action and rejection/state evidence. |
+| SE-FOCUS-12-C03 | The case-specific recovery or final valid operation completes without a hidden bypass: The corrected body persists with all five ports and the original Component identity; explicit verification passes for that revision. | 20 | yes | 0 or 4 | Recovery recording and reopened result. |
 | SE-FOCUS-12-C04 | The user can identify the affected operation, retained state, and next action; feedback and focus do not hide the failure. | 15 | no | 0–4 | Visible feedback/focus and rationale for partial ratings. |
 
 Use [scoring rules](../../SCORING.md). Weights total 100. Mandatory failures
@@ -67,7 +67,7 @@ remain failures regardless of partial visual/usability credit.
 
 ### Partial-credit anchors for this check
 
-The concrete result under review is: Saved valid arithmetic survives the failed edit; a corrected draft can be saved without losing other Sections.
+The concrete result under review is: Saved incomplete text survives failed verification; corrected arithmetic can be saved and explicitly verified without losing other Sections.
 For qualitative feedback/readability criteria, rating 2 means this result can
 be understood only after substantial extra inspection; rating 3 means it is
 clear with one minor local wording, focus, or spacing issue; rating 4 means the

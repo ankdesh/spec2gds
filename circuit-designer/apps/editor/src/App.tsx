@@ -235,6 +235,7 @@ export default function App() {
           return { ...current, executions };
         });
         if (["succeeded", "failed", "cancelled"].includes(text(execution.status))) {
+          setNotice(current => current.startsWith("Queued ") ? "" : current);
           void refreshActivity().catch(caught => {
             if (epoch === documentEpoch.current && key === activeKey.current) {
               setError(`The job finished, but its results could not refresh: ${caught instanceof Error ? caught.message : String(caught)}`);
@@ -250,7 +251,7 @@ export default function App() {
       if (epoch === documentEpoch.current && key === activeKey.current) setSyncState("Disconnected · reconnecting");
     });
     return () => events.close();
-  }, [client, refreshActivity, snapshot?.owner_document_key]);
+  }, [client, refreshActivity, snapshot?.owner_document_key, documentEpoch.current]);
 
   const pendingCreation = useRef<{ path: string; title: string; requestId: string } | null>(null);
   const createDocument = useCallback(async (nextPath: string, title: string) => {
@@ -321,7 +322,7 @@ export default function App() {
     source.onopen = () => { setSyncState(editing.current ? "Editing draft" : "Synchronizing"); schedule(); };
     source.onerror = () => setSyncState("Disconnected · reconnecting");
     return () => { source.close(); if (timer) clearTimeout(timer); };
-  }, [client, loadView, snapshot?.owner_document_key]);
+  }, [client, loadView, snapshot?.owner_document_key, documentEpoch.current]);
 
   const executeAction = async (ref: EntityRef, action: EntityAction) => {
     const key = snapshot?.owner_document_key;
@@ -357,6 +358,12 @@ export default function App() {
     entityKind: "component" | "design",
     entityId: string,
   ) => {
+    if (entityKind === "component" && snapshot?.components.some(item => item.ref.entity_id === entityId)
+      && !snapshot.component_compositions.some(item => item.component.entity_id === entityId)) {
+      setView("document");
+      requestAnimationFrame(() => document.getElementById(`component-${entityId.replaceAll("_", "-")}`)?.querySelector(".spec-topology-card")?.scrollIntoView({ block: "center" }));
+      return;
+    }
     if (launchingCircuit) return;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {
@@ -408,7 +415,7 @@ export default function App() {
     if (activeKey.current !== snapshot.owner_document_key) return;
     await refreshActivity();
     if (activeKey.current !== snapshot.owner_document_key) return;
-    setNotice(`Queued ${item.definition.title} for ${referenceName(snapshot, ref)}.`);
+    setNotice("");
     setView("activity");
   };
 
@@ -501,10 +508,12 @@ export default function App() {
     const key = snapshot.owner_document_key;
     try {
       const base = saveBaseRevision(reviewedRevision.current, draftRevision.current, snapshot.source_revision_hash);
-      const result = await client.applyTransaction(base, operations);
+      const result = await client.applyTransaction(base, operations, "authoring");
       if (epoch !== documentEpoch.current || key !== activeKey.current) return;
       ++viewRequest.current;
       currentRevision.current = result.snapshot.source_revision_hash;
+      draftRevision.current = result.snapshot.source_revision_hash;
+      reviewedRevision.current = null;
       setSnapshot(result.snapshot);
       setExternalChange(null);
       setError("");
@@ -553,10 +562,25 @@ export default function App() {
           `Spec name changed to ${title} and saved automatically.`,
         );
       },
-      async createEntity(kind: "component" | "design", name: string) {
+      source: snapshot,
+      async applyOperations(operations: EditorTransactionOperation[]) {
+        await commitEditorOperations(operations, "Changes saved to Spec. Verify the updated hardware when ready.");
+      },
+      async addComponentPorts(ref: EntityRef, values: ComponentPortInput[]) {
+        await commitEditorOperations(values.map(port => ({ type: "add_component_port" as const, component: ref, port })), "Ports saved to Spec.");
+      },
+      async verify(ref: EntityRef) {
+        const key = snapshot.owner_document_key;
+        await client.verifyComponent(ref, snapshot.source_revision_hash);
+        const next = await client.getDocumentView(key);
+        if (activeKey.current === key && currentRevision.current === next.source_revision_hash) {
+          setSnapshot(next.snapshot); setBatch(next.a2ui);
+        }
+      },
+      async createEntity(kind: "component" | "design", name: string, entryDesign = true) {
         await commitEditorOperations(
-          [{ type: "create_entity", kind, name }],
-          `${kind === "component" ? "Component" : "Entry design"} ${name} created and saved automatically.`,
+          [{ type: "create_entity", kind, name, ...(kind === "design" ? { entry_design: entryDesign } : {}) }],
+          `${kind === "component" ? "Component" : entryDesign ? "Entry Design" : "Design"} ${name} created and saved automatically.`,
         );
       },
       async addComponentInstance(design: EntityRef, value: ComponentInstanceInput) {
@@ -612,7 +636,7 @@ export default function App() {
             section_id: sectionId,
             payload: { content },
           }],
-          "SystemVerilog section validated and saved automatically.",
+          "SystemVerilog section saved. Use Verify Component or Verify Design to run lint.",
         );
       },
       async deleteEntitySection(ref: EntityRef, sectionId?: string) {
@@ -633,7 +657,7 @@ export default function App() {
           : { enabled: true, reason: "" };
       },
     };
-  }, [commitEditorOperations, snapshot]);
+  }, [commitEditorOperations, snapshot, client, loadView]);
 
   const commandController = useMemo<SpecDocumentCommandController | undefined>(() => {
     if (!snapshot) return undefined;
@@ -655,18 +679,20 @@ export default function App() {
       } finally { commandPending.current = false; }
     };
     return {
-      revisionKey: `${key}:${revision}`,
+      revisionKey: `${key}:${revision}:${JSON.stringify(snapshot.verifications ?? [])}`,
       async loadCommands(ref) {
         assertCurrent(ref);
         const [actions, activities] = await Promise.all([client.listEntityActions(ref), client.listEntityActivities(ref)]);
         assertCurrent(ref);
-        return { actions: actions.actions, activities: activities.activities };
+        const checked = snapshot.verifications?.some(item => item.target.entity_id === ref.entity_id && item.source_revision_hash === revision && item.status === "passed");
+        return { actions: actions.actions, activities: activities.activities.map(item => item.definition.activity_id === "rtl.generate" && !checked
+          ? { ...item, availability: { available: false, diagnostics: ["Use Verify Component or Verify Design before generating RTL."] } } : item) };
       },
       explore: ref => run(ref, () => launchAssistant(ref)),
       executeAction: (ref, action) => run(ref, () => executeAction(ref, action)),
       launchActivity: (ref, item) => run(ref, () => executeActivity(ref, item)),
     };
-  }, [client, snapshot?.owner_document_key, snapshot?.source_revision_hash]);
+  }, [client, snapshot]);
 
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
@@ -679,6 +705,7 @@ export default function App() {
   return (
     <div className="app-shell" data-theme={themeId}>
       <EditorMenuBar
+        dialogError={error}
         activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
         diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length + sectionDiagnostics.length}
         launchingAssistant={launchingAssistant}
@@ -703,7 +730,7 @@ export default function App() {
       {notice && <div className="app-notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}
       {snapshot && <div className="spec-status-bar" aria-label="Spec status">
         <span role="status">{syncState}</span>
-        <span>Assistant: {approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"}</span>
+        <details><summary>Assistant settings</summary><span>{approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"}</span></details>
       </div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
@@ -864,7 +891,6 @@ function ActivityView({
         <h1>Activity</h1>
         <button type="button" onClick={onRefresh}>Refresh</button>
       </header>
-      <div className="activity-history">{history}</div>
       <div className="activity-grid">
         <UtilityPanel title="Action executions" count={activity.executions.length}>
           {activity.executions.slice().reverse().map((value) => {
@@ -887,7 +913,7 @@ function ActivityView({
                 <TechnicalDetails value={item} />
                 <p>{text(item.presentation_summary, text(report.summary, text(diagnostics[0], "No report summary")))}</p>
                 {activityExecution && text(item.workspace_output_path, "") && (
-                  <p><strong>Server path:</strong> <code>{text(item.workspace_output_path)}</code></p>
+                  <p><strong>Server path:</strong> <code>{text(item.workspace_output_path)}</code> <CopyPathButton path={text(item.workspace_output_path)} /></p>
                 )}
                 {activityExecution && text(report.top_module, "") && (
                   <p>Top module: <code>{text(report.top_module)}</code> · {files.length} generated files</p>
@@ -913,10 +939,10 @@ function ActivityView({
                 <strong>{item.role === "spec.summary" && item.media_type === "application/json" ? "Target Section details" : text(item.role, "Artifact")}</strong>
                 <TechnicalDetails value={item} />
                 <p>{text(item.media_type)} · {text(item.size, "0")} bytes</p>
-                {item.role === "spec.summary" && item.media_type === "application/json" && snapshot && <a
+                {["spec.summary", "rtl.generation_report"].includes(String(item.role)) && item.media_type === "application/json" && snapshot && <a
                   href={client.artifactContentUrl(text(item.artifact_id), snapshot.owner_document_key)}
                   download={`${publicFilenameStem(referenceName(snapshot, (item.source_entities as EntityRef[] | undefined)?.[0] ?? { document_id: snapshot.document_id, entity_kind: "component", entity_id: "target" }), "target")}-section-details.json`}
-                >Download JSON</a>}
+                >{item.role === "spec.summary" ? "Download JSON" : "Download report"}</a>}
               </article>
             );
           })}
@@ -966,6 +992,7 @@ function ActivityView({
           {!activity.assistant_changes.length && <p className="empty-copy">No AI Assistant changes have been applied.</p>}
         </UtilityPanel>
       </div>
+      <div className="activity-history">{history}</div>
     </div>
   );
 }
@@ -980,11 +1007,19 @@ function UtilityPanel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="utility-panel">
-      <header><h2>{title}</h2><span>{count}</span></header>
+    <details className="utility-panel" open={count > 0}>
+      <summary><h2>{title}</h2> <span>{count}</span></summary>
       <div>{children}</div>
-    </section>
+    </details>
   );
+}
+
+function CopyPathButton({ path }: { path: string }) {
+  const [message, setMessage] = useState("");
+  return <><button type="button" onClick={async () => {
+    try { await navigator.clipboard.writeText(path); setMessage("Copied"); }
+    catch { setMessage("Could not copy. Select the path to copy it."); }
+  }}>Copy path</button><span role="status">{message}</span></>;
 }
 
 function DiagnosticsView({

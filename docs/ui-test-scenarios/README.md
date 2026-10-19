@@ -200,7 +200,7 @@ when an entire group is excluded. An unrun selected case is not a pass.
 | [x] | [SE-FOCUS-09](spec-editor/focused/SE-FOCUS-09.md) | Author parameters and symbolic port ranges |
 | [x] | [SE-FOCUS-10](spec-editor/focused/SE-FOCUS-10.md) | Render a substantial readable explanation |
 | [x] | [SE-FOCUS-11](spec-editor/focused/SE-FOCUS-11.md) | Add and edit a SystemVerilog Section |
-| [x] | [SE-FOCUS-12](spec-editor/focused/SE-FOCUS-12.md) | Reject invalid SystemVerilog without losing saved logic |
+| [x] | [SE-FOCUS-12](spec-editor/focused/SE-FOCUS-12.md) | Save unverified SystemVerilog and report explicit verification errors |
 | [x] | [SE-FOCUS-13](spec-editor/focused/SE-FOCUS-13.md) | Cancel and confirm SystemVerilog deletion |
 | [x] | [SE-FOCUS-14](spec-editor/focused/SE-FOCUS-14.md) | Cancel a text draft and restore the saved view |
 | [x] | [SE-FOCUS-15](spec-editor/focused/SE-FOCUS-15.md) | Preserve a stale draft during a competing save |

@@ -36,7 +36,7 @@ from spec2gds.spec.activities import (
     activity_availability,
     load_extension_modules,
 )
-from spec2gds.spec.activities.contracts import ActivityResult
+from spec2gds.spec.activities.contracts import ActivityAvailability, ActivityResult
 from spec2gds.spec.activities.reference import specification_summary
 from spec2gds.spec.activities.rtl import register_extensions as register_rtl
 from spec2gds.spec.activities.systemc_at import register_extensions as register_systemc_at
@@ -96,7 +96,7 @@ from spec2gds.spec.spec_format.spec_service_store import (
     SpecServiceJournal,
     document_key,
 )
-from spec2gds.spec.spec_format.sv_validation import validate_revision_sections
+from spec2gds.spec.spec_format.sv_validation import cached_revision_sections
 from spec2gds.spec.spec_format.transactions import (
     AddAsset,
     AddComponentPort,
@@ -106,6 +106,8 @@ from spec2gds.spec.spec_format.transactions import (
     DeleteConnection,
     DeleteDocument,
     DeleteInstance,
+    DeleteComponentPort,
+    DeleteParameter,
     DeleteNarrativeBlock,
     DeleteSection,
     RemoveAsset,
@@ -121,6 +123,7 @@ from spec2gds.spec.spec_format.transactions import (
     StructuredPortInput,
     TransactionalPortInput,
     UpdateComponentPort,
+    UpdateParameter,
     UpsertConnection,
     UpsertDocumentXml,
     UpsertInstance,
@@ -160,6 +163,7 @@ class TransactionRequest(pydantic.BaseModel):
 
     expected_source_revision_hash: str
     operations: list[dict[str, typing.Any]]
+    validation_mode: typing.Literal["strict", "authoring"] = "strict"
 
 
 class ActionInputRequest(pydantic.BaseModel):
@@ -247,6 +251,7 @@ class V1Session:
         self._journal: SpecServiceJournal | None = None
         self.reconciled_proposals: set[str] = set()
         self.name_catalog: SpecServiceBindings | None = None
+        self.verifications: dict[str, dict[str, typing.Any]] = {}
 
     @property
     def journal(self) -> SpecServiceJournal:
@@ -982,20 +987,21 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         }
 
     @app.post("/circuit-designer/launch")
-    def launch_circuit(request: CircuitLaunchRequest) -> dict[str, typing.Any]:
+    def launch_circuit(request: CircuitLaunchRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Project one design and register its revision-guarded source binding."""
+        session = bound_session(owner_document_key)
         try:
             initial_projection = project_source_to_circuit(
-                active().revision,
+                session.revision,
                 request.entity_kind,
                 request.entity_id,
             )
             session_id = source_session_document_id(
-                active().revision,
+                session.revision,
                 initial_projection.editable_design_id or initial_projection.source_entity_id,
             )
             projection = project_source_to_circuit(
-                active().revision,
+                session.revision,
                 request.entity_kind,
                 request.entity_id,
                 session_document_id=session_id,
@@ -1005,6 +1011,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 projection.document,
                 service_url=service_urls()["circuit_designer"]["service_url"],
                 editor_url=service_urls()["circuit_designer"]["ui_url"],
+                refresh_existing=False,
             )
             token = uuid4().hex
             binding_id = f"source_{uuid4().hex}"
@@ -1012,19 +1019,19 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             binding = {
                 "schema_version": 1,
                 "binding_id": binding_id,
-                "source_document_id": active().revision.document_id,
-                "source_name": active().revision.narrative.title,
-                "source_entity_name": reference_name(active().revision, EntityRef(document_id=active().revision.document_id,
+                "source_document_id": session.revision.document_id,
+                "source_name": session.revision.narrative.title,
+                "source_entity_name": reference_name(session.revision, EntityRef(document_id=session.revision.document_id,
                     entity_kind=projection.source_entity_kind, entity_id=projection.source_entity_id)),
-                "source_owner_document_key": active().service_document_key,
+                "source_owner_document_key": session.service_document_key,
                 "source_service_url": service_urls()["spec_editor"]["service_url"],
                 "source_entity": {
-                    "document_id": active().revision.document_id,
+                    "document_id": session.revision.document_id,
                     "entity_id": projection.source_entity_id,
                     "entity_kind": projection.source_entity_kind,
                 },
                 **({"editable_design_id": projection.editable_design_id} if projection.editable_design_id else {}),
-                "base_source_revision_hash": active().revision.source_revision_hash,
+                "base_source_revision_hash": session.revision.source_revision_hash,
                 "writable": writable,
                 "capabilities": ([
                     "topology", "layout", "timing", "local-components", "numeric-part-selects",
@@ -1046,6 +1053,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 service_url=service_urls()["circuit_designer"]["service_url"],
                 callback_url=f"{service_urls()['spec_editor']['service_url']}/circuit-designer/source",
                 token=token,
+                reload_source=launched.reused_session,
             )
         except CircuitDesignerConnectionError as exc:
             raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc
@@ -1062,6 +1070,10 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "source_binding": binding,
         }
 
+    def circuit_source_session(record: dict[str, typing.Any]) -> V1Session:
+        """Keep a Circuit binding attached to its exact package, across other opens."""
+        return bound_session(record["binding"].get("source_owner_document_key"))
+
     def circuit_source_record(authorization: str | None) -> dict[str, typing.Any]:
         prefix = "Bearer "
         if not authorization or not authorization.startswith(prefix):
@@ -1069,13 +1081,13 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         record = state["circuit_source_bindings"].get(authorization[len(prefix):])
         if record is None:
             raise fastapi.HTTPException(status_code=403, detail="Unknown Circuit source-provider token.")
-        if record["binding"]["source_document_id"] != active().revision.document_id:
+        if record["binding"]["source_document_id"] != circuit_source_session(record).revision.document_id:
             raise fastapi.HTTPException(status_code=409, detail="A different .spec document is active.")
         return typing.cast(dict[str, typing.Any], record)
 
     def circuit_source_projection(record: dict[str, typing.Any], revision: SpecRevision | None = None) -> typing.Any:
         return project_source_to_circuit(
-            revision or active().revision,
+            revision or circuit_source_session(record).revision,
             record["entity_kind"],
             record["entity_id"],
             session_document_id=record["session_document_id"],
@@ -1096,14 +1108,15 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     ) -> dict[str, typing.Any]:
         """Return the current authoritative projection for one registered session."""
         record = circuit_source_record(authorization)
+        session = circuit_source_session(record)
         try:
             projection = circuit_source_projection(record)
         except CircuitAdapterError as exc:
-            return sync_failure("source_projection_failed", str(exc))
-        record["binding"]["base_source_revision_hash"] = active().revision.source_revision_hash
+            return sync_failure("source_projection_failed", str(exc), session.revision.source_revision_hash)
+        record["binding"]["base_source_revision_hash"] = session.revision.source_revision_hash
         return {
             "accepted": True,
-            "source_revision_hash": active().revision.source_revision_hash,
+            "source_revision_hash": session.revision.source_revision_hash,
             "document": projection.document,
             "diagnostics": [],
         }
@@ -1113,21 +1126,24 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         authorization: str | None,
     ) -> tuple[dict[str, typing.Any], dict[str, typing.Any], typing.Any | None]:
         record = circuit_source_record(authorization)
-        if request.base_source_revision_hash != active().revision.source_revision_hash:
-            return record, sync_failure(
+        session = circuit_source_session(record)
+        def fail(code: str, message: str) -> dict[str, typing.Any]:
+            return sync_failure(code, message, session.revision.source_revision_hash)
+        if request.base_source_revision_hash != session.revision.source_revision_hash:
+            return record, fail(
                 "source_revision_conflict",
                 "The Spec changed after Circuit editing began. Reopen the latest source or download the draft.",
             ), None
         if request.candidate_document is None:
-            return record, sync_failure("candidate_required", "A candidate Circuit document is required."), None
+            return record, fail("candidate_required", "A candidate Circuit document is required."), None
         try:
             projection = circuit_source_projection(record)
-            operations = compile_circuit_sync_operations(active().revision, projection, request.candidate_document)
-            result = SpecEditTransaction(active().revision.source_revision_hash, operations).apply(active().revision)
+            operations = compile_circuit_sync_operations(session.revision, projection, request.candidate_document)
+            result = SpecEditTransaction(session.revision.source_revision_hash, operations, "authoring").apply(session.revision)
         except (CircuitAdapterError, KeyError, TypeError, ValueError, pydantic.ValidationError) as exc:
-            return record, sync_failure("source_sync_invalid", str(exc)), None
+            return record, fail("source_sync_invalid", str(exc)), None
         if not result.succeeded or result.revision is None:
-            return record, sync_failure("source_sync_rejected", " · ".join(result.diagnostics)), None
+            return record, fail("source_sync_rejected", " · ".join(result.diagnostics)), None
         authoritative = circuit_source_projection(record, result.revision)
         response = {
             "accepted": True,
@@ -1153,8 +1169,9 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         )
         if replay is not None:
             return typing.cast(dict[str, typing.Any], replay)
-        _, response, _ = preview_circuit_source_change(request, authorization)
-        return response
+        with circuit_source_session(record).lock:
+            _, response, _ = preview_circuit_source_change(request, authorization)
+            return response
 
     @app.post("/circuit-designer/source/commit")
     def commit_circuit_source(
@@ -1163,27 +1180,29 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     ) -> dict[str, typing.Any]:
         """Atomically commit a candidate and return its authoritative re-projection."""
         record = circuit_source_record(authorization)
-        replay_key = (record["binding"]["binding_id"], request.request_id)
-        replay = state["circuit_source_results"].get(replay_key)
-        if replay is not None:
-            return typing.cast(dict[str, typing.Any], replay)
-        record, response, revision = preview_circuit_source_change(request, authorization)
-        if not response["accepted"] or revision is None:
+        session = circuit_source_session(record)
+        with session.lock:
+            replay_key = (record["binding"]["binding_id"], request.request_id)
+            replay = state["circuit_source_results"].get(replay_key)
+            if replay is not None:
+                return typing.cast(dict[str, typing.Any], replay)
+            record, response, revision = preview_circuit_source_change(request, authorization)
+            if not response["accepted"] or revision is None:
+                return response
+            session.commit_revision(revision)
+            record["binding"]["base_source_revision_hash"] = revision.source_revision_hash
+            _publish_source_event(
+                state,
+                session,
+                origin="circuit-designer",
+                affected_entities=[{
+                    "document_id": revision.document_id,
+                    "entity_id": record["binding"]["editable_design_id"],
+                    "entity_kind": "design",
+                }],
+            )
+            state["circuit_source_results"][replay_key] = response
             return response
-        active().commit_revision(revision)
-        record["binding"]["base_source_revision_hash"] = revision.source_revision_hash
-        _publish_source_event(
-            state,
-            active(),
-            origin="circuit-designer",
-            affected_entities=[{
-                "document_id": revision.document_id,
-                "entity_id": record["binding"]["editable_design_id"],
-                "entity_kind": "design",
-            }],
-        )
-        state["circuit_source_results"][replay_key] = response
-        return response
 
     @app.get("/documents/a2ui")
     def document_a2ui(owner_document_key: str | None = None) -> dict[str, typing.Any]:
@@ -1461,11 +1480,25 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         for definition in activity_registry.activities():
             if not definition.scopes.supports(target):
                 continue
-            availability = activity_availability(
-                activity_registry,
-                definition.activity_id,
-                snapshot,
-            )
+            if definition.activity_id == "rtl.generate":
+                # This GET must not elaborate symbolic interfaces. The UI
+                # gates generation on a current receipt; launch still runs
+                # the Activity's full validation for every API client.
+                receipt = session.verifications.get(f"{kind}:{entity_id}")
+                current = receipt and receipt["source_revision_hash"] == session.revision.source_revision_hash
+                failed = current and receipt["status"] == "failed"
+                availability = ActivityAvailability(
+                    available=not bool(failed),
+                    diagnostics=("The saved target failed explicit verification.",) if failed else
+                        () if current and receipt["status"] == "passed" else
+                        ("RTL validation runs during explicit verification or generation.",),
+                )
+            else:
+                availability = activity_availability(
+                    activity_registry,
+                    definition.activity_id,
+                    snapshot,
+                )
             values.append({
                 "definition": _jsonable(definition),
                 "availability": _jsonable(availability),
@@ -1619,7 +1652,24 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         except (KeyError, ValueError, pydantic.ValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
         with session.lock:
-            return result_or_error(SpecEditTransaction(request.expected_source_revision_hash, operations).apply(session.revision), session)
+            return result_or_error(SpecEditTransaction(request.expected_source_revision_hash, operations, request.validation_mode).apply(session.revision), session)
+
+    @app.post("/entities/{kind}/{entity_id}/verify")
+    def verify_component(kind: str, entity_id: str, request: ActivityExecutionRequest,
+                         owner_document_key: str | None = None) -> dict[str, typing.Any]:
+        """Run lint only after an explicit designer request, against a guarded revision."""
+        from spec2gds.spec.spec_format.component_verification import verify_target
+        session = bound_session(owner_document_key)
+        with session.lock:
+            if request.expected_source_revision_hash != session.revision.source_revision_hash:
+                raise fastapi.HTTPException(status_code=409, detail="The saved source changed. Verify the current revision.")
+            try:
+                target = EntityRef(document_id=session.revision.document_id, entity_kind=kind, entity_id=entity_id)
+                result = verify_target(session.revision, target)
+            except (KeyError, ValueError) as exc:
+                raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+            session.verifications[f"{kind}:{entity_id}"] = result
+            return result
 
     @app.post("/assets")
     def add_asset(request: AssetRequest) -> dict[str, typing.Any]:
@@ -1915,6 +1965,15 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
                 port_name,
                 _decode_component_port_input(value, include_name=kind == "add_component_port"),
             ))
+        elif kind == "delete_component_port":
+            operations.append(DeleteComponentPort(entity(raw["component"]), str(raw["name"])))
+        elif kind == "update_parameter":
+            value = raw.get("parameter")
+            if not isinstance(value, dict):
+                raise ValueError("update_parameter requires a parameter object.")
+            operations.append(UpdateParameter(entity(raw["component"]), value))
+        elif kind == "delete_parameter":
+            operations.append(DeleteParameter(entity(raw["component"]), str(raw["name"])))
         elif kind == "upsert_instance":
             operations.append(UpsertInstance(entity(raw["design"]), InstanceIR(**raw["instance"])))
         elif kind == "delete_instance":
@@ -2065,7 +2124,7 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
     """Build the single payload from which every editor view is rendered."""
     revision = session.revision
     from spec2gds.spec.spec_format.naming import document_name
-    section_validation = validate_revision_sections(revision)
+    section_validation = cached_revision_sections(revision)
     return {
         "schema_version": "spec2gds.snapshot.v2",
         "document_id": revision.document_id,
@@ -2084,6 +2143,8 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
         "assets": [_jsonable(item) for item in revision.assets],
         "entity_sections": [_jsonable(item) for item in revision.entity_sections],
         "section_validation": [item.as_json() for item in section_validation],
+        "verifications": [{**item, "status": item["status"] if item["source_revision_hash"] == revision.source_revision_hash else "stale"}
+                          for item in session.verifications.values()],
         "diagnostics": {"source": list(revision.diagnostics), "artifacts": list(session.activity.artifact_diagnostics())},
     }
 

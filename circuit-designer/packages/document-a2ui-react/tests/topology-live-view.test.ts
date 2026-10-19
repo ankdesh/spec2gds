@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { simpleDocumentFixture } from "@spec2gds/circuit-core";
+import { simpleDocumentFixture, obsidianTheme } from "@spec2gds/circuit-core";
 
 import {
   circuitSvgFilename,
@@ -28,6 +28,14 @@ describe("design topology live views", () => {
       omitted_ports: [],
     })?.status).toBe("empty");
     await expect(renderDesignTopology({} as never)).rejects.toThrow("required property");
+  });
+
+  it("renders the selected dark theme without changing Circuit geometry", async () => {
+    const document = simpleDocumentFixture();
+    const light = await renderDesignTopology(document);
+    const dark = await renderDesignTopology(document, "obsidian");
+    expect(dark.svg).toContain(`.canvas-background{fill:${obsidianTheme.colors.canvas}}`);
+    expect([dark.width, dark.height]).toEqual([light.width, light.height]);
   });
 
   it("creates portable, bounded SVG filenames", () => {
