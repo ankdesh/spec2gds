@@ -41,4 +41,5 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 - [Development Guide](development.md): Repository layout, port allocations, service configuration (`config/services.json`), unified logging, and launcher commands.
 - [Python Code Guide](python-code-guide.md): Reading order, architectural boundaries, code-quality standards, and static analysis commands.
 - [Software Testing Strategy](testing-strategy.md): Test pyramid, execution profiles (`fast`, `integration`, `regression`), and capability coverage matrix.
+- [Designer Acceptance Catalogue](acceptance/README.md): Twenty complete designer journeys, forty focused checks for later Playwright implementation, complete hardware input packs, weighted criteria, and four independent group scores.
 - [Sample Application Methodology](sample-apps.md): Guidelines for developing small, reproducible hardware scenarios through the full platform.
