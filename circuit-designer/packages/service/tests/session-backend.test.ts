@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  CircuitDraft,
   simpleDocumentFixture,
   type CircuitOperationBatch,
   type CircuitProposalCreateRequest,
@@ -152,6 +153,30 @@ describe("ephemeral circuit session backend", () => {
     expect((await backend.export(first.document_id, { format: "json" })).filename).toBe("cafe.circuit.json");
     expect((await backend.export(second.document_id, { format: "json" })).filename).toBe("cafe-2.circuit.json");
     expect((await backend.get(second.document_id)).document.label).toBe("Cafe");
+  });
+
+  it("takes over only the expected lease and rejects displaced writers", async () => {
+    const backend = new EphemeralCircuitSessionBackend({ documents: [simpleDocumentFixture()] });
+    const first = await backend.acquireLease("fixture_simple", "first-tab");
+    await expect(backend.acquireLease("fixture_simple", "second-tab")).rejects.toMatchObject({ code: "lock_conflict" });
+    const second = await backend.takeOverLease("fixture_simple", first.lease_id, "second-tab");
+    expect(second.lease_id).not.toBe(first.lease_id);
+    await expect(backend.takeOverLease("fixture_simple", first.lease_id, "third-tab")).rejects.toMatchObject({ code: "lock_conflict" });
+    await expect(backend.renewLease("fixture_simple", first.lease_id)).rejects.toMatchObject({ code: "lock_conflict" });
+    await expect(backend.releaseLease("fixture_simple", first.lease_id)).rejects.toMatchObject({ code: "lock_conflict" });
+    const draft = new CircuitDraft((await backend.get("fixture_simple")).document, "1");
+    draft.apply({ operation_id: "rename", type: "set_document_label", label: "Displaced write" });
+    expect((await backend.commit("fixture_simple", draft.toBatch("stale"), first.lease_id)).status).toBe("locked");
+    expect((await backend.get("fixture_simple")).document.label).toBe("simple");
+    expect((await backend.getLease("fixture_simple"))?.lease_id).toBe(second.lease_id);
+  });
+
+  it("leaves the existing lease intact when the refreshed source is invalid", async () => {
+    const backend = new EphemeralCircuitSessionBackend({ documents: [simpleDocumentFixture()] });
+    const first = await backend.acquireLease("fixture_simple", "first-tab");
+    const invalid = { ...simpleDocumentFixture(), document_id: "wrong-document" };
+    await expect(backend.takeOverLease("fixture_simple", first.lease_id, "second-tab", 900, invalid)).rejects.toMatchObject({ code: "validation_failed" });
+    expect(await backend.getLease("fixture_simple")).toEqual(first);
   });
 
   it("expires and reacquires whole-document leases", async () => {

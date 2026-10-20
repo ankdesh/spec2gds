@@ -243,7 +243,7 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             });
             return;
           }
-          if (event.key !== "Enter" || occupied || !data.editable) return;
+          if (event.key !== "Enter" || !data.editable) return;
           event.preventDefault();
           event.stopPropagation();
           data.onTerminalActivate(terminal.id);
@@ -255,13 +255,13 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             type="source"
             position={positions[side]}
             style={{ ...style, pointerEvents: "all" }}
-            className={occupied ? "cd-terminal--occupied" : pending ? "cd-terminal--pending" : undefined}
-            title={occupied ? `${displayLabel} · already connected` : `${displayLabel} · drag to connect`}
+            className={[occupied && "cd-terminal--occupied", pending && "cd-terminal--pending"].filter(Boolean).join(" ") || undefined}
+            title={occupied ? `${displayLabel} · drag to extend its net` : `${displayLabel} · drag to connect`}
             aria-label={occupied ? `${displayLabel}, already connected` : `${displayLabel}, connection terminal`}
-            aria-disabled={occupied || !data.editable}
+            aria-disabled={!data.editable}
             role="button"
             tabIndex={data.editable ? 0 : -1}
-            isConnectable={data.editable && !occupied}
+            isConnectable={data.editable}
             onKeyDown={activateFromKeyboard}
             data-terminal-id={terminal.id}
             onContextMenu={(event) => {
@@ -478,8 +478,8 @@ export function connectionRejectionReason(
   if (sourceTerminalId === targetTerminalId) return "same_terminal";
   const terminalIds = new Set(graph.terminals.map((terminal) => terminal.id));
   if (!terminalIds.has(sourceTerminalId) || !terminalIds.has(targetTerminalId)) return "invalid_target";
-  const occupied = new Set(graph.nets.flatMap((net) => net.endpoints.map((endpoint) => endpoint.terminal_id)));
-  if (occupied.has(sourceTerminalId) || occupied.has(targetTerminalId)) return "terminal_in_use";
+  // The application resolves existing-net membership and numeric slices. A
+  // connected pin is also a valid starting point for a fan-out gesture.
   return undefined;
 }
 

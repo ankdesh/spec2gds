@@ -391,6 +391,12 @@ export default function App() {
           : "."),
       );
     } catch (caught) {
+      if (caught instanceof SpecEditorHttpError && caught.status === 423 && caught.detail && typeof caught.detail === "object" && "editor_url" in caught.detail && typeof caught.detail.editor_url === "string") {
+        if (pendingWindow) pendingWindow.location.replace(caught.detail.editor_url);
+        else window.open(caught.detail.editor_url, "_blank", "noopener,noreferrer");
+        setNotice("Opened the existing Circuit read-only. Review its draft lock before taking over editing.");
+        return;
+      }
       pendingWindow?.close();
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {

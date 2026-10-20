@@ -8,6 +8,52 @@ import { createDefaultCircuitDesignerPreferences, simpleDocumentFixture } from "
 const circuitApiUrl = process.env.CIRCUIT_DESIGNER_E2E_API_URL
   ?? "http://127.0.0.1:6011/api/circuit-designer/v1";
 
+test("extends one net by connected-pin drag and dialog with local recovery", async ({ page, request }) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `fanout_${Date.now()}`;
+  document.label = document.document_id;
+  for (const component of document.components) component.terminals[0].width = 16;
+  for (let index = 1; index <= 3; index += 1) document.design.instances.push({ ...document.design.instances[1], id: `consumer_${index}`, label: `Sink ${index}` });
+  expect((await request.post(`${circuitApiUrl}/documents`, { data: { request_id: document.document_id, document } })).ok()).toBe(true);
+  expect((await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, { data: {
+    callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`, token: "fanout-test",
+    binding: { schema_version: 1, binding_id: `binding_${document.document_id}`, source_document_id: "fanout_spec",
+      source_entity: { document_id: "fanout_spec", entity_id: "top", entity_kind: "design" }, editable_design_id: "top",
+      base_source_revision_hash: "base", writable: true, capabilities: ["topology", "layout"], omitted_bus_items: [], omitted_ports: [] },
+  } })).ok()).toBe(true);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await menuAction(page, "Edit", "Begin editing");
+  await page.locator('.react-flow__handle[data-handleid="producer_0:data"]').dragTo(page.locator('.react-flow__handle[data-handleid="consumer_1:data"]'));
+  await expect(page.locator(".notice")).toContainText("Endpoint added");
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  await menuAction(page, "Edit", /Undo/);
+  await menuAction(page, "Edit", /Redo/);
+  await menuAction(page, "Connect", "New connection");
+  await page.getByLabel("Connection action").selectOption("existing");
+  await page.getByLabel("Existing net", { exact: true }).selectOption("data");
+  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_2:data");
+  await page.getByLabel("Width (0=full)").fill("17");
+  await page.getByRole("button", { name: "Add endpoint", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width/i);
+  await expect(page.getByLabel("Endpoint B", { exact: true })).toHaveValue("consumer_2:data");
+  await page.getByLabel("Width (0=full)").fill("16");
+  await page.getByRole("button", { name: "Add endpoint", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.design.nets).toHaveLength(1);
+  expect(saved.document.design.nets[0]).toMatchObject({ id: "data", label: "data" });
+  expect(saved.document.design.nets[0].endpoints).toHaveLength(4);
+  await page.reload();
+  await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  const svgDownload = page.waitForEvent("download");
+  await menuAction(page, "File", /Export SVG/);
+  const svg = await readFile((await (await svgDownload).path())!, "utf8");
+  expect(svg).toContain("Sink 1");
+  expect(svg).toContain("Sink 2");
+});
+
 let sourceProvider: Server;
 let sourceProviderPort = 0;
 let sourceProviderCalls: string[] = [];

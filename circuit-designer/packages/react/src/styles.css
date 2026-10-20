@@ -29,7 +29,8 @@
 .cd-canvas .react-flow__handle { width: 11px; height: 11px; border: 2px solid var(--cd-surface, #fff); border-radius: 50%; background: var(--cd-primary, #007c89); box-shadow: 0 0 0 1px var(--cd-primary, #007c89); transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease; }
 .cd-canvas .react-flow__handle.connectionindicator:hover, .cd-canvas .react-flow__handle.connectingto.valid { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-primary, #007c89) 24%, transparent); transform: scale(1.18); }
 .cd-canvas .react-flow__handle.connectingto:not(.valid) { background: var(--cd-danger, #c43d4e); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-danger, #c43d4e) 24%, transparent); }
-.cd-canvas .react-flow__handle.cd-terminal--occupied { cursor: not-allowed; opacity: .48; background: var(--cd-text-muted, #60758a); box-shadow: 0 0 0 1px var(--cd-text-muted, #60758a); }
+.cd-canvas .react-flow__handle.cd-terminal--occupied { cursor: crosshair; background: var(--cd-text-muted, #60758a); box-shadow: 0 0 0 1px var(--cd-text-muted, #60758a); }
+.cd-canvas .react-flow__handle[aria-disabled="true"] { cursor: not-allowed; opacity: .48; }
 .cd-canvas .react-flow__handle.cd-terminal--pending { background: var(--cd-warning, #9a5d00); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-warning, #9a5d00) 24%, transparent); }
 .cd-net__segment { fill: none; stroke: var(--cd-net, #1d64c8); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 .cd-net__segment--locked { stroke: var(--cd-net, #1d64c8); stroke-dasharray: 7 3; stroke-width: 2; }

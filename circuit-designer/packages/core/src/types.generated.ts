@@ -556,5 +556,8 @@ export interface ServiceEvent {
 export interface ServiceError {
   code: NonEmptyString;
   message: NonEmptyString;
+  details?: {
+    [k: string]: any;
+  };
   diagnostics?: Diagnostic[];
 }

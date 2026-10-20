@@ -1,6 +1,6 @@
 /* Reusable Circuit Designer application shell. */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { DEFAULT_CLOCK_DOMAIN_ID, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
+import { DEFAULT_CLOCK_DOMAIN_ID, circuitEndpointLabel, endpointTerminalKey, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
 
 export type CircuitDialogId = "connect" | "catalog" | "new-component" | "proposals" | "clock-settings" | "timing-analysis" | "cycle-edge" | "getting-started" | "about";
 
@@ -86,8 +86,11 @@ export interface CircuitDialogsProps {
   sourceIdentifierPattern?: string;
   sourceIdentifierHint?: string;
   proposals: CircuitProposal[];
-  terminals: Array<{ id: string; label?: string }>;
+  terminals: Array<{ id: string; label?: string; width?: number | string; direction?: string }>;
   netName: string;
+  existingNetId?: string;
+  connectionError?: string;
+  onExistingNetChange: (id: string | undefined) => void;
   endpointA: string;
   endpointB: string;
   sliceLsb: number;
@@ -137,17 +140,33 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
   if (!props.dialog) return null;
 
   if (props.dialog === "connect") {
+    const existing = props.existingNetId !== undefined;
+    const net = props.document?.design.nets.find(item => item.id === props.existingNetId);
+    const firstEndpoint = net?.endpoints[0];
+    const netWidth = firstEndpoint?.slice?.width ?? props.terminals.find(item => firstEndpoint && item.id === endpointTerminalKey(firstEndpoint))?.width;
     const submit = (event: FormEvent) => {
       event.preventDefault();
       if (props.onCreateConnection()) props.onClose();
     };
     return <CircuitModal onClose={props.onClose} title="Create connection">
       <form className="circuit-dialog__form" onSubmit={submit}>
-        <label>Net label<input autoFocus value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
-        <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        <label>Connection action<select autoFocus value={existing ? "existing" : "new"} onChange={(event) => props.onExistingNetChange(event.target.value === "existing" ? "" : undefined)}><option value="new">New net</option><option value="existing">Add endpoint to existing net</option></select></label>
+        {existing ? <>
+          <label>Existing net<select value={props.existingNetId} onChange={(event) => props.onExistingNetChange(event.target.value)}><option value="">Choose…</option>{props.document?.design.nets.map(item => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}</select></label>
+          {net && props.document && <p>Net width: {netWidth ?? "unresolved"}. Current endpoints: {net.endpoints.map(endpoint => {
+            const terminal = props.terminals.find(item => item.id === endpointTerminalKey(endpoint));
+            const role = terminal?.direction === "inout" ? "bidirectional"
+              : terminal?.direction === (endpoint.kind === "boundary" ? "in" : "out") ? "driver" : "sink";
+            return `${circuitEndpointLabel(props.document!, endpoint)} (${role})`;
+          }).join(", ")}</p>}
+        </> : <>
+          <label>Net label<input value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
+          <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        </>}
         <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
-        <div className="slice-row"><label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label><label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
-        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.endpointA || !props.endpointB} type="submit">Create net</button></div>
+        <div className="slice-row">{!existing && <label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label>}<label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
+        {props.connectionError && <p role="alert">{props.connectionError}</p>}
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={(!existing && !props.endpointA) || !props.endpointB || (existing && !net)} type="submit">{existing ? "Add endpoint" : "Create net"}</button></div>
       </form>
     </CircuitModal>;
   }

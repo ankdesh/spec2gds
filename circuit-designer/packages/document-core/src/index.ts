@@ -406,7 +406,7 @@ export interface EntityActivity {
 }
 
 export class SpecEditorHttpError extends Error {
-  constructor(message: string, readonly status: number) {
+  constructor(message: string, readonly status: number, readonly detail?: unknown) {
     super(message);
     this.name = "SpecEditorHttpError";
   }
@@ -414,6 +414,7 @@ export class SpecEditorHttpError extends Error {
 
 function errorMessage(detail: unknown): string {
   if (typeof detail === "string") return detail;
+  if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") return detail.message;
   if (detail && typeof detail === "object" && "diagnostics" in detail) {
     const diagnostics = (detail as { diagnostics: unknown }).diagnostics;
     if (Array.isArray(diagnostics)) return diagnostics.map(String).join(" ");
@@ -456,7 +457,7 @@ export class SpecEditorHttpClient {
       const detail = typeof payload === "object" && payload && "detail" in payload
         ? (payload as { detail: unknown }).detail
         : payload;
-      throw new SpecEditorHttpError(errorMessage(detail), response.status);
+      throw new SpecEditorHttpError(errorMessage(detail), response.status, detail);
     }
     return payload as T;
   }

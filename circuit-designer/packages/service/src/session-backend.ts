@@ -197,6 +197,7 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
   }
 
   async acquireLease(documentId: string, ownerId: string, ttlSeconds = 900): Promise<EditLease> {
+    this.validateLeaseRequest(ownerId, ttlSeconds);
     const record = this.record(documentId);
     const current = this.activeLease(record);
     if (current && current.owner_id !== ownerId) {
@@ -212,6 +213,7 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
   }
 
   async renewLease(documentId: string, leaseId: string, ttlSeconds = 900): Promise<EditLease> {
+    this.validateLeaseRequest(leaseId, ttlSeconds);
     const record = this.record(documentId);
     const lease = this.activeLease(record);
     if (!lease || lease.lease_id !== leaseId) {
@@ -219,6 +221,37 @@ export class EphemeralCircuitSessionBackend implements CircuitDesignerBackend {
     }
     lease.expires_at = new Date(this.now().getTime() + ttlSeconds * 1000).toISOString();
     return clone(lease);
+  }
+
+  async takeOverLease(documentId: string, expectedLeaseId: string, ownerId: string, ttlSeconds = 900, refreshedDocument?: CircuitDocument): Promise<EditLease> {
+    this.validateLeaseRequest(ownerId, ttlSeconds);
+    const record = this.record(documentId);
+    const lease = this.activeLease(record);
+    if (!expectedLeaseId || lease?.lease_id !== expectedLeaseId) {
+      throw new CircuitBackendError("lock_conflict", "The editing lease changed. Review the current lock before taking over.", [], { document_id: documentId, lease });
+    }
+    if (refreshedDocument) {
+      const checked = validateCircuitDocument(refreshedDocument);
+      const naming = this.nameDiagnostics(refreshedDocument);
+      if (refreshedDocument.document_id !== documentId || !checked.valid || naming.length) {
+        throw new CircuitBackendError("validation_failed", "The refreshed source is not a valid replacement.", [...checked.diagnostics, ...naming]);
+      }
+      // No await between the lease comparison, replacement and new lease.
+      this.advance(record, clone(refreshedDocument));
+      this.markProposalsStale(record);
+    }
+    record.lease = {
+      lease_id: this.nextId("lease"), document_id: documentId, owner_id: ownerId,
+      expires_at: new Date(this.now().getTime() + ttlSeconds * 1000).toISOString(),
+    };
+    return clone(record.lease);
+  }
+
+  private validateLeaseRequest(clientId: string, ttlSeconds: number): void {
+    if (typeof clientId !== "string" || !clientId.trim() || !Number.isFinite(ttlSeconds) || ttlSeconds <= 0
+      || !Number.isFinite(new Date(this.now().getTime() + ttlSeconds * 1000).getTime())) {
+      throw new CircuitBackendError("validation_failed", "A client identity and positive lease duration are required.");
+    }
   }
 
   async releaseLease(documentId: string, leaseId: string): Promise<void> {

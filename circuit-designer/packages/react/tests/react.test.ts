@@ -59,9 +59,9 @@ describe("React Flow circuit model", () => {
     expect(terminalDisplayLabel({ label: "valid", width: 1 })).toBe("valid");
   });
 
-  test("only permits new connections between two distinct free terminals", () => {
+  test("allows connected-pin gestures for application-level net resolution", () => {
     const occupied = simpleFixture();
-    expect(connectionRejectionReason(occupied, "producer_0:data", "consumer_0:data")).toBe("terminal_in_use");
+    expect(connectionRejectionReason(occupied, "producer_0:data", "consumer_0:data")).toBeUndefined();
     const free = { ...occupied, nets: [] };
     expect(connectionRejectionReason(free, "producer_0:data", "producer_0:data")).toBe("same_terminal");
     expect(connectionRejectionReason(free, "producer_0:data", "missing:data")).toBe("invalid_target");

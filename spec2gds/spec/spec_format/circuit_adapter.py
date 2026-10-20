@@ -47,6 +47,11 @@ class CircuitAdapterError(ValueError):
 class CircuitDesignerConnectionError(CircuitAdapterError):
     """Report an unavailable or incompatible Circuit Designer service."""
 
+    def __init__(self, message: str, *, status_code: int = 503, details: dict[str, typing.Any] | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.details = details or {}
+
 
 @dataclass(frozen=True)
 class CircuitProjection:
@@ -1044,13 +1049,15 @@ def register_circuit_source_binding(
     token: str,
     timeout: float = 3.0,
     reload_source: bool = False,
-) -> None:
+    recovery: dict[str, str] | None = None,
+) -> dict[str, typing.Any] | None:
     """Register a server-side source callback without exposing its token to the browser."""
     base = service_url.rstrip("/")
     payload = json.dumps({
         "binding": binding,
         "callback_url": callback_url.rstrip("/") + "/",
         "token": token,
+        **({"recovery": recovery} if recovery else {}),
     }).encode()
     request = urllib.request.Request(
         f"{base}/documents/{urllib.parse.quote(document_id)}/source-binding",
@@ -1059,8 +1066,9 @@ def register_circuit_source_binding(
         method="PUT",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout):
-            pass
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            if recovery:
+                return json.loads(response.read())
         if reload_source:
             # Use the source protocol; ordinary document replacement correctly
             # rejects source-bound writes. The newly registered callback also
@@ -1081,7 +1089,7 @@ def register_circuit_source_binding(
             except ValueError:
                 payload = None
             if isinstance(payload, dict) and payload.get("code") == "lock_conflict" and isinstance(payload.get("message"), str):
-                raise CircuitDesignerConnectionError(payload["message"]) from exc
+                raise CircuitDesignerConnectionError(payload["message"], status_code=423, details=payload.get("details", {})) from exc
         raise CircuitDesignerConnectionError(
             f"Circuit Designer rejected the source binding with HTTP {exc.code}: {body}"
         ) from exc

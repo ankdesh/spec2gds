@@ -210,6 +210,31 @@ def test_round_trips_source_semantic_layout_and_numeric_slices() -> None:
         package.require_valid()
 
 
+def test_round_trips_multi_sink_net_without_splitting_its_identity() -> None:
+    revision = _direct_revision(bounds=("7", "0"))
+    session_id = source_session_document_id(revision, "design_direct")
+    projection = project_design_to_circuit(revision, "design_direct", session_document_id=session_id, include_catalog=True)
+    candidate = copy.deepcopy(projection.document)
+    sink = next(item for item in candidate["design"]["instances"] if item["id"] == "sink0")
+    candidate["design"]["instances"].append({**sink, "id": "sink1", "label": "sink1"})
+    net = candidate["design"]["nets"][0]
+    net_id = net["id"]
+    old_endpoints = copy.deepcopy(net["endpoints"])
+    sink_endpoint = next(item for item in net["endpoints"] if item.get("instance_id") == "sink0")
+    net["endpoints"].append({**sink_endpoint, "instance_id": "sink1"})
+    result = SpecEditTransaction(revision.source_revision_hash, compile_circuit_sync_operations(revision, projection, candidate)).apply(revision)
+    assert result.succeeded, result.diagnostics
+    assert result.revision is not None
+    reopened = SpecRevision.from_package(result.revision.to_package())
+    refreshed = project_design_to_circuit(reopened, "design_direct", session_document_id=session_id, include_catalog=True)
+    assert len(refreshed.document["design"]["nets"]) == 1
+    saved = refreshed.document["design"]["nets"][0]
+    assert saved["id"] == net_id
+    assert saved["label"] == "data_link"
+    assert len(saved["endpoints"]) == 3
+    assert all(endpoint in saved["endpoints"] for endpoint in old_endpoints)
+
+
 def test_round_trips_timing_markers_and_semantic_clock_assignments() -> None:
     revision = _direct_revision()
     session_id = source_session_document_id(revision, "design_direct")

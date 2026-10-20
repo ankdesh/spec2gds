@@ -56,6 +56,60 @@ test("cancel discards a Circuit draft without changing the Spec", async ({ page,
   expect((await stack.snapshot()).source_revision_hash).toBe(snapshot.source_revision_hash);
 });
 
+test("confirmed source takeover preserves the displaced draft and blocks its saves", async ({ page, context, stack }) => {
+  const snapshot = await sourceDesign(stack);
+  const launched = await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
+  await menu(page, "Edit", "Begin editing");
+  await localComponent(page, "First tab private child");
+  const before = stack.archive(stack.path());
+  const second = await context.newPage();
+  await second.goto(launched.editor_url);
+  await expect(second.getByRole("button", { name: "Take over editing", exact: true })).toBeVisible();
+  await second.getByRole("button", { name: "Take over editing", exact: true }).click();
+  await second.getByRole("dialog").getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(stack.archive(stack.path())).toEqual(before);
+  await second.getByRole("button", { name: "Take over editing", exact: true }).click();
+  await second.getByRole("dialog").getByRole("button", { name: "Take over editing", exact: true }).click();
+  await expect(second.locator(".notice")).toContainText("Editing taken over");
+  await expect(second.locator(".react-flow__node")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Discard preserved draft" })).toBeVisible();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  expect(stack.archive(stack.path())).toEqual(before);
+  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: /Undo/ })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download Draft JSON", exact: true }).click();
+  const file = await (await downloaded).path();
+  expect(file).not.toBeNull();
+  expect(JSON.parse(readFileSync(file!, "utf8")).components[0].label).toBe("First tab private child");
+  await page.getByRole("button", { name: "Discard preserved draft" }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  await localComponent(second, "Second tab accepted child");
+  await second.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(second.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await stack.snapshot();
+  expect(saved.components).toHaveLength(1);
+  expect(saved.components[0].display_name).toBe("Second tab accepted child");
+});
+
+test("Cancel remains usable when a private draft lease has expired", async ({ page, stack }) => {
+  const snapshot = await sourceDesign(stack);
+  const launched = await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
+  const before = stack.archive(stack.path());
+  await menu(page, "Edit", "Begin editing");
+  await localComponent(page, "Expired private child");
+  const base = `${stack.circuit}/api/circuit-designer/v1/documents/${launched.document_id}`;
+  const lease = (await (await fetch(`${base}/lock`)).json()).lease;
+  // Shorten only the expiry prerequisite; Cancel is performed through the UI.
+  expect((await fetch(`${base}/lock/${lease.lease_id}`, { method: "PUT",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ttl_seconds: 0.001 }) })).ok).toBe(true);
+  await expect.poll(async () => (await (await fetch(`${base}/lock`)).json()).lease).toBeNull();
+  await menu(page, "File", "Cancel changes");
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  expect(stack.archive(stack.path())).toEqual(before);
+});
+
 test("a stale Circuit save cannot replace a later Spec edit", async ({ page, stack }) => {
   const snapshot = await sourceDesign(stack);
   await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
@@ -114,4 +168,3 @@ test("dialogs trap focus and Escape returns focus to triggering menu", async ({ 
   await expect(dialog).toBeHidden();
   await expect(page.locator("#circuit-help-menu-trigger")).toBeFocused();
 });
-

@@ -79,6 +79,10 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     async load(documentId) {
       return state(await backend.getSourceBinding(documentId));
     },
+    async recover(documentId, expectedLeaseId, clientId) {
+      const result = await backend.recoverSource(documentId, expectedLeaseId, clientId);
+      return { lease: result.lease, snapshot: result.snapshot, state: state(result.binding) };
+    },
     async commit(documentId, batch, leaseId, proposalId) {
       const result = await backend.commitSource(documentId, batch, leaseId, proposalId);
       return {

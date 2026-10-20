@@ -14,6 +14,7 @@ import {
   type CircuitProposal,
   type CircuitProposalCreateRequest,
   type CircuitSnapshot,
+  type CircuitEditRecovery,
   type CircuitSourceBindingV1,
   type CircuitSourceSyncResponse,
   type CircuitDesignerPreferencesV1,
@@ -194,6 +195,30 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
 
   async releaseLease(documentId: string, leaseId: string): Promise<void> {
     await this.sendJson(`${this.documentUrl(documentId)}/lock/${encodeURIComponent(leaseId)}`, "DELETE");
+  }
+
+  async takeOverLease(documentId: string, expectedLeaseId: string, ownerId: string, ttlSeconds = 900, refreshedDocument?: CircuitDocument): Promise<EditLease> {
+    if (refreshedDocument) throw new TypeError("Source-bound recovery must use recoverSource.");
+    return this.validated("EditLease", await this.sendJson(`${this.documentUrl(documentId)}/lock/takeover`, "POST", {
+      expected_lease_id: expectedLeaseId, owner_id: ownerId, ttl_seconds: ttlSeconds,
+    })) as EditLease;
+  }
+
+  async recoverSource(documentId: string, expectedLeaseId: string, ownerId: string): Promise<CircuitEditRecovery & { binding: CircuitSourceBindingV1 }> {
+    const value = await this.sendJson(`${this.documentUrl(documentId)}/source/recover`, "POST", {
+      expected_lease_id: expectedLeaseId, owner_id: ownerId,
+    }) as CircuitEditRecovery & { binding: CircuitSourceBindingV1 };
+    this.validated("EditLease", value.lease);
+    this.validated("CircuitSnapshot", value.snapshot);
+    if (!isCircuitSourceBindingV1(value.binding)) throw new Error("Circuit service returned invalid recovery metadata.");
+    return value;
+  }
+
+  /** Best-effort navigation cleanup; expiry and takeover remain authoritative. */
+  releaseLeaseOnExit(documentId: string, leaseId: string): void {
+    void this.fetch(`${this.documentUrl(documentId)}/lock/${encodeURIComponent(leaseId)}`, {
+      method: "DELETE", keepalive: true,
+    }).catch(() => undefined);
   }
 
   async summary(documentId: string): Promise<DocumentSummary> {

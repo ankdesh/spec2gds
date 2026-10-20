@@ -8,6 +8,7 @@ import type {
   CircuitDocument,
   CircuitOperationBatch,
   CircuitSnapshot,
+  CircuitEditRecovery,
   Diagnostic,
   ServiceEvent,
 } from "@spec2gds/circuit-core";
@@ -72,6 +73,7 @@ export interface CircuitSourceAdapter {
   load(documentId: string): Promise<CircuitSourceState | undefined>;
   commit(documentId: string, batch: CircuitOperationBatch, leaseId: string, proposalId?: string): Promise<CircuitSourceSaveResult>;
   reload(documentId: string): Promise<CircuitSourceSaveResult>;
+  recover?(documentId: string, expectedLeaseId: string, clientId: string): Promise<CircuitEditRecovery & { state?: CircuitSourceState }>;
 }
 
 export interface CircuitToolContext {

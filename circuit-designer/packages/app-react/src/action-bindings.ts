@@ -47,7 +47,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("select-all", "Selection", "Select all", "Select every instance, boundary terminal, and net."),
   command("clear-selection", "Selection", "Clear selection", "Deselect every item and cancel a keyboard connection."),
   command("center-selection", "Selection", "Center on selection", "Fit the viewport around the selected items."),
-  command("open-connect", "Connect", "New connection", "Open the form for a named or sliced two-terminal net."),
+  command("open-connect", "Connect", "New connection", "Create a named or sliced net, or add an endpoint to an existing net."),
   command("reroute-selected", "Route", "Reroute selected net", "Automatically route the selected unlocked net."),
   command("lock-selected-route", "Route", "Lock selected route", "Prevent changes to the selected route."),
   command("unlock-selected-route", "Route", "Unlock selected route", "Allow the selected route to be edited again."),

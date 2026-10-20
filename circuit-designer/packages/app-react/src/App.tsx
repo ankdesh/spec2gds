@@ -22,6 +22,8 @@ import {
   availableHumanName,
   circuitTerminalLabel,
   circuitEndpointLabel,
+  planConnection,
+  ConnectionChoiceRequired,
   type CircuitDocument,
   type ClockDomainV1,
   type CycleEdgeMarkerV1,
@@ -99,6 +101,8 @@ const emptyDocument = () => createEmptyCircuitDocument(
 const isConflictError = (reason: unknown): boolean => Boolean(
   reason && typeof reason === "object" && "status" in reason && reason.status === 409,
 );
+const isLeaseConflict = (reason: unknown): boolean => Boolean(reason && typeof reason === "object"
+  && (("status" in reason && reason.status === 423) || ("code" in reason && reason.code === "lock_conflict")));
 
 function endpointFromTerminal(terminalKey: string, lsb: number, width: number): NetEndpoint {
   const slice = width > 0 ? { slice: { lsb, width } } : {};
@@ -160,6 +164,10 @@ export function App({
   const [snapshot, setSnapshot] = useState<CircuitSnapshot>();
   const [document, setDocument] = useState<CircuitDocument>();
   const [lease, setLease] = useState<EditLease>();
+  const [clientId] = useState(() => `circuit_${browserRandomUuid()}`);
+  const [remoteLease, setRemoteLease] = useState<EditLease | null>(null);
+  const [leaseLost, setLeaseLost] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const [sourceBinding, setSourceBinding] = useState<CircuitSourceState>();
   const [sourceConflict, setSourceConflict] = useState(false);
   const [layout, setLayout] = useState<LayoutResult>();
@@ -170,6 +178,8 @@ export function App({
   const [endpointA, setEndpointA] = useState("");
   const [endpointB, setEndpointB] = useState("");
   const [netName, setNetName] = useState("");
+  const [existingNetId, setExistingNetId] = useState<string | undefined>();
+  const [connectionError, setConnectionError] = useState("");
   const [sliceLsb, setSliceLsb] = useState(0);
   const [sliceLsbB, setSliceLsbB] = useState(0);
   const [sliceWidth, setSliceWidth] = useState(0);
@@ -185,9 +195,15 @@ export function App({
   const draftRef = useRef<CircuitDraft>();
   const appRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
+  const layoutGraphRef = useRef<ReturnType<typeof projectDocument>>();
   const actionExecutorRef = useRef<(invocation: CircuitActionInvocation) => boolean>(() => false);
   const preferencesHydratedRef = useRef(false);
   const savedPreferencesRef = useRef("");
+  const currentLeaseRef = useRef(lease);
+  currentLeaseRef.current = lease;
+  const currentDocumentIdRef = useRef(snapshot?.document.document_id);
+  currentDocumentIdRef.current = snapshot?.document.document_id;
+  const acquiringRef = useRef(false);
 
   const actionBindings = preferences.action_bindings;
   const inspectorOpen = preferences.ui.inspector_open;
@@ -358,7 +374,10 @@ export function App({
     if (!graph) return;
     let active = true;
     layoutCircuitGraph(graph).then((result) => {
-      if (active) setLayout(result);
+      if (active) {
+        layoutGraphRef.current = graph;
+        setLayout(result);
+      }
     }).catch((reason) => {
       if (active) setMessage(`Layout failed: ${String(reason)}`);
     });
@@ -374,23 +393,91 @@ export function App({
     if (!snapshot || !events) return;
     const documentId = snapshot.document.document_id;
     return events.subscribe(documentId, (event) => {
+      if (event.kind === "lock.changed") {
+        void inspectLease(documentId).catch(() => undefined);
+        return;
+      }
       if (event.kind === "proposal.changed") {
         void backend.listProposals(documentId).then(setProposals).catch(() => undefined);
         return;
       }
-      if (event.kind !== "document.changed" || lease) return;
+      if (event.kind !== "document.changed" || draftRef.current) return;
       void backend.get(documentId).then((next) => {
+        if (currentDocumentIdRef.current !== documentId || draftRef.current) return;
         if (next.revision === snapshot.revision) return;
         setSnapshot(next);
         setDocument(next.document);
         setSelection([]);
         setLayout(undefined);
         setMessage(`Updated ${next.document.label} from another client.`);
+        if (source) void source.load(documentId).then(binding => {
+          if (currentDocumentIdRef.current === documentId && !draftRef.current) setSourceBinding(binding);
+        }).catch(() => undefined);
       }).catch((reason) => {
         setMessage(`Could not refresh the REST session: ${reason instanceof Error ? reason.message : String(reason)}`);
       });
     });
   }, [backend, events, lease, snapshot?.document.document_id, snapshot?.revision]);
+
+  async function inspectLease(documentId: string): Promise<void> {
+    const held = currentLeaseRef.current;
+    const current = await backend.getLease(documentId);
+    if (held !== currentLeaseRef.current || currentDocumentIdRef.current !== documentId) return;
+    setRemoteLease(current);
+    if (held && current?.lease_id !== held.lease_id) {
+      currentLeaseRef.current = undefined;
+      setLease(undefined);
+      setLeaseLost(true);
+      setMessage("Editing permission was lost. Your draft is preserved for download. Discard it before starting a new draft.");
+    }
+  }
+
+  useEffect(() => {
+    if (!snapshot) return;
+    setLeaseLost(false);
+    setRemoteLease(null);
+    let active = true;
+    void backend.getLease(snapshot.document.document_id).then(current => { if (active) setRemoteLease(current); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [backend, snapshot?.document.document_id]);
+
+  useEffect(() => {
+    if (!lease || !snapshot) return;
+    const documentId = snapshot.document.document_id;
+    let active = true;
+    const renew = async () => {
+      try {
+        const renewed = await backend.renewLease(documentId, lease.lease_id);
+        if (active && currentLeaseRef.current?.lease_id === lease.lease_id) {
+          currentLeaseRef.current = renewed;
+          setLease(renewed);
+          setRemoteLease(renewed);
+        }
+      } catch (reason) {
+        if (!active) return;
+        if (isLeaseConflict(reason)) await inspectLease(documentId).catch(() => undefined);
+        else if (Date.parse(currentLeaseRef.current?.expires_at ?? "") <= Date.now()) {
+          currentLeaseRef.current = undefined;
+          setLease(undefined);
+          setLeaseLost(true);
+          setMessage("Editing permission expired. Your draft is preserved for download or discard.");
+        } else setMessage("Could not renew editing permission. Your draft is preserved; saving still requires a valid lease.");
+      }
+    };
+    const timer = window.setInterval(() => void renew(), 60_000);
+    const resume = () => { if (globalThis.document.visibilityState === "visible") void renew(); };
+    const release = () => backend.releaseLeaseOnExit?.(documentId, lease.lease_id);
+    window.addEventListener("pagehide", release);
+    globalThis.document.addEventListener("visibilitychange", resume);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", release);
+      globalThis.document.removeEventListener("visibilitychange", resume);
+      // The release compares lease IDs, so it cannot release a successor's lease.
+      if (currentLeaseRef.current?.lease_id === lease.lease_id) release();
+    };
+  }, [backend, lease?.lease_id, snapshot?.document.document_id]);
 
   function mutate(operation: CircuitOperation, success: string): boolean {
     return mutateBatch([operation], success);
@@ -398,7 +485,7 @@ export function App({
 
   function mutateBatch(operations: CircuitOperation[], success: string): boolean {
     const draft = draftRef.current;
-    if (!draft) {
+    if (!draft || !lease) {
       setMessage("Unlock the document before editing.");
       return false;
     }
@@ -414,19 +501,83 @@ export function App({
   }
 
   async function unlock(): Promise<void> {
-    if (!snapshot || !backend || lease) return;
+    if (!snapshot || !backend || lease || acquiringRef.current) return;
+    if (draftRef.current || recovering) { setMessage("Download or discard the preserved draft before starting another draft."); return; }
+    acquiringRef.current = true;
     try {
-      const nextLease = await backend.acquireLease(snapshot.document.document_id, "standalone-canvas");
-      draftRef.current = new CircuitDraft(snapshot.document, snapshot.revision);
+      const nextLease = await backend.acquireLease(snapshot.document.document_id, clientId);
+      const latest = await backend.get(snapshot.document.document_id);
+      if (currentDocumentIdRef.current !== latest.document.document_id) {
+        await backend.releaseLease(latest.document.document_id, nextLease.lease_id);
+        return;
+      }
+      setSnapshot(latest);
+      draftRef.current = new CircuitDraft(latest.document, latest.revision);
       setLease(nextLease);
+      currentLeaseRef.current = nextLease;
+      setRemoteLease(nextLease);
+      setLeaseLost(false);
       setDocument(draftRef.current.document);
       setMessage("Private draft opened. Save commits atomically; Cancel discards it.");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
-    }
+      await inspectLease(snapshot.document.document_id).catch(() => undefined);
+    } finally { acquiringRef.current = false; }
+  }
+
+  function confirmTakeover(): void {
+    if (!snapshot || !remoteLease || lease || recovering || draftRef.current) return;
+    const documentId = snapshot.document.document_id;
+    const expectedLeaseId = remoteLease.lease_id;
+    setConfirmation({
+      title: "Take over editing?",
+      message: "The other draft will lose permission to save. Its unsaved changes will not transfer. Your new draft will start from the latest saved source.",
+      confirmLabel: "Take over editing",
+      onConfirm: () => {
+        setConfirmation(undefined);
+        setRecovering(true);
+        void (async () => {
+          try {
+            const result = sourceBinding
+              ? await source?.recover?.(documentId, expectedLeaseId, clientId)
+              : { lease: await backend.takeOverLease(documentId, expectedLeaseId, clientId), snapshot: await backend.get(documentId), state: undefined };
+            if (!result) throw new Error("This host does not support source draft recovery.");
+            if (currentDocumentIdRef.current !== documentId) {
+              await backend.releaseLease(documentId, result.lease.lease_id);
+              return;
+            }
+            setSnapshot(result.snapshot);
+            setDocument(result.snapshot.document);
+            setSourceBinding(result.state ?? sourceBinding);
+            setLayout(undefined);
+            setSelection([]);
+            draftRef.current = new CircuitDraft(result.snapshot.document, result.snapshot.revision);
+            currentLeaseRef.current = result.lease;
+            setLease(result.lease);
+            setRemoteLease(result.lease);
+            setLeaseLost(false);
+            setSourceConflict(false);
+            setMessage("Editing taken over. The new draft uses the latest saved source.");
+          } catch (reason) {
+            setMessage(reason instanceof Error ? reason.message : String(reason));
+            await inspectLease(documentId).catch(() => undefined);
+          } finally { setRecovering(false); }
+        })();
+      },
+    });
   }
 
   async function save(): Promise<void> {
+    try { await saveDraft(); }
+    catch (reason) {
+      if (isLeaseConflict(reason) && snapshot) {
+        await inspectLease(snapshot.document.document_id).catch(() => undefined);
+        setMessage("Editing permission changed. Your draft is preserved for download or discard.");
+      } else setMessage(`Save failed. The complete draft is preserved. ${reason instanceof Error ? reason.message : String(reason)}`);
+    }
+  }
+
+  async function saveDraft(): Promise<void> {
     const draft = draftRef.current;
     if (!snapshot || !backend || !lease || !draft) return;
     if (!draft.dirty) {
@@ -435,7 +586,7 @@ export function App({
     }
     if (sourceBinding) {
       if (!sourceBinding.writable) return;
-      if (!layout) {
+      if (!layout || layoutGraphRef.current !== graph) {
         setMessage("Wait for the visible circuit layout before saving to the source.");
         return;
       }
@@ -481,6 +632,7 @@ export function App({
           stagedProposalId,
         );
       } catch (reason) {
+        if (isLeaseConflict(reason)) throw reason;
         setMessage(`The source save response was lost or failed. The complete draft is preserved; retry the save. ${reason instanceof Error ? reason.message : String(reason)}`);
         return;
       }
@@ -494,6 +646,9 @@ export function App({
       // snapshot. Rejected or uncertain saves above preserve the complete draft.
       draftRef.current = undefined;
       setLease(undefined);
+      currentLeaseRef.current = undefined;
+      setLeaseLost(false);
+      setRemoteLease(null);
       setStagedProposalId(undefined);
       setSnapshot(result.snapshot);
       setDocument(result.snapshot.document);
@@ -513,9 +668,13 @@ export function App({
       setMessage(result.diagnostics.map((item) => item.message).join(" · "));
       return;
     }
-    await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
+    try { await backend.releaseLease(snapshot.document.document_id, lease.lease_id); }
+    catch (reason) { if (!isLeaseConflict(reason)) throw reason; }
     draftRef.current = undefined;
     setLease(undefined);
+    currentLeaseRef.current = undefined;
+    setLeaseLost(false);
+    setRemoteLease(null);
     setSnapshot(result.snapshot);
     setDocument(result.snapshot.document);
     await downloadCircuitDocument(result.snapshot.document);
@@ -544,14 +703,35 @@ export function App({
   }
 
   async function cancel(): Promise<void> {
-    if (!snapshot || !backend || !lease) return;
-    await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
+    if (!snapshot || !backend) return;
+    let releaseWarning = "";
+    if (lease) {
+      try { await backend.releaseLease(snapshot.document.document_id, lease.lease_id); }
+      catch (reason) {
+        if (!isLeaseConflict(reason)) {
+          releaseWarning = ` Lease release failed; it will expire automatically. ${String(reason)}`;
+        }
+      }
+    }
     draftRef.current?.cancel();
     draftRef.current = undefined;
     setLease(undefined);
+    currentLeaseRef.current = undefined;
+    setLeaseLost(false);
     setStagedProposalId(undefined);
     setDocument(snapshot.document);
-    setMessage("Draft cancelled. No changes were persisted.");
+    setMessage(`Draft cancelled. No changes were persisted.${releaseWarning}`);
+    try {
+      const latest = await backend.get(snapshot.document.document_id);
+      if (currentDocumentIdRef.current === latest.document.document_id && !draftRef.current) {
+        setSnapshot(latest);
+        setDocument(latest.document);
+        if (sourceBinding) {
+          const binding = await source?.load(latest.document.document_id);
+          if (currentDocumentIdRef.current === latest.document.document_id && !draftRef.current) setSourceBinding(binding);
+        }
+      }
+    } catch { /* Retain the readable accepted snapshot if the service is unavailable. */ }
   }
 
   function undoDraft(direction: "undo" | "redo"): void {
@@ -642,24 +822,62 @@ export function App({
     if (!document || !source || !target || source === target) return false;
     const label = requestedName.trim() || `${sourceBinding ? "net_" : "net "}${document.design.nets.length + 1}`;
     if (!isSourceIdentifier(label)) {
-      setMessage(sourceBinding?.identifierHint ?? "Use a source-compatible connection name.");
+      const error = sourceBinding?.identifierHint ?? "Use a source-compatible connection name.";
+      setMessage(error);
+      setConnectionError(error);
       return false;
     }
     const id = uniqueSlug(label, document.design.nets.map((item) => item.id));
-    const created = mutate({
-      operation_id: operationId("net"),
-      type: "create_net",
-      net: {
-        id,
-        label,
-        endpoints: [
-          endpointFromTerminal(source, lsb, width),
-          endpointFromTerminal(target, lsbB, width),
-        ],
-      },
-    }, `Created net “${label}”.`);
-    if (created) setSelection([{ kind: "net", id }]);
-    return created;
+    return applyConnection([
+      endpointFromTerminal(source, lsb, width),
+      endpointFromTerminal(target, lsbB, width),
+    ], id, label);
+  }
+
+  function applyConnection(endpoints: NetEndpoint[], id: string, label: string, selectedNetId?: string): boolean {
+    if (!document) return false;
+    try {
+      const operation = planConnection(document, endpoints, {
+        operationId: operationId("net"), netId: id, label, existingNetId: selectedNetId,
+        route: selectedNetId ? layout?.layout.net_routes[selectedNetId] : undefined,
+      });
+      if (!operation) {
+        setConnectionError("");
+        setMessage("These endpoints are already connected.");
+        return true;
+      }
+      // Visible routes may not yet be materialized in the private draft.
+      if (operation.type === "connect_endpoint") {
+        const route = layout?.layout.net_routes[operation.net_id];
+        if (route?.vertices.some(item => item.locked) || route?.segments.some(item => item.locked)) throw new Error("Unlock this net's route before adding an endpoint.");
+      }
+      // Freeze the visible placement and unrelated routes before changing
+      // topology. Otherwise an automatic layout can move the whole diagram.
+      const geometry: CircuitOperation[] = layout ? [
+        ...Object.entries(layout.layout.node_geometry).filter(([id]) => document.design.instances.some(item => item.id === id))
+          .map(([id, value]): CircuitOperation => ({ operation_id: operationId("connection_geometry"), type: "set_instance_geometry", instance_id: id, geometry: value })),
+        ...Object.entries(layout.layout.terminal_placements).filter(([id]) => graph?.terminals.some(item => item.id === id))
+          .map(([id, value]): CircuitOperation => ({ operation_id: operationId("connection_placement"), type: "set_terminal_placement", terminal_key: id, placement: value })),
+        ...Object.entries(layout.layout.net_routes).filter(([id]) => document.design.nets.some(item => item.id === id))
+          .map(([id, value]): CircuitOperation => ({ operation_id: operationId("connection_route"), type: "set_net_route", net_id: id, route: value })),
+      ] : [];
+      const changed = mutateBatch([...geometry, operation], operation.type === "connect_endpoint" ? "Endpoint added to the existing net." : `Created net “${label}”.`);
+      if (!changed) return false;
+      setConnectionError("");
+      setSelection([{ kind: "net", id: operation.type === "connect_endpoint" ? operation.net_id : id }]);
+      return true;
+    } catch (reason) {
+      const message = reason instanceof Error ? reason.message : String(reason);
+      setMessage(message);
+      setConnectionError(message);
+      if (reason instanceof ConnectionChoiceRequired) {
+        setExistingNetId("");
+        setEndpointA(endpointTerminalKey(endpoints[0]));
+        setEndpointB(endpointTerminalKey(endpoints[1]));
+        setDialog("connect");
+      }
+      return false;
+    }
   }
 
   function moveNodes(changes: Record<string, NodeGeometry>): void {
@@ -899,7 +1117,7 @@ export function App({
       }
       let nextLease;
       try {
-        nextLease = await backend.acquireLease(document.document_id, "standalone-canvas");
+        nextLease = await backend.acquireLease(document.document_id, clientId);
         const draft = new CircuitDraft(snapshot.document, snapshot.revision);
         const diagnostics = draft.applyBatch(proposal.batch.operations);
         const errors = diagnostics.filter(item => item.severity === "error");
@@ -1035,7 +1253,10 @@ export function App({
   }
 
   function createConnectionFromDialog(): boolean {
-    const created = createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth, sliceLsbB);
+    if (existingNetId === "") { setConnectionError("Choose an existing net."); return false; }
+    const created = existingNetId
+      ? applyConnection([endpointFromTerminal(endpointB, sliceLsbB, sliceWidth)], "", "", existingNetId)
+      : createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth, sliceLsbB);
     if (!created) return false;
     setNetName("");
     setEndpointA("");
@@ -1043,6 +1264,8 @@ export function App({
     setSliceLsb(0);
     setSliceLsbB(0);
     setSliceWidth(0);
+    setExistingNetId(undefined);
+    setConnectionError("");
     return true;
   }
 
@@ -1167,11 +1390,12 @@ export function App({
     setMessage(reason === "same_terminal"
       ? "Choose two different terminals."
       : reason === "terminal_in_use"
-        ? "That terminal is already connected. Extending and merging nets are not available yet."
+        ? "Choose the existing net to extend this connection."
         : "Drop the connection on another free terminal.");
   }
 
   function isCommandEnabled(invocation: CircuitActionInvocation): boolean {
+    if (recovering) return false;
     const actionId = invocation.commandId;
     const contextualNetId = targetNetId(invocation.target) ?? selectedNet?.id;
     const contextualRoute = contextualNetId ? layout?.layout.net_routes[contextualNetId] : undefined;
@@ -1185,14 +1409,14 @@ export function App({
     const contextualCycleEdgeId = invocation.target?.kind === "cycle-edge" ? invocation.target.edgeId : selectedCycleEdge?.id;
     const contextualCycleEdge = timing.cycle_edges.find((edge) => edge.id === contextualCycleEdgeId);
     switch (actionId) {
-      case "new-document": return !lease && !openingFile;
-      case "open-document": return Boolean(snapshot) && !lease && !openingFile;
-      case "save-document":
-      case "cancel-changes": return Boolean(lease);
+      case "new-document": return !lease && !draftRef.current && !openingFile;
+      case "open-document": return Boolean(snapshot) && !lease && !draftRef.current && !openingFile;
+      case "save-document": return Boolean(lease && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
+      case "cancel-changes": return Boolean(lease || draftRef.current);
       case "download-json":
       case "export-svg":
-      case "export-png": return Boolean(snapshot && layout) && !lease;
-      case "begin-edit": return Boolean(snapshot) && !lease && Boolean(!linkedDocumentId || sourceBinding?.writable);
+      case "export-png": return Boolean(snapshot && layout && layoutGraphRef.current === graph) && !lease;
+      case "begin-edit": return Boolean(snapshot) && !lease && !draftRef.current && Boolean(!linkedDocumentId || sourceBinding?.writable);
       case "undo": return Boolean(lease && draftRef.current?.canUndo);
       case "redo": return Boolean(lease && draftRef.current?.canRedo);
       case "delete-selection": return Boolean(lease && (selection.length || (invocation.target && selectionItemForTarget(invocation.target))));
@@ -1304,6 +1528,8 @@ export function App({
       case "open-connect":
         setEndpointA(targetTerminalKey(invocation.target) ?? "");
         setEndpointB("");
+        setExistingNetId(undefined);
+        setConnectionError("");
         setDialog("connect");
         return true;
       case "reroute-selected": {
@@ -1439,7 +1665,7 @@ export function App({
         sourceBound={Boolean(sourceBinding)}
         sourceSaveLabel={sourceBinding?.saveLabel}
         tools={tools}
-        toolsEnabled={Boolean(snapshot) && !lease}
+        toolsEnabled={Boolean(snapshot) && !lease && !draftRef.current && !recovering}
         onRunTool={runTool}
       />
       <div className="document-status" title={sourceDescription}>
@@ -1467,6 +1693,7 @@ export function App({
       </button>
       {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
         className="source-save-button"
+        disabled={!layout || layoutGraphRef.current !== graph}
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
         type="button"
       >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}
@@ -1481,6 +1708,11 @@ export function App({
       {sourceConflict && <span className="source-recovery">
         <button onClick={() => void reopenLatestSource()} type="button">Reopen Latest</button>
         <button onClick={() => { if (document) void downloadCircuitDocument(document); }} type="button">Download Draft JSON</button>
+      </span>}
+      {!lease && remoteLease && !leaseLost && !draftRef.current && <button disabled={recovering} onClick={confirmTakeover} type="button">{recovering ? "Recovering…" : "Take over editing"}</button>}
+      {leaseLost && <span className="source-recovery">
+        <button onClick={() => { if (document) void downloadCircuitDocument(document); }} type="button">Download Draft JSON</button>
+        <button onClick={() => void cancel()} type="button">Discard preserved draft</button>
       </span>}
     </div>
     {activePage === "actions" ? <ActionSettingsPage
@@ -1633,6 +1865,19 @@ export function App({
       sourceDescription={sourceDescription}
       sourceIdentifierPattern={sourceIdentifierPattern}
       sourceIdentifierHint={sourceBinding?.identifierHint}
+      existingNetId={existingNetId}
+      connectionError={connectionError}
+      onExistingNetChange={(id) => {
+        setExistingNetId(id);
+        setConnectionError("");
+        if (id && document) {
+          const net = document.design.nets.find(item => item.id === id);
+          const endpoint = net?.endpoints[0];
+          const terminal = endpoint && graph?.terminals.find(item => item.id === endpointTerminalKey(endpoint));
+          setSliceWidth(endpoint?.slice?.width ?? (typeof terminal?.width === "number" ? terminal.width : 0));
+          setSliceLsbB(0);
+        }
+      }}
       terminals={terminals.map(terminal => ({ ...terminal, label: document ? circuitTerminalLabel(document, terminal.id) : "Port" }))}
       timing={timing}
       timingAnalysis={timingAnalysis}

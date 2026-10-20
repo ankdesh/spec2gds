@@ -17,6 +17,11 @@ import type {
 
 export type ProposalDecision = "accept" | "reject";
 
+export interface CircuitEditRecovery {
+  lease: EditLease;
+  snapshot: CircuitSnapshot;
+}
+
 export interface CircuitExportOptions {
   format: "json" | "svg" | "png";
   selection?: string[];
@@ -68,8 +73,10 @@ export interface CircuitDesignerBackend {
 
   getLease(documentId: string): Promise<EditLease | null>;
   acquireLease(documentId: string, ownerId: string, ttlSeconds?: number): Promise<EditLease>;
+  takeOverLease(documentId: string, expectedLeaseId: string, ownerId: string, ttlSeconds?: number, refreshedDocument?: CircuitDocument): Promise<EditLease>;
   renewLease(documentId: string, leaseId: string, ttlSeconds?: number): Promise<EditLease>;
   releaseLease(documentId: string, leaseId: string): Promise<void>;
+  releaseLeaseOnExit?(documentId: string, leaseId: string): void;
 
   summary(documentId: string): Promise<DocumentSummary>;
   lookupComponents(documentId: string, query?: ComponentQuery): Promise<ComponentDefinition[]>;
@@ -99,6 +106,7 @@ export class CircuitBackendError extends Error {
       | "proposal_stale",
     message: string,
     readonly diagnostics: Diagnostic[] = [],
+    readonly details?: Record<string, unknown>,
   ) {
     super(message);
     this.name = "CircuitBackendError";

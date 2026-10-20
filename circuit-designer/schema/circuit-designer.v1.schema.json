@@ -2443,6 +2443,10 @@
         "message": {
           "$ref": "#/$defs/NonEmptyString"
         },
+        "details": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "diagnostics": {
           "type": "array",
           "items": {

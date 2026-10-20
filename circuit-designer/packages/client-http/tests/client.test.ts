@@ -13,6 +13,23 @@ const response = (body: unknown, status = 200) => new Response(
 );
 
 describe("HTTP circuit designer client", () => {
+  test("takes over only the explicitly confirmed lease", async () => {
+    const lease = { lease_id: "new", document_id: "fixture_simple", owner_id: "second-tab", expires_at: "2026-10-20T12:00:00Z" };
+    const fetch = vi.fn().mockResolvedValue(response(lease));
+    const client = new HttpCircuitDesignerBackend({ fetch });
+    await expect(client.takeOverLease("fixture_simple", "confirmed-old", "second-tab")).resolves.toEqual(lease);
+    expect(fetch.mock.calls[0][0]).toContain("/fixture_simple/lock/takeover");
+    expect(JSON.parse(fetch.mock.calls[0][1].body)).toMatchObject({ expected_lease_id: "confirmed-old", owner_id: "second-tab" });
+  });
+
+  test("rejects recovery responses without an authoritative snapshot", async () => {
+    const client = new HttpCircuitDesignerBackend({ fetch: vi.fn().mockResolvedValue(response({
+      lease: { lease_id: "new", document_id: "fixture_simple", owner_id: "second-tab", expires_at: "2026-10-20T12:00:00Z" },
+      snapshot: { revision: "2" }, binding: {},
+    })) });
+    await expect(client.recoverSource("fixture_simple", "old", "second-tab")).rejects.toMatchObject({ status: 502 });
+  });
+
   test("loads and validates a canonical snapshot", async () => {
     const fetch = vi.fn().mockResolvedValue(response({ revision: "1", document: simpleDocumentFixture() }));
     const client = new HttpCircuitDesignerBackend({ baseUrl: "http://example.test/circuit/v1", fetch });

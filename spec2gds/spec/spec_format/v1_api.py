@@ -195,11 +195,17 @@ class AssetRequest(pydantic.BaseModel):
     extension: str
 
 
+class CircuitRecoveryRequest(pydantic.BaseModel):
+    expected_lease_id: str = pydantic.Field(min_length=1)
+    owner_id: str = pydantic.Field(min_length=1)
+
+
 class CircuitLaunchRequest(pydantic.BaseModel):
     """Select one source component or design to project into Circuit Designer."""
 
     entity_kind: typing.Literal["component", "design"]
     entity_id: str
+    recovery: CircuitRecoveryRequest | None = None
 
 
 class CircuitSourceSyncRequest(pydantic.BaseModel):
@@ -1047,15 +1053,21 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "entity_id": request.entity_id,
                 "session_document_id": launched.document_id,
             }
-            register_circuit_source_binding(
+            recovered = register_circuit_source_binding(
                 launched.document_id,
                 binding,
                 service_url=service_urls()["circuit_designer"]["service_url"],
                 callback_url=f"{service_urls()['spec_editor']['service_url']}/circuit-designer/source",
                 token=token,
                 reload_source=launched.reused_session,
+                recovery=request.recovery.model_dump() if request.recovery else None,
             )
         except CircuitDesignerConnectionError as exc:
+            if exc.status_code == 423:
+                raise fastapi.HTTPException(status_code=423, detail={
+                    "code": "lock_conflict", "message": str(exc),
+                    **exc.details, "editor_url": launched.editor_url,
+                }) from exc
             raise fastapi.HTTPException(status_code=503, detail=str(exc)) from exc
         except CircuitAdapterError as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
@@ -1068,6 +1080,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "omitted_bus_items": list(projection.omitted_bus_items),
             "omitted_ports": list(projection.omitted_ports),
             "source_binding": binding,
+            **({"recovery": recovered} if recovered is not None else {}),
         }
 
     def circuit_source_session(record: dict[str, typing.Any]) -> V1Session:

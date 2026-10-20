@@ -181,3 +181,47 @@ def test_circuit_draft_conflict_has_an_actionable_message(monkeypatch):
     with pytest.raises(CircuitDesignerConnectionError) as result:
         register_circuit_source_binding("circuit", {}, service_url="http://localhost/api", callback_url="http://localhost/source", token="test-token")
     assert str(result.value) == message
+    assert result.value.status_code == 423
+
+
+def test_circuit_launch_preserves_structured_lock_recovery_details(tmp_path, monkeypatch):
+    from spec2gds.spec.spec_format.circuit_adapter import CircuitDesignerConnectionError
+    from spec2gds.spec.spec_format.v1_api import CircuitLaunchRequest
+    api = endpoints(tmp_path, monkeypatch)
+    snapshot = api["create_document"](CreateDocumentRequest(path=str(tmp_path / "locked.spec"), title="Locked Circuit"))
+    snapshot = api["transaction"](TransactionRequest(
+        expected_source_revision_hash=snapshot["source_revision_hash"],
+        operations=[{"type": "create_entity", "kind": "design", "name": "top"}],
+    ))["snapshot"]
+    request = CircuitLaunchRequest(entity_kind="design", entity_id=snapshot["designs"][0]["ref"]["entity_id"])
+    with patch("spec2gds.spec.spec_format.v1_api.publish_circuit_document") as publish, patch(
+        "spec2gds.spec.spec_format.v1_api.register_circuit_source_binding",
+        side_effect=CircuitDesignerConnectionError("An active draft exists", status_code=423,
+            details={"document_id": "circuit", "lease": {"lease_id": "old", "expires_at": "2026-10-20T12:00:00Z"}}),
+    ):
+        publish.return_value.document_id = "circuit"
+        publish.return_value.editor_url = "http://localhost:7022/?document_id=circuit"
+        publish.return_value.reused_session = True
+        with pytest.raises(fastapi.HTTPException) as caught:
+            api["launch_circuit"](request)
+    assert caught.value.status_code == 423
+    assert caught.value.detail["code"] == "lock_conflict"
+    assert caught.value.detail["lease"]["lease_id"] == "old"
+    assert caught.value.detail["editor_url"].endswith("document_id=circuit")
+
+
+def test_recovery_binding_uses_one_conditional_registration_without_reload(monkeypatch):
+    import io
+    import json
+    from spec2gds.spec.spec_format.circuit_adapter import register_circuit_source_binding
+    requests = []
+    def respond(request, **kwargs):
+        requests.append(request)
+        return io.BytesIO(json.dumps({"lease": {"lease_id": "new"}, "snapshot": {}}).encode())
+    monkeypatch.setattr("urllib.request.urlopen", respond)
+    recovery = {"expected_lease_id": "old", "owner_id": "new-tab"}
+    result = register_circuit_source_binding("circuit", {}, service_url="http://localhost/api",
+        callback_url="http://localhost/source", token="private-token", recovery=recovery, reload_source=True)
+    assert len(requests) == 1
+    assert json.loads(requests[0].data)["recovery"] == recovery
+    assert result["lease"]["lease_id"] == "new"

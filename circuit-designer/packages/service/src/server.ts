@@ -61,7 +61,9 @@ export class CircuitDesignerService {
   private readonly logger: StructuredLogger;
   private readonly preferences: CircuitPreferencesStore;
   private readonly sourceBindings = new Map<string, StoredSourceBinding>();
+  private readonly pendingSourceBindings = new Map<string, StoredSourceBinding>();
   private readonly sourceResults = new Map<string, CircuitSourceSyncResponse>();
+  private readonly documentWrites = new Map<string, Promise<void>>();
 
   constructor(options: CircuitServiceOptions = {}) {
     this.backend = options.backend ?? new EphemeralCircuitSessionBackend();
@@ -95,6 +97,24 @@ export class CircuitDesignerService {
   }
 
   private async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const path = new URL(request.url ?? "/", "http://localhost").pathname;
+    const documentId = /^\/api\/circuit-designer\/v1\/documents\/([^/]+)/.exec(path)?.[1];
+    if (!documentId || request.method === "GET" || request.method === "OPTIONS") return this.handleUnlocked(request, response);
+    // Source callbacks can yield. Serialize lease changes, source writes and
+    // rebinding so a displaced client cannot finish a save after takeover.
+    const previous = this.documentWrites.get(documentId) ?? Promise.resolve();
+    let release!: () => void;
+    const current = new Promise<void>(resolve => { release = resolve; });
+    this.documentWrites.set(documentId, current);
+    await previous;
+    try { await this.handleUnlocked(request, response); }
+    finally {
+      release();
+      if (this.documentWrites.get(documentId) === current) this.documentWrites.delete(documentId);
+    }
+  }
+
+  private async handleUnlocked(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const correlationId = String(request.headers["x-request-id"] ?? randomUUID().replaceAll("-", ""));
     const started = performance.now();
     let failure: unknown;
@@ -285,13 +305,29 @@ export class CircuitDesignerService {
             throw new CircuitBackendError("validation_failed", "Source binding registration is invalid.");
           }
           await this.backend.get(documentId);
-          if (await this.backend.getLease(documentId)) {
-            throw new CircuitBackendError("lock_conflict", "Cancel or save the active draft before reopening its source binding.");
-          }
-          this.sourceBindings.set(documentId, {
+          const stored = {
             binding: structuredClone(body.binding),
             provider: new HttpSourceDesignProvider(callback, body.token),
-          });
+          };
+          const lease = await this.backend.getLease(documentId);
+          const active = this.sourceBindings.get(documentId)?.binding;
+          if ((lease || body.recovery) && active && (active.source_document_id !== stored.binding.source_document_id
+            || active.editable_design_id !== stored.binding.editable_design_id)) {
+            throw new CircuitBackendError("validation_failed", "A locked Circuit cannot be rebound to a different source.");
+          }
+          if (body.recovery) {
+            const recovered = await this.recoverSource(documentId, body.recovery, stored);
+            return this.jsonResponse(response, 200, recovered);
+          }
+          if (lease) {
+            // Keep a replacement callback separate from the active draft's
+            // binding. Recovery can use it after a Spec service restart without
+            // exposing callback credentials or requiring cross-origin requests.
+            this.pendingSourceBindings.set(documentId, stored);
+            throw new CircuitBackendError("lock_conflict", "This Circuit has an active draft. Open it to review or take over editing.", [], { document_id: documentId, lease });
+          }
+          this.sourceBindings.set(documentId, stored);
+          this.pendingSourceBindings.delete(documentId);
           return this.jsonResponse(response, 200, body.binding);
         }
       }
@@ -303,6 +339,9 @@ export class CircuitDesignerService {
       }
       if (method === "POST" && tail[0] === "source" && tail[1] === "reload") {
         return await this.sourceReload(response, documentId);
+      }
+      if (method === "POST" && tail[0] === "source" && tail[1] === "recover") {
+        return this.jsonResponse(response, 200, await this.recoverSource(documentId, await this.json(request) as { expected_lease_id: string; owner_id: string }));
       }
       if (method === "POST" && tail[0] === "queries" && tail[1] === "subgraph") {
         return this.jsonResponse(response, 200, await this.backend.subgraph(documentId, await this.json(request) as never));
@@ -388,6 +427,25 @@ export class CircuitDesignerService {
     return this.jsonResponse(response, 200, result);
   }
 
+  private async recoverSource(documentId: string, request: { expected_lease_id: string; owner_id: string }, replacement?: StoredSourceBinding) {
+    const current = await this.backend.getLease(documentId);
+    if (!request.expected_lease_id || current?.lease_id !== request.expected_lease_id) {
+      throw new CircuitBackendError("lock_conflict", "The editing lease changed. Review the current lock before taking over.", [], { document_id: documentId, lease: current });
+    }
+    const stored = replacement ?? this.pendingSourceBindings.get(documentId) ?? this.sourceBinding(documentId);
+    if (!stored.binding.writable) throw new CircuitBackendError("validation_failed", "This Circuit is read-only.");
+    const resolved = await stored.provider.resolve(stored.binding);
+    if (!resolved.accepted || !resolved.document) throw new CircuitBackendError("provider_failed", "Could not refresh the saved source. The existing draft lock is unchanged. Reopen this Circuit from Spec Editor to refresh its source binding.", resolved.diagnostics);
+    const lease = await this.backend.takeOverLease(documentId, request.expected_lease_id, request.owner_id, 900, resolved.document);
+    stored.binding = { ...stored.binding, base_source_revision_hash: resolved.source_revision_hash };
+    this.sourceBindings.set(documentId, stored);
+    this.pendingSourceBindings.delete(documentId);
+    const snapshot = await this.backend.get(documentId);
+    this.emit(documentId, "lock.changed");
+    this.emit(documentId, "document.changed", snapshot.revision);
+    return { lease, snapshot, binding: stored.binding };
+  }
+
   private async sourceCommit(response: ServerResponse, documentId: string, body: SourceCommitBody): Promise<void> {
     this.requireDefinition("CircuitOperationBatch", body.batch);
     const registered = this.sourceBinding(documentId);
@@ -421,7 +479,9 @@ export class CircuitDesignerService {
     // Refresh can fail after that save; this is not a transaction across stores.
     // Reopen from the owner before treating a lost response as an unsaved source.
     const before = await this.backend.get(documentId);
-    await this.backend.releaseLease(documentId, body.lease_id);
+    // A long source callback may outlast the lease. The per-document gate
+    // prevents another writer from acquiring it before reconciliation finishes.
+    if ((await this.backend.getLease(documentId))?.lease_id === body.lease_id) await this.backend.releaseLease(documentId, body.lease_id);
     const replaced = await this.backend.replace(documentId, result.document, before.revision, `source:${body.batch.request_id}`);
     if (replaced.status !== "accepted" || !replaced.snapshot) {
       throw new CircuitBackendError("provider_failed", "Specification saved, but the Circuit session could not refresh.", replaced.diagnostics);
@@ -431,6 +491,7 @@ export class CircuitDesignerService {
     // source acceptance and the refreshed Circuit snapshot are confirmed.
     if (body.proposal_id) await this.backend.resolveProposal(documentId, body.proposal_id);
     this.emit(documentId, "document.changed", replaced.snapshot.revision);
+    this.emit(documentId, "lock.changed");
     if (body.proposal_id) this.emit(documentId, "proposal.changed");
     const responseBody = { ...result, binding: stored.binding, snapshot: replaced.snapshot };
     this.sourceResults.set(replayKey, responseBody);
@@ -463,6 +524,13 @@ export class CircuitDesignerService {
     documentId: string,
     tail: string[],
   ): Promise<void> {
+    if (request.method === "POST" && tail.length === 2 && tail[1] === "takeover") {
+      this.requireIndependent(documentId);
+      const body = await this.json(request) as { expected_lease_id: string; owner_id: string; ttl_seconds?: number };
+      const lease = await this.backend.takeOverLease(documentId, body.expected_lease_id, body.owner_id, body.ttl_seconds);
+      this.emit(documentId, "lock.changed");
+      return this.jsonResponse(response, 200, lease);
+    }
     if (request.method === "GET" && tail.length === 1) {
       return this.jsonResponse(response, 200, { lease: await this.backend.getLease(documentId) });
     }
@@ -608,7 +676,7 @@ export class CircuitDesignerService {
           : reason.code === "revision_conflict" || reason.code === "proposal_stale" ? 409
             : reason.code === "provider_failed" ? 502
               : 400;
-      return this.error(response, status, reason.code, reason.message, reason.diagnostics);
+      return this.error(response, status, reason.code, reason.message, reason.diagnostics, reason.details);
     }
     this.error(response, 500, "internal_error", reason instanceof Error ? reason.message : String(reason));
   }
@@ -619,8 +687,9 @@ export class CircuitDesignerService {
     code: string,
     message: string,
     diagnostics?: ServiceError["diagnostics"],
+    details?: Record<string, unknown>,
   ): void {
-    this.jsonResponse(response, status, { code, message, ...(diagnostics?.length ? { diagnostics } : {}) });
+    this.jsonResponse(response, status, { code, message, ...(diagnostics?.length ? { diagnostics } : {}), ...(details ? { details } : {}) });
   }
 
   private jsonResponse(response: ServerResponse, status: number, body: unknown): void {

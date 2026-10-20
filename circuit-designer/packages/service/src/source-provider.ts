@@ -16,6 +16,7 @@ export interface SourceBindingRegistration {
   callback_url: string;
   token: string;
   allow_non_loopback?: boolean;
+  recovery?: { expected_lease_id: string; owner_id: string };
 }
 
 export interface CircuitSourceSyncRequest {
