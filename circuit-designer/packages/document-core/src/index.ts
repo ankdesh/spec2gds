@@ -65,6 +65,8 @@ export interface SectionDiagnostic {
   line: number | null;
   column: number | null;
   blocking: boolean;
+  file_path?: string | null;
+  source_kind?: "section" | "generated" | null;
 }
 
 export interface EntityContentSection {
@@ -232,7 +234,7 @@ export interface ComponentVerification {
   source_revision_hash: string;
   status: "passed" | "failed" | "unverified" | "stale";
   tool_version: string;
-  diagnostics: Array<{ code: string; message: string; blocking?: boolean; line?: number | null; column?: number | null }>;
+  diagnostics: Array<{ code: string; message: string; blocking?: boolean; line?: number | null; column?: number | null; file_path?: string | null; source_kind?: "section" | "generated" | null }>;
   functional_simulation: "unverified";
   interfaces?: Array<{ component: string; status: string; ports: Array<{ name: string; range: string | null; width: number | null }> }>;
 }

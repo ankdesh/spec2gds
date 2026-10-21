@@ -17,7 +17,7 @@ from spec2gds.spec.spec_format.ir import ComponentIR, DesignIR, SpecRevision
 from spec2gds.spec.spec_format.naming import qualified_reference_name
 from spec2gds.spec.spec_format.sections import SectionIR
 
-_CACHE: dict[tuple[str, str, str, str], "SectionValidation"] = {}
+_CACHE: dict[tuple[str, str, str, str, str], "SectionValidation"] = {}
 
 
 def cached_revision_sections(revision: SpecRevision, section_ids: set[str] | None = None) -> tuple["SectionValidation", ...]:
@@ -26,8 +26,10 @@ def cached_revision_sections(revision: SpecRevision, section_ids: set[str] | Non
     for section in revision.entity_sections:
         if section.section_type != "sv" or section_ids is not None and section.section_id not in section_ids:
             continue
+        # A containing Design's lint cannot establish a leaf Section's status.
         found = next((result for key, result in reversed(tuple(_CACHE.items()))
-                      if key[:3] == (section.section_id, section.source_sha256, revision.source_revision_hash)), None)
+                      if key[:3] == (section.section_id, section.source_sha256, revision.source_revision_hash)
+                      and key[4] == "section"), None)
         results.append(found or SectionValidation(section.section_id, "unverified", ()))
     return tuple(results)
 _SAFETY_WARNINGS = {
@@ -45,18 +47,22 @@ class SectionDiagnostic:
     """JSON-friendly source diagnostic without coupling validation to Pydantic."""
 
     def __init__(self, code: str, message: str, line: int | None = None,
-                 column: int | None = None, blocking: bool = False) -> None:
+                 column: int | None = None, blocking: bool = False,
+                 file_path: str | None = None, source_kind: str | None = None) -> None:
         self.code = code
         self.message = message
         self.line = line
         self.column = column
         self.blocking = blocking
+        self.file_path = file_path
+        self.source_kind = source_kind
 
     def as_json(self) -> dict[str, object]:
         """Serialize one diagnostic for API and document projections."""
         return {
             "code": self.code, "message": self.message, "line": self.line,
             "column": self.column, "blocking": self.blocking,
+            "file_path": self.file_path, "source_kind": self.source_kind,
         }
 
 
@@ -88,9 +94,9 @@ class SectionValidation:
 
 
 def validate_revision_sections(
-    revision: SpecRevision, section_ids: set[str] | None = None
+    revision: SpecRevision, section_ids: set[str] | None = None, *, context: str = "hierarchy"
 ) -> tuple[SectionValidation, ...]:
-    results = _validate_revision_sections(revision, section_ids)
+    results = _validate_revision_sections(revision, section_ids, context=context)
     owners = {section.section_id: section.parent for section in revision.entity_sections}
     for result in results:
         result.target_name = qualified_reference_name(revision, owners[result.section_id])
@@ -98,7 +104,7 @@ def validate_revision_sections(
 
 
 def _validate_revision_sections(
-    revision: SpecRevision, section_ids: set[str] | None = None
+    revision: SpecRevision, section_ids: set[str] | None = None, *, context: str = "hierarchy"
 ) -> tuple[SectionValidation, ...]:
     """Validate selected SV sections in generated context when Verilator exists."""
     sections = tuple(
@@ -122,12 +128,12 @@ def _validate_revision_sections(
 
     results: list[SectionValidation] = []
     for section in sections:
-        key = (section.section_id, section.source_sha256, revision.source_revision_hash, version)
+        key = (section.section_id, section.source_sha256, revision.source_revision_hash, version, context)
         cached = _CACHE.get(key)
         if cached is not None:
             results.append(cached)
             continue
-        result = _validate_one(revision, section, executable)
+        result = _validate_one(revision, section, executable, context=context)
         if len(_CACHE) >= 512:
             _CACHE.pop(next(iter(_CACHE)))
         _CACHE[key] = result
@@ -151,12 +157,15 @@ def _targets(revision: SpecRevision, section: SectionIR) -> tuple[DesignIR, ...]
     )
 
 
-def _validate_one(revision: SpecRevision, section: SectionIR, executable: str) -> SectionValidation:
+def _validate_one(revision: SpecRevision, section: SectionIR, executable: str, *, context: str = "hierarchy") -> SectionValidation:
     # Imported lazily so the core transaction module does not create an
     # activities -> spec_format -> activities initialization cycle.
     from spec2gds.spec.activities.rtl.codegen import generate_project
     from spec2gds.spec.activities.view import SpecAccess
 
+    entity = revision.resolve(section.parent)
+    if context == "section" and isinstance(entity, ComponentIR) and revision.internal_design(entity) is None:
+        return _lint_standalone_component(revision, section, executable)
     targets = _targets(revision, section)
     if not targets:
         return _lint_standalone_component(revision, section, executable)
@@ -213,7 +222,7 @@ def _lint_standalone_component(
 
 
 def _run_project(
-    files: dict[str, bytes], top_module: str, executable: str, section: SectionIR
+    files: dict[str, bytes], top_module: str, executable: str, section: SectionIR | None
 ) -> list[SectionDiagnostic]:
     try:
         with tempfile.TemporaryDirectory(prefix="spec2gds-sv-lint-") as temporary:
@@ -244,6 +253,8 @@ def _run_project(
             int(match.group("line")) if match.group("line") else None,
             int(match.group("column")) if match.group("column") else None,
             blocking,
+            file_path=match.group("path"),
+            source_kind="section" if section is not None and match.group("path") == section.source_path else "generated",
         ))
     if completed.returncode and not any(item.blocking for item in diagnostics):
         diagnostics.append(SectionDiagnostic(

@@ -1,6 +1,7 @@
 /* Reusable Circuit Designer application shell. */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { DEFAULT_CLOCK_DOMAIN_ID, circuitEndpointLabel, endpointTerminalKey, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
+import { connectionSelectionLabel } from "./connection-input";
 
 export type CircuitDialogId = "connect" | "catalog" | "new-component" | "proposals" | "clock-settings" | "timing-analysis" | "cycle-edge" | "getting-started" | "about";
 
@@ -144,6 +145,11 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     const net = props.document?.design.nets.find(item => item.id === props.existingNetId);
     const firstEndpoint = net?.endpoints[0];
     const netWidth = firstEndpoint?.slice?.width ?? props.terminals.find(item => firstEndpoint && item.id === endpointTerminalKey(firstEndpoint))?.width;
+    const a = props.terminals.find(item => item.id === props.endpointA);
+    const b = props.terminals.find(item => item.id === props.endpointB);
+    const width = props.sliceWidth || (existing ? netWidth : a?.width === b?.width ? a?.width : undefined);
+    const from = existing ? net?.label || net?.id : a && connectionSelectionLabel(a.label || a.id, a.width, props.sliceLsb, props.sliceWidth);
+    const to = b && connectionSelectionLabel(b.label || b.id, b.width, props.sliceLsbB, props.sliceWidth);
     const submit = (event: FormEvent) => {
       event.preventDefault();
       if (props.onCreateConnection()) props.onClose();
@@ -152,7 +158,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
       <form className="circuit-dialog__form" onSubmit={submit}>
         <label>Connection action<select autoFocus value={existing ? "existing" : "new"} onChange={(event) => props.onExistingNetChange(event.target.value === "existing" ? "" : undefined)}><option value="new">New net</option><option value="existing">Add endpoint to existing net</option></select></label>
         {existing ? <>
-          <label>Existing net<select value={props.existingNetId} onChange={(event) => props.onExistingNetChange(event.target.value)}><option value="">Choose…</option>{props.document?.design.nets.map(item => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}</select></label>
+          <label>Existing net<select aria-label="Existing net" value={props.existingNetId} onChange={(event) => props.onExistingNetChange(event.target.value)}><option value="">Choose…</option>{props.document?.design.nets.map(item => <option key={item.id} value={item.id}>{item.label || item.id}</option>)}</select></label>
           {net && props.document && <p>Net width: {netWidth ?? "unresolved"}. Current endpoints: {net.endpoints.map(endpoint => {
             const terminal = props.terminals.find(item => item.id === endpointTerminalKey(endpoint));
             const role = terminal?.direction === "inout" ? "bidirectional"
@@ -165,6 +171,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         </>}
         <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
         <div className="slice-row">{!existing && <label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label>}<label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
+        {from && to && <output aria-label="Connection mapping" aria-live="polite">{from} → {to} · {typeof width === "number" ? `${width} ${width === 1 ? "bit" : "bits"}` : "whole ports"}</output>}
         {props.connectionError && <p role="alert">{props.connectionError}</p>}
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={(!existing && !props.endpointA) || !props.endpointB || (existing && !net)} type="submit">{existing ? "Add endpoint" : "Create net"}</button></div>
       </form>

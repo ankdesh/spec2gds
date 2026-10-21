@@ -115,8 +115,9 @@ function directedOwners(graph: CircuitGraphSnapshot): { adjacency: Map<string, S
       const terminal = terminals.get(endpoint.terminal_id);
       return terminal?.node_id === owner && (terminal.direction === "out" || terminal.role === "initiator");
     }));
-    const roots = sources.length ? sources : [owners[0]];
-    for (const source of roots) for (const target of owners) {
+    // Boundary-driven nets (including shared controls) have consumers here,
+    // not an instance driver. Do not invent dependencies between those sinks.
+    for (const source of sources) for (const target of owners) {
       if (source === target || adjacency.get(source)!.has(target)) continue;
       adjacency.get(source)!.add(target);
       incoming.set(target, (incoming.get(target) ?? 0) + 1);
@@ -363,6 +364,7 @@ export async function layoutCircuitGraph(graph: CircuitGraphSnapshot, options: L
   for (const net of graph.nets) {
     const saved = graph.layout?.net_routes?.[net.id];
     if (!saved) continue;
+    if (resolved.preserveNodeGeometry !== "all" && !hasLocks(saved)) continue;
     const ids = net.endpoints.map((endpoint) => endpoint.terminal_id);
     savedRoutes[net.id] = reanchorRouteEndpoints(saved, terminalAnchors(ids, terminals, nodeGeometry, boundaryGeometry, placements));
   }
@@ -423,13 +425,20 @@ export async function layoutCircuitDocument(
       const left = stage === 0
         ? movedEdges[0].x - (Math.max(...values.map((value) => value.x + value.width - minGenerated)) + padding)
         : movedEdges[stage - 1]?.x + padding;
-      for (const id of ids) result.layout.node_geometry[id].x = snap(left + (result.layout.node_geometry[id].x - minGenerated), options.gridSize ?? document.layout.grid_size);
+      for (const id of ids) {
+        const original = document.layout.instance_geometry[id];
+        const preserve = options.preserveNodeGeometry ?? "all";
+        if (original && (preserve === "all" || (preserve === "pinned" && original.pinned))) continue;
+        result.layout.node_geometry[id].x = snap(left + (result.layout.node_geometry[id].x - minGenerated), options.gridSize ?? document.layout.grid_size);
+      }
     }
     updated.timing = { ...timing, cycle_edges: movedEdges };
     const rerouteDocument = clone(updated);
     rerouteDocument.layout.instance_geometry = result.layout.node_geometry;
     rerouteDocument.layout.terminal_placements = result.layout.terminal_placements;
-    rerouteDocument.layout.net_routes = {};
+    rerouteDocument.layout.net_routes = Object.fromEntries(
+      Object.entries(result.layout.net_routes ?? {}).filter(([, route]) => hasLocks(route)),
+    );
     result = await layoutCircuitGraph(projectDocument(rerouteDocument, "layout"), { ...options, preserveNodeGeometry: "all" });
   }
   updated.layout.direction = result.layout.direction;

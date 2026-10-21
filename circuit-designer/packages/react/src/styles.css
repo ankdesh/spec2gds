@@ -20,14 +20,17 @@
 .cd-node__symbol--register::before { content: "▣"; }
 .cd-node__symbol--constant::before { content: "1"; }
 .cd-node__symbol--not::before { content: "▷○"; }
-.cd-node__port-label { position: absolute; z-index: 2; max-width: 78px; overflow: hidden; color: var(--cd-text-muted, #60758a); font: 10px/1 "IBM Plex Mono", ui-monospace, monospace; pointer-events: none; text-overflow: ellipsis; white-space: nowrap; }
+.cd-node__port-label { position: absolute; z-index: 2; display: inline-flex; max-width: 78px; color: var(--cd-text-muted, #60758a); font: 10px/1 "IBM Plex Mono", ui-monospace, monospace; white-space: nowrap; }
+.cd-node__port-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cd-node__port-width { flex-shrink: 0; white-space: pre; }
+.cd-node__port-label:focus-visible { outline: 2px solid var(--cd-focus, #3aaed8); outline-offset: 2px; }
 .cd-node__port-label--west { left: 9px; transform: translateY(-50%); }
 .cd-node__port-label--east { right: 9px; transform: translateY(-50%); }
 .cd-node__port-label--north { top: 6px; transform: translateX(-50%); }
 .cd-node__port-label--south { bottom: 6px; transform: translateX(-50%); }
 .cd-node--boundary .cd-node__port-label { max-width: 156px; }
-.cd-canvas .react-flow__handle { width: 11px; height: 11px; border: 2px solid var(--cd-surface, #fff); border-radius: 50%; background: var(--cd-primary, #007c89); box-shadow: 0 0 0 1px var(--cd-primary, #007c89); transition: box-shadow 120ms ease, opacity 120ms ease, transform 120ms ease; }
-.cd-canvas .react-flow__handle.connectionindicator:hover, .cd-canvas .react-flow__handle.connectingto.valid { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-primary, #007c89) 24%, transparent); transform: scale(1.18); }
+.cd-canvas .react-flow__handle { width: 11px; height: 11px; border: 2px solid var(--cd-surface, #fff); border-radius: 50%; background: var(--cd-primary, #007c89); box-shadow: 0 0 0 1px var(--cd-primary, #007c89); transition: box-shadow 120ms ease, opacity 120ms ease; }
+.cd-canvas .react-flow__handle.connectionindicator:hover, .cd-canvas .react-flow__handle.connectingto.valid { box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-primary, #007c89) 24%, transparent); }
 .cd-canvas .react-flow__handle.connectingto:not(.valid) { background: var(--cd-danger, #c43d4e); box-shadow: 0 0 0 4px color-mix(in srgb, var(--cd-danger, #c43d4e) 24%, transparent); }
 .cd-canvas .react-flow__handle.cd-terminal--occupied { cursor: crosshair; background: var(--cd-text-muted, #60758a); box-shadow: 0 0 0 1px var(--cd-text-muted, #60758a); }
 .cd-canvas .react-flow__handle[aria-disabled="true"] { cursor: not-allowed; opacity: .48; }

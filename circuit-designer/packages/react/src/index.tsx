@@ -60,6 +60,8 @@ import {
   moveRouteVertex,
   removeRouteBend,
   projectDocument,
+  circuitTerminalDisplayLabel,
+  compactCircuitTerminalLabel,
   sortedCycleEdges,
   stageLabel,
 } from "@spec2gds/circuit-core";
@@ -104,7 +106,7 @@ export function circuitSelectionsEqual(left: CircuitCanvasSelection, right: Circ
 }
 
 export function terminalDisplayLabel(terminal: Pick<CircuitTerminal, "label" | "width">): string {
-  return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.width > 1 ? `${terminal.label} · ${terminal.width} bits` : terminal.label;
+  return circuitTerminalDisplayLabel(terminal);
 }
 
 export interface CircuitDesignerCanvasProps {
@@ -204,7 +206,7 @@ for (const key of ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer", "
 
 function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
-  useEffect(() => updateNodeInternals(id), [id, selected, updateNodeInternals]);
+  useEffect(() => updateNodeInternals(id), [id, selected, data.terminals, data.placements, data.geometry.width, data.geometry.height, updateNodeInternals]);
   const rendererKey = data.circuitNode.component_vlnv ?? "generic";
   const customRenderer = data.rendererRegistry?.renderer(rendererKey)
     ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
@@ -223,6 +225,9 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
           : Math.min(requestedOffset, data.geometry.width - 20);
         const style = side === "EAST" || side === "WEST" ? { top: offset } : { left: offset };
         const displayLabel = terminalDisplayLabel(terminal);
+        const labelLimit = data.contextTarget.kind === "boundary" ? 26 : 13;
+        const widthLabel = compactCircuitTerminalLabel({ ...terminal, label: "" }, labelLimit);
+        const shortLabel = compactCircuitTerminalLabel(terminal, labelLimit);
         const occupied = data.occupiedTerminalIds.has(terminal.id);
         const pending = data.pendingTerminalId === terminal.id;
         const activateFromKeyboard = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -249,7 +254,10 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
           data.onTerminalActivate(terminal.id);
         };
         return <Fragment key={terminal.id}>
-          <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style}>{displayLabel}</span>
+          <span className={`cd-node__port-label cd-node__port-label--${side.toLowerCase()}`} style={style} title={displayLabel} aria-label={displayLabel} tabIndex={0}>
+            <span className="cd-node__port-name">{shortLabel.slice(0, shortLabel.length - widthLabel.length)}</span>
+            <span className="cd-node__port-width">{widthLabel}</span>
+          </span>
           <Handle
             id={terminalHandleId(terminal.id)}
             type="source"
@@ -260,7 +268,7 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
             aria-label={occupied ? `${displayLabel}, already connected` : `${displayLabel}, connection terminal`}
             aria-disabled={!data.editable}
             role="button"
-            tabIndex={data.editable ? 0 : -1}
+            tabIndex={0}
             isConnectable={data.editable}
             onKeyDown={activateFromKeyboard}
             data-terminal-id={terminal.id}
@@ -579,6 +587,7 @@ function CycleEdgeOverlay({ timing, viewport, editable, selectedId, gridSize, ca
 function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
+  const fitWhenReady = useRef(false);
   const secondaryDragRef = useRef<{ x: number; y: number; moved: boolean }>();
   const [pendingTerminalId, setPendingTerminalId] = useState<string>();
   const emitContextMenu = (target: CircuitCanvasContextTarget, anchor: CircuitContextAnchor) => {
@@ -656,6 +665,8 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       position: { x: geometry.x, y: geometry.y },
       width: geometry.width,
       height: geometry.height,
+      // Preserve handle measurements when controlled nodes are projected again.
+      measured: { width: geometry.width, height: geometry.height },
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: node,
@@ -685,6 +696,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       position: { x: geometry.x, y: geometry.y },
       width: geometry.width,
       height: geometry.height,
+      measured: { width: geometry.width, height: geometry.height },
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: { id: terminal.id, label: terminal.label, component_id: "boundary", terminal_ids: [terminal.id], configuration_values: {} },
@@ -716,30 +728,33 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     if (edge.data) edge.data.onContextMenu = emitContextMenu;
   }
 
+  function fitCanvas(): void {
+    const canvas = canvasRef.current;
+    const instance = instanceRef.current;
+    if (!canvas || !instance) { fitWhenReady.current = true; return; }
+    fitWhenReady.current = false;
+    const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry)];
+    const points = [
+      ...geometry.flatMap(box => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]),
+      ...Object.values(netRoutes).flatMap(route => route.vertices.map(vertex => vertex.point)),
+    ];
+    if (!points.length) return;
+    // Boundary labels sit outside their small port boxes. Include them and
+    // route bends, and use the current canvas size after a window resize.
+    const x = Math.min(...points.map(point => point.x)) - 160;
+    const y = Math.min(...points.map(point => point.y)) - 40;
+    const next = getViewportForBounds({ x, y,
+      width: Math.max(...points.map(point => point.x)) - x + 160,
+      height: Math.max(...points.map(point => point.y)) - y + 40,
+    }, canvas.clientWidth, canvas.clientHeight, 0.08, 2.5, 0.1);
+    void instance.setViewport(next);
+    onViewportChange?.(next);
+  }
+
   useImperativeHandle(forwardedRef, () => ({
     zoomIn: () => { void instanceRef.current?.zoomIn({ duration: 140 }); },
     zoomOut: () => { void instanceRef.current?.zoomOut({ duration: 140 }); },
-    fitView: () => {
-      const canvas = canvasRef.current;
-      const instance = instanceRef.current;
-      if (!canvas || !instance) return;
-      const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry)];
-      const points = [
-        ...geometry.flatMap(box => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]),
-        ...Object.values(netRoutes).flatMap(route => route.vertices.map(vertex => vertex.point)),
-      ];
-      if (!points.length) return;
-      // Boundary labels sit outside their small port boxes. Include them and
-      // route bends, and use the current canvas size after a window resize.
-      const x = Math.min(...points.map(point => point.x)) - 160;
-      const y = Math.min(...points.map(point => point.y)) - 40;
-      const next = getViewportForBounds({ x, y,
-        width: Math.max(...points.map(point => point.x)) - x + 160,
-        height: Math.max(...points.map(point => point.y)) - y + 40,
-      }, canvas.clientWidth, canvas.clientHeight, 0.08, 2.5, 0.1);
-      void instance.setViewport(next);
-      onViewportChange?.(next);
-    },
+    fitView: fitCanvas,
     cancelPendingConnection: () => setPendingTerminalId(undefined),
     centerSelection: () => {
       const instance = instanceRef.current;
@@ -779,7 +794,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       const current = instance.getViewport();
       void instance.setViewport({ ...current, x: current.x + delta.x, y: current.y + delta.y }, { duration: 140 });
     },
-  }), [netRoutes, selection]);
+  }), [netRoutes, selection, nodeGeometry, boundaryGeometry, onViewportChange]);
 
   const onCanvasKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     const target = event.target;
@@ -876,7 +891,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         nodeTypes={{ circuit: CircuitNodeView }}
         edgeTypes={{ circuit: CircuitEdgeView }}
         fitView={fitViewOnInit}
-        onInit={(instance) => { instanceRef.current = instance; }}
+        onInit={(instance) => { instanceRef.current = instance; if (fitWhenReady.current) fitCanvas(); }}
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         {...(viewport ? { viewport } : {})}
         minZoom={0.08}

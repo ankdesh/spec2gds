@@ -1147,6 +1147,54 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+test("shows generated RTL diagnostics on the checked target with their file location", async ({ page }) => {
+  await mockEditorApi(page);
+  await page.route("**/documents/view*", async route => {
+    // The existing fixture supplies the document projection; replace only its verification result.
+    const currentBatch = structuredClone(batch);
+    const checked = { ...snapshot, verifications: [{ target: designRef, source_revision_hash: revision, status: "failed", tool_version: "Verilator fixture", diagnostics: [{ code: "VERILATOR_ERROR", message: "Invalid parent connection", blocking: true, file_path: "designs/processor.sv", source_kind: "generated", line: 31, column: 45 }], functional_simulation: "unverified" }] };
+    await route.fulfill({ json: { snapshot: checked, a2ui: currentBatch, activity: { executions: [], artifacts: [], proposals: [], assistant_changes: [] }, approval_policy: "automatic", event_cursor: 0, source_revision_hash: revision } });
+  });
+  await openSample(page);
+  const design = page.locator("#design-design_top");
+  await expect(design.getByRole("status")).toContainText("Lint failed");
+  await expect(design).toContainText("1 blocking diagnostic");
+  await design.getByText("Verification details", { exact: true }).click();
+  await expect(design).toContainText("Generated RTL: designs/processor.sv:31:45");
+  await expect(page.locator(".spec-section-diagnostics")).toHaveCount(0);
+});
+
+test("keeps port actions compact and keyboard accessible in both themes", async ({ page }, testInfo) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const row = page.locator("#component-component_timer .spec-port-row").first();
+  for (const theme of ["obsidian", "clean"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.locator(".theme-quick-toggle").click();
+    for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 560, height: 760 }]) {
+      await page.setViewportSize(size);
+      await row.getByRole("button", { name: "Edit", exact: true }).scrollIntoViewIfNeeded();
+      const rowBox = await row.boundingBox();
+      expect(rowBox!.height).toBeLessThan(90);
+      await expect(page.getByRole("menuitem", { name: "Duplicate", exact: true })).toBeHidden();
+      const more = row.getByLabel("More actions for port irq", { exact: true });
+      await more.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("menuitem", { name: "Duplicate", exact: true })).toBeVisible();
+      await expect(page.getByRole("menuitem", { name: "Delete port", exact: true })).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`ports-${theme}-${size.width}.png`) });
+      await page.keyboard.press("Escape");
+      await expect(more).toBeFocused();
+      await expect(page.getByRole("menuitem", { name: "Duplicate", exact: true })).toBeHidden();
+    }
+  }
+  await row.getByLabel("More actions for port irq", { exact: true }).click();
+  await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
+  const draft = page.locator("#component-component_timer .spec-port-editor");
+  await expect(draft.getByLabel("Port ID", { exact: true })).toHaveValue("irq_2");
+  await draft.getByRole("button", { name: "Cancel", exact: true }).click();
+  expect(state.transactions).toHaveLength(0);
+});
+
 test("keeps mixed-family tables contained, IDs exact, and row actions readable", async ({ page }) => {
   await mockEditorApi(page);
   await openSample(page);
@@ -1462,7 +1510,7 @@ test("toggles themes via quick toggle and Preferences dialog with persistence", 
 
   // Default theme is obsidian
   await expect(page.locator("html")).toHaveAttribute("data-theme", "obsidian");
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_obsidian.png" });
+  await page.screenshot({ path: test.info().outputPath("spec_editor_obsidian.png") });
 
   // Click quick toggle in header
   const toggleButton = page.locator(".theme-quick-toggle");
@@ -1471,7 +1519,7 @@ test("toggles themes via quick toggle and Preferences dialog with persistence", 
 
   // Switched to clean (light)
   await expect(page.locator("html")).toHaveAttribute("data-theme", "clean");
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_clean.png" });
+  await page.screenshot({ path: test.info().outputPath("spec_editor_clean.png") });
 
   // Open Edit -> Preferences…
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
@@ -1479,7 +1527,7 @@ test("toggles themes via quick toggle and Preferences dialog with persistence", 
 
   const preferencesDialog = page.getByRole("dialog", { name: "Preferences" });
   await expect(preferencesDialog).toBeVisible();
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_preferences_dialog.png" });
+  await page.screenshot({ path: test.info().outputPath("spec_editor_preferences_dialog.png") });
 
   // Verify focus trap wraps between first and last focusable elements
   const closeButton = preferencesDialog.getByRole("button", { name: "Close" });
@@ -1523,7 +1571,7 @@ test("renders SystemVerilog edit box with full width and aligns Explore button t
   expect(buttonBox!.x + buttonBox!.width).toBeGreaterThanOrEqual(narrativeBox!.x + narrativeBox!.width - 10);
 
   await page.locator("#component-component_timer").scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_narrative_action_right.png" });
+  await page.screenshot({ path: test.info().outputPath("spec_editor_narrative_action_right.png") });
 
   // Open SystemVerilog editor
   const timer = page.locator("#component-component_timer");
@@ -1543,7 +1591,7 @@ test("renders SystemVerilog edit box with full width and aligns Explore button t
   expect(codeBox!.width).toBeGreaterThanOrEqual(formBox!.width - 36);
 
   await svForm.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/spec_editor_sv_full_width.png" });
+  await page.screenshot({ path: test.info().outputPath("spec_editor_sv_full_width.png") });
 });
 
 test("TS-UI-001 and TS-UI-002: renders canonical Spec Editor branding and inflects document entity counts", async ({ page }) => {
@@ -1636,6 +1684,8 @@ test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus ac
   // Check Obsidian (dark theme) table header contrast
   const obsidianThRatio = await getContrastRatio(".spec-table-scroll th", ".spec-table-scroll th");
   expect(obsidianThRatio).toBeGreaterThanOrEqual(4.5);
+  await page.setViewportSize({ width: 560, height: 760 });
+  expect(await getContrastRatio(".editor-mobile-menu-trigger", ".editor-mobile-menu-trigger")).toBeGreaterThanOrEqual(4.5);
 
   // Switch to Clean (light theme)
   await page.locator(".theme-quick-toggle").click();
@@ -1644,6 +1694,7 @@ test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus ac
   // Check Clean (light theme) table header contrast
   const cleanThRatio = await getContrastRatio(".spec-table-scroll th", ".spec-table-scroll th");
   expect(cleanThRatio).toBeGreaterThanOrEqual(4.5);
+  expect(await getContrastRatio(".editor-mobile-menu-trigger", ".editor-mobile-menu-trigger")).toBeGreaterThanOrEqual(4.5);
 });
 
 test("captures Spec Editor visual baselines across themes, viewports, and dialogs", async ({ page }) => {

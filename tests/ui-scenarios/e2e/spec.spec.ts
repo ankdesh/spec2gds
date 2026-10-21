@@ -59,13 +59,15 @@ test("manual authoring: repeated ports, duplication and deletion retain saved ro
   await draft.getByLabel("Range", { exact: true }).fill("");
   await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
   const row = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a", exact: true }) });
-  await row.getByRole("button", { name: "Duplicate", exact: true }).click();
+  await row.getByRole("button", { name: "More actions for port a", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
   draft = component.locator(".spec-port-editor");
   await expect(draft.getByLabel("Port ID")).toHaveValue("a_2");
   await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(component.locator(".spec-port-row")).toHaveCount(3);
   page.once("dialog", dialog => dialog.accept());
-  await component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a_2", exact: true }) }).getByRole("button", { name: "Delete port", exact: true }).click();
+  await component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a_2", exact: true }) }).getByRole("button", { name: "More actions for port a_2", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Delete port", exact: true }).click();
   await expect(component.locator(".spec-port-row")).toHaveCount(2);
   const saved = (await stack.snapshot()).components[0].ports;
   expect(saved.map((port: any) => port.name)).toEqual(["a", "clk"]);

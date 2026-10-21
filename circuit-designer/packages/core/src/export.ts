@@ -46,8 +46,8 @@ const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }
   const titleChars = Math.max(4, Math.floor((geometry.width - 44) / 8));
   const shortLabel = label.length > titleChars ? `${label.slice(0, titleChars - 1)}…` : label;
   return [
-    `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/>`,
-    `<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`,
+    `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component" data-component-id="${escapeXml(component.id)}"/>`,
+    ...(displayName === label ? [] : [`<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`]),
     `<text x="${geometry.x + 13}" y="${geometry.y + 49}" class="component-symbol">${component.appearance.renderer_key === "register" ? "▣" : component.appearance.renderer_key === "constant" ? "1" : component.appearance.renderer_key === "not" ? "▷○" : "◈"}</text>`,
     `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label"><title>${escapeXml(label)}</title>${escapeXml(shortLabel)}</text>`,
   ].join("");
@@ -75,8 +75,17 @@ type ExportTerminal = {
   placement: TerminalPlacement;
 };
 
-function terminalDisplayLabel(terminal: ExportTerminal["definition"]): string {
+export function circuitTerminalDisplayLabel(terminal: Pick<TerminalDefinition, "label" | "width">): string {
   return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.width > 1 ? `${terminal.label} · ${terminal.width} bits` : terminal.label;
+}
+
+/** Shorten only the name; numeric and symbolic width information stays intact. */
+export function compactCircuitTerminalLabel(terminal: Pick<TerminalDefinition, "label" | "width">, limit: number): string {
+  const suffix = typeof terminal.width === "number" && terminal.width > 1
+    ? ` · ${terminal.width}b` : circuitTerminalDisplayLabel({ ...terminal, label: "" });
+  const available = Math.max(1, limit - suffix.length);
+  const name = terminal.label.length > available ? `${terminal.label.slice(0, Math.max(0, available - 1))}…` : terminal.label;
+  return name + suffix;
 }
 
 function terminalPoint(terminal: ExportTerminal): Point {
@@ -171,9 +180,9 @@ function exportTerminals(
 function terminalMarkup(terminal: ExportTerminal): string {
   const point = terminalPoint(terminal);
   const box = terminal.geometry;
-  const fullLabel = terminalDisplayLabel(terminal.definition);
+  const fullLabel = circuitTerminalDisplayLabel(terminal.definition);
   const limit = terminal.key.startsWith("boundary:") ? 26 : 13;
-  const label = escapeXml(fullLabel.length > limit ? `${fullLabel.slice(0, limit - 1)}…` : fullLabel);
+  const label = escapeXml(compactCircuitTerminalLabel(terminal.definition, limit));
   const side = terminal.placement.side;
   const labelPosition = side === "WEST" ? { x: box.x + 8, y: point.y + 3, anchor: "start" }
     : side === "EAST" ? { x: box.x + box.width - 8, y: point.y + 3, anchor: "end" }

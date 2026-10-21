@@ -802,7 +802,7 @@ class _Normalizer:
             if connection.source.external_ports:
                 assert parent is not None
                 external = next(endpoint for endpoint in connection.endpoints if endpoint.kind == "boundary")
-                expression = _slice_expression(self.port_names[(parent.ref.entity_id, external.port.name)], external.slice)
+                expression = _slice_expression(self.port_names[(parent.ref.entity_id, external.port.name)], external.slice, _port_shape(external.port))
             else:
                 expression = connection_names[connection.source.name]
                 nets.append(_RtlNet(connection.source.name, expression, connection.shape.text))
@@ -813,7 +813,7 @@ class _Normalizer:
                 if endpoint.slice is None:
                     expressions[key] = expression
                 else:
-                    bits = _slice_expression(expressions[key], endpoint.slice)
+                    bits = _slice_expression(expressions[key], endpoint.slice, _port_shape(endpoint.port))
                     lhs, rhs = (bits, expression) if endpoint.port.direction == "in" else (expression, bits)
                     assignments.append(f"assign {lhs} = {rhs};")
 
@@ -1088,8 +1088,15 @@ def _json_bytes(value: object) -> bytes:
     ).encode("utf-8")
 
 
-def _slice_expression(name: str, endpoint_slice: EndpointSliceIR | None) -> str:
+def _slice_expression(name: str, endpoint_slice: EndpointSliceIR | None, shape: _PortShape | None) -> str:
     if endpoint_slice is None:
+        return name
+    # Saved connections can explicitly select the only bit of a scalar. The
+    # selection is valid logically, but a scalar has no packed HDL dimension.
+    # Packed one-bit ports still need their declared index, including [5:5].
+    if shape is not None and shape.key is None:
+        if endpoint_slice.lsb != 0 or endpoint_slice.width != 1:
+            raise ValueError("A scalar connection must select its only bit.")
         return name
     high = endpoint_slice.lsb + endpoint_slice.width - 1
     return f"{name}[{high}:{endpoint_slice.lsb}]" if endpoint_slice.width > 1 else f"{name}[{endpoint_slice.lsb}]"

@@ -10,7 +10,61 @@ import {
   terminalSide,
 } from "../src/index";
 
+function dataflowFixture(edges: Array<[string, string]>) {
+  const document = simpleDocumentFixture();
+  const ids = [...new Set(edges.flat())];
+  document.components = ids.map(id => ({
+    id, label: id, origin: "local" as const, editable: true, parameters: [],
+    appearance: { renderer_key: "generic", properties: {} },
+    terminals: [
+      { id: "clk", label: "clk", direction: "input" as const, width: 1, category: "port" as const },
+      ...edges.flatMap(([source, target], n) => source === id
+        ? [{ id: `out${n}`, label: `out${n}`, direction: "output" as const, width: 1, category: "port" as const }]
+        : target === id ? [{ id: `in${n}`, label: `in${n}`, direction: "input" as const, width: 1, category: "port" as const }] : []),
+    ],
+  }));
+  document.design.instances = ids.map(id => ({ id, label: id, component_id: id, parameter_values: {} }));
+  document.design.boundary_terminals = [{ id: "clk", label: "clk", direction: "input", width: 1, category: "port" }];
+  document.design.nets = edges.map(([source, target], n) => ({ id: `net${n}`, label: `net${n}`, endpoints: [
+    { kind: "instance" as const, instance_id: source, terminal_id: `out${n}` },
+    { kind: "instance" as const, instance_id: target, terminal_id: `in${n}` },
+  ] }));
+  document.design.nets.push({ id: "clock", label: "clock", endpoints: [
+    ...[...ids].reverse().map(id => ({ kind: "instance" as const, instance_id: id, terminal_id: "clk" })),
+    { kind: "boundary", terminal_id: "clk" },
+  ] });
+  document.layout.instance_geometry = Object.fromEntries(ids.map((id, index) => [id, { x: 80, y: 80 + 260 * index, width: 180, height: 160, pinned: false }]));
+  document.layout.net_routes = {};
+  document.layout.terminal_placements = {};
+  return document;
+}
+
 describe("deterministic circuit layout", () => {
+  test("arranges data flow despite reverse-ordered shared boundary fan-out", async () => {
+    const document = dataflowFixture([["z_input", "m_add"], ["m_add", "a_output"]]);
+    const result = await layoutCircuitDocument(document, { preserveNodeGeometry: "pinned" });
+    const geometry = result.document.layout.instance_geometry;
+    expect(geometry.z_input.x).toBeLessThan(geometry.m_add.x);
+    expect(geometry.m_add.x).toBeLessThan(geometry.a_output.x);
+    expect(document.layout.instance_geometry.a_output.x).toBe(80);
+  });
+
+  test("keeps parallel arithmetic before its selector and output register", async () => {
+    const document = dataflowFixture([["add", "select"], ["sub", "select"], ["select", "result"]]);
+    const result = await layoutCircuitDocument(document, { preserveNodeGeometry: "pinned" });
+    const geometry = result.document.layout.instance_geometry;
+    expect(geometry.add.x).toBe(geometry.sub.x);
+    expect(geometry.select.x).toBeGreaterThan(geometry.add.x);
+    expect(geometry.result.x).toBeGreaterThan(geometry.select.x);
+  });
+
+  test("arranges feedback deterministically without inferring protocol direction", async () => {
+    const document = dataflowFixture([["fifo", "slice"], ["slice", "fifo"]]);
+    const first = await layoutCircuitDocument(document, { preserveNodeGeometry: "pinned" });
+    const second = await layoutCircuitDocument(document, { preserveNodeGeometry: "pinned" });
+    expect(first.document.layout).toEqual(second.document.layout);
+    expect(first.document.layout.instance_geometry.fifo.x).not.toBe(first.document.layout.instance_geometry.slice.x);
+  });
   for (const [name, build] of Object.entries(fixtures)) {
     if (name === "large") continue;
     test(`places and routes ${name}`, async () => {
@@ -144,6 +198,25 @@ describe("deterministic circuit layout", () => {
     expect(stageForHorizontalSpan(result.document.timing!, result.document.layout.instance_geometry.producer_0.x, result.document.layout.instance_geometry.producer_0.x + result.document.layout.instance_geometry.producer_0.width)).toBe(0);
     expect(stageForHorizontalSpan(result.document.timing!, result.document.layout.instance_geometry.consumer_0.x, result.document.layout.instance_geometry.consumer_0.x + result.document.layout.instance_geometry.consumer_0.width)).toBe(1);
     expect(edge.x % document.layout.grid_size).toBe(0);
+  });
+
+  test("Arrange keeps pinned geometry and route locks with timing markers", async () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry = {
+      producer_0: { x: 80, y: 80, width: 180, height: 100, pinned: true },
+      consumer_0: { x: 500, y: 80, width: 180, height: 100, pinned: false },
+    };
+    document.timing = { schema_version: 1, clock_domains: [{ id: "default", label: "clk" }], cycle_edges: [{ id: "edge", x: 340, locked: true }], subject_domain_overrides: {} };
+    const initial = await layoutCircuitDocument(document);
+    expect(initial.document.layout.instance_geometry.producer_0).toEqual(document.layout.instance_geometry.producer_0);
+    initial.document.layout.net_routes.data = setAllRouteLocks(initial.document.layout.net_routes.data, true);
+    const pinned = structuredClone(initial.document.layout.instance_geometry.producer_0);
+    const arranged = await layoutCircuitDocument(initial.document, { preserveNodeGeometry: "pinned" });
+    expect(arranged.document.layout.instance_geometry.producer_0).toEqual(pinned);
+    expect(arranged.document.timing!.cycle_edges).toEqual(document.timing.cycle_edges);
+    for (const segment of initial.document.layout.net_routes.data.segments) {
+      expect(arranged.document.layout.net_routes.data.segments.find(item => item.id === segment.id)?.locked).toBe(true);
+    }
   });
 
   test("handles the 200-node scale fixture", async () => {

@@ -63,6 +63,7 @@ import {
   summarizeFileDiagnostics,
 } from "./circuit-files";
 import { browserRandomUuid } from "./browser-id";
+import { connectionEndpoint } from "./connection-input";
 import { ActionSettingsPage } from "./ActionSettingsPage";
 import { CircuitMenuBar } from "./CircuitMenuBar";
 import { CircuitConfirmationDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
@@ -103,20 +104,6 @@ const isConflictError = (reason: unknown): boolean => Boolean(
 );
 const isLeaseConflict = (reason: unknown): boolean => Boolean(reason && typeof reason === "object"
   && (("status" in reason && reason.status === 423) || ("code" in reason && reason.code === "lock_conflict")));
-
-function endpointFromTerminal(terminalKey: string, lsb: number, width: number): NetEndpoint {
-  const slice = width > 0 ? { slice: { lsb, width } } : {};
-  if (terminalKey.startsWith("boundary:")) {
-    return { kind: "boundary", terminal_id: terminalKey.slice("boundary:".length), ...slice };
-  }
-  const separator = terminalKey.indexOf(":");
-  return {
-    kind: "instance",
-    instance_id: terminalKey.slice(0, separator),
-    terminal_id: terminalKey.slice(separator + 1),
-    ...slice,
-  };
-}
 
 export interface CircuitDesignerAppProps {
   backend: CircuitDesignerBackend;
@@ -196,11 +183,17 @@ export function App({
   const appRef = useRef<HTMLElement>(null);
   const canvasRef = useRef<CircuitDesignerCanvasHandle>(null);
   const layoutGraphRef = useRef<ReturnType<typeof projectDocument>>();
+  const fittedDocumentRef = useRef<string>();
+  const pendingArrangeFitRef = useRef<{ documentId: string; operations: string }>();
+  const arrangeRequestRef = useRef(0);
+  const draftChangeRef = useRef(0);
   const actionExecutorRef = useRef<(invocation: CircuitActionInvocation) => boolean>(() => false);
   const preferencesHydratedRef = useRef(false);
   const savedPreferencesRef = useRef("");
   const currentLeaseRef = useRef(lease);
   currentLeaseRef.current = lease;
+  const currentSnapshotRef = useRef(snapshot);
+  currentSnapshotRef.current = snapshot;
   const currentDocumentIdRef = useRef(snapshot?.document.document_id);
   currentDocumentIdRef.current = snapshot?.document.document_id;
   const acquiringRef = useRef(false);
@@ -385,6 +378,23 @@ export function App({
   }, [graph]);
 
   useEffect(() => {
+    if (!graph) return;
+    const key = `${graph.document_id}:${graph.design.id}`;
+    if (!graph.nodes.length && !graph.terminals.length) { fittedDocumentRef.current = key; return; }
+    if (!layout || layoutGraphRef.current !== graph) return;
+    const pending = pendingArrangeFitRef.current;
+    const arrangeFit = pending?.documentId === graph.document_id
+      && pending.operations === JSON.stringify(draftRef.current?.operations);
+    if (fittedDocumentRef.current === key && !arrangeFit) return;
+    const frame = requestAnimationFrame(() => {
+      canvasRef.current?.fitView();
+      fittedDocumentRef.current = key;
+      if (arrangeFit) pendingArrangeFitRef.current = undefined;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [graph, layout]);
+
+  useEffect(() => {
     if (!snapshot || !backend) return;
     void backend.listProposals(snapshot.document.document_id).then(setProposals);
   }, [backend, snapshot]);
@@ -404,7 +414,10 @@ export function App({
       if (event.kind !== "document.changed" || draftRef.current) return;
       void backend.get(documentId).then((next) => {
         if (currentDocumentIdRef.current !== documentId || draftRef.current) return;
-        if (next.revision === snapshot.revision) return;
+        // A queued refresh can finish after a local save. Compare with the
+        // current revision, not the snapshot captured by this subscription.
+        if (next.revision === currentSnapshotRef.current?.revision) return;
+        currentSnapshotRef.current = next;
         setSnapshot(next);
         setDocument(next.document);
         setSelection([]);
@@ -496,6 +509,7 @@ export function App({
       return false;
     }
     setDocument(draft.document);
+    draftChangeRef.current += 1;
     setMessage(success);
     return true;
   }
@@ -619,6 +633,7 @@ export function App({
         return;
       }
       setDocument(draft.document);
+      draftChangeRef.current += 1;
       if (!source) {
         setMessage("This host did not provide a writable source adapter.");
         return;
@@ -644,6 +659,7 @@ export function App({
       }
       // Close the private draft only after the adapter returns its authoritative
       // snapshot. Rejected or uncertain saves above preserve the complete draft.
+      currentSnapshotRef.current = result.snapshot;
       draftRef.current = undefined;
       setLease(undefined);
       currentLeaseRef.current = undefined;
@@ -670,6 +686,7 @@ export function App({
     }
     try { await backend.releaseLease(snapshot.document.document_id, lease.lease_id); }
     catch (reason) { if (!isLeaseConflict(reason)) throw reason; }
+    currentSnapshotRef.current = result.snapshot;
     draftRef.current = undefined;
     setLease(undefined);
     currentLeaseRef.current = undefined;
@@ -738,6 +755,7 @@ export function App({
     const draft = draftRef.current;
     if (!draft) return;
     setDocument(direction === "undo" ? draft.undo() : draft.redo());
+    draftChangeRef.current += 1;
     setMessage(direction === "undo" ? "Draft change undone." : "Draft change redone.");
   }
 
@@ -829,8 +847,8 @@ export function App({
     }
     const id = uniqueSlug(label, document.design.nets.map((item) => item.id));
     return applyConnection([
-      endpointFromTerminal(source, lsb, width),
-      endpointFromTerminal(target, lsbB, width),
+      connectionEndpoint(source, lsb, width, graph?.terminals.find(item => item.id === source)?.width),
+      connectionEndpoint(target, lsbB, width, graph?.terminals.find(item => item.id === target)?.width),
     ], id, label);
   }
 
@@ -947,17 +965,26 @@ export function App({
   }
 
   async function autoLayout(): Promise<void> {
-    if (!document || !draftRef.current) {
+    const draft = draftRef.current;
+    if (!document || !draft || !lease) {
       setMessage("Unlock before applying automatic layout.");
       return;
     }
+    const requestId = ++arrangeRequestRef.current;
+    const changeBefore = draftChangeRef.current;
+    const leaseId = lease.lease_id;
     setLayoutProgress("Starting layout…");
-    const task = createLayoutTask(document, {
-      layout: { preserveNodeGeometry: "pinned" },
-      onProgress: (phase, progress) => setLayoutProgress(`${phase} · ${Math.round(progress * 100)}%`),
-    });
     try {
+      const task = createLayoutTask(document, {
+        layout: { preserveNodeGeometry: "pinned" },
+        onProgress: (phase, progress) => {
+          if (arrangeRequestRef.current === requestId && draftRef.current === draft) setLayoutProgress(`${phase} · ${Math.round(progress * 100)}%`);
+        },
+      });
       const result = await task.result;
+      if (arrangeRequestRef.current !== requestId || draftRef.current !== draft
+        || currentLeaseRef.current?.lease_id !== leaseId || currentDocumentIdRef.current !== document.document_id
+        || draftChangeRef.current !== changeBefore) return;
       const operations: CircuitOperation[] = [
         ...Object.entries(result.document.layout.instance_geometry).map(([instanceId, geometry]): CircuitOperation => ({
           operation_id: operationId("layout"),
@@ -977,11 +1004,14 @@ export function App({
           return previous && previous.x !== edge.x ? [{ operation_id: operationId("cycle_edge"), type: "update_cycle_edge", edge }] : [];
         }),
       ];
-      if (mutateBatch(operations, `Automatic layout completed in ${result.elapsed_ms} ms.`)) setLayout(undefined);
+      if (mutateBatch(operations, `Automatic layout completed in ${result.elapsed_ms} ms.`)) {
+        pendingArrangeFitRef.current = { documentId: document.document_id, operations: JSON.stringify(draft.operations) };
+        setLayout(undefined);
+      }
     } catch (reason) {
-      setMessage(reason instanceof Error ? reason.message : String(reason));
+      if (draftRef.current === draft && arrangeRequestRef.current === requestId) setMessage(reason instanceof Error ? reason.message : String(reason));
     } finally {
-      setLayoutProgress("");
+      if (arrangeRequestRef.current === requestId) setLayoutProgress("");
     }
   }
 
@@ -1255,7 +1285,7 @@ export function App({
   function createConnectionFromDialog(): boolean {
     if (existingNetId === "") { setConnectionError("Choose an existing net."); return false; }
     const created = existingNetId
-      ? applyConnection([endpointFromTerminal(endpointB, sliceLsbB, sliceWidth)], "", "", existingNetId)
+      ? applyConnection([connectionEndpoint(endpointB, sliceLsbB, sliceWidth, graph?.terminals.find(item => item.id === endpointB)?.width)], "", "", existingNetId)
       : createNet(endpointA, endpointB, netName, sliceLsb, sliceWidth, sliceLsbB);
     if (!created) return false;
     setNetName("");

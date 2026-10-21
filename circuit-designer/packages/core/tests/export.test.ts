@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { hierarchyDocumentFixture, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
+import { compactCircuitTerminalLabel, hierarchyDocumentFixture, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
 
 describe("Circuit Designer visual export", () => {
+  it("preserves width suffixes and full inspection labels when names are shortened", () => {
+    const document = simpleDocumentFixture();
+    for (const component of document.components) component.terminals[0] = { ...component.terminals[0], label: "long_operand_name", width: 32 };
+    const compact = compactCircuitTerminalLabel(document.components[0].terminals[0], 13);
+    expect(compact).toMatch(/… · 32b$/);
+    const svg = renderCircuitSvg(document);
+    expect(svg).toContain(compact);
+    expect(svg).toContain("<title>long_operand_name · 32 bits</title>");
+    expect(compactCircuitTerminalLabel({ label: "a", width: "[N-1:0]" }, 13)).toContain("[N-1:0]");
+  });
+
+  it("does not repeat an identical Component and instance name", () => {
+    const document = simpleDocumentFixture();
+    for (const instance of document.design.instances) instance.label = document.components.find(item => item.id === instance.component_id)!.label;
+    const svg = renderCircuitSvg(document);
+    expect(svg).not.toContain('class="component-eyebrow"');
+    expect(svg).toContain('class="component-label"');
+    expect(svg).toContain(`data-component-id="${document.components[0].id}"`);
+  });
   it("renders canvas colors, component details, ports, routes, and explicit dimensions", () => {
     const document = simpleDocumentFixture();
     document.layout.instance_geometry = {

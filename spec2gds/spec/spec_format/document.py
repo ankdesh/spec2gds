@@ -125,6 +125,8 @@ class SectionDiagnostic(pydantic.BaseModel):
     line: int | None = None
     column: int | None = None
     blocking: bool = False
+    file_path: str | None = None
+    source_kind: typing.Literal["section", "generated"] | None = None
 
 
 class EntityContentSection(pydantic.BaseModel):

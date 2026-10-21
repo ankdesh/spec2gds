@@ -1150,7 +1150,7 @@ button:disabled {
   .app-header { padding: var(--spec-space-2) var(--spec-space-3); }
   .brand > span:last-child, .active-document { display: none; }
   .brand__mark { width: 2.75rem; height: 2.75rem; }
-  .editor-mobile-menu-trigger { display: block; border: 0.0625rem solid var(--spec-line-strong); background: #1c1c20; color: #f4f4f5; }
+  .editor-mobile-menu-trigger { display: block; border: 0.0625rem solid var(--spec-line-strong); background: var(--spec-paper); color: var(--spec-text); }
   .editor-menubar { display: none; }
   .editor-menubar--open {
     position: absolute; top: calc(100% + 0.25rem); left: var(--spec-space-3); right: var(--spec-space-3);

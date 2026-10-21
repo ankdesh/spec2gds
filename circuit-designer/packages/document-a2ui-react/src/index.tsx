@@ -7,10 +7,13 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 import { A2uiSurface, createComponentImplementation } from "@a2ui/react/v0_9";
 import {
   Catalog,
@@ -1013,7 +1016,7 @@ function SystemVerilogCodeEditor({
   useEffect(() => {
     const instance = view.current;
     if (!instance) return;
-    const mapped: Diagnostic[] = diagnostics.map((item) => {
+    const mapped: Diagnostic[] = diagnostics.filter(item => item.source_kind !== "generated").map((item) => {
       const lineNumber = Math.min(Math.max(item.line ?? 1, 1), instance.state.doc.lines);
       const line = instance.state.doc.line(lineNumber);
       const from = Math.min(line.to, line.from + Math.max((item.column ?? 1) - 1, 0));
@@ -1073,6 +1076,7 @@ function HardwareControls({ state }: { state: SectionEditState }) {
   const isEntry = source?.entry_designs.some(item => item.ref.entity_id === ref.entity_id);
   const internal = source?.component_compositions.find(item => item.component.entity_id === ref.entity_id)?.internal_design;
   const result = source?.verifications?.find(item => item.target.entity_id === ref.entity_id);
+  const blockingCount = result?.diagnostics.filter(item => item.blocking).length ?? 0;
   const id = `${state.section.section_id}-controls`;
   const run = async (operation: () => Promise<void>) => {
     if (!coordinator.requestEditor(id)) return;
@@ -1093,6 +1097,7 @@ function HardwareControls({ state }: { state: SectionEditState }) {
     <div className="spec-edit-actions">
       {state.controller?.verify && <button type="button" disabled={busy || !!parameter} onClick={() => void run(() => state.controller!.verify!(ref))}>{busy ? "Working…" : component ? "Verify Component" : "Verify Design"}</button>}
       <span role="status">{result ? ({ passed: "Lint passed", failed: "Lint failed", unverified: "Not verified", stale: "Out of date" } as const)[result.status] : "Not verified"}</span>
+      {result?.status === "failed" && <small>{blockingCount} blocking {blockingCount === 1 ? "diagnostic" : "diagnostics"} · See verification details</small>}
     </div>
     {result && <details className="spec-verification-details">
       <summary>Verification details</summary>
@@ -1100,7 +1105,7 @@ function HardwareControls({ state }: { state: SectionEditState }) {
       <p>Source revision: <code>{result.source_revision_hash}</code></p>
       <p>{result.tool_version} · Functional simulation unverified</p>
       {result.interfaces?.map(item => <div key={item.component}><strong>{item.component}: {item.status}</strong>{item.ports.map(port => <p key={port.name}><code>{port.name}</code> · {port.range || "scalar"} · {port.width ?? "unresolved"} bits</p>)}</div>)}
-      {result.diagnostics.map((item, index) => <p key={index}>{item.code}: {item.message}</p>)}
+      {result.diagnostics.map((item, index) => <p key={index}><code>{item.code}</code>: {item.message}{item.file_path && <small> · {item.source_kind === "generated" ? "Generated RTL: " : "Section: "}{item.file_path}{item.line ? `:${item.line}${item.column ? `:${item.column}` : ""}` : ""}</small>}</p>)}
     </details>}
     <details><summary>Hardware settings</summary>
       {!component && <label><input type="checkbox" checked={!!isEntry} disabled={busy} onChange={event => void run(() => apply([{ type: event.target.checked ? "add_entry_design" : "remove_entry_design", design: ref }]))} /> Entry Design</label>}
@@ -1309,7 +1314,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
           {section.diagnostics.map((item, index) => (
             <li key={`${item.code}-${index}`}>
               <code>{item.code}</code> {item.message}
-              {item.line ? ` (line ${item.line}${item.column ? `:${item.column}` : ""})` : ""}
+              {item.file_path ? ` (${item.source_kind === "generated" ? "Generated RTL: " : ""}${item.file_path}${item.line ? `:${item.line}${item.column ? `:${item.column}` : ""}` : ""})` : item.line ? ` (line ${item.line}${item.column ? `:${item.column}` : ""})` : ""}
             </li>
           ))}
         </ul>
@@ -1516,6 +1521,45 @@ function ComponentPortsTable({
   );
 }
 
+function PortActionsMenu({ name, children }: { name: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    if (!open || !trigger.current || !menu.current) return;
+    const anchor = trigger.current.getBoundingClientRect();
+    menu.current.style.left = `${Math.max(8, Math.min(anchor.right - menu.current.offsetWidth, window.innerWidth - menu.current.offsetWidth - 8))}px`;
+    menu.current.style.top = `${anchor.bottom + menu.current.offsetHeight + 8 < window.innerHeight ? anchor.bottom + 4 : Math.max(8, anchor.top - menu.current.offsetHeight - 4)}px`;
+    menu.current.querySelector<HTMLButtonElement>("button")?.focus();
+  }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => {
+      if (!trigger.current?.contains(event.target as Node) && !menu.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const resize = () => setOpen(false);
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", resize);
+    return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", resize); };
+  }, [open]);
+  return <>
+    <button aria-label={`More actions for port ${name}`} aria-haspopup="menu" aria-controls={id} aria-expanded={open} onClick={() => setOpen(!open)} type="button" ref={trigger}>⋯</button>
+    {open && createPortal(<div className="spec-port-menu__items" id={id} ref={menu} role="menu" aria-label={`Actions for port ${name}`} onBlur={event => {
+      if (!event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== trigger.current) setOpen(false);
+    }} onClick={() => setOpen(false)} onKeyDown={event => {
+      if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); trigger.current?.focus(); }
+      if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const items = Array.from(menu.current?.querySelectorAll<HTMLButtonElement>("button") ?? []);
+        const current = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1 : event.key === "ArrowDown" ? (current + 1) % items.length : (current + items.length - 1) % items.length;
+        items[next]?.focus();
+      }
+    }}>{children}</div>, document.body)}
+  </>;
+}
+
 function ComponentPortRow({
   table,
   row,
@@ -1581,13 +1625,13 @@ function ComponentPortRow({
             Read-only
           </small>
         ) : null}
-        {canEdit && sectionEdit && <><button type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(true); setEditing(true); } }}>Duplicate</button>
-          {sectionEdit.controller?.applyOperations && <button className="spec-delete-button" type="button" onClick={async () => {
+        {canEdit && sectionEdit && <PortActionsMenu name={name}><button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(true); setEditing(true); } }}>Duplicate</button>
+          {sectionEdit.controller?.applyOperations && <button role="menuitem" className="spec-delete-button" type="button" onClick={async () => {
             if (!window.confirm(`Delete port ${name}? Connected or mapped ports cannot be deleted.`) || !coordinator.requestEditor(editorId)) return;
             try { await sectionEdit.controller!.applyOperations!([{ type: "delete_component_port", component: sectionEdit.section.entity_ref!, name }]); }
             catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
             finally { coordinator.finishEditor(editorId); }
-          }}>Delete port</button>}</>}
+          }}>Delete port</button>}</PortActionsMenu>}
         {error && <p role="alert">{error}</p>}
       </td>
     </tr>

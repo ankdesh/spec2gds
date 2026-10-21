@@ -52,7 +52,7 @@ def verify_target(revision: SpecRevision, target: EntityRef) -> dict:
     if not isinstance(entity, (ComponentIR, DesignIR)):
         raise ValueError("Select a Component or Design to verify.")
     visit(entity)
-    sections = validate_revision_sections(revision, section_ids)
+    sections = validate_revision_sections(revision, section_ids, context="section")
     diagnostics.extend(item.as_json() for result in sections for item in result.diagnostics)
     if not sections:
         diagnostics.append({"code": "NO_IMPLEMENTATION", "message": "No SystemVerilog implementation is available to lint.", "blocking": True})
@@ -63,15 +63,13 @@ def verify_target(revision: SpecRevision, target: EntityRef) -> dict:
         version = "Unavailable"
     hierarchy_checked = False
     if executable and sections and all(item.status in {"verified", "warnings"} for item in sections):
-        # Leaf Section checks can lint a direct containing Design. Also check
-        # the selected root so nested boundary connections cannot escape lint.
+        # Check the selected hierarchy separately from its leaf implementations.
         from spec2gds.spec.activities.rtl.codegen import generate_project
         from spec2gds.spec.activities.view import SpecAccess
         from spec2gds.spec.spec_format.sv_validation import _run_project
         try:
             project = generate_project(SpecAccess(revision, target), target)
-            source_section = next(item for item in revision.entity_sections if item.section_id in section_ids)
-            checked = _run_project(project.files, project.top_module, executable, source_section)
+            checked = _run_project(project.files, project.top_module, executable, None)
             diagnostics.extend(item.as_json() for item in checked)
             hierarchy_checked = not any(item.code in {"VERILATOR_TIMEOUT", "VERILATOR_UNAVAILABLE"} for item in checked)
         except (KeyError, TypeError, ValueError, OSError, subprocess.SubprocessError) as exc:

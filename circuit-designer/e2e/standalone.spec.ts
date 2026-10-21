@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { createDefaultCircuitDesignerPreferences, simpleDocumentFixture } from "@spec2gds/circuit-core";
 
 const circuitApiUrl = process.env.CIRCUIT_DESIGNER_E2E_API_URL
@@ -22,8 +22,9 @@ test("extends one net by connected-pin drag and dialog with local recovery", asy
       base_source_revision_hash: "base", writable: true, capabilities: ["topology", "layout"], omitted_bus_items: [], omitted_ports: [] },
   } })).ok()).toBe(true);
   await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator('.react-flow__node[data-id="consumer_3"]')).toBeInViewport({ ratio: 0.999999 });
   await menuAction(page, "Edit", "Begin editing");
-  await page.locator('.react-flow__handle[data-handleid="producer_0:data"]').dragTo(page.locator('.react-flow__handle[data-handleid="consumer_1:data"]'));
+  await connectTerminals(page, "producer_0:data", "consumer_1:data");
   await expect(page.locator(".notice")).toContainText("Endpoint added");
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
   await menuAction(page, "Edit", /Undo/);
@@ -37,6 +38,7 @@ test("extends one net by connected-pin drag and dialog with local recovery", asy
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width/i);
   await expect(page.getByLabel("Endpoint B", { exact: true })).toHaveValue("consumer_2:data");
   await page.getByLabel("Width (0=full)").fill("16");
+  await expect(page.getByLabel("Connection mapping")).toContainText("16 bits");
   await page.getByRole("button", { name: "Add endpoint", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -48,10 +50,42 @@ test("extends one net by connected-pin drag and dialog with local recovery", asy
   await page.reload();
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
   const svgDownload = page.waitForEvent("download");
-  await menuAction(page, "File", /Export SVG/);
+  await menuAction(page, "File", "Download");
+  await page.getByRole("menuitem", { name: /SVG/ }).click();
   const svg = await readFile((await (await svgDownload).path())!, "utf8");
   expect(svg).toContain("Sink 1");
   expect(svg).toContain("Sink 2");
+});
+
+test("previews a scalar to high bus bit and preserves independent endpoint mappings", async ({ page, request }) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `scalar_mapping_${Date.now()}`;
+  document.label = document.document_id;
+  document.design.nets = [];
+  document.design.boundary_terminals = [{ id: "cin", label: "cin", direction: "input", width: 1, category: "port" }];
+  document.components[1].terminals[0].width = 65;
+  await publishEditableFixture(request, document);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Connect", "New connection");
+  await page.getByLabel("Endpoint A", { exact: true }).selectOption("boundary:cin");
+  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("LSB for B", { exact: true }).fill("64");
+  await page.getByLabel("Width (0=full)").fill("2");
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width|range|slice/i);
+  await expect(page.getByLabel("LSB for B", { exact: true })).toHaveValue("64");
+  await page.getByLabel("Width (0=full)").fill("1");
+  await expect(page.getByLabel("Connection mapping")).toContainText(/cin.*→.*data\[64\].*1 bit/);
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.design.nets[0].endpoints).toEqual([
+    { kind: "boundary", terminal_id: "cin" },
+    { kind: "instance", instance_id: "consumer_0", terminal_id: "data", slice: { lsb: 64, width: 1 } },
+  ]);
+  expect(saved.document.components[1].terminals[0].width).toBe(65);
 });
 
 let sourceProvider: Server;
@@ -90,11 +124,166 @@ async function menuAction(page: Page, menu: string, action: string | RegExp): Pr
   await page.getByRole("menuitem", typeof action === "string" ? { name: action, exact: true } : { name: action }).click();
 }
 
+async function connectTerminals(page: Page, sourceKey: string, targetKey: string) {
+  const source = page.locator(`.react-flow__handle[data-handleid="${sourceKey}"]`);
+  const target = page.locator(`.react-flow__handle[data-handleid="${targetKey}"]`);
+  const before = (await source.boundingBox())!;
+  await source.hover();
+  const hovered = (await source.boundingBox())!;
+  expect(hovered.x).toBeCloseTo(before.x, 1);
+  expect(hovered.y).toBeCloseTo(before.y, 1);
+  await page.mouse.move(hovered.x + hovered.width / 2, hovered.y + hovered.height / 2);
+  expect(await source.evaluate(element => {
+    const bounds = element.getBoundingClientRect();
+    return document.elementFromPoint(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2)?.closest(".react-flow__handle")?.getAttribute("data-handleid");
+  })).toBe(sourceKey);
+  await page.mouse.down();
+  try {
+    const box = (await target.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 });
+    await expect(source).toHaveClass(/connectingfrom/);
+    await expect(target).toHaveClass(/valid/);
+  } finally { await page.mouse.up(); }
+}
+
+async function publishEditableFixture(request: APIRequestContext, document: ReturnType<typeof simpleDocumentFixture>) {
+  const created = await request.post(`${circuitApiUrl}/documents`, { data: { request_id: document.document_id, document } });
+  expect(created.ok(), await created.text()).toBe(true);
+  const binding = await request.put(`${circuitApiUrl}/documents/${document.document_id}/source-binding`, { data: {
+    callback_url: `http://127.0.0.1:${sourceProviderPort}/source/`, token: "focused-fixture",
+    binding: { schema_version: 1, binding_id: `binding_${document.document_id}`, source_document_id: document.document_id,
+      source_entity: { document_id: document.document_id, entity_id: "top", entity_kind: "design" }, editable_design_id: "top",
+      base_source_revision_hash: "base", writable: true, capabilities: ["topology", "layout", "local-components"], omitted_bus_items: [], omitted_ports: [] },
+  } });
+  expect(binding.ok(), await binding.text()).toBe(true);
+}
+
 test.beforeEach(async ({ request }) => {
   const response = await request.put(`${circuitApiUrl}/preferences`, {
     data: createDefaultCircuitDesignerPreferences(),
   });
   expect(response.ok()).toBe(true);
+});
+
+function stackedCircuitFixture() {
+  const document = simpleDocumentFixture();
+  document.document_id = `arrange_${Date.now()}`;
+  document.label = document.document_id;
+  for (const component of document.components) {
+    component.terminals[0].width = 16;
+    component.terminals.push({ id: "clk", label: "clk", direction: "input", width: 1, category: "port" });
+  }
+  document.design.boundary_terminals = [
+    { id: "clk", label: "shared_clock", direction: "input", width: 1, category: "port" },
+    { id: "result", label: "result", direction: "output", width: 16, category: "port" },
+  ];
+  document.design.nets[0].endpoints.push({ kind: "boundary", terminal_id: "result" });
+  document.design.nets.push({ id: "clock", label: "clock", endpoints: [
+    { kind: "instance", instance_id: "consumer_0", terminal_id: "clk" },
+    { kind: "instance", instance_id: "producer_0", terminal_id: "clk" },
+    { kind: "boundary", terminal_id: "clk" },
+  ] });
+  document.layout.instance_geometry = {
+    producer_0: { x: 80, y: 80, width: 180, height: 140, pinned: false },
+    consumer_0: { x: 80, y: 780, width: 180, height: 140, pinned: false },
+  };
+  document.layout.net_routes = {};
+  document.layout.terminal_placements = {};
+  return document;
+}
+
+test("fits loaded circuits in both themes and saves the accepted Arrange geometry", async ({ page, request }, testInfo) => {
+  test.setTimeout(60_000);
+  const document = stackedCircuitFixture();
+  await publishEditableFixture(request, document);
+  for (const theme of ["blueprint-slate", "obsidian"]) {
+    const preferences = createDefaultCircuitDesignerPreferences();
+    preferences.ui.theme_id = theme;
+    expect((await request.put(`${circuitApiUrl}/preferences`, { data: preferences })).ok()).toBe(true);
+    for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 560, height: 760 }]) {
+      await page.setViewportSize(size);
+      await page.goto(`/?document_id=${document.document_id}`);
+      await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
+      await expect(page.locator(".react-flow__node")).toHaveCount(4);
+      await expect.poll(async () => {
+        const canvas = await page.getByTestId("circuit-canvas").boundingBox();
+        const boxes = await page.locator(".react-flow__node, .cd-node__port-label").evaluateAll(elements => elements.map(element => {
+          const box = element.getBoundingClientRect(); return { x: box.x, y: box.y, right: box.right, bottom: box.bottom };
+        }));
+        return !!canvas && boxes.every(box => box.x >= canvas.x && box.y >= canvas.y && box.right <= canvas.x + canvas.width && box.bottom <= canvas.y + canvas.height);
+      }).toBe(true);
+      const label = page.locator('.react-flow__node[data-id="producer_0"] .cd-node__port-label').filter({ hasText: "16b" });
+      await label.focus();
+      await expect(label).toHaveAttribute("title", "data · 16 bits");
+      await page.screenshot({ path: testInfo.outputPath(`circuit-${theme}-${size.width}.png`) });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Route", "Arrange and route all");
+  await expect(page.locator(".notice")).toContainText("Automatic layout completed");
+  const producer = page.locator('.react-flow__node[data-id="producer_0"]');
+  const consumer = page.locator('.react-flow__node[data-id="consumer_0"]');
+  await expect.poll(async () => (await producer.boundingBox())!.x < (await consumer.boundingBox())!.x).toBe(true);
+  await menuAction(page, "Edit", /Undo/);
+  await expect.poll(async () => Math.abs((await producer.boundingBox())!.x - (await consumer.boundingBox())!.x)).toBeLessThan(1);
+  await menuAction(page, "Edit", /Redo/);
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.layout.instance_geometry.producer_0.x).toBeLessThan(saved.document.layout.instance_geometry.consumer_0.x);
+  expect(saved.document.design.nets).toEqual(document.design.nets);
+  await page.reload();
+  await expect.poll(async () => (await producer.boundingBox())!.x < (await consumer.boundingBox())!.x).toBe(true);
+  // Allow Chromium's subpixel rounding on scaled, fully visible labels.
+  await expect(page.locator('.cd-node__port-label[aria-label="shared_clock"]')).toBeInViewport({ ratio: 0.999999 });
+  for (const theme of ["obsidian", "blueprint-slate"]) {
+    if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.locator(".topbar .theme-quick-toggle").click();
+    await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
+    await page.screenshot({ path: testInfo.outputPath(`arranged-${theme}-1440.png`) });
+  }
+});
+
+test("ignores an Arrange result after another draft edit", async ({ page, request }) => {
+  await page.addInitScript(() => {
+    const NativeWorker = window.Worker;
+    window.Worker = class extends NativeWorker {
+      postMessage(message: unknown, transfer?: Transferable[]) {
+        if ((message as { type?: string }).type === "layout") {
+          (window as Window & { releaseArrange?: () => void }).releaseArrange = () => super.postMessage(message, transfer ?? []);
+        } else super.postMessage(message, transfer ?? []);
+      }
+    };
+  });
+  const document = stackedCircuitFixture();
+  await publishEditableFixture(request, document);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator('.cd-node__port-label[aria-label="shared_clock"]')).toBeInViewport({ ratio: 0.999999 });
+  const viewport = page.locator(".react-flow__viewport");
+  const initialViewport = await viewport.getAttribute("style");
+  const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+  await page.mouse.move(pane.x + pane.width - 140, pane.y + pane.height - 140);
+  await page.mouse.down();
+  await page.mouse.move(pane.x + pane.width - 100, pane.y + pane.height - 120, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => viewport.getAttribute("style")).not.toBe(initialViewport);
+  const manualViewport = await viewport.getAttribute("style");
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Route", "Arrange and route all");
+  await expect.poll(() => page.evaluate(() => !!(window as Window & { releaseArrange?: () => void }).releaseArrange)).toBe(true);
+  await menuAction(page, "Components", "New local component");
+  await page.getByLabel("Name", { exact: true }).fill("Late edit");
+  await page.getByRole("button", { name: "Create definition + instance", exact: true }).click();
+  await expect(viewport).toHaveAttribute("style", manualViewport!);
+  await page.evaluate(() => (window as Window & { releaseArrange?: () => void }).releaseArrange!());
+  await expect(page.locator(".notice")).toContainText("Local component and first instance created");
+  await expect(viewport).toHaveAttribute("style", manualViewport!);
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.design.instances).toHaveLength(3);
+  expect(saved.document.layout.instance_geometry.producer_0.x).toBe(80);
+  expect(saved.document.layout.instance_geometry.consumer_0.x).toBe(80);
 });
 
 test("uses a compact menubar and the reclaimed full-width canvas", async ({ page }) => {
@@ -226,7 +415,14 @@ test("edits a writable specification binding and saves it through source preview
   await expect(page.locator(".document-status")).toContainText("Specification draft");
 
   const pane = page.locator(".react-flow__pane");
-  await pane.click({ button: "right", position: { x: 420, y: 260 } });
+  const emptyPoint = await pane.evaluate(element => {
+    const box = element.getBoundingClientRect();
+    for (const point of [{ x: box.width - 80, y: box.height - 80 }, { x: 80, y: 80 }, { x: box.width - 80, y: 80 }]) {
+      if (document.elementFromPoint(box.x + point.x, box.y + point.y) === element) return point;
+    }
+    throw new Error("No empty canvas point is visible.");
+  });
+  await pane.click({ button: "right", position: emptyPoint });
   const createLocal = page.getByRole("menuitem", { name: "New local component…", exact: true });
   await expect(createLocal).toBeEnabled();
   await createLocal.click();
@@ -629,7 +825,7 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
   await page.goto("/");
   // Defaults to blueprint-slate (light canvas)
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_blueprint_slate.png" });
+  await page.screenshot({ path: test.info().outputPath("circuit_designer_blueprint_slate.png") });
 
   // Click topbar quick toggle
   const toggle = page.locator(".topbar .theme-quick-toggle");
@@ -640,14 +836,14 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
 
   // Switched to obsidian
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_obsidian.png" });
+  await page.screenshot({ path: test.info().outputPath("circuit_designer_obsidian.png") });
 
   // Open preferences page
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await page.getByRole("menuitem", { name: "Preferences", exact: true }).click();
   await page.getByRole("menuitem", { name: /Actions and shortcuts/ }).click();
   await expect(page.locator(".action-settings")).toBeVisible();
-  await page.screenshot({ path: "/home/ankdesh/.gemini/antigravity/brain/46ad83b5-881c-44d9-a90d-77bb49d293ca/circuit_designer_preferences.png" });
+  await page.screenshot({ path: test.info().outputPath("circuit_designer_preferences.png") });
 
   // Switch back to Blueprint Slate in preferences
   const saved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
