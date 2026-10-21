@@ -241,7 +241,10 @@ docs/evidence/
 tmp/
 .tmp/
 temp/
+TEMP_*
+**/TEMP_*
 TEMP-*/
+**/TEMP-*/
 artifacts/
 **/artifacts/
 *.artifacts/

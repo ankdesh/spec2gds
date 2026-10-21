@@ -31,7 +31,8 @@ We have strict terminology rules to disambiguate overloaded terms (e.g., never u
   Add browser protection when the defect depends on browser behaviour.
 
 ## 4. Temporary Artifacts and File Hygiene
-- All temporary artifacts created during testing, exploration, or execution—including pictures/screenshots (`.png`, `.svg`), temporary `.spec` packages, activity outputs, logs, and progress files—MUST be written to an ignored temporary folder (such as `tmp/`, `.tmp/`, `temp/`, or `artifacts/`, or system `/tmp`).
+- All temporary artifacts created during testing, exploration, or execution—including pictures/screenshots (`.png`, `.svg`), temporary `.spec` packages, activity outputs, logs, and progress files—MUST be written to an ignored temporary folder inside the repository with the prefix `TEMP_` (e.g., `TEMP_artifacts/`, `TEMP_tests/`, `TEMP_run/`, etc.).
+- **DO NOT use the system `/tmp` directory or any path outside the repository.** All temporary files and generated artifacts must remain inside the repository within an ignored folder prefixed with `TEMP_`.
 - Never write temporary artifacts, test pictures/screenshots, scratch specs, or activity run outputs directly to tracked source directories.
-- Ensure all temporary folders used for outputs are listed in `.gitignore`.
+- Ensure all temporary folders used for outputs are listed in `.gitignore` (specifically `TEMP_*`, `**/TEMP_*`, etc.) to prevent them from being tracked or added to git.
 
