@@ -12,12 +12,34 @@ from spec2gds.spec.spec_format.document import (
     build_a2ui_batch,
     build_document_projection,
 )
-from spec2gds.spec.spec_format.ir import SpecRevision
+from spec2gds.spec.spec_format.ir import ConnectionIR, EndpointSliceIR, ExternalPortEndpointIR, PortEndpointIR, SpecRevision
 from spec2gds.spec.spec_format.testing import build_test_package
 
 
 def _projection():
     return build_document_projection(SpecRevision.from_package(build_test_package()))
+
+
+def test_connection_tables_show_independent_numeric_and_symbolic_selections() -> None:
+    import lxml.etree as etree
+
+    revision = SpecRevision.from_package(build_test_package())
+    design = dataclasses.replace(revision.designs[0], connections=(
+        ConnectionIR(name="lane", kind="ad_hoc", port_endpoints=(PortEndpointIR("u_lane", "din", EndpointSliceIR(0, 8)),), external_ports=(ExternalPortEndpointIR("data", EndpointSliceIR(16, 8)),)),
+        ConnectionIR(name="enable", kind="ad_hoc", port_endpoints=(PortEndpointIR("u_lane", "enable", EndpointSliceIR(0, 1)),), external_ports=(ExternalPortEndpointIR("enable", EndpointSliceIR(2, 1)),)),
+        ConnectionIR(name="symbolic", kind="ad_hoc", port_endpoints=(PortEndpointIR("u_lane", "din", symbolic_slice="N-1:0"),), external_ports=(ExternalPortEndpointIR("data", symbolic_slice="M+N-1:M"),)),
+    ))
+    tables = document_module._design_tables(design, etree.fromstring(b"<design/>"), {}, revision)
+    rows = next(table for table in tables if table.kind == "ad_hoc_connections").rows
+    assert rows[0].cells["endpoints"].value == "u_lane.din[7:0]"
+    assert rows[0].cells["external"].value == "data[23:16]"
+    assert rows[0].cells["width"].value == "8 bits"
+    assert rows[1].cells["endpoints"].value == "u_lane.enable[0]"
+    assert rows[1].cells["external"].value == "enable[2]"
+    assert rows[1].cells["width"].value == "1 bit"
+    assert rows[2].cells["endpoints"].value == "u_lane.din[N-1:0]"
+    assert rows[2].cells["external"].value == "data[M+N-1:M]"
+    assert rows[2].cells["width"].value == "Not resolved"
 
 
 def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> None:

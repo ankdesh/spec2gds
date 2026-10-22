@@ -5,6 +5,21 @@ import { documentImports } from "./import_flow.js";
 
 documentImports();
 
+test("renames the Spec through its authoring control and retains the title after reopen", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const before = await stack.snapshot();
+  await page.locator(".spec-cover").getByRole("button", { name: "Edit name", exact: true }).click();
+  await page.getByLabel("Spec name", { exact: true }).fill("Released Spec 1.0");
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Released Spec 1.0", exact: true })).toBeVisible();
+  const after = await stack.snapshot();
+  expect(after.document_id).toBe(before.document_id);
+  expect(after.narrative.title).toBe("Released Spec 1.0");
+  expect(JSON.parse(stack.archive(stack.path())["document/document.json"]).title).toBe("Released Spec 1.0");
+  await openSpec(page, stack);
+  await expect(page.getByRole("heading", { name: "Released Spec 1.0", exact: true })).toBeVisible();
+});
+
 test("manual authoring: readable names, pasted ports and explicit verification", async ({ page, stack }) => {
   await newSpec(page, stack);
   await page.locator("#components").getByRole("button", { name: "Add Component", exact: true }).click();

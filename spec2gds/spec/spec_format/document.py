@@ -26,6 +26,7 @@ from spec2gds.spec.spec_format.ir import (
     BusDefinitionIR,
     ComponentIR,
     DesignIR,
+    EndpointSliceIR,
     SpecRevision,
 )
 from spec2gds.spec.spec_format.models import EntityRef, NarrativeBlock
@@ -600,10 +601,20 @@ def _component_tables(
     return tables
 
 
+def _endpoint_selection(part: EndpointSliceIR | None, symbolic: str | None) -> str:
+    if symbolic:
+        return f"[{symbolic}]"
+    if part is None:
+        return ""
+    high = part.lsb + part.width - 1
+    return f"[{part.lsb}]" if part.width == 1 else f"[{high}:{part.lsb}]"
+
+
 def _design_tables(
     design: DesignIR,
     root: etree._Element,
     anchors_by_vlnv: dict[str, str],
+    revision: SpecRevision,
 ) -> list[DocumentTable]:
     """Project instances and connection rows while keeping source reference paths.
 
@@ -611,6 +622,12 @@ def _design_tables(
     cannot represent an otherwise preserved source connection.
     """
     prefix = _anchor("design", design.ref.entity_id)
+    components = {item.vlnv: item for item in revision.components}
+    instances_by_name = {item.name: components.get(item.component_vlnv) for item in design.instances}
+    parent = next((item for item in revision.components if revision.internal_design(item) == design), None)
+
+    def endpoint_width(component: ComponentIR | None, name: str) -> int | str | None:
+        return next((port.width for port in component.ports if port.name == name), None) if component else None
     tables = _configuration_tables(root, prefix)
     instances = [{
         "name": _cell(instance.name, "/componentInstances/componentInstance/instanceName"),
@@ -643,11 +660,26 @@ def _design_tables(
                 "hierarchy": _cell(", ".join(connection.hierarchy_interfaces), "/interconnections/interconnection/hierInterface", kind="reference"),
             })
         else:
-            endpoints = ", ".join(f"{item.instance_name}.{item.port_name}" for item in connection.port_endpoints)
+            widths = [
+                item.slice.width if item.slice else None if item.symbolic_slice else endpoint_width(instances_by_name.get(item.instance_name), item.port_name)
+                for item in connection.port_endpoints
+            ] + [
+                item.slice.width if item.slice else None if item.symbolic_slice else endpoint_width(parent, item.port_name)
+                for item in connection.external_ports
+            ]
+            width = widths[0] if widths and isinstance(widths[0], int) and all(value == widths[0] for value in widths) else None
+            endpoints = ", ".join(
+                f"{item.instance_name}.{item.port_name}{_endpoint_selection(item.slice, item.symbolic_slice)}"
+                for item in connection.port_endpoints
+            )
             ad_hoc_rows.append({
                 "name": _cell(connection.name, "/adHocConnections/adHocConnection/name"),
+                "width": _cell(f"{width} {'bit' if width == 1 else 'bits'}" if width is not None else "Not resolved", "/adHocConnections/adHocConnection/portReferences"),
                 "endpoints": _cell(endpoints, "/adHocConnections/adHocConnection/portReferences/internalPortReference", kind="reference"),
-                "external": _cell(", ".join(item.port_name for item in connection.external_ports), "/adHocConnections/adHocConnection/portReferences/externalPortReference", kind="reference"),
+                "external": _cell(", ".join(
+                    f"{item.port_name}{_endpoint_selection(item.slice, item.symbolic_slice)}"
+                    for item in connection.external_ports
+                ), "/adHocConnections/adHocConnection/portReferences/externalPortReference", kind="reference"),
             })
     tables.append(_table(
         f"{prefix}-interface-connections",
@@ -666,6 +698,7 @@ def _design_tables(
         "Ad-hoc connections",
         _columns(
             ("name", "Name", "/adHocConnections/adHocConnection/name"),
+            ("width", "Width", "/adHocConnections/adHocConnection/portReferences"),
             ("endpoints", "Instance ports", "/adHocConnections/adHocConnection/portReferences/internalPortReference"),
             ("external", "External ports", "/adHocConnections/adHocConnection/portReferences/externalPortReference"),
         ),
@@ -1037,7 +1070,7 @@ def build_document_projection(
             entity_ref=design.ref,
             preview_mode="design",
             facts=_identity_facts(root, design.vlnv),
-            tables=_design_tables(design, root, anchors_by_vlnv),
+            tables=_design_tables(design, root, anchors_by_vlnv, revision),
             narrative=[named_block(block) for block in narrative],
             content_sections=content_sections,
             available_section_types=available_section_types,

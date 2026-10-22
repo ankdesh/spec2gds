@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { compactCircuitTerminalLabel, hierarchyDocumentFixture, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
+import { compactCircuitInstanceLabel, compactCircuitTerminalLabel, hierarchyDocumentFixture, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
 
 describe("Circuit Designer visual export", () => {
+  it("keeps repeated instance numbers visible in compact names and exports", () => {
+    const document = simpleDocumentFixture();
+    document.design.instances[0].label = "enabled_eight_bit_register_12";
+    const compact = compactCircuitInstanceLabel(document.design.instances[0].label, 17);
+    expect(compact).toHaveLength(17);
+    expect(compact).toMatch(/…_12$/);
+    const svg = renderCircuitSvg(document);
+    expect(svg).toContain("<title>enabled_eight_bit_register_12</title>");
+    expect(svg).toMatch(/…_12<\/text>/);
+    expect(compactCircuitInstanceLabel("u_lane0", 17)).toBe("u_lane0");
+  });
   it("preserves width suffixes and full inspection labels when names are shortened", () => {
     const document = simpleDocumentFixture();
     for (const component of document.components) component.terminals[0] = { ...component.terminals[0], label: "long_operand_name", width: 32 };

@@ -804,16 +804,20 @@ export function App({
     setComponentCreationPoint(undefined);
   }
 
-  function placeCatalogComponent(componentId: string): void {
-    if (!document || !lease) return;
+  function placeCatalogComponent(componentId: string, requestedName?: string): boolean {
+    if (!document || !lease) return false;
     const component = document.components.find((item) => item.id === componentId);
-    if (!component) return;
-    const instanceId = uniqueSlug(component.label, document.design.instances.map((item) => item.id));
+    if (!component) return false;
+    const instanceId = requestedName?.trim() || uniqueSlug(component.label, document.design.instances.map((item) => item.id));
     if (mutate({
       operation_id: operationId("instance"),
       type: "add_instance",
       instance: { id: instanceId, label: instanceId, component_id: component.id, parameter_values: {} },
-    }, `Placed ${component.label} as ${instanceId}.`)) setSelection([{ kind: "node", id: instanceId }]);
+    }, `Placed ${component.label} as ${instanceId}.`)) {
+      setSelection([{ kind: "node", id: instanceId }]);
+      return true;
+    }
+    return false;
   }
 
   function addBoundaryPort(): void {
@@ -1772,6 +1776,7 @@ export function App({
           {graph && layout && <CircuitDesignerCanvas
             ref={canvasRef}
             graph={graph}
+            componentLabels={Object.fromEntries(document?.components.map(component => [component.id, component.label]) ?? [])}
             layout={layout.layout}
             boundaryGeometry={layout.boundary_geometry}
             editable={Boolean(lease)}

@@ -44,7 +44,7 @@ const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }
   const maxChars = Math.max(4, Math.floor((geometry.width - 26) / 7.2));
   const eyebrow = displayName.length > maxChars ? `${displayName.slice(0, maxChars - 1)}…` : displayName;
   const titleChars = Math.max(4, Math.floor((geometry.width - 44) / 8));
-  const shortLabel = label.length > titleChars ? `${label.slice(0, titleChars - 1)}…` : label;
+  const shortLabel = compactCircuitInstanceLabel(label, titleChars);
   return [
     `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component" data-component-id="${escapeXml(component.id)}"/>`,
     ...(displayName === label ? [] : [`<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`]),
@@ -77,6 +77,13 @@ type ExportTerminal = {
 
 export function circuitTerminalDisplayLabel(terminal: Pick<TerminalDefinition, "label" | "width">): string {
   return typeof terminal.width === "string" ? `${terminal.label} ${terminal.width}` : terminal.width > 1 ? `${terminal.label} · ${terminal.width} bits` : terminal.label;
+}
+
+/** Retain the instance number when repeated definitions have long names. */
+export function compactCircuitInstanceLabel(label: string, limit: number): string {
+  if (label.length <= limit) return label;
+  const suffix = label.match(/_\d+$/)?.[0] ?? "";
+  return `${label.slice(0, Math.max(1, limit - suffix.length - 1))}…${suffix}`;
 }
 
 /** Shorten only the name; numeric and symbolic width information stays intact. */

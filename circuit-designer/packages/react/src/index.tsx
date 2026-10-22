@@ -28,6 +28,7 @@ import {
   ReactFlow,
   SelectionMode,
   useReactFlow,
+  useNodesInitialized,
   useUpdateNodeInternals,
   type Edge,
   type EdgeChange,
@@ -62,6 +63,7 @@ import {
   projectDocument,
   circuitTerminalDisplayLabel,
   compactCircuitTerminalLabel,
+  compactCircuitInstanceLabel,
   sortedCycleEdges,
   stageLabel,
 } from "@spec2gds/circuit-core";
@@ -113,6 +115,7 @@ export interface CircuitDesignerCanvasProps {
   graph: CircuitGraphSnapshot;
   layout: DiagramLayout;
   boundaryGeometry?: Record<string, NodeGeometry>;
+  componentLabels?: Record<string, string>;
   selection?: CircuitCanvasSelection;
   onSelectionChange?: (selection: CircuitCanvasSelection) => void;
   editable?: boolean;
@@ -145,6 +148,7 @@ export interface CircuitDesignerCanvasProps {
 
 type CircuitNodeData = {
   circuitNode: CircuitNode;
+  componentLabel?: string;
   geometry: NodeGeometry;
   terminals: CircuitTerminal[];
   placements: Record<string, TerminalPlacement>;
@@ -210,12 +214,15 @@ function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
   const rendererKey = data.circuitNode.component_vlnv ?? "generic";
   const customRenderer = data.rendererRegistry?.renderer(rendererKey)
     ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
+  const fullTitle = data.circuitNode.display_name ?? data.circuitNode.label;
+  const shortTitle = compactCircuitInstanceLabel(fullTitle, Math.max(4, Math.floor((data.geometry.width - 30) / 8)));
+  const instanceSuffix = fullTitle.match(/_\d+$/)?.[0] ?? "";
   return (
     <div className={data.contextTarget.kind === "boundary" ? "cd-node cd-node--boundary" : "cd-node"}>
-      {data.contextTarget.kind !== "boundary" && <><div className="cd-node__eyebrow">{data.circuitNode.component_vlnv ?? data.circuitNode.component_id}</div>
-      <div className="cd-node__title" title={data.circuitNode.display_name ?? data.circuitNode.label}>{customRenderer
+      {data.contextTarget.kind !== "boundary" && <><div className="cd-node__eyebrow" title={data.componentLabel}>{data.componentLabel || "Component"}</div>
+      <div className="cd-node__title" tabIndex={0} title={fullTitle}>{customRenderer
         ? customRenderer({ node: data.circuitNode })
-        : data.circuitNode.display_name ?? data.circuitNode.label}</div></>}
+        : <><span className="cd-node__instance-name">{instanceSuffix ? shortTitle.slice(0, -instanceSuffix.length) : shortTitle}</span>{instanceSuffix && <span className="cd-node__instance-suffix">{instanceSuffix}</span>}</>}</div></>}
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
@@ -584,10 +591,19 @@ function CycleEdgeOverlay({ timing, viewport, editable, selectedId, gridSize, ca
   </div>;
 }
 
-function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+function CanvasMeasurementStatus({ onReady }: { onReady: (ready: boolean) => void }) {
+  const ready = useNodesInitialized();
+  useEffect(() => onReady(ready), [ready, onReady]);
+  return null;
+}
+
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, componentLabels = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
-  const fitWhenReady = useRef(false);
+  const [fitRequest, setFitRequest] = useState(0);
+  const completedFit = useRef(0);
+  const [canvasReady, setCanvasReady] = useState(false);
+  const [nodesInitialized, setNodesInitialized] = useState(false);
   const secondaryDragRef = useRef<{ x: number; y: number; moved: boolean }>();
   const [pendingTerminalId, setPendingTerminalId] = useState<string>();
   const emitContextMenu = (target: CircuitCanvasContextTarget, anchor: CircuitContextAnchor) => {
@@ -670,6 +686,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
       style: { width: geometry.width, height: geometry.height },
       data: {
         circuitNode: node,
+        componentLabel: componentLabels[node.component_id],
         geometry,
         terminals: terminalsByNode.get(node.id) ?? [],
         placements: terminalPlacements,
@@ -731,8 +748,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
   function fitCanvas(): void {
     const canvas = canvasRef.current;
     const instance = instanceRef.current;
-    if (!canvas || !instance) { fitWhenReady.current = true; return; }
-    fitWhenReady.current = false;
+    if (!canvas || !instance || !canvas.clientWidth || !canvas.clientHeight) return;
     const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry)];
     const points = [
       ...geometry.flatMap(box => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]),
@@ -751,10 +767,21 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
     onViewportChange?.(next);
   }
 
+  // Fit after React Flow has committed and measured the accepted layout.
+  // Consume each explicit request once; ordinary edits retain the manual view.
+  useEffect(() => {
+    if (!canvasReady || !nodesInitialized || fitRequest === completedFit.current) return;
+    const frame = requestAnimationFrame(() => {
+      fitCanvas();
+      completedFit.current = fitRequest;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [canvasReady, nodesInitialized, fitRequest, nodeGeometry, boundaryGeometry, netRoutes]);
+
   useImperativeHandle(forwardedRef, () => ({
     zoomIn: () => { void instanceRef.current?.zoomIn({ duration: 140 }); },
     zoomOut: () => { void instanceRef.current?.zoomOut({ duration: 140 }); },
-    fitView: fitCanvas,
+    fitView: () => setFitRequest(request => request + 1),
     cancelPendingConnection: () => setPendingTerminalId(undefined),
     centerSelection: () => {
       const instance = instanceRef.current;
@@ -891,7 +918,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
         nodeTypes={{ circuit: CircuitNodeView }}
         edgeTypes={{ circuit: CircuitEdgeView }}
         fitView={fitViewOnInit}
-        onInit={(instance) => { instanceRef.current = instance; if (fitWhenReady.current) fitCanvas(); }}
+        onInit={(instance) => { instanceRef.current = instance; setCanvasReady(true); }}
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         {...(viewport ? { viewport } : {})}
         minZoom={0.08}
@@ -976,6 +1003,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, sele
           if (Object.keys(changes).length) onNodeGeometryChanges?.(changes);
         }}
       >
+        <CanvasMeasurementStatus onReady={setNodesInitialized} />
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         {showInlineViewportControls && <Controls showInteractive={false} />}
       </ReactFlow>

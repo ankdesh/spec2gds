@@ -674,7 +674,7 @@ function SectionOptionsMenu({
               type="button"
             >
               <span>{section.preview_mode === "interface" ? "Preview interface" : "Open in Circuit Designer"}</span>
-              {section.entity_ref?.entity_kind === "component" && section.eyebrow !== "Composite component" && <small>Read-only preview</small>}
+              {section.entity_ref?.entity_kind === "component" && <small>Read-only preview</small>}
             </button>
           )}
           {section.entity_ref && controller && (
@@ -1474,6 +1474,9 @@ function ComponentPortsTable({
   const [pasting, setPasting] = useState(false);
   const coordinator = useContext(EditCoordinatorContext);
   const pasteId = `${table.table_id}-paste`;
+  const internalDesign = sectionEdit?.controller?.source?.component_compositions.find(
+    composition => composition.component.entity_id === sectionEdit.section.entity_ref?.entity_id,
+  )?.internal_design;
   return (
     <section className="spec-table-block spec-ports-table" aria-labelledby={`${table.table_id}-title`}>
       <div className="spec-table-block__heading">
@@ -1484,6 +1487,9 @@ function ComponentPortsTable({
           {sectionEdit.controller.addComponentPorts && <button type="button" onClick={() => { if (coordinator.requestEditor(pasteId)) setPasting(true); }}>Paste rows</button>}
         </div>}
       </div>
+      {!sectionEdit?.portAvailability.enabled && internalDesign && <p className="spec-boundary-port-help">
+        These ports are shared with the assigned Design. <button type="button" onClick={() => dispatchOpenCircuit(internalDesign)}>Edit boundary ports in Circuit Designer</button>
+      </p>}
       {pasting && sectionEdit && <PortPasteEditor state={sectionEdit} existing={table.rows.map(row => rowText(row, "name"))} finish={() => { setPasting(false); coordinator.finishEditor(pasteId); }} />}
       <div className="spec-table-scroll" role="group" aria-labelledby={`${table.table_id}-title`} tabIndex={0}>
         <table>

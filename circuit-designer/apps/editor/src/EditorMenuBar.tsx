@@ -791,7 +791,7 @@ export default function EditorMenuBar({
                   disabled={launchingCircuit}
                   key={`design-${design.ref.entity_id}`}
                   onActivate={activate(() => { void onOpenCircuit("design", design.ref.entity_id); })}
-                  status={entryIds.has(design.ref.entity_id) ? "Entry" : undefined}
+                  status={entryIds.has(design.ref.entity_id) ? "Entry · Edit Design" : "Edit Design"}
                 >
                   {design.display_name || displayEntityName(design.vlnv)}
                 </MenuAction>
@@ -801,7 +801,7 @@ export default function EditorMenuBar({
                 <MenuAction
                   disabled={launchingCircuit}
                   key={`component-${component.ref.entity_id}`}
-                  status={snapshot?.component_compositions.some(item => item.component.entity_id === component.ref.entity_id) ? undefined : "Preview"}
+                  status="Read-only preview"
                   onActivate={activate(() => { void onOpenCircuit("component", component.ref.entity_id); })}
                 >
                   {component.display_name || displayEntityName(component.vlnv)}

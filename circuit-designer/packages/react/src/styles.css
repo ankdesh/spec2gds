@@ -16,6 +16,10 @@
 .cd-node__eyebrow { overflow: hidden; color: var(--cd-text-muted, #60758a); font: 11px/1.2 "IBM Plex Mono", ui-monospace, monospace; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
 .cd-node__title { margin-top: 8px; font: 600 16px/1.2 "IBM Plex Sans", system-ui, sans-serif; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cd-node__symbol { display: inline-flex; align-items: center; gap: 6px; }
+.cd-node__title:focus-visible { outline: 2px solid var(--cd-focus, #3aaed8); outline-offset: 2px; }
+.cd-node__title { display: flex; }
+.cd-node__instance-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cd-node__instance-suffix { flex-shrink: 0; }
 .cd-node__symbol::before { content: "◈"; color: var(--cd-primary, #007c89); font: 12px "IBM Plex Mono", ui-monospace, monospace; }
 .cd-node__symbol--register::before { content: "▣"; }
 .cd-node__symbol--constant::before { content: "1"; }

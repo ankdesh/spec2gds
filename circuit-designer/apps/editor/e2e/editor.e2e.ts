@@ -417,6 +417,7 @@ type ApiState = {
   createdPaths: string[];
   createdTitles: string[];
   openedPaths: string[];
+  generatedTargets: Array<{ entity_kind: string; entity_id: string }>;
   transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
   currentRevision: string;
   currentTitle: string;
@@ -427,6 +428,7 @@ type ApiState = {
 async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean } = {}): Promise<ApiState> {
   const state: ApiState = {
     activityExecutions: [],
+    generatedTargets: [],
     circuits: [],
     createdPaths: [],
     artifacts: [] as Array<Record<string, unknown>>,
@@ -594,6 +596,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
       }] });
     }
     if (/^\/entities\/[^/]+\/[^/]+\/activities\/rtl.generate\/executions$/.test(path)) {
+      const [, , entityKind, entityId] = path.split("/");
+      state.generatedTargets.push({ entity_kind: entityKind, entity_id: entityId });
       const execution = {
         execution_type: "activity",
         title: "Generate RTL",
@@ -970,6 +974,7 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(design.getByText(/dut.clk is unconnected/)).toBeVisible();
   await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
+  expect(state.generatedTargets).toEqual([{ entity_kind: "design", entity_id: designRef.entity_id }]);
   await expect(page.getByText("Generate RTL", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Document", exact: true }).click();
 
@@ -1145,6 +1150,32 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
   await page.keyboard.press("Escape");
   await expect(page.getByRole("button", { name: "Document", exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("opens the assigned Design for boundary edits and identifies launch modes", async ({ page }, testInfo) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  const composite = page.locator("#component-component_subsystem");
+  const edit = composite.getByRole("button", { name: "Edit boundary ports in Circuit Designer", exact: true });
+  await edit.click();
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+  expect(state.transactions).toHaveLength(0);
+  await page.getByRole("menuitem", { name: "Circuit", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Circuit" });
+  await expect(menu.getByRole("menuitem", { name: /Processor.*Edit Design/ })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Subsystem.*Read-only preview/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  for (const theme of ["clean", "obsidian"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.locator(".theme-quick-toggle").click();
+    for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 560, height: 760 }]) {
+      await page.setViewportSize(size);
+      const preview = page.locator("#design-design_top .spec-topology-card__preview");
+      await preview.scrollIntoViewIfNeeded();
+      await expect(preview).toHaveCSS("background-color", theme === "clean" ? "rgb(247, 249, 252)" : "rgb(9, 9, 11)");
+      await expect(preview.locator("img")).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`preview-${theme}-${size.width}.png`) });
+    }
+  }
 });
 
 test("shows generated RTL diagnostics on the checked target with their file location", async ({ page }) => {

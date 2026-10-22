@@ -220,8 +220,19 @@ test("fits loaded circuits in both themes and saves the accepted Arrange geometr
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await menuAction(page, "Edit", "Begin editing");
+  // Arrange must replace an existing close-up view, not fit only on reopen.
+  await page.locator(".react-flow__pane").hover({ position: { x: 500, y: 300 } });
+  await page.mouse.wheel(0, -700);
   await menuAction(page, "Route", "Arrange and route all");
   await expect(page.locator(".notice")).toContainText("Automatic layout completed");
+  await expect.poll(async () => {
+    const bounds = await page.getByTestId("circuit-canvas").boundingBox();
+    const boxes = await page.locator(".react-flow__node, .cd-node__port-label").evaluateAll(elements => elements.map(element => {
+      const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom };
+    }));
+    return !!bounds && boxes.every(box => box.x >= bounds.x && box.y >= bounds.y && box.right <= bounds.x + bounds.width && box.bottom <= bounds.y + bounds.height);
+  }).toBe(true);
+  await page.screenshot({ path: testInfo.outputPath("immediate-arrange-fit.png") });
   const producer = page.locator('.react-flow__node[data-id="producer_0"]');
   const consumer = page.locator('.react-flow__node[data-id="consumer_0"]');
   await expect.poll(async () => (await producer.boundingBox())!.x < (await consumer.boundingBox())!.x).toBe(true);
@@ -242,6 +253,70 @@ test("fits loaded circuits in both themes and saves the accepted Arrange geometr
     await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
     await page.screenshot({ path: testInfo.outputPath(`arranged-${theme}-1440.png`) });
   }
+});
+
+test("places named instances with local duplicate validation and preserves numbered labels", async ({ page, request }, testInfo) => {
+  const document = stackedCircuitFixture();
+  document.components[1].label = "Enabled eight-bit register";
+  document.design.instances[1].label = "enabled_eight_bit_register_12";
+  await publishEditableFixture(request, document);
+  await page.goto(`/?document_id=${document.document_id}`);
+  const node = page.locator('.react-flow__node[data-id="consumer_0"]');
+  await expect(node.locator(".cd-node__eyebrow")).toHaveText("Enabled eight-bit register");
+  await expect(node.locator(".cd-node__title")).toContainText(/…_12$/);
+  await node.locator(".cd-node__title").focus();
+  await expect(node.locator(".cd-node__title")).toHaveAttribute("title", "enabled_eight_bit_register_12");
+  const titleBounds = (await node.locator(".cd-node__title").boundingBox())!;
+  const suffixBounds = (await node.locator(".cd-node__instance-suffix").boundingBox())!;
+  expect(suffixBounds.x + suffixBounds.width).toBeLessThanOrEqual(titleBounds.x + titleBounds.width + 0.5);
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Components", "Component catalog");
+  await page.locator(".catalog-list").getByRole("button", { name: /Enabled eight-bit register/ }).click();
+  const name = page.getByLabel("Instance name (optional)", { exact: true });
+  await name.fill("enabled_eight_bit_register_12");
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("already exists");
+  await expect(page.getByRole("button", { name: "Place instance", exact: true })).toBeDisabled();
+  await name.fill("u_lane4");
+  await page.getByRole("button", { name: "Place instance", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__title')).toHaveText("u_lane4");
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.design.instances.at(-1)).toMatchObject({ id: "u_lane4", label: "u_lane4", component_id: document.components[1].id });
+  await page.reload();
+  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__title')).toHaveText("u_lane4");
+  await expect(page.locator('.react-flow__node[data-id="consumer_0"]')).toBeInViewport({ ratio: 0.999999 });
+  await expect(page.locator('.cd-node__port-label[aria-label="shared_clock"]')).toBeInViewport({ ratio: 0.999999 });
+  await page.screenshot({ path: testInfo.outputPath("named-instances.png") });
+});
+
+test("places two distinct cycle markers through the UI and retains them after save", async ({ page, request }, testInfo) => {
+  const document = stackedCircuitFixture();
+  document.layout.instance_geometry.consumer_0 = { x: 800, y: 80, width: 180, height: 140, pinned: false };
+  await publishEditableFixture(request, document);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await expect(page.locator('.react-flow__node[data-id="consumer_0"]')).toBeInViewport({ ratio: 0.999999 });
+  await menuAction(page, "Edit", "Begin editing");
+  for (const x of [400, 640]) {
+    await menuAction(page, "Timing", "Add cycle edge");
+    const point = await page.evaluate(({ x, y }) => {
+      const canvas = document.querySelector('[data-testid="circuit-canvas"]')!.getBoundingClientRect();
+      const viewport = document.querySelector(".react-flow__viewport")!;
+      const matrix = new DOMMatrix(getComputedStyle(viewport).transform);
+      return { x: canvas.x + matrix.e + x * matrix.a, y: canvas.y + matrix.f + y * matrix.d };
+    }, { x, y: 350 });
+    await page.mouse.click(point.x, point.y);
+    await expect(page.locator(".notice")).toContainText(`Added cycle edge at x=${x}`);
+  }
+  await expect(page.locator(".cd-cycle-edge")).toHaveCount(2);
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.timing.cycle_edges.map((edge: { x: number }) => edge.x)).toEqual([400, 640]);
+  await page.reload();
+  await expect(page.locator(".cd-cycle-edge")).toHaveCount(2);
+  await page.screenshot({ path: testInfo.outputPath("two-cycle-markers.png") });
 });
 
 test("ignores an Arrange result after another draft edit", async ({ page, request }) => {

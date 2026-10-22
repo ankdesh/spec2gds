@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { getCircuitTheme } from "@spec2gds/circuit-core";
 import type { NarrativeBlock } from "@spec2gds/document-core";
 
 import {
@@ -154,7 +155,7 @@ export function DesignTopologyLiveView({
   }
 
   return (
-    <figure aria-busy={!imageUrl} className="spec-topology-card">
+    <figure aria-busy={!imageUrl} className="spec-topology-card" style={{ "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas } as React.CSSProperties}>
       <figcaption>
         <div>
           <strong>{label}</strong>

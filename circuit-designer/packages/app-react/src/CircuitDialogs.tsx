@@ -108,7 +108,7 @@ export interface CircuitDialogsProps {
   onCreateConnection: () => boolean;
   onComponentNameChange: (value: string) => void;
   onCreateComponent: () => void;
-  onPlaceComponent: (componentId: string) => void;
+  onPlaceComponent: (componentId: string, instanceName?: string) => boolean;
   onDecideProposal: (proposalId: string, decision: "accept" | "reject") => void;
   timing: CircuitTimingV1;
   timingAnalysis: CircuitTimingAnalysis;
@@ -122,6 +122,8 @@ export interface CircuitDialogsProps {
 
 export function CircuitDialogs(props: CircuitDialogsProps) {
   const [selectedComponentId, setSelectedComponentId] = useState<string>();
+  const [instanceName, setInstanceName] = useState("");
+  useEffect(() => setInstanceName(""), [props.dialog, selectedComponentId]);
   const [clockLabel, setClockLabel] = useState("clk");
   const [clockSignal, setClockSignal] = useState("");
   const [newDomainLabel, setNewDomainLabel] = useState("");
@@ -196,13 +198,18 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
 
   if (props.dialog === "catalog") {
     const selected = props.document?.components.find((component) => component.id === selectedComponentId);
+    const name = instanceName.trim();
+    const nameError = name && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+      ? "Use letters, digits, and underscores. Start with a letter or underscore."
+      : name && props.document?.design.instances.some(instance => instance.id === name || instance.label === name)
+        ? "An instance with this name already exists." : "";
     return <CircuitModal onClose={props.onClose} title="Component catalog">
       <div className="catalog-dialog">
         <p>{props.sourceDescription}</p>
         <div className="metrics"><div><b>{props.document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{props.document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-dialog__grid">
           <div className="catalog-list">{props.document?.components.map((component) => <button className={component.id === selectedComponentId ? "active" : ""} key={component.id} onClick={() => setSelectedComponentId(component.id)} type="button"><b>{component.label}</b><small>{component.origin}</small></button>)}</div>
-          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3>{selected.editable && props.onRenameComponent && <button type="button" onClick={() => { const name = window.prompt("Component name", selected.label); if (name?.trim()) props.onRenameComponent?.(selected.id, name); }}>Rename</button>}<p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source-defined"}</p><details><summary>Technical details</summary><code>{selected.id}</code></details><button className="primary" onClick={() => { props.onPlaceComponent(selected.id); props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
+          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3>{selected.editable && props.onRenameComponent && <button type="button" onClick={() => { const name = window.prompt("Component name", selected.label); if (name?.trim()) props.onRenameComponent?.(selected.id, name); }}>Rename</button>}<p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source-defined"}</p><details><summary>Technical details</summary><code>{selected.id}</code></details><label>Instance name (optional)<input value={instanceName} maxLength={200} placeholder="Automatic name" onChange={event => setInstanceName(event.target.value)} aria-invalid={!!nameError} aria-describedby={nameError ? "catalog-name-error" : undefined} /></label>{nameError && <p id="catalog-name-error" role="alert">{nameError}</p>}<button className="primary" disabled={!!nameError} onClick={() => { if (props.onPlaceComponent(selected.id, name)) props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
         </div>
         {!props.document?.components.length && <p className="empty-copy">No component definitions are available yet.</p>}
       </div>

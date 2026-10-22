@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { simpleDocumentFixture, obsidianTheme } from "@spec2gds/circuit-core";
+import { layoutCircuitGraph } from "@spec2gds/circuit-layout";
+import { projectDocument, renderCircuitSvg } from "@spec2gds/circuit-core";
 
 import {
   circuitSvgFilename,
@@ -8,6 +10,21 @@ import {
 } from "../src/topology-live-view";
 
 describe("design topology live views", () => {
+  it("matches the saved canvas geometry, bends, and timing without changing the source", async () => {
+    const document = simpleDocumentFixture();
+    document.layout.instance_geometry = {
+      producer_0: { x: 200, y: 120, width: 180, height: 120, pinned: false },
+      consumer_0: { x: 200, y: 600, width: 180, height: 120, pinned: false },
+    };
+    const effective = await layoutCircuitGraph(projectDocument(document));
+    document.layout.net_routes = effective.layout.net_routes;
+    document.layout.terminal_placements = effective.layout.terminal_placements;
+    document.timing = { schema_version: 1, clock_domains: [{ id: "default", label: "clk" }], cycle_edges: [{ id: "edge", x: 500, locked: false }], subject_domain_overrides: {} };
+    const before = structuredClone(document);
+    const preview = await renderDesignTopology(document);
+    expect(preview.svg).toBe(renderCircuitSvg(document, { boundaryGeometry: effective.boundary_geometry }));
+    expect(document).toEqual(before);
+  });
   it("validates, lays out, and renders the shared Circuit Designer SVG", async () => {
     const rendered = await renderDesignTopology(simpleDocumentFixture());
 
