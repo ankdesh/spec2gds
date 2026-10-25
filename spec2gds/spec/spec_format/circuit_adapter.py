@@ -811,23 +811,26 @@ def compile_circuit_sync_operations(
 
     base_instances = projection.source_map.instance_name_by_id
     candidate_instances = {item["id"]: item for item in candidate["design"]["instances"]}
+    replaced_instances = {
+        instance_id for instance_id, current in candidate_instances.items()
+        if instance_id in base_instances
+        and current["component_id"] != projection.source_map.instance_component_id_by_id[instance_id]
+    }
     for instance_id, old_name in base_instances.items():
         current = candidate_instances.get(instance_id)
-        if current is None:
+        if current is None or instance_id in replaced_instances:
             if any(
                 endpoint.instance_name == old_name
                 for connection in design.connections if connection.kind == "interface"
                 for endpoint in connection.interface_endpoints
             ):
                 raise CircuitAdapterError(
-                    f"Instance {old_name} is used by an omitted interface connection and cannot be deleted here."
+                    f"Instance {old_name} is used by an omitted interface connection and cannot be deleted or replaced here."
                 )
             continue
         new_name = str(current["label"]).strip()
         if not ID_PATTERN.fullmatch(new_name):
             raise CircuitAdapterError(f"Instance name {new_name!r} must be an XML-compatible identifier.")
-        if current["component_id"] != projection.source_map.instance_component_id_by_id[instance_id]:
-            raise CircuitAdapterError("Changing an existing instance's component type is not supported.")
         if new_name != old_name:
             operations.append(RenameInstance(design_ref, old_name, new_name))
 
@@ -836,12 +839,12 @@ def compile_circuit_sync_operations(
             operations.append(DeleteConnection(design_ref, connection.name))
 
     for instance_id, old_name in base_instances.items():
-        if instance_id not in candidate_instances:
+        if instance_id not in candidate_instances or instance_id in replaced_instances:
             operations.append(DeleteInstance(design_ref, old_name))
 
     candidate_map = _candidate_source_map(candidate)
     for instance_id, instance in candidate_instances.items():
-        if instance_id in base_instances:
+        if instance_id in base_instances and instance_id not in replaced_instances:
             continue
         name = str(instance["label"]).strip()
         if not ID_PATTERN.fullmatch(name):

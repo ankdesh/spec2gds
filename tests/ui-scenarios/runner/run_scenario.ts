@@ -198,7 +198,7 @@ async function run(): Promise<void> {
     SPEC_SERVICE_ALLOWLIST: owner, CIRCUIT_SERVICE_ALLOWLIST: `http://127.0.0.1:${circuitPort}/api/circuit-designer/v1`,
     SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: scenario === "smoke" ? "6" : process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
     ASSISTANT_MAX_OUTPUT_TOKENS: scenario === "smoke" ? "4096" : process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
-    ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini" } : {}) };
+    ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini", OPENAI_API: "openai-completions" } : {}) };
   const ownerArgs = ["run", "--no-sync", "spec2gds-spec-service", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
   let ownerProcess = start("owner", "uv", ownerArgs, root, env);
   const assistantProcess = start("assistant", process.execPath, ["scripts/dev.mjs", "--no-open"], join(root, "ai-assistant"), env);

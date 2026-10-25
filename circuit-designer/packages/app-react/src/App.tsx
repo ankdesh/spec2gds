@@ -161,6 +161,8 @@ export function App({
   const [layoutProgress, setLayoutProgress] = useState("");
   const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
   const [message, setMessage] = useState("Ready. Unlock to make a private draft.");
+  const [saveError, setSaveError] = useState("");
+  useEffect(() => setSaveError(""), [snapshot?.document.document_id]);
   const [componentName, setComponentName] = useState("");
   const [endpointA, setEndpointA] = useState("");
   const [endpointB, setEndpointB] = useState("");
@@ -582,8 +584,10 @@ export function App({
   }
 
   async function save(): Promise<void> {
+    setSaveError("");
     try { await saveDraft(); }
     catch (reason) {
+      setSaveError(reason instanceof Error ? reason.message : String(reason));
       if (isLeaseConflict(reason) && snapshot) {
         await inspectLease(snapshot.document.document_id).catch(() => undefined);
         setMessage("Editing permission changed. Your draft is preserved for download or discard.");
@@ -601,6 +605,7 @@ export function App({
     if (sourceBinding) {
       if (!sourceBinding.writable) return;
       if (!layout || layoutGraphRef.current !== graph) {
+        setSaveError("Wait for the circuit layout to finish, then save again.");
         setMessage("Wait for the visible circuit layout before saving to the source.");
         return;
       }
@@ -629,12 +634,14 @@ export function App({
       const materializeDiagnostics = draft.applyBatch(materialize);
       const materializeErrors = materializeDiagnostics.filter((item) => item.severity === "error");
       if (materializeErrors.length) {
+        setSaveError(materializeErrors.map((item) => item.message).join(" · "));
         setMessage(materializeErrors.map((item) => item.message).join(" · "));
         return;
       }
       setDocument(draft.document);
       draftChangeRef.current += 1;
       if (!source) {
+        setSaveError("This host did not provide a writable source adapter.");
         setMessage("This host did not provide a writable source adapter.");
         return;
       }
@@ -648,10 +655,12 @@ export function App({
         );
       } catch (reason) {
         if (isLeaseConflict(reason)) throw reason;
+        setSaveError(`The save response could not be confirmed. Retry Save to Spec. ${reason instanceof Error ? reason.message : String(reason)}`);
         setMessage(`The source save response was lost or failed. The complete draft is preserved; retry the save. ${reason instanceof Error ? reason.message : String(reason)}`);
         return;
       }
       if (!result.accepted || !result.snapshot) {
+        setSaveError(result.diagnostics.map((item) => item.message).join(" · ") || "The Spec service rejected the save.");
         const conflict = result.diagnostics.some((item) => item.code === "source_revision_conflict");
         setSourceConflict(conflict);
         setMessage(result.diagnostics.map((item) => item.message).join(" · ") || "Source save was rejected.");
@@ -681,6 +690,7 @@ export function App({
       lease.lease_id,
     );
     if (result.status !== "accepted" || !result.snapshot) {
+      setSaveError(result.diagnostics.map((item) => item.message).join(" · ") || "The Circuit service rejected the save.");
       setMessage(result.diagnostics.map((item) => item.message).join(" · "));
       return;
     }
@@ -715,6 +725,7 @@ export function App({
     setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
     setSelection([]);
     setSourceConflict(false);
+    setSaveError("");
     void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
     setMessage("Reopened the latest source revision. The previous unsaved draft was discarded.");
   }
@@ -737,6 +748,8 @@ export function App({
     setLeaseLost(false);
     setStagedProposalId(undefined);
     setDocument(snapshot.document);
+    setSaveError("");
+    setSourceConflict(false);
     setMessage(`Draft cancelled. No changes were persisted.${releaseWarning}`);
     try {
       const latest = await backend.get(snapshot.document.document_id);
@@ -1052,7 +1065,7 @@ export function App({
           net_routes: structuredClone(layout.layout.net_routes),
         },
       };
-      const options = { boundaryGeometry: layout.boundary_geometry };
+      const options = { boundaryGeometry: layout.boundary_geometry, theme };
       const stem = publicFilenameStem(snapshot.document.label || snapshot.document.design.label || "Circuit");
       if (format === "svg") {
         await files.write({ suggestedName: `${stem}.svg`, mediaType: "image/svg+xml", data: renderCircuitSvg(exportDocument, options) });
@@ -1682,7 +1695,7 @@ export function App({
     return value.replace(/sha256:[a-f0-9]{16,}/gi, "source revision")
       .replace(/\b[a-f0-9]{24,}\b/gi, "internal reference");
   })();
-  const themeStyle = circuitThemeCssProperties(theme) as CSSProperties;
+  const themeStyle = { ...circuitThemeCssProperties(theme), colorScheme: theme.color_scheme } as CSSProperties;
 
   return <main className="cd-app standalone-shell" data-theme={theme.id} ref={appRef} style={themeStyle}>
     <header className="topbar">
@@ -1732,6 +1745,7 @@ export function App({
         type="button"
       >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}
     </header>
+    <div className="circuit-feedback">
     <div className="notice">
       <span className="local-dot" />
       {activePage === "actions" ? "Actions & shortcuts" : sourceBinding?.writable ? sourceBinding.label : linkedDocumentId ? "Source projection" : "Independent document"}
@@ -1749,6 +1763,12 @@ export function App({
         <button onClick={() => void cancel()} type="button">Discard preserved draft</button>
       </span>}
     </div>
+    {saveError && <div className="save-error" role="alert">
+      <strong>{draftRef.current ? "Save failed. Your draft is still open." : "The saved Circuit could not be downloaded."}</strong>
+      <p>{saveError}</p>
+      {draftRef.current && <p>Save or cancel the draft before exporting the saved Circuit.</p>}
+    </div>}
+    </div>
     {activePage === "actions" ? <ActionSettingsPage
       onClose={() => setActivePage("canvas")}
       onPreferencesChange={setPreferences}
@@ -1756,6 +1776,11 @@ export function App({
       preferenceStatus={preferenceStatus}
     /> : <section className={`workspace${inspectorOpen ? " workspace--inspector-open" : ""}`}>
       <div className="stage">
+        <div className="canvas-actions" aria-label="Circuit view controls">
+          <button type="button" disabled={!layout} onClick={() => executeCircuitAction({ commandId: "fit-circuit", source: "menubar" })}>Fit circuit</button>
+          <button type="button" disabled={!lease || !layout || Boolean(layoutProgress)} onClick={() => executeCircuitAction({ commandId: "arrange-all", source: "menubar" })}>Arrange</button>
+          <button type="button" aria-pressed={inspectorOpen} onClick={() => executeCircuitAction({ commandId: "toggle-inspector", source: "menubar" })}>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
+        </div>
         <div
           className={`canvas-surface${placingCycleEdge ? " canvas-surface--placing-cycle-edge" : ""}`}
           onClick={(event) => {

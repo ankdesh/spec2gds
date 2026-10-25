@@ -9,9 +9,20 @@
     providers:
       openai:
         apiKeyEnv: OPENAI_API_KEY
-        api: openai-completions
+        # GPT-6 Luna tool calls need Responses with reasoning enabled. Keep the
+        # existing protocol for other models and allow compatible gateways to
+        # choose their protocol explicitly.
+        api: !!js process.env.OPENAI_API || (['gpt-6-luna', 'gpt-5.6-luna'].includes(process.env.OPENAI_MODEL || '') && 'openai-responses') || 'openai-completions'
         baseURL: !!js process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
-        models: !!js Array.from(new Set([process.env.OPENAI_MODEL || 'gpt-4o-mini', 'gpt-5.6-luna']), id => ({ id }))
+        # The installed catalogue does not yet describe GPT-6 Luna. Declare
+        # support for explicit schema mode so optional tool fields stay optional.
+        models: !!js >-
+          Array.from(new Set([process.env.OPENAI_MODEL || 'gpt-4o-mini', 'gpt-5.6-luna']),
+          id => id === 'gpt-6-luna'
+          ? { id, compat: { supportsStrictMode: true }, reasoningEfforts: {
+              off: 'none', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max'
+            } }
+          : { id })
 
 - id: system-prompt
   config:

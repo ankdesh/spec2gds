@@ -124,6 +124,7 @@ The deployment profile is [cordis.patch.yml](../ai-assistant/profile/cordis.patc
 | `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents`; service-reserved named `.spec` destinations. |
 | `SPEC2GDS_CATALOG_ROOT` | Product `profile/catalog`, set by launch scripts. |
 | `OPENAI_MODEL` | `gpt-4o-mini`; configured default model. |
+| `OPENAI_API` | Optional protocol override: `openai-responses` or `openai-completions`. Luna defaults to Responses when selected with `OPENAI_MODEL`; other models retain Chat Completions. |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1`. |
 | `OPENAI_API_KEY` | No default credential. Required for provider model calls. |
 | `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010`; comma-separated exact service URLs. |
@@ -145,6 +146,18 @@ The OpenAI route offers `gpt-5.6-luna` as well as the configured model. The endp
 and key must have access to the selected model. Generic Harness Models onboarding
 is omitted. Exact prompt/event definitions are pinned to the conversation; model
 selection must remain within approved routes.
+
+To use GPT-6 Luna, set `OPENAI_MODEL=gpt-6-luna` before starting the Assistant
+or a live test. The product selects Responses for `gpt-6-luna` and
+`gpt-5.6-luna`. GPT-6 Luna tool calls with reasoning enabled fail on Chat Completions;
+see the [OpenAI Luna documentation](https://developers.openai.com/api/docs/models/gpt-6-luna).
+The product also declares GPT-6 Luna's reasoning levels and support for explicit
+tool schema mode because the pinned Harness catalogue does not yet list it.
+This preserves optional tool arguments; service validation still applies.
+`OPENAI_API` overrides the protocol for the complete OpenAI route, including
+models selected later in that process. Use it only when the endpoint supports
+that protocol. Deterministic fixtures explicitly select their own model and
+Chat Completions protocol.
 
 Service allowlists are rechecked on service calls. Product browser routes use same-origin
 checks. This is a trusted single-user deployment, not an authenticated public

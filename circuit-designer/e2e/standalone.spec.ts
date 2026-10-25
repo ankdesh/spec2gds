@@ -88,6 +88,59 @@ test("previews a scalar to high bus bit and preserves independent endpoint mappi
   expect(saved.document.components[1].terminals[0].width).toBe(65);
 });
 
+test("rejects submitted multiple drivers and out-of-bounds slices without losing the draft", async ({ page, request }) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `invalid_connection_${Date.now()}`;
+  document.label = document.document_id;
+  document.design.nets = [];
+  document.design.instances.push({ ...document.design.instances[0], id: "producer_1", label: "Second producer" });
+  await publishEditableFixture(request, document);
+  await page.goto(`/?document_id=${document.document_id}`);
+  await menuAction(page, "Edit", "Begin editing");
+  await menuAction(page, "Connect", "New connection");
+  await page.getByLabel("Net label", { exact: true }).fill("invalid_drivers");
+  await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
+  await page.getByLabel("Endpoint B", { exact: true }).selectOption("producer_1:data");
+  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText("Both endpoints drive");
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/driver/i);
+  await expect(page.getByLabel("Net label", { exact: true })).toHaveValue("invalid_drivers");
+  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("LSB for B").fill("40");
+  await page.getByLabel("Width (0=full)").fill("1");
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width|range|slice/i);
+  await expect(page.getByLabel("LSB for B")).toHaveValue("40");
+  for (const theme of ["blueprint-slate", "obsidian"]) {
+    if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) {
+      // Reopen the dialog after changing the host theme.
+      await page.keyboard.press("Escape");
+      await page.getByRole("button", { name: /Switch theme/ }).click();
+      await menuAction(page, "Connect", "New connection");
+      await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
+      await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+    }
+    await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
+    for (const [width, height] of [[1440, 900], [1024, 768], [560, 760]]) {
+      await page.setViewportSize({ width, height });
+      await expect(page.getByRole("dialog")).toBeInViewport();
+      await expect(page.getByRole("dialog").getByRole("button", { name: "Create net", exact: true })).toBeInViewport();
+      const colors = await page.locator(".circuit-dialog input").first().evaluate(element => ({
+        background: getComputedStyle(element).backgroundColor,
+        expected: getComputedStyle(element.closest(".cd-app")!).getPropertyValue("--cd-surface").trim(),
+      }));
+      expect(colors.background).toBe(theme === "obsidian" ? "rgb(24, 24, 27)" : "rgb(255, 255, 255)");
+      await page.screenshot({ path: test.info().outputPath(`connection-${theme}-${width}.png`) });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
+  expect(saved.document.design.nets).toEqual([]);
+  await page.getByLabel("LSB for B").fill("0");
+  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
 let sourceProvider: Server;
 let sourceProviderPort = 0;
 let sourceProviderCalls: string[] = [];
@@ -879,6 +932,21 @@ test("exports the visible canvas layout consistently to SVG and PNG", async ({ p
   expect([...png.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   expect(png.readUInt32BE(16)).toBe(Number(svgBox![1]));
   expect(png.readUInt32BE(20)).toBe(Number(svgBox![2]));
+  await page.getByRole("button", { name: /Switch theme/ }).click();
+  await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
+  const darkSvgDownload = page.waitForEvent("download");
+  await menuAction(page, "File", "Download");
+  await page.getByRole("menuitem", { name: "Export SVG", exact: true }).click();
+  const darkSvg = await readFile((await (await darkSvgDownload).path())!, "utf8");
+  expect(darkSvg).toContain(".canvas-background{fill:#09090b}");
+  expect(darkSvg).not.toBe(svg);
+  const darkPngDownload = page.waitForEvent("download");
+  await menuAction(page, "File", "Download");
+  await page.getByRole("menuitem", { name: "Export PNG", exact: true }).click();
+  const darkPng = await readFile((await (await darkPngDownload).path())!);
+  expect(darkPng.equals(png)).toBe(false);
+  expect(darkPng.readUInt32BE(16)).toBe(png.readUInt32BE(16));
+  expect(darkPng.readUInt32BE(20)).toBe(png.readUInt32BE(20));
 });
 
 test("rejects an invalid file without replacing the current circuit", async ({ page }) => {

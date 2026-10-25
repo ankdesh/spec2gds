@@ -1132,7 +1132,10 @@ button:disabled {
 .utility-panel > div > button, .activity-item button { border: 0.0625rem solid #7c3aed; background: #7c3aed; color: #ffffff; }
 .utility-panel > div > button:hover, .activity-item button:hover { background: #6d28d9; }
 .activity-history { margin-bottom: var(--spec-space-6); }
-.activity-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--spec-space-4); }
+.activity-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--spec-space-4); }
+.activity-output { display: flex; align-items: start; flex-wrap: wrap; gap: .5rem; margin-block: .75rem; }
+.activity-output details { min-width: 0; }
+.activity-output code { overflow-wrap: anywhere; }
 .activity-item p, .empty-copy, .diagnostic, .action-option p, .action-option small { font-size: var(--spec-font-body); line-height: 1.5; }
 .activity-item code { font-size: var(--spec-font-small); }
 .activity-item details pre, .activity-history pre, .app-refresh-notice pre { max-width: 100%; overflow: auto; white-space: pre-wrap; }

@@ -152,6 +152,13 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     const width = props.sliceWidth || (existing ? netWidth : a?.width === b?.width ? a?.width : undefined);
     const from = existing ? net?.label || net?.id : a && connectionSelectionLabel(a.label || a.id, a.width, props.sliceLsb, props.sliceWidth);
     const to = b && connectionSelectionLabel(b.label || b.id, b.width, props.sliceLsbB, props.sliceWidth);
+    const driver = (terminal: typeof a) => Boolean(terminal && terminal.direction === (terminal.id.startsWith("boundary:") ? "in" : "out"));
+    const selectionIssue = !existing && a && b && driver(a) && driver(b)
+      ? "Both endpoints drive the signal. Choose one driver and one sink."
+      : a && b && !props.sliceWidth && typeof a.width === "number" && typeof b.width === "number" && a.width !== b.width
+        ? "These port widths differ. Set the offsets and width to select compatible slices." : "";
+    const terminalLabel = (terminal: typeof b) => terminal
+      ? `${terminal.label || "Port"} · ${terminal.direction === "in" ? "input" : terminal.direction === "out" ? "output" : terminal.direction === "inout" ? "bidirectional" : terminal.direction ?? "port"} · ${typeof terminal.width === "number" ? `${terminal.width} ${terminal.width === 1 ? "bit" : "bits"}` : terminal.width ?? "unresolved width"}` : "Port";
     const submit = (event: FormEvent) => {
       event.preventDefault();
       if (props.onCreateConnection()) props.onClose();
@@ -169,11 +176,12 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
           }).join(", ")}</p>}
         </> : <>
           <label>Net label<input value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
-          <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+          <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}</option>)}</select></label>
         </>}
-        <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminal.label || "Port"}</option>)}</select></label>
+        <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}</option>)}</select></label>
         <div className="slice-row">{!existing && <label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label>}<label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
         {from && to && <output aria-label="Connection mapping" aria-live="polite">{from} → {to} · {typeof width === "number" ? `${width} ${width === 1 ? "bit" : "bits"}` : "whole ports"}</output>}
+        {selectionIssue && <p role="status" aria-label="Connection guidance">{selectionIssue}</p>}
         {props.connectionError && <p role="alert">{props.connectionError}</p>}
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={(!existing && !props.endpointA) || !props.endpointB || (existing && !net)} type="submit">{existing ? "Add endpoint" : "Create net"}</button></div>
       </form>

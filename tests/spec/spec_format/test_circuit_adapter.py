@@ -314,3 +314,50 @@ def test_round_trip_creates_a_real_local_component_and_instance() -> None:
     assert next(item for item in refreshed.document["components"] if item["id"] == component.ref.entity_id)["label"] == "Arithmetic unit"
     assert refreshed.document["design"]["nets"] == projection.document["design"]["nets"]
     assert any(item.name == "alu0" for item in result.revision.designs[0].instances)
+
+
+@pytest.mark.parametrize("new_name", ["sink0", "replacement_sink"])
+def test_replaces_instance_definition_atomically_with_same_id(new_name) -> None:
+    revision = _direct_revision(bounds=("3", "0"))
+    projection = project_design_to_circuit(revision, "design_direct", include_catalog=True)
+    candidate = copy.deepcopy(projection.document)
+    replacement = copy.deepcopy(next(item for item in candidate["components"] if item["id"] == "component_sink"))
+    replacement.update(id="new_sink", label="Replacement sink", origin="local", editable=True)
+    candidate["components"].append(replacement)
+    instance = next(item for item in candidate["design"]["instances"] if item["id"] == "sink0")
+    instance.update(component_id="new_sink", label=new_name)
+    result = SpecEditTransaction(revision.source_revision_hash,
+        compile_circuit_sync_operations(revision, projection, candidate)).apply(revision)
+    assert result.succeeded, result.diagnostics
+    refreshed = project_design_to_circuit(result.revision, "design_direct")
+    saved = next(item for item in refreshed.document["design"]["instances"] if item["label"] == new_name)
+    assert saved["component_id"] != "component_sink"
+    assert len(refreshed.document["design"]["instances"]) == 2
+    assert refreshed.document["design"]["nets"][0]["label"] == "data_link"
+    assert result.revision.designs[0].connections[0].port_endpoints[1].instance_name == new_name
+    assert revision.designs[0].instances[1].component_vlnv.endswith(":sink:1.0")
+
+
+def test_replacement_with_missing_connected_port_leaves_source_unchanged() -> None:
+    revision = _direct_revision(bounds=("3", "0"))
+    before = revision.source_revision_hash
+    projection = project_design_to_circuit(revision, "design_direct", include_catalog=True)
+    candidate = copy.deepcopy(projection.document)
+    candidate["components"].append({
+        "id": "replacement", "label": "Empty replacement", "origin": "local", "editable": True,
+        "terminals": [], "parameters": [], "appearance": {"renderer_key": "generic", "properties": {}},
+    })
+    candidate["design"]["instances"][1]["component_id"] = "replacement"
+    with pytest.raises(CircuitAdapterError):
+        compile_circuit_sync_operations(revision, projection, candidate)
+    assert revision.source_revision_hash == before
+
+
+def test_replacement_cannot_change_an_omitted_interface_connection() -> None:
+    from spec2gds.spec.spec_format.testing import build_test_package
+    revision = SpecRevision.from_package(build_test_package())
+    projection = project_design_to_circuit(revision, "design_subsystem_internal", include_catalog=True)
+    candidate = copy.deepcopy(projection.document)
+    candidate["design"]["instances"][0]["component_id"] = "component_subsystem"
+    with pytest.raises(CircuitAdapterError, match="omitted interface connection"):
+        compile_circuit_sync_operations(revision, projection, candidate)

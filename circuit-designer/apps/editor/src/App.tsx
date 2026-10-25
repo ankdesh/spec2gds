@@ -199,6 +199,7 @@ export default function App() {
       await loadView();
       if (epoch !== documentEpoch.current) return false;
       setPath(nextSnapshot.source_path || nextPath);
+      setNotice(nextSnapshot.open_notice ?? "");
       setView("document");
       setExternalChange(null);
       browserLogger?.event("documents", "opened", "Opened specification", "info", { path: nextPath, snapshot: nextSnapshot });
@@ -577,10 +578,15 @@ export default function App() {
       },
       async verify(ref: EntityRef) {
         const key = snapshot.owner_document_key;
-        await client.verifyComponent(ref, snapshot.source_revision_hash);
+        setNotice("");
+        const result = await client.verifyComponent(ref, snapshot.source_revision_hash);
         const next = await client.getDocumentView(key);
         if (activeKey.current === key && currentRevision.current === next.source_revision_hash) {
           setSnapshot(next.snapshot); setBatch(next.a2ui);
+          setNotice(result.source_revision_hash !== next.source_revision_hash ? "Verification is out of date. Verify the current saved source."
+            : result.status === "passed" ? "Lint passed. Functional simulation is unverified."
+            : result.status === "failed" ? "Lint failed. Your saved text is preserved. Review the verification diagnostics."
+            : "Not verified. Review the verification details before generating RTL.");
         }
       },
       async createEntity(kind: "component" | "design", name: string, entryDesign = true) {
@@ -919,11 +925,12 @@ function ActivityView({
                 <TechnicalDetails value={item} />
                 <p>{text(item.presentation_summary, text(report.summary, text(diagnostics[0], "No report summary")))}</p>
                 {activityExecution && text(item.workspace_output_path, "") && (
-                  <p><strong>Server path:</strong> <code>{text(item.workspace_output_path)}</code> <CopyPathButton path={text(item.workspace_output_path)} /></p>
+                  <div className="activity-output"><CopyPathButton path={text(item.workspace_output_path)} /><details><summary>Server path</summary><code>{text(item.workspace_output_path)}</code></details></div>
                 )}
                 {activityExecution && text(report.top_module, "") && (
                   <p>Top module: <code>{text(report.top_module)}</code> · {files.length} generated files</p>
                 )}
+                {activityExecution && text(report.top_module, "") && <p>RTL generation: {status}. Generated-project lint and functional simulation require separate checks.</p>}
                 {warnings.map((warning, index) => <p className="activity-warning" key={index}>{String(warning)}</p>)}
                 {activityExecution && ["queued", "running"].includes(status) && (
                   <div className="button-row">

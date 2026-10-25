@@ -49,6 +49,18 @@ test("manual authoring: readable names, pasted ports and explicit verification",
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await expect.poll(async () => component.locator(".spec-topology-card__preview img").evaluate(async image =>
       fetch((image as HTMLImageElement).src).then(response => response.text()))).toContain(`.canvas-background{fill:${canvas}}`);
+    for (const [width, height] of [[1440, 900], [1024, 768], [560, 760]]) {
+      await page.setViewportSize({ width, height });
+      const compact = component.locator(".spec-port-description-compact").first();
+      if (await compact.isVisible()) {
+        if (!(await compact.evaluate(element => (element as HTMLDetailsElement).open))) await compact.locator("summary").click();
+        await expect(compact.locator("p")).toHaveText("Input");
+        await expect(compact.locator("p")).toBeVisible();
+        await expect(component.getByRole("rowheader", { name: "a", exact: true })).toBeInViewport();
+      }
+      await page.screenshot({ path: test.info().outputPath(`spec-${theme}-${width}.png`), fullPage: true });
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
   }
   expect((await stack.snapshot()).source_revision_hash).toBe(beforeTheme);
   await component.locator(".spec-sv-section").getByRole("button", { name: "Edit", exact: true }).click();
@@ -57,6 +69,9 @@ test("manual authoring: readable names, pasted ports and explicit verification",
   expect((await stack.snapshot()).entity_sections[0].content).toContain("assign y = ;");
   await component.getByRole("button", { name: "Verify Component", exact: true }).click();
   await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint failed");
+  await expect(page.locator(".app-notice")).toContainText("Lint failed. Your saved text is preserved.");
+  await expect(page.locator(".app-notice")).not.toContainText("Use Verify Component");
+  await page.screenshot({ path: test.info().outputPath("verification-failed.png"), fullPage: true });
   await openSpec(page, stack);
   await expect(component.locator(".spec-sv-source")).toContainText("assign y = ;");
 });

@@ -1311,12 +1311,15 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
       )}
       {section.diagnostics.length > 0 && (
         <ul className="spec-section-diagnostics">
-          {section.diagnostics.map((item, index) => (
-            <li key={`${item.code}-${index}`}>
-              <code>{item.code}</code> {item.message}
-              {item.file_path ? ` (${item.source_kind === "generated" ? "Generated RTL: " : ""}${item.file_path}${item.line ? `:${item.line}${item.column ? `:${item.column}` : ""}` : ""})` : item.line ? ` (line ${item.line}${item.column ? `:${item.column}` : ""})` : ""}
-            </li>
-          ))}
+          {section.diagnostics.map((item, index) => {
+            const location = item.source_kind === "generated" ? "Generated RTL" : "SystemVerilog";
+            const summary = item.file_path ? item.message.split(item.file_path).join(location) : item.message;
+            return <li key={`${item.code}-${index}`}><details>
+              <summary><code>{item.code}</code> {summary}{item.line ? ` (${location} line ${item.line}${item.column ? `:${item.column}` : ""})` : ""}</summary>
+              <pre>{item.message}</pre>
+              {item.file_path && <p>{location}: <code>{item.file_path}{item.line ? `:${item.line}${item.column ? `:${item.column}` : ""}` : ""}</code></p>}
+            </details></li>;
+          })}
         </ul>
       )}
       {error && <p className="spec-edit-error" role="alert">{error}</p>}
@@ -1613,7 +1616,7 @@ function ComponentPortRow({
       <th scope="row"><strong>{name}</strong></th>
       <td><span className="spec-port-family">{titleCase(family)}</span></td>
       <td>{portDefinition(row, family)}</td>
-      <td className="spec-port-text">{description || "—"}</td>
+      <td className="spec-port-text">{description ? <><span className="spec-port-description">{description}</span><details className="spec-port-description-compact"><summary>Read description</summary><p>{description}</p></details></> : "—"}</td>
       <td className="spec-port-row-actions">
         {canEdit ? (
           <button

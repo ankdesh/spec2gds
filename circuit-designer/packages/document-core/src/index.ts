@@ -285,6 +285,8 @@ export interface TransactionResult {
 }
 
 export interface DocumentSnapshot {
+  /** Present on Open when the service saved normalized names. */
+  open_notice?: string;
   verifications?: ComponentVerification[];
   owner_document_key: string;
   schema_version: string;

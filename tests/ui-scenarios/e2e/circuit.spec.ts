@@ -56,6 +56,35 @@ test("cancel discards a Circuit draft without changing the Spec", async ({ page,
   expect((await stack.snapshot()).source_revision_hash).toBe(snapshot.source_revision_hash);
 });
 
+test("replaces a deleted instance with another definition using the same name", async ({ page, stack }) => {
+  let snapshot = await sourceDesign(stack);
+  snapshot = (await stack.commit([
+    { type: "create_entity", kind: "component", name: "Two input selector" },
+    { type: "create_entity", kind: "component", name: "Four input selector" },
+  ], snapshot)).snapshot;
+  const first = snapshot.components.find((item: any) => item.display_name === "Two input selector");
+  const replacement = snapshot.components.find((item: any) => item.display_name === "Four input selector");
+  snapshot = (await stack.commit([{ type: "upsert_instance", design: snapshot.designs[0].ref,
+    instance: { name: "u_read", component_vlnv: first.vlnv } }], snapshot)).snapshot;
+  await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
+  await menu(page, "Edit", "Begin editing");
+  await page.locator('.react-flow__node[data-id="u_read"]').click();
+  await menu(page, "Edit", /Delete selected/);
+  await expect(page.locator(".react-flow__node")).toHaveCount(0);
+  await menu(page, "Components", "Component catalog");
+  const dialog = page.getByRole("dialog");
+  await dialog.locator(".catalog-list button").filter({ hasText: "Four input selector" }).click();
+  await dialog.getByLabel("Instance name").fill("u_read");
+  await dialog.getByRole("button", { name: "Place instance", exact: true }).click();
+  await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+  await expect(page.locator(".save-error")).toHaveCount(0);
+  const saved = await stack.snapshot();
+  expect(saved.designs[0].instances).toEqual([{ name: "u_read", component_vlnv: replacement.vlnv }]);
+  await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
+  await expect(page.locator('.react-flow__node[data-id="u_read"]')).toContainText("Four input selector");
+});
+
 test("confirmed source takeover preserves the displaced draft and blocks its saves", async ({ page, context, stack }) => {
   const snapshot = await sourceDesign(stack);
   const launched = await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
@@ -120,8 +149,13 @@ test("a stale Circuit save cannot replace a later Spec edit", async ({ page, sta
   const source = stack.archive(stack.path());
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(page.locator(".notice")).toContainText(/stale|changed|revision/i);
+  await expect(page.locator(".save-error")).toContainText("Save failed. Your draft is still open.");
+  await expect(page.locator(".save-error")).toContainText("before exporting");
+  await page.screenshot({ path: test.info().outputPath("save-rejected.png") });
   expect((await stack.snapshot()).source_revision_hash).toBe(saved.source_revision_hash);
   expect(stack.archive(stack.path())).toEqual(source);
+  await menu(page, "File", "Cancel changes");
+  await expect(page.locator(".save-error")).toHaveCount(0);
 });
 
 test("leaf Component Circuit previews remain read-only", async ({ page, stack }) => {

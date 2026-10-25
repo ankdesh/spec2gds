@@ -35,6 +35,24 @@ def _endpoints() -> dict[str, object]:
     return {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
 
 
+def test_open_reports_saved_name_normalization_and_reopen_does_not_write(tmp_path, monkeypatch) -> None:
+    from spec2gds.spec.spec_format.archive import SpecPackage
+    monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
+    endpoints = _endpoints()
+    source, copied = tmp_path / "source.spec", tmp_path / "copied.spec"
+    SpecPackage.create(title="Copied counter").save(str(source))
+    copied.write_bytes(source.read_bytes())
+    first = endpoints["open_document"](OpenDocumentRequest(path=str(source)))
+    second = endpoints["open_document"](OpenDocumentRequest(path=str(copied)))
+    assert second["document_id"] == first["document_id"]
+    assert second["narrative"]["title"] != first["narrative"]["title"]
+    assert 'saved name changed from "Copied counter"' in second["open_notice"]
+    before = copied.read_bytes()
+    reopened = endpoints["open_document"](OpenDocumentRequest(path=str(copied)))
+    assert "open_notice" not in reopened
+    assert copied.read_bytes() == before
+
+
 def test_v1_api_create_edit_action_proposal_reopen_and_editor_acceptance() -> None:
     """Exercise the complete source-edit/action/review persistence workflow."""
     endpoints = _endpoints()

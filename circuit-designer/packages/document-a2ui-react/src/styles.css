@@ -444,6 +444,13 @@
   line-height: 1.55;
   white-space: pre-wrap;
 }
+.spec-port-description-compact { display: none; }
+@container (max-width: 42rem) {
+  .spec-port-description { display: none; }
+  .spec-port-description-compact { display: block; }
+  .spec-port-description-compact summary { cursor: pointer; color: var(--spec-muted); white-space: normal; }
+  .spec-port-description-compact p { white-space: normal; overflow-wrap: anywhere; }
+}
 
 .spec-ports-empty p {
   margin: 0.35rem 0 0;
@@ -1264,6 +1271,8 @@
 .spec-ports-table table { min-width: 48rem; }
 .spec-ports-table thead th:last-child, .spec-port-row-actions { position: sticky; right: 0; z-index: 1; min-width: 6rem; width: 6rem; background: #1a1a1e; box-shadow: -0.0625rem 0 var(--spec-line, #27272a); }
 .spec-ports-table thead th:last-child { background: var(--spec-table-head, #1a1a1e); }
+.spec-ports-table thead th:first-child, .spec-port-row > th { position: sticky; left: 0; z-index: 2; min-width: 4rem; box-shadow: .0625rem 0 var(--spec-line, #27272a); }
+.spec-ports-table thead th:first-child { background: var(--spec-table-head, #1a1a1e); }
 .spec-port-row > th { font-family: var(--spec-font-mono, monospace); font-size: 0.875rem; text-transform: none; background: #161618; color: #f4f4f5; }
 .spec-port-row > th strong { font-weight: 500; }
 .spec-port-row:hover > th, .spec-port-row:hover > td, .spec-port-row:hover .spec-port-row-actions { background: #202024; }

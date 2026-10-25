@@ -9,7 +9,7 @@
 }
 .cd-app.standalone-shell {
   display: grid;
-  grid-template-rows: 48px 34px minmax(0, 1fr);
+  grid-template-rows: 48px auto minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-height: 560px;
@@ -197,6 +197,12 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
 .circuit-menu > button:hover, .circuit-menu > button:focus-visible, .circuit-menu > button[aria-expanded="true"] { background: #123853; color: #fff; }
 .source-save-button, .section .primary, .action-settings button.primary, .circuit-dialog button.primary { border-color: var(--cd-primary); background: var(--cd-primary); }
 .notice { border-color: var(--cd-border); background: var(--cd-surface-subtle); color: var(--cd-text-muted); font-size: 12px; }
+.notice { min-height: 34px; }
+.save-error { padding: 10px 16px; border-bottom: 1px solid var(--cd-warning); background: var(--cd-warning-surface); color: var(--cd-text); overflow-wrap: anywhere; max-height: 25vh; overflow: auto; }
+.save-error p { margin: 4px 0; font-size: 13px; }
+.canvas-actions { position: absolute; z-index: 6; inset: 10px auto auto 10px; display: flex; gap: 6px; pointer-events: none; }
+.canvas-actions button { pointer-events: auto; border: 1px solid var(--cd-border-strong); border-radius: 4px; padding: 5px 8px; background: var(--cd-surface); color: var(--cd-text); font-size: 12px; }
+.canvas-actions button:disabled { opacity: .55; cursor: default; }
 .local-dot { background: var(--cd-success); box-shadow: 0 0 0 3px var(--cd-success-surface); }
 .canvas-surface { background: var(--cd-canvas); }
 .inspector { border-color: #17364f; background: var(--cd-chrome); color: #eef5f8; }
@@ -207,6 +213,12 @@ pre { overflow: auto; font: 9px/1.5 ui-monospace; white-space: pre-wrap; }
 .inspector code { color: #9eb6c7; }
 button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--cd-focus); outline-offset: 2px; }
 .circuit-menu__panel, .circuit-dialog, .action-settings__table { border-color: var(--cd-border); background: var(--cd-surface); }
+.circuit-dialog > header { border-color: var(--cd-border); background: var(--cd-surface-subtle); }
+.circuit-dialog > header h2, .circuit-dialog__copy, .catalog-dialog__details h3 { color: var(--cd-text); }
+.circuit-dialog input, .circuit-dialog select { border-color: var(--cd-border-strong); background: var(--cd-surface); color: var(--cd-text); color-scheme: inherit; }
+.circuit-dialog__form > label, .slice-row label, .catalog-dialog__details { color: var(--cd-text-muted); font-size: 12px; }
+.circuit-dialog button:not(.primary):not(.danger) { border-color: var(--cd-border-strong); background: var(--cd-surface-subtle); color: var(--cd-text); }
+.circuit-dialog [role="alert"] { color: var(--cd-danger); }
 .circuit-menu__panel > button:hover:not(:disabled), .circuit-menu__panel > button:focus-visible, .circuit-submenu > button:hover:not(:disabled), .circuit-submenu > button:focus-visible { background: #e4f3f3; color: #075b64; }
 [data-theme="obsidian"] .circuit-menu__panel > button:hover:not(:disabled),
 [data-theme="obsidian"] .circuit-menu__panel > button:focus-visible,

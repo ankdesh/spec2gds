@@ -27,6 +27,8 @@ def model_fixture():
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            assert self.path == "/v1/chat/completions"
+            assert body["model"] == "gpt-4o-mini"
             requests.append(body)
             tools = {tool["function"]["name"] for tool in body["tools"]}
             assert not tools & {"prepare_spec_proposal", "prepare_architecture_review", "prepare_spec_document_creation"}
@@ -81,6 +83,9 @@ def test_focused_cli_returns_correlated_flow_wait(tmp_path, monkeypatch, restric
     with _private_spec_service(restricted) as service_url, model_fixture() as (endpoint, requests):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
+        # This server scripts Chat Completions, independent of the live route.
+        monkeypatch.setenv("OPENAI_MODEL", "gpt-4o-mini")
+        monkeypatch.setenv("OPENAI_API", "openai-completions")
         monkeypatch.setenv("SPEC2GDS_SESSION_COMPRESSION", "none")
         assert assistant_main([str(path), "--service-url", service_url, "--", "Add timer with scalar a input, q output and assign q = a."]) == 2
     run = json.loads((assistant_state_root(path) / "last-run.json").read_text())

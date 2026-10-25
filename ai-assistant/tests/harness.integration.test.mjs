@@ -15,6 +15,8 @@ import { calculateMetrics, parseJsonLines } from "../lib/eval-metrics.js";
 
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+// This fixture implements Chat Completions. Do not inherit a live model route.
+const fixtureModelEnv = { OPENAI_MODEL: "gpt-4o-mini", OPENAI_API: "openai-completions" };
 
 async function listen(server) {
   server.listen(0, "127.0.0.1");
@@ -133,6 +135,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       cwd: root,
       env: {
         ...process.env,
+        ...fixtureModelEnv,
         HARNESS_SOURCE: harness,
         ASSISTANT_STATE: state,
         SPEC2GDS_SESSION_COMPRESSION: "none",
@@ -194,7 +197,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
 
     const beforeFlow = modelRequests.length;
     flowChild = spawn(process.execPath, [resolve(root, "scripts/request.mjs"), "--json", "--domain", "spec", "--service-url", `http://127.0.0.1:${ownerPort}`, "--document-id", "doc-test", "--", "Start timer flow"], {
-      cwd: root, env: { ...process.env, HARNESS_SOURCE: harness, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
+      cwd: root, env: { ...process.env, ...fixtureModelEnv, HARNESS_SOURCE: harness, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
         SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`, CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1", OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1` }, stdio: ["ignore", "pipe", "pipe"],
     });
     let flowOutput = ""; flowChild.stdout.on("data", value => { flowOutput += value; }); flowChild.stderr.on("data", value => { flowOutput += value; });
@@ -219,6 +222,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       cwd: root,
       env: {
         ...process.env,
+        ...fixtureModelEnv,
         HARNESS_SOURCE: harness,
         ASSISTANT_STATE: loopState,
         ASSISTANT_MAX_OUTPUT_TOKENS: "4096",
@@ -264,6 +268,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       cwd: root,
       env: {
         ...process.env,
+        ...fixtureModelEnv,
         HARNESS_SOURCE: harness,
         ASSISTANT_PROFILE: "spec2gds-replay",
         ASSISTANT_STATE: replayState,

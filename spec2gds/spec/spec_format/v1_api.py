@@ -834,8 +834,19 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         """Validate and activate an existing deterministic package."""
         try:
             logger.event("documents", "open_requested", "Opening specification", details=request)
-            state["active"] = register_session(V1Session(request.path, request.sidecar_root), request.sidecar_root)
-            return _snapshot(active())
+            session = V1Session(request.path, request.sidecar_root)
+            original_title = session.revision.narrative.title
+            original_revision = session.revision.source_revision_hash
+            state["active"] = register_session(session, request.sidecar_root)
+            snapshot = _snapshot(active())
+            if session.revision.source_revision_hash != original_revision:
+                snapshot["open_notice"] = (
+                    f'Opened Spec. Its saved name changed from "{original_title}" to "{session.revision.narrative.title}" '
+                    "to keep names unique. Hardware identities are unchanged."
+                    if session.revision.narrative.title != original_title else
+                    "Opened Spec. Saved names were normalized; hardware identities are unchanged."
+                )
+            return snapshot
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 

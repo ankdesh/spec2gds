@@ -194,11 +194,33 @@ test("product policy bounds model steps and output tokens", () => {
   assert.match(patch, /ASSISTANT_MAX_OUTPUT_TOKENS \|\| 16384/);
 });
 
-test("OpenAI route offers GPT-5.6 Luna without changing the configured default", () => {
+test("OpenAI route preserves the default models and declares GPT-6 Luna capabilities", () => {
   const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
   assert.match(patch, /provider: openai\n    model: !!js process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini'/);
-  assert.match(patch, /new Set\(\[process\.env\.OPENAI_MODEL \|\| 'gpt-4o-mini', 'gpt-5\.6-luna'\]\)/);
-  assert.match(patch, /id => \(\{ id \}\)/);
+  const expression = patch.match(/^        models: !!js >-\n((?:          .+\n)+)/m)?.[1];
+  assert.ok(expression);
+  const models = (env: Record<string, string>) => JSON.parse(JSON.stringify(vm.runInNewContext(expression, { process: { env } })));
+  assert.deepEqual(models({}), [{ id: "gpt-4o-mini" }, { id: "gpt-5.6-luna" }]);
+  const luna = models({ OPENAI_MODEL: "gpt-6-luna" });
+  assert.equal(luna[0].id, "gpt-6-luna");
+  assert.equal(luna[0].compat.supportsStrictMode, true, "Responses must receive an explicit tool schema mode");
+  assert.deepEqual(luna[0].reasoningEfforts, { off: "none", low: "low", medium: "medium", high: "high", xhigh: "xhigh", max: "max" });
+});
+
+test("Luna selects Responses without changing legacy model or gateway routing", () => {
+  const patch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
+  const expression = patch.match(/^        api: !!js (.+)$/m)?.[1];
+  assert.ok(expression, "The product must declare its OpenAI protocol selection");
+  for (const [env, expected] of [
+    [{}, "openai-completions"],
+    [{ OPENAI_MODEL: "gpt-4o-mini" }, "openai-completions"],
+    [{ OPENAI_MODEL: "gpt-6-luna" }, "openai-responses"],
+    [{ OPENAI_MODEL: "gpt-5.6-luna" }, "openai-responses"],
+    [{ OPENAI_MODEL: "gpt-6-luna", OPENAI_API: "openai-completions" }, "openai-completions"],
+    [{ OPENAI_MODEL: "gpt-4o-mini", OPENAI_API: "openai-responses" }, "openai-responses"],
+  ] as const) {
+    assert.equal(vm.runInNewContext(expression, { process: { env } }), expected);
+  }
 });
 
 test("a structured clarification grants only one additional focused model step", () => {
