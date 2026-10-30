@@ -15,11 +15,11 @@
     },
     "client": {
       "inject": [
-        "@deepseek-ai/dsh-client-ui-renderer",
-        "@deepseek-ai/dsh-client-ui-session",
-        "@deepseek-ai/dsh-client-ui-sidebar",
-        "@deepseek-ai/dsh-client-ui-tool",
-        "@deepseek-ai/dsh-api-session-controller"
+        "@ankdesh/dsh-client-ui-renderer",
+        "@ankdesh/dsh-client-ui-session",
+        "@ankdesh/dsh-client-ui-sidebar",
+        "@ankdesh/dsh-client-ui-tool",
+        "@ankdesh/dsh-api-session-controller"
       ],
       "external": [
         "react"
@@ -32,6 +32,47 @@
     "lib"
   ],
   "dependencies": {
-    "@deepseek-ai/dsh-client-ui-flow": "0.1.6-alpha.1"
+    "@ankdesh/dsh-agent-presets": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-api-remotes": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-api-session-controller": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-api-settings-controller": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-api-workspace-controller": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-connection": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-file-upload": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-locale": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-modules": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-resources": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-agent-preset": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-approval": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-chat": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-commands": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-conversation": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-goal": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-input-trigger": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-layout": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-model-selection": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-renderer": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-session": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-settings": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-settings-general": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-settings-unarchive-sessions": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-sidebar": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-sidebar-right": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-theme": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-tool": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-user-questions": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-client-ui-workspace": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-cordis-client-runner": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-cordis-host-runner": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-file-reference-local": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-flow-runtime": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-host-webserver": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-message-feedback": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-session-log-export": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-session-reference": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-session-stats": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-session-turn-outline": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-web-runtime": "0.1.6-ankdesh.1",
+    "@ankdesh/dsh-workspace": "0.1.6-ankdesh.1"
   }
 }

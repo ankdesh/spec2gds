@@ -10,7 +10,7 @@ import { registerDomainTools } from "../src/tools.js";
 import { specAdapter } from "../src/service-adapters/spec.js";
 import { circuitAdapter } from "../src/service-adapters/circuit.js";
 import { metadataDigest } from "../src/service-adapters/metadata.js";
-import { assertObjectJsonSchema } from "@deepseek-ai/dsh-tools";
+import { assertObjectJsonSchema } from "@ankdesh/dsh-tools";
 import { EventConfigurations } from "../src/event-configuration.js";
 
 function modified(version: string, change: (files: Record<string, string>) => void = () => {}) {

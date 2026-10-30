@@ -4,8 +4,8 @@ import { resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { parsePromptBundleYaml } from "@deepseek-ai/dsh-prompt-catalog-yaml";
-import { assertObjectJsonSchema, assertSupportedJsonSchema, type JsonSchemaNode } from "@deepseek-ai/dsh-tools";
+import { parsePromptBundleYaml } from "@ankdesh/dsh-prompt-catalog-yaml";
+import { assertObjectJsonSchema, assertSupportedJsonSchema, type JsonSchemaNode } from "@ankdesh/dsh-tools";
 import type { ToolName } from "./tool-arguments.js";
 
 export const handlerCompatibilityVersion = 2;

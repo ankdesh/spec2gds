@@ -1,5 +1,5 @@
 /** Native registration consumes contracts; handlers retain service authority. */
-import { assertObjectJsonSchema, validateJsonSchemaValue, valueSchemaSpecToJsonSchema, type ToolRunContext, type ValueSchemaSpec, type JsonSchemaNode } from "@deepseek-ai/dsh-tools";
+import { assertObjectJsonSchema, validateJsonSchemaValue, valueSchemaSpecToJsonSchema, type ToolRunContext, type ValueSchemaSpec, type JsonSchemaNode } from "@ankdesh/dsh-tools";
 import { defaultInstructions, type InstructionBundle } from "./instructions.js";
 import { modelProposalResult, proposalPresentation } from "./review-transport.js";
 import type { ToolName } from "./tool-arguments.js";

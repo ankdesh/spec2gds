@@ -4,57 +4,16 @@ Use the [system contract](ai-assistant.md) for required system behavior.
 This guide defines run commands, configuration settings, diagnostic workflows, and verification matrices.
 It does not redefine product behavior.
 
-## Setup and source pin
+## Setup and package release
 
-Use the root uv-managed Python environment. Use Node.js 24.2+ for the combined
-stack. Assistant alone also supports Node.js 22.19+ in the 22.x line. Node.js
-24.0/24.1 cannot launch the pinned Harness CLI. The launcher checks this before
-runtime state is created. Circuit Designer declares Node.js 24+.
+Use Node.js 24.2+ for the complete environment. Assistant alone also supports
+Node.js 22.19+ in the 22.x line. Set `NODE_AUTH_TOKEN` with GitHub Packages read
+access, then run `scripts/setup-all.sh`. Setup installs locked packages and builds
+the application. It does not clone Harness or require pnpm.
 
-From the repository root:
-
-```bash
-uv sync
-scripts/setup-all.sh
-npm --prefix circuit-designer run build:editor
-```
-
-Setup prepares the selected Harness source, links its unpublished native `.spec` files
-and toolchain, and builds the Assistant. Do not use a separate `npm ci` in
-`ai-assistant` for this source-linked dependency composition. Network access is
-needed for clone/fetch/install. There is no `setup:harness` npm script or
-`--update-harness` option.
-
-`HARNESS_SOURCE` selects a checkout. Relative values resolve from the repository
-root. The default is the sibling `deepseek-harness` directory. Setup follows
-`DSH_BRANCH`, currently `spec2gds/integration`. It records the physical checkout
-path in `ai-assistant/.env` and preserves other settings, comments, and permissions.
-It refreshes native `.spec` file/type links and the actual `tsc`/`tsx` executable links.
-Replaced installed entries remain in `node_modules/.harness-links-*`.
-
-Verify that the selected checkout matches [harness.lock.json](../ai-assistant/harness.lock.json).
-The setup script does not enforce the pin or a clean checkout. Packaging does.
-Stricter bootstrap enforcement is proposed in future work. Do not use setup to change another
-person's dirty checkout without first resolving its state.
-
-```bash
-# Set this to the exact checkout selected by setup.
-ASSISTANT_HARNESS_CHECKOUT=/absolute/path/to/deepseek-harness
-git -C "$ASSISTANT_HARNESS_CHECKOUT" rev-parse HEAD
-git -C "$ASSISTANT_HARNESS_CHECKOUT" status --short
-```
-
-Compare the commit with the lock file. For a moved/deleted Harness checkout,
-rerun setup with an explicit destination:
-
-```bash
-HARNESS_SOURCE=/absolute/path/to/deepseek-harness scripts/setup-all.sh
-```
-
-If toolchain links are missing, inspect the setup diagnostic. Install the Harness
-checkout's dependencies before relinking. Do not copy pnpm shell wrappers as
-standalone executables. Focused setup tests use disposable fixtures; they do not
-replace a real source build.
+See [Harness package releases](harness-packages.md) for first publication,
+production locks, registry access, release adoption, and explicit source development.
+The [beginner guide](harness-packages/index.html) explains the package terms.
 
 ## Start and use the browser
 
@@ -615,17 +574,10 @@ editable guide set under `ai-assistant/docs`.
 
 ## Build and maintain
 
-From `ai-assistant`, after source and test verification:
-
-```bash
-npm run package -- /tmp/spec2gds-assistant-release
-```
-
-Packaging requires a clean Harness checkout at the exact lock revision. New native
-npm packages are source-linked; registry publication and lockfile regeneration are
-separate release work. Keep product behavior in spec2gds and generic extension
-changes in Harness. Generated bundles, dependencies, samples, and old research
-are not authorities for product behavior.
+Use the verified installed profile when packaging. Follow the commands in
+[Harness package releases](harness-packages.md). Packaging verifies the release
+manifest and installed versions. It does not inspect a Harness source checkout.
+Keep application behavior in spec2gds and reusable extensions in Harness.
 
 For a contract change, update the stable requirement, its acceptance row, and the
 TEMP gap record. Validate JSON examples against native tool admission and service

@@ -1,13 +1,13 @@
 /** Spec-specific operations over the independent Harness flow executor. */
-import type { Context } from "@deepseek-ai/cordis";
-import type { Agent } from "@deepseek-ai/dsh-agent";
-import { SessionId } from "@deepseek-ai/dsh-session";
-import { ToolCallId } from "@deepseek-ai/dsh-llm";
-import { FlowOperationError } from "@deepseek-ai/dsh-flow-runtime";
-import type { FlowExecutionId, FlowOperationContext, FlowRuntime, FlowView } from "@deepseek-ai/dsh-flow";
-import { registerFlowTools } from "@deepseek-ai/dsh-tool-flow";
-import type { ToolRunContext, ToolExecutionToken, JsonSchemaNode } from "@deepseek-ai/dsh-tools";
-import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
+import type { Context } from "@ankdesh/cordis";
+import type { Agent } from "@ankdesh/dsh-agent";
+import { SessionId } from "@ankdesh/dsh-session";
+import { ToolCallId } from "@ankdesh/dsh-llm";
+import { FlowOperationError } from "@ankdesh/dsh-flow-runtime";
+import type { FlowExecutionId, FlowOperationContext, FlowRuntime, FlowView } from "@ankdesh/dsh-flow";
+import { registerFlowTools } from "@ankdesh/dsh-tool-flow";
+import type { ToolRunContext, ToolExecutionToken, JsonSchemaNode } from "@ankdesh/dsh-tools";
+import { snapshotJsonValue, type JsonValue } from "@ankdesh/dsh-util-values";
 import type { ProductState } from "./state.js";
 import { artifactDigest } from "./state.js";
 import { ServiceClients, ServiceError } from "./service-clients.js";

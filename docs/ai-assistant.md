@@ -688,7 +688,7 @@ acceptance. Additional source preflight is a future proposal, not a requirement.
 <a id="as-28"></a>
 
 **AS-28 — Reproducible composition.** Use the source setup and supported runtimes.
-Verify the Harness revision against `harness.lock.json` before supported integration
+Verify the installed Harness release against `harness.lock.json` before supported integration
 or packaging. Package releases only from a clean matching Harness checkout. Rebuild product/editor
 assets from source. Copied bundles and stale builds are not evidence of source changes.
 

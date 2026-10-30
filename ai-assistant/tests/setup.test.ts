@@ -16,7 +16,7 @@ function harnessFixture(root: string, marker: string) {
   write(join(root, "scripts/product-runtime.mjs"), "// Fixture Harness runtime\n");
   mkdirSync(join(root, "vendor"), { recursive: true });
   const native = join(root, "packages/core/example");
-  write(join(native, "package.json"), JSON.stringify({ name: "@deepseek-ai/example", type: "module", exports: "./index.mjs" }));
+  write(join(native, "package.json"), JSON.stringify({ name: "@ankdesh/example", type: "module", exports: "./index.mjs" }));
   write(join(native, "index.mjs"), `export default ${JSON.stringify(marker)};\n`);
   for (const [name, command, entry] of [["typescript", "tsc", "bin/tsc"], ["tsx", "tsx", "dist/cli.mjs"]]) {
     const packageRoot = join(root, `node_modules/.pnpm/${name}@${marker}/node_modules/${name}`);
@@ -56,7 +56,7 @@ function fixture(t: TestContext) {
       assert.equal(realpathSync(join(product, "node_modules", packageName!)), realpathSync(join(harness, "node_modules", packageName!)));
     }
     assert.equal(realpathSync(join(product, "node_modules/@types")), realpathSync(join(harness, "node_modules/@types")));
-    const imported = spawnSync(process.execPath, ["--input-type=module", "-e", "import ts from 'typescript'; import tsx from 'tsx'; import native from '@deepseek-ai/example'; console.log(JSON.stringify([ts,tsx,native]));"], { cwd: product, encoding: "utf8" });
+    const imported = spawnSync(process.execPath, ["--input-type=module", "-e", "import ts from 'typescript'; import tsx from 'tsx'; import native from '@ankdesh/example'; console.log(JSON.stringify([ts,tsx,native]));"], { cwd: product, encoding: "utf8" });
     assert.equal(imported.status, 0, imported.stderr);
     assert.deepEqual(JSON.parse(imported.stdout), [marker, marker, marker]);
     assert.equal(parseEnv(readFileSync(join(product, ".env"), "utf8")).HARNESS_SOURCE, realpathSync(harness));
@@ -90,7 +90,7 @@ test("linking refreshes valid and dangling links when switching Harness checkout
 
 test("replaced installed packages and real executable wrappers are backed up", t => {
   const f = fixture(t);
-  for (const name of ["@deepseek-ai", "@types", "typescript", "tsx"]) {
+  for (const name of ["@ankdesh", "@types", "typescript", "tsx"]) {
     write(join(f.product, "node_modules", name, "keep.txt"), name);
   }
   for (const name of ["tsc", "tsx"]) write(join(f.product, "node_modules/.bin", name), `old-${name}`);
@@ -99,7 +99,7 @@ test("replaced installed packages and real executable wrappers are backed up", t
   f.verify();
   const backup = readdirSync(join(f.product, "node_modules")).find(name => name.startsWith(".harness-links-"))!;
   const generated = join(f.product, "node_modules", backup);
-  for (const [name, target] of [["@deepseek-ai", "scope"], ["@types", "types"], ["typescript", "typescript"], ["tsx", "tsx"]]) {
+  for (const [name, target] of [["@ankdesh", "scope"], ["@types", "types"], ["typescript", "typescript"], ["tsx", "tsx"]]) {
     assert.equal(readFileSync(join(generated, `previous-installed-${target}`, "keep.txt"), "utf8"), name);
   }
   for (const name of ["tsc", "tsx"]) assert.equal(readFileSync(join(generated, `previous-installed-bin-${name}`), "utf8"), `old-${name}`);
@@ -110,7 +110,7 @@ test("missing toolchain executables fail before changing existing links or .env"
   const f = fixture(t);
   f.success();
   const env = readFileSync(join(f.product, ".env"), "utf8");
-  const scope = realpathSync(join(f.product, "node_modules/@deepseek-ai"));
+  const scope = realpathSync(join(f.product, "node_modules/@ankdesh"));
   const broken = harnessFixture(join(f.root, "incomplete"), "broken");
   rmSync(join(broken, "node_modules/tsx/dist/cli.mjs"));
   const result = f.link(broken);
@@ -118,7 +118,7 @@ test("missing toolchain executables fail before changing existing links or .env"
   assert.match(result.stderr, /Harness toolchain is incomplete: missing .*cli\.mjs/);
   assert.match(result.stderr, /Run pnpm install/);
   assert.equal(readFileSync(join(f.product, ".env"), "utf8"), env);
-  assert.equal(realpathSync(join(f.product, "node_modules/@deepseek-ai")), scope);
+  assert.equal(realpathSync(join(f.product, "node_modules/@ankdesh")), scope);
   f.verify();
 });
 
@@ -130,30 +130,26 @@ test("symlinked checkout paths persist their physical destination", t => {
   f.verify();
 });
 
-test("unified setup resolves relative nested checkouts and builds through npm", t => {
-  const f = fixture(t);
-  const workspace = dirname(f.product);
-  const nested = harnessFixture(join(f.root, "wrapper/deepseek-harness"), "nested");
-  mkdirSync(join(nested, ".git"));
-  symlinkSync(join(f.root, "wrapper"), join(f.root, "source alias"), "dir");
+test("unified setup installs locked packages without a Harness checkout", t => {
+  const f = fixture(t), workspace = dirname(f.product);
   mkdirSync(join(workspace, "scripts"), { recursive: true });
   mkdirSync(join(workspace, "circuit-designer"));
   const setup = join(workspace, "scripts/setup-all.sh");
   copyFileSync(resolve(import.meta.dirname, "../../scripts/setup-all.sh"), setup);
-  const commands = join(f.root, "setup-commands.log");
-  const bin = join(f.root, "stub-tools");
-  for (const command of ["uv", "npm", "npx", "pnpm"]) {
+  const commands = join(f.root, "setup-commands.log"), bin = join(f.root, "stub-tools");
+  for (const command of ["uv", "npm", "npx"]) {
     write(join(bin, command), '#!/bin/sh\nprintf "%s:%s\\n" "$PWD" "$*" >> "$SETUP_TEST_COMMANDS"\n', 0o755);
   }
-  const run = () => spawnSync("bash", [setup], { cwd: f.root, encoding: "utf8", env: {
-    ...process.env, PATH: `${bin}:${process.env.PATH}`, HARNESS_SOURCE: "../source alias", SETUP_TEST_COMMANDS: commands,
+  // A clone, source link, or pnpm build would fail this installation.
+  for (const command of ["git", "pnpm"]) write(join(bin, command), '#!/bin/sh\nexit 99\n', 0o755);
+  const result = spawnSync("bash", [setup], { cwd: f.root, encoding: "utf8", env: {
+    ...process.env, PATH: `${bin}:${process.env.PATH}`, NODE_AUTH_TOKEN: "fixture-token", SETUP_TEST_COMMANDS: commands,
   } });
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const result = run();
-    assert.equal(result.status, 0, result.stderr);
-    f.verify(nested, "nested");
-  }
-  assert.ok(readFileSync(commands, "utf8").includes(`${f.product}:run build\n`));
+  assert.equal(result.status, 0, result.stderr);
+  const log = readFileSync(commands, "utf8");
+  assert.ok(log.includes(`${f.product}:ci --no-audit --no-fund\n`));
+  assert.ok(log.includes(`${f.product}:run build\n`));
+  assert.equal(existsSync(join(f.product, ".env")), false);
 });
 
 test(".env updates remove stale duplicates while preserving settings, comments and permissions", t => {

@@ -137,10 +137,10 @@ test("catalog-backed presets separate focused, goal, and read-only orchestrated 
   const goal = readFileSync(resolve(root, "profile/presets/goal/agent.cordis.yml"), "utf8");
   const orchestrated = readFileSync(resolve(root, "profile/presets/orchestrated/agent.cordis.yml"), "utf8");
   for (const preset of [focused, goal, orchestrated]) {
-    assert.match(preset, /@deepseek-ai\/dsh-tool-ask-user/);
+    assert.match(preset, /@ankdesh\/dsh-tool-ask-user/);
   }
   assert.doesNotMatch(focused, /tool-goal|tool-s-workflow|tool-subagent/);
-  assert.match(goal, /@deepseek-ai\/dsh-tool-goal/);
+  assert.match(goal, /@ankdesh\/dsh-tool-goal/);
   assert.doesNotMatch(goal, /tool-s-workflow/);
   assert.doesNotMatch(goal, /tool-subagent/);
   assert.doesNotMatch(orchestrated, /tool-subagent|tool-s-workflow|tool-goal/);
@@ -154,9 +154,9 @@ test("browser presets use Harness structured questions while headless stays noni
   const packageJson = readFileSync(resolve(root, "package.json"), "utf8");
   const webPatch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
   const sharedPatch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
-  assert.match(packageJson, /"@deepseek-ai\/dsh-tool-ask-user": "0\.1\.6-alpha\.1"/);
+  assert.match(packageJson, /"@ankdesh\/dsh-tool-ask-user": "0\.1\.6-ankdesh\.1"/);
   assert.doesNotMatch(webPatch, /- id: ui-user-questions\n  disabled: true/);
-  assert.doesNotMatch(sharedPatch, /@deepseek-ai\/dsh-tool-ask-user/);
+  assert.doesNotMatch(sharedPatch, /@ankdesh\/dsh-tool-ask-user/);
 });
 
 test("web proposal forms are profile-owned and do not depend on ask_user_question registration", () => {

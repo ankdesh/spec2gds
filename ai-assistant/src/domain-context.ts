@@ -3,7 +3,7 @@ import { defaultInstructions, type InstructionBundle } from "./instructions.js";
  * Keep product instruction order separate from untrusted rendered owner content.
  * The prompt explains capabilities; native tool guards and owner validation
  * enforce them even when a model ignores those instructions. */
-import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
+import type { PromptSection } from "@ankdesh/dsh-system-prompt";
 import type { SessionBinding } from "./types.js";
 import { isRecord } from "./types.js";
 

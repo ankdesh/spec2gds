@@ -9,12 +9,13 @@ Use the maintained guides:
 - [System contract](../docs/ai-assistant.md): required behavior and tool rules.
 - [Operations and tests](../docs/ai-assistant-operations.md): setup, configuration,
   CLI, diagnostics, test commands, and packaging.
+- [Package releases](../docs/harness-packages.md): registry access, selected profiles, and upgrades.
 - [Reusable flows](../docs/ai-assistant-flows.md): definitions, execution, controls,
   approvals, and recovery.
 
 Model output alone is not proof of a saved document. An applied service receipt proves saved content.
 
-From the repository root, prepare the source-linked product:
+From the repository root, install the locked packages:
 
 ```bash
 scripts/setup-all.sh
@@ -34,6 +35,6 @@ npm run test:harness
 ```
 
 Set the provider key before model calls. Use the operations guide for owner startup,
-source-pin verification, browser dependencies, and flow controls and Spec Editor decisions.
+package release verification, browser dependencies, and flow controls and Spec Editor decisions.
 Keep configuration defaults in that guide. Do not create another behavior or
 setup reference here.

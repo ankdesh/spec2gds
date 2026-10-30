@@ -2,7 +2,7 @@
  * Resolve supported local definitions under explicit limits; unsupported schema
  * constructs must fail instead of widening accepted arguments. Semantic scope,
  * references and source revision are still checked by owner preview/application. */
-import type { ValueSchemaSpec } from "@deepseek-ai/dsh-tools";
+import type { ValueSchemaSpec } from "@ankdesh/dsh-tools";
 
 type Node = Record<string, unknown>;
 

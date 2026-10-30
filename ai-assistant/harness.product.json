@@ -3,13 +3,25 @@
   "defaultProfile": "spec2gds-web",
   "profiles": {
     "spec2gds-web": {
-      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@spec2gds/harness-assistant", "@spec2gds/harness-web"],
-      "localBundles": [".", "bundles/web"],
+      "bundles": [
+        "@spec2gds/harness-assistant",
+        "@spec2gds/harness-web"
+      ],
+      "localBundles": [
+        ".",
+        "bundles/web"
+      ],
       "patchReload": "startup"
     },
     "spec2gds-headless": {
-      "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "@spec2gds/harness-assistant"],
-      "localBundles": ["."],
+      "bundles": [
+        "@spec2gds/harness-assistant",
+        "@spec2gds/harness-headless"
+      ],
+      "localBundles": [
+        ".",
+        "bundles/headless"
+      ],
       "patchReload": "startup"
     }
   },

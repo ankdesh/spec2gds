@@ -6,5 +6,8 @@
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" }
   },
-  "files": ["cordis.patch.yml"]
+  "files": ["cordis.patch.yml"],
+  "dependencies": {
+    "@ankdesh/dsh-llm-replay": "0.1.6-ankdesh.1"
+  }
 }

@@ -53,6 +53,8 @@ test("manual authoring: readable names, pasted ports and explicit verification",
       await page.setViewportSize({ width, height });
       const compact = component.locator(".spec-port-description-compact").first();
       if (await compact.isVisible()) {
+        // Theme changes can leave the port table below the current viewport.
+        await compact.scrollIntoViewIfNeeded();
         if (!(await compact.evaluate(element => (element as HTMLDetailsElement).open))) await compact.locator("summary").click();
         await expect(compact.locator("p")).toHaveText("Input");
         await expect(compact.locator("p")).toBeVisible();

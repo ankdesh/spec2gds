@@ -3,7 +3,7 @@
 import type { ToolRunContext } from "../tool-registry.js";
 export interface SpecChangeInputs { supported: boolean; unsupported_reason: string | null; base_source_revision_hash: string; title: string; summary: string; rationale: string; assumptions: string[]; operations: unknown[]; architecture_review_id?: string; }
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
-import { snapshotJsonValue } from "@deepseek-ai/dsh-util-values";
+import { snapshotJsonValue } from "@ankdesh/dsh-util-values";
 import { ServiceError, type ServiceClients } from "../service-clients.js";
 import { validateProposalEnvelope } from "../operation-schemas.js";
 import { normalizeSpecFormatting } from "../normalize.js";

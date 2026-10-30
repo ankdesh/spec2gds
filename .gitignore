@@ -236,6 +236,8 @@ __marimo__/
 # Browser-only test dependencies
 ai-assistant/.ui-test-tools/
 docs/evidence/
+# Local Harness release development checkout; keep separate from application sources.
+.harness-package-release/
 
 # Temporary directories and artifacts (pics, specs, activity outputs, test progress)
 tmp/

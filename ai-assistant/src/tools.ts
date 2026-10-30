@@ -3,7 +3,7 @@
  * preview enforce meaning. Standing specialists stay read-only; primary tools
  * cannot bypass immutable binding, review claims or native execution permission. */
 
-import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
+import type { PromptSection } from "@ankdesh/dsh-system-prompt";
 import { registeredTool, nativeTool, type ToolRunContext } from "./tool-registry.js";
 import { defaultInstructions, type InstructionBundle } from "./instructions.js";
 import { type ServiceClients } from "./service-clients.js";

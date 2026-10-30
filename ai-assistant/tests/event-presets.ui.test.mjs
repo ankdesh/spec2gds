@@ -10,8 +10,8 @@ import { mkdtemp, readFile, rm, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
-import { SessionId } from '@deepseek-ai/dsh-session';
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { SessionId } from '@ankdesh/dsh-session';
+import { createUserMessage } from '@ankdesh/dsh-llm';
 import { boot, waitFor } from './support/event-runtime.mjs';
 
 const dependencies = createRequire(resolve(process.env.AI_ASSISTANT_UI_TEST_DEPS || process.env.ASSISTANT_UI_TEST_DEPS || new URL('..',import.meta.url).pathname,'package.json'));
@@ -65,7 +65,7 @@ async function fixture() {
       if(request.url.startsWith('/test/')) {
         let data='';for await(const chunk of request)data+=chunk;const body=JSON.parse(data);
         if(request.url==='/test/create-session') {
-          await runtime.ctx.agents.create({sessionId:SessionId(body.sessionId),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:body.agentPreset},setup:async(ctx)=>{if(body.agentPreset==='goal')await ctx.plugin(await import('@deepseek-ai/dsh-tool-goal'));}});
+          await runtime.ctx.agents.create({sessionId:SessionId(body.sessionId),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:body.agentPreset},setup:async(ctx)=>{if(body.agentPreset==='goal')await ctx.plugin(await import('@ankdesh/dsh-tool-goal'));}});
         }
         else if(request.url==='/test/send') {
           const agent=runtime.ctx.agents.get(SessionId(body.sessionId));

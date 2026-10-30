@@ -1,4 +1,4 @@
-/** Link this product to a local Harness checkout and run the focused profile. */
+/** Prepare an installed Harness profile and start the Assistant. */
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,10 +12,6 @@ if (typeof import.meta.main !== "boolean") {
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 if (existsSync(resolve(root, ".env"))) process.loadEnvFile(resolve(root, ".env"));
-let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
-if (!existsSync(resolve(harness, "scripts/product-runtime.mjs")) && existsSync(resolve(harness, "deepseek-harness/scripts/product-runtime.mjs"))) {
-  harness = resolve(harness, "deepseek-harness");
-}
 const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 mkdirSync(state, { recursive: true, mode: 0o700 });
 const env = {
@@ -48,34 +44,24 @@ if (existsSync(registryPath)) {
 if (!existsSync(resolve(root, "lib/index.js")) || !existsSync(resolve(root, "bundles/web/lib/client.js"))) {
   throw new Error("Build the assistant first: npm run build");
 }
-// Local Harness development uses source links for its own packages. Keep those
-// links in a generated product tree so npm-installed build dependencies in the
-// source checkout are never replaced or mixed into the running Cordis graph.
-const runtimeProduct = resolve(state, "runtime-product");
-rmSync(runtimeProduct, { recursive: true, force: true });
-mkdirSync(runtimeProduct, { recursive: true, mode: 0o700 });
-const manifest = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-manifest.dependencies = Object.fromEntries(Object.entries(manifest.dependencies || {})
-  .filter(([name]) => name !== "react" && name !== "react-dom"));
-if (profile === "spec2gds-replay") manifest.dependencies["@deepseek-ai/dsh-llm-replay"] = "0.1.6-alpha.1";
-writeFileSync(resolve(runtimeProduct, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
-for (const directory of ["lib", "profile", "bundles"]) {
-  const target = resolve(runtimeProduct, directory);
-  mkdirSync(dirname(target), { recursive: true });
-  cpSync(resolve(root, directory), target, { recursive: true });
-}
-env.SPEC2GDS_CATALOG_ROOT = resolve(runtimeProduct, "profile", "catalog");
+// Installed packages prepare the same named profile used by releases.
+const { prepareProductProfile, packageDirectory } = await import("@ankdesh/dsh-product-tools");
 const productConfig = JSON.parse(readFileSync(resolve(root, "harness.product.json"), "utf8"));
 if (profile === "spec2gds-replay") {
   productConfig.profiles[profile] = {
-    bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "@spec2gds/harness-assistant", "@spec2gds/harness-replay"],
-    localBundles: [".", "bundles/replay"],
-    patchReload: "startup",
+    bundles: ["@spec2gds/harness-assistant", "@spec2gds/harness-headless", "@spec2gds/harness-replay"],
+    localBundles: [".", "bundles/headless", "bundles/replay"], patchReload: "startup",
   };
 }
-writeFileSync(resolve(runtimeProduct, "harness.product.json"), `${JSON.stringify(productConfig, null, 2)}\n`);
-if (profile === "spec2gds-web") console.log(`spec2gds Harness assistant: http://127.0.0.1:${env.ASSISTANT_PORT || 6013}`);
-if (!env.OPENAI_API_KEY) console.error("OPENAI_API_KEY is unset; model turns will fail.");
-const child = spawn(process.execPath, [resolve(harness, "scripts/product-runtime.mjs"), "dev", runtimeProduct, profile, ...process.argv.slice(2)], { cwd: env.DSH_PRODUCT_RUN_CWD || runtimeProduct, env, stdio: "inherit" });
+const selected = productConfig.profiles[profile];
+if (!selected) throw new Error(`Unknown Assistant profile ${profile}`);
+prepareProductProfile(root, env.DSH_HOME, {
+  profileName: profile, bundles: selected.bundles,
+  localBundles: selected.localBundles.map(path => resolve(root, path)), patchReload: selected.patchReload,
+});
+env.SPEC2GDS_CATALOG_ROOT = resolve(root, "profile/catalog");
+const child = spawn(process.execPath, [resolve(packageDirectory("@ankdesh/dsh", root), "lib/bin.js"), "--profile", profile, ...process.argv.slice(2)], {
+  cwd: env.DSH_PRODUCT_RUN_CWD || root, env, stdio: "inherit",
+});
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));
 child.on("exit", (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });

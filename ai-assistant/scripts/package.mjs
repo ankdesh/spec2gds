@@ -1,37 +1,22 @@
-/** Refuse dirty/unpinned Harness inputs, then delegate release assembly. */
-import { existsSync, readFileSync, cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
-import { resolve, dirname } from "node:path";
-import { tmpdir } from "node:os";
-import { fileURLToPath } from "node:url";
-import { execFileSync, spawnSync } from "node:child_process";
-
-// Resolve from the script location so packaging also works from another cwd.
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-let harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
-if (!existsSync(resolve(harness, "scripts/product-runtime.mjs")) && existsSync(resolve(harness, "deepseek-harness/scripts/product-runtime.mjs"))) {
-  harness = resolve(harness, "deepseek-harness");
-}
-const output = process.argv[2];
-if (!output) throw new Error("Usage: npm run package -- NEW_OUTPUT_DIRECTORY");
-if (!existsSync(resolve(root, "lib/index.js")) || !existsSync(resolve(root, "bundles/web/lib/client.js"))) throw new Error("Run npm run build before packaging.");
-const lock = JSON.parse(readFileSync(resolve(root, "harness.lock.json"), "utf8"));
-const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: harness, encoding: "utf8" }).trim();
-if (head !== lock.commit) throw new Error("Harness HEAD does not match harness.lock.json.");
-const dirty = execFileSync("git", ["status", "--porcelain"], { cwd: harness, encoding: "utf8" }).trim();
-if (dirty) throw new Error("Refusing to package from a dirty Harness checkout. Commit or remove every Harness change first.");
-// The canonical guides live at repository level. Stage them for the release;
-// do not restore a second editable documentation source under this npm package.
-const staging = mkdtempSync(resolve(tmpdir(), "spec2gds-release-inputs-"));
-try {
-  for (const entry of ["package.json", "lib", "profile", "bundles", "deployment", "README.md", "harness.product.json", "harness.lock.json"]) {
-    cpSync(resolve(root, entry), resolve(staging, entry), { recursive: true });
-  }
-  symlinkSync(resolve(root, "node_modules"), resolve(staging, "node_modules"), "dir");
-  mkdirSync(resolve(staging, "docs"));
-  for (const guide of ["ai-assistant.md", "ai-assistant-operations.md", "ai-assistant-flows.md", "TERMINOLOGY.md"]) {
-    cpSync(resolve(root, "../docs", guide), resolve(staging, "docs", guide));
-  }
-  const result = spawnSync(process.execPath, [resolve(harness, "scripts/product-pack.mjs"), staging, resolve(output)], { stdio: "inherit" });
-  if (result.error) throw result.error;
-  process.exitCode = result.status || (result.signal ? 1 : 0);
-} finally { rmSync(staging, { recursive: true, force: true }); }
+/** Assemble a product from installed packages and a verified release manifest. */
+import {cpSync, readFileSync, existsSync} from 'node:fs';
+import {dirname, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+import {assembleProduct} from '@ankdesh/dsh-product-tools';
+const root=resolve(dirname(fileURLToPath(import.meta.url)),'..');
+const output=process.argv[2]&&resolve(process.argv[2]);
+const profile=process.argv[3]||'spec2gds-web';
+const install=process.env.ASSISTANT_INSTALL_ROOT&&resolve(process.env.ASSISTANT_INSTALL_ROOT);
+if(!output||!install)throw new Error('Usage: ASSISTANT_INSTALL_ROOT=LOCKED_PROFILE_INSTALL npm run package -- NEW_DIRECTORY [PROFILE]');
+const lock=JSON.parse(readFileSync(resolve(root,'harness.lock.json'),'utf8'));
+const recipe=JSON.parse(readFileSync(resolve(root,'harness.product.json'),'utf8'));
+if(!Object.hasOwn(recipe.profiles,profile))throw new Error(`Unknown profile ${profile}`);
+if(!existsSync(resolve(install,'release-manifest.json')))throw new Error('The tested release manifest is missing from the install root.');
+assembleProduct({from:install,output,roots:['@ankdesh/dsh','@ankdesh/dsh-product-tools',...recipe.profiles[profile].bundles],
+ releaseManifest:resolve(install,'release-manifest.json'),releaseManifestSha256:lock.releaseManifestSha256});
+for(const entry of ['deployment','harness.lock.json'])cpSync(resolve(root,entry),resolve(output,entry),{recursive:true});
+// A release contains only the selected production profile.
+const {writeFileSync}=await import('node:fs');
+recipe.profiles={[profile]:{...recipe.profiles[profile],localBundles:recipe.profiles[profile].bundles.map(name=>'../'+name)}};
+recipe.defaultProfile=profile;
+writeFileSync(resolve(output,'harness.product.json'),JSON.stringify(recipe,null,2)+'\n');

@@ -2,29 +2,29 @@
  * Startup reconciles reservations/reviews, validates catalogs and awaits native
  * storage before routes become ready. Agent membership determines immutable
  * binding/capability scope; model arguments never choose a different owner. */
-import type { Context } from "@deepseek-ai/cordis";
-import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
-import { summarizeFlow } from "@deepseek-ai/dsh-flow";
-import type { FlowRuntime, FlowExecutionId } from "@deepseek-ai/dsh-flow";
-import type {} from "@deepseek-ai/dsh-flow-model-native";
+import type { Context } from "@ankdesh/cordis";
+import { snapshotJsonValue, type JsonValue } from "@ankdesh/dsh-util-values";
+import { summarizeFlow } from "@ankdesh/dsh-flow";
+import type { FlowRuntime, FlowExecutionId } from "@ankdesh/dsh-flow";
+import type {} from "@ankdesh/dsh-flow-model-native";
 import { SpecFlows } from "./spec-flows.js";
 import { flowPresentation, relatedFlowViews } from "./flow-presentation.js";
 import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
-import type { Agent } from "@deepseek-ai/dsh-agent";
-import type EventSystemService from "@deepseek-ai/dsh-event-system";
-import type { EventSystemSnapshot } from "@deepseek-ai/dsh-event-system";
-import type HttpSourceService from "@deepseek-ai/dsh-event-system-http";
-import type { HttpSourceInput, HttpSourceId } from "@deepseek-ai/dsh-event-system-http";
-import type { GoalService } from "@deepseek-ai/dsh-goal";
+import type { Agent } from "@ankdesh/dsh-agent";
+import type EventSystemService from "@ankdesh/dsh-event-system";
+import type { EventSystemSnapshot } from "@ankdesh/dsh-event-system";
+import type HttpSourceService from "@ankdesh/dsh-event-system-http";
+import type { HttpSourceInput, HttpSourceId } from "@ankdesh/dsh-event-system-http";
+import type { GoalService } from "@ankdesh/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { EventConfigurations } from "./event-configuration.js";
-import type { SessionPersistence } from "@deepseek-ai/dsh-session-persistence";
+import type { SessionPersistence } from "@ankdesh/dsh-session-persistence";
 import { randomUUID } from "node:crypto";
 import { sourceName } from "./naming.js";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
-import z from "@deepseek-ai/schemastery";
-import { SessionId } from "@deepseek-ai/dsh-session";
+import z from "@ankdesh/schemastery";
+import { SessionId } from "@ankdesh/dsh-session";
 import { ServiceClients, ServiceError } from "./service-clients.js";
 import { errorFromException, logProposalFailure, proposalError, publicReview } from "./proposal-presentation.js";
 import { artifactDigest, ProductState } from "./state.js";

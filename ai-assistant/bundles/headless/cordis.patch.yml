@@ -1,0 +1,10 @@
+- insert:
+    - id: headless-startup
+      name: '@ankdesh/dsh-headless/startup'
+    - id: headless-runner
+      name: '@ankdesh/dsh-headless'
+      inject: [headlessStartup]
+      config:
+        task: !!js ctx.headlessStartup.task
+        sessionId: !!js ctx.headlessStartup.sessionId
+        json: !!js ctx.headlessStartup.json

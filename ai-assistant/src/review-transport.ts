@@ -1,5 +1,5 @@
 /** Small model projections and durable references to complete service reviews. */
-import type { JsonValue } from "@deepseek-ai/dsh-util-values";
+import type { JsonValue } from "@ankdesh/dsh-util-values";
 import { isRecord } from "./types.js";
 
 export const MODEL_RESULT_LIMIT = 40 * 1024;

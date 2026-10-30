@@ -3,10 +3,10 @@
  * preview enforce meaning. Standing specialists stay read-only; primary tools
  * cannot bypass immutable binding, review claims or native execution permission. */
 import { randomUUID } from "node:crypto";
-import type { PromptSection } from "@deepseek-ai/dsh-system-prompt";
+import type { PromptSection } from "@ankdesh/dsh-system-prompt";
 import { type ToolRunContext } from "../tool-registry.js";
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
-import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
+import { snapshotJsonValue, type JsonValue } from "@ankdesh/dsh-util-values";
 import { rtlSizingFeedback } from "../rtl-authoring-feedback.js";
 import { publicReview } from "../proposal-presentation.js";
 import { type ProductState } from "../state.js";

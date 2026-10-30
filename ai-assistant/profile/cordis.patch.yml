@@ -1,3 +1,339 @@
+# Explicit shared runtime. General coding tools are not installed.
+- insert:
+    - id: timer
+      name: '@ankdesh/cordis-plugin-timer'
+
+    # Module reload is opt-in per profile. `patchReload: live` config watching
+    # uses the launcher's watch-only fallback and does not require this row.
+    - id: llm
+      name: '@ankdesh/dsh-llm'
+
+    - id: session
+      name: '@ankdesh/dsh-session'
+
+    - id: session-log-deepseek
+      name: '@ankdesh/dsh-session-log-deepseek'
+
+    - id: typert
+      name: '@ankdesh/dsh-typert-registry'
+
+    - id: typert-loader
+      name: '@ankdesh/dsh-typert-loader'
+
+    - id: typert-gateway
+      name: '@ankdesh/dsh-api-gateway'
+
+    - id: session-title
+      name: '@ankdesh/dsh-session-title'
+      config:
+        fallbackMaxWords: 5
+        fallbackMaxBytes: 40
+        maxTitleBytes: 80
+
+    - id: user-questions
+      name: '@ankdesh/dsh-user-questions'
+
+    - id: agent
+      name: '@ankdesh/dsh-agent'
+
+    - id: agent-default-model
+      name: '@ankdesh/dsh-agent-default-model'
+      config:
+        provider: deepseek-official
+        model: deepseek-flash
+
+    - id: llm-retry
+      name: '@ankdesh/dsh-llm-retry'
+
+    # User-settings document (`$DSH_HOME/settings.yaml`, hot-reloaded): a
+    # `llm-deepseek:` or `llm-pi-ai:` section there overrides the adapter entries
+    # below without a restart, and is what the web Models page writes.
+    - id: settings
+      name: '@ankdesh/dsh-settings-file'
+
+    # Credential sources: inherited environment over the managed
+    # `$DSH_HOME/.credentials.yaml`, with project and user `.env` fallbacks.
+    # Adapters resolve references per request; the Models page writes only the
+    # managed document, which is never materialized into the process environment.
+    - id: credentials
+      name: '@ankdesh/dsh-credentials-local'
+
+    # The pi-ai multi-provider twin, mounted dormant: zero routes (and no extra
+    # models in the picker) until a `llm-pi-ai:` settings section supplies provider
+    # profiles — then those routes register live, keys resolving per request
+    # through their apiKeyEnv references, and drop again when the section empties.
+    # Supplying those profiles is exactly what the web Models page does. Which
+    # adapters exist is composition; which providers run is the user's settings
+    # document.
+    - id: llm-pi-ai
+      name: '@ankdesh/dsh-llm-pi-ai'
+
+    - id: session-persistence-jsonl
+      name: '@ankdesh/dsh-session-persistence-jsonl'
+      config:
+        root: !!js dshHomePath('sessions')
+
+    # Durable image bytes live outside the append-only session log. Messages
+    # keep content-addressed references that this shared backend resolves for
+    # provider requests and authorized history reads.
+    - id: attachment-local
+      name: '@ankdesh/dsh-attachment-local'
+
+    # Full-text session search is opt-in. `openAt: never` keeps
+    # ctx.sessionQuery mounted — exact reads, titles, and lineage traces
+    # (session export, subagent-fork Workspace inheritance) stay available —
+    # while search calls fail with SESSION_QUERY_SEARCH_DISABLED and SQLite is
+    # never opened; the Web sidebar search matches titles and workspace names
+    # only. Deployments enabling content search override `openAt` to
+    # `first-search` or `startup` in a later patch layer (profile
+    # cordis.patch.yml or a --patch overlay), typically with a durable `path`.
+    - id: session-query-sqlite
+      name: '@ankdesh/dsh-session-query-sqlite'
+      config:
+        path: ':memory:'
+        openAt: never
+
+    # Shared projection registry: subagent catalog identity (mode/label) folds
+    # through its registered units, so the `list_agents` surface below fails
+    # loud without it; web layers reuse this same mount for list rows.
+    - id: session-projection
+      name: '@ankdesh/dsh-session-projection'
+
+    # Durable KV storage: the storage hub, the json backend, and the
+    # schema-validated domain form over them. Session-layer persistence (the
+    # projection cache below; workspace in web layers)
+    # routes through this stack, so it belongs to the shared base.
+    - id: storage
+      name: '@ankdesh/dsh-storage'
+
+    - id: storage-json
+      name: '@ankdesh/dsh-storage-json'
+      config:
+        root: !!js dshHomePath('storages')
+
+    - id: storage-domain
+      name: '@ankdesh/dsh-storage-domain'
+      config:
+        backend: json
+
+    # Persisted projection cache: throttled write-behind over the
+    # session_projcache domain (per-record layout — one version-stamped
+    # checkpoint document per session), serving the session listing's
+    # projection column.
+    - id: session-projection-cache
+      name: '@ankdesh/dsh-session-projection-cache'
+      config:
+        writeEveryEvents: 200
+        writeIntervalMs: 5000
+
+    # OTel releases a Session-log prefix only after explicit user feedback,
+    # regardless of model provider. Ordinary activity never triggers capture.
+    # DSH_TELEMETRY_OTLP_URL overrides the production endpoint. A non-empty
+    # DSH_TELEMETRY_DISABLED — any value, including '0'/'false' — opts the
+    # process out (the launchers patch the row disabled; config cannot disable
+    # a row). Exports carry the harness home's anonymous user id ($DSH_HOME/.anonymous-user-id,
+    # random UUID; delete the file to reset the identity) as the Resource's
+    # user.id. The exporter/processor values normally bound the shutdown drain
+    # to ~1s against an unreachable collector: exporter.timeoutMillis is both
+    # the per-attempt socket timeout and the retry deadline (1s effectively
+    # disables the SDK's 5-try backoff), while maxExportBatchSize == maxQueueSize
+    # (both explicit) makes the drain a single batch. The SDK awaits
+    # exporter.forceFlush() outside exportTimeoutMillis, so the backend's 3s
+    # shutdownTimeoutMillis is the load-bearing outer bound when a transport
+    # promise never settles. Every CLI exit path drains it by disposing the root
+    # on SIGINT/SIGTERM.
+    - id: subprocess
+      name: '@ankdesh/dsh-subprocess-local'
+
+    # Every shipped CLI mode starts with the same file-effect boundary.
+    # The environment remains an explicit deployment override; otherwise fresh
+    # sessions pin workspace-write + ask through the permission service below.
+    - id: sandbox
+      name: '@ankdesh/dsh-sandbox-local'
+
+    - id: sandbox-policy
+      name: '@ankdesh/dsh-sandbox-policy'
+      config:
+        mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'
+        workspaceRoot: !!js process.cwd()
+
+    - id: approval
+      name: '@ankdesh/dsh-user-approval'
+      config:
+        policy: !!js "(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'"
+
+    - id: permission
+      name: '@ankdesh/dsh-permission-presets'
+      config:
+        presets:
+          read-only:
+            sandbox: read-only
+            approval: ask
+          workspace-write:
+            sandbox: workspace-write
+            approval: ask
+          danger-full-access:
+            sandbox: danger-full-access
+            approval: never
+
+    - id: shell-env
+      name: '@ankdesh/dsh-shell-env'
+
+    - id: fs-observation-policy
+      name: '@ankdesh/dsh-fs-observation-policy'
+
+    - id: agent-instructions
+      name: '@ankdesh/dsh-agent-instructions'
+      config:
+        maxBytes: 65536
+
+    - id: skill
+      name: '@ankdesh/dsh-skill'
+
+    - id: skill-badge
+      name: '@ankdesh/dsh-skill-badge'
+      disabled: true
+
+    - id: commands
+      name: '@ankdesh/dsh-commands'
+
+    - id: command-feedback
+      name: '@ankdesh/dsh-command-feedback'
+
+    - id: goal
+      name: '@ankdesh/dsh-goal'
+
+    - id: goal-round-driver
+      name: '@ankdesh/dsh-goal-round-driver'
+
+    - id: command-goal
+      name: '@ankdesh/dsh-command-goal'
+
+    - id: plan-mode
+      name: '@ankdesh/dsh-plan-mode'
+      config:
+        section: |
+              You are in plan mode. Stay in plan mode until exit_plan_mode succeeds or the user switches the session mode. Imperative language to implement changes means plan the implementation, not execute it. A user's conversational agreement — including an answer confirming something you asked — approves nothing and does not end plan mode; fold the confirmed decision into the plan and submit it through exit_plan_mode.
+
+              Explore first. Use non-mutating reads, searches, static analysis, and checks to ground the plan in the actual repository. Do not edit or write files, change configuration, run formatters or code generation that rewrites tracked files, commit, or otherwise carry out the plan. Prefer existing functions and patterns over new machinery.
+
+              The tool catalog stays the same across modes for request-cache stability. These plan-mode rules override any later tool description or guidance that suggests using mutation tools; those tools remain listed only to keep the request shape stable. Do not use todo_write to track this planning phase: it tracks implementation after an approved plan, while the plan itself belongs in exit_plan_mode.
+
+              Resolve discoverable facts by inspection. Use ask_user_question only for user-owned choices or material ambiguity that inspection cannot answer. Do not ask the user where code lives or how current behavior works when you can find out.
+
+              Make the plan decision-complete: state the goal and success criteria; group implementation changes by subsystem; identify public API, schema, and data-flow changes; cover edge cases, failure modes, tests, acceptance criteria, and explicit assumptions. Keep it concise enough to review but detailed enough that another engineer can implement it without making design decisions.
+
+              When ready, call exit_plan_mode with the complete plan markdown, starting with a # title. Make exit_plan_mode the only and final tool call in that assistant response: it presents the plan for approval, and implementation begins only in a later step after approval. Do not paste the final plan as a plain reply or ask "should I proceed?" through prose or ask_user_question. If review rejects it, incorporate the feedback and present again. If the review channel is unavailable or aborted, stay in plan mode and ask the user to switch modes manually; do not proceed with implementation.
+
+    - id: token-meter
+      name: '@ankdesh/dsh-token-meter'
+
+    - id: compaction-basic
+      name: '@ankdesh/dsh-compaction-basic'
+
+    # Human `/compact`: one useful reduction below the automatic threshold. Backend
+    # independent, so it follows whichever compaction service this leaf mounts.
+    - id: command-compact
+      name: '@ankdesh/dsh-command-compact'
+
+    - id: subagent
+      name: '@ankdesh/dsh-subagent'
+
+    - id: subagent-spawn-in-process
+      name: '@ankdesh/dsh-subagent-spawn-in-process'
+      config:
+        providerName: spawn
+
+    - id: subagent-fork-in-process
+      name: '@ankdesh/dsh-subagent-fork-in-process'
+      config:
+        providerName: fork
+
+    # Continuable background children are selected per delegation tool. The
+    # separately loaded follow-up tool registers the one global `send_message`.
+    - id: timeout-policy
+      name: '@ankdesh/dsh-tool-call-timeout-policy'
+
+    - id: spill-local
+      name: '@ankdesh/dsh-spill-local'
+
+    - id: spill-policy
+      name: '@ankdesh/dsh-spill-policy'
+      config:
+        maxInlineBytes: 50000
+
+    # Durability checkpoints before each model request and top-level dispatch.
+    - id: session-checkpoint-policy
+      name: '@ankdesh/dsh-session-checkpoint-policy'
+
+    # Compacts oversized tool results before the broader conversation compactor
+    # runs, preserving the model-visible result within the configured budget.
+    - id: tool-result-pruner
+      name: '@ankdesh/dsh-compaction-tool-result-pruner'
+      config:
+        thresholdChars: 8192
+        headChars: 4096
+        tailChars: 1024
+
+    # When an image-capable route rejects a request as over its image budget,
+    # replace the oldest images with placeholders on the surface and retry.
+    - id: image-offload
+      name: '@ankdesh/dsh-compaction-image-offload'
+
+    - id: tool-goal
+      name: '@ankdesh/dsh-tool-goal'
+
+    # Fresh-agent Ralph iteration over a build-time-fixed script. Off by
+    # default: the tool description restricts `ralph` to runs the human
+    # explicitly asked for, and completion is a worker self-report, not an
+    # independent evaluation. An overlay row restores it for a base-backed
+    # profile (`$DSH_HOME/cordis.patch.yml`, or a `--patch <file>`):
+    #   - id: tool-ralph
+    #     disabled: false
+    - id: repeat-tool-reminder
+      name: '@ankdesh/dsh-repeat-tool-reminder'
+      config:
+        thresholds: [3, 5, 8]
+        argumentsPreviewChars: 500
+
+    # The shared base enables the stable model-facing web_search and web_fetch
+    # tools. The Web app disables this host row and composes both tools per agent
+    # preset; products with a stricter network policy override tool-web. DeepSeek
+    # search resolves the same DEEPSEEK_API_KEY
+    # credential the Models page manages for chat, at each search; its Messages
+    # endpoint is separate from the chat-completions endpoint, so it takes its own
+    # base-URL override. Anonymous fetch accepts only public HTTP(S) destinations,
+    # resolves and validates every destination, and pins every actual connection.
+    # Search is a full auxiliary model request with server-side retrieval, so this
+    # shipped DeepSeek route gets 60s while the provider-neutral tool default
+    # remains 30s.
+    - id: tools
+      name: '@ankdesh/dsh-tools'
+
+    # The deployment persona is a deployment choice; plan-mode and tool plugins own
+    # their own prompt sections.
+    - id: system-prompt
+      name: '@ankdesh/dsh-system-prompt'
+      config:
+        personaPrefix: ''
+
+    # Agents created at startup. The base stays empty; raw overlays may create
+    # agents, while Web creates sessions on client request.
+    - id: agent-loop
+      name: '@ankdesh/dsh-agent-loop'
+      config:
+        agents: []
+
+    # The sandboxed filesystem provider. `cwd` defaults to `process.cwd()`; an
+    # overlay can pin another workspace.
+    - id: fs-sandbox
+      name: '@ankdesh/dsh-fs-sandbox'
+
+    # The native DeepSeek adapter. No key or endpoint is inlined: both resolve per
+    # request from the `llm-deepseek:` settings section over this entry, with the
+    # key coming from the credential store below. Thinking defaults are a deployment
+    # choice.
+
 # Shared spec2gds layer for both browser and one-shot profiles.
 - id: agent-default-model
   config:
@@ -111,43 +447,32 @@
 
 - insert:
     - id: spec2gds-invariants
-      name: '@deepseek-ai/dsh-invariants'
+      name: '@ankdesh/dsh-invariants'
       config:
         enabled: true
 
     - id: prompt-catalog
-      name: '@deepseek-ai/dsh-prompt-catalog'
+      name: '@ankdesh/dsh-prompt-catalog'
 
     - id: prompt-catalog-yaml
-      name: '@deepseek-ai/dsh-prompt-catalog-yaml'
+      name: '@ankdesh/dsh-prompt-catalog-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/prompts'
 
-    # Retain historical workflow event decoding; new presets do not start workflows.
-    - id: s-workflow
-      name: '@deepseek-ai/dsh-s-workflow'
-
-    - id: s-workflow-yaml
-      name: '@deepseek-ai/dsh-s-workflow-yaml'
-      config:
-        roots:
-          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/workflows'
-          - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/adapters'
-
     - id: event-system-storage
-      name: '@deepseek-ai/dsh-storage-sqlite'
+      name: '@ankdesh/dsh-storage-sqlite'
       config:
         path: !!js dshHomePath('event-systems.sqlite3')
 
     - id: event-systems
-      name: '@deepseek-ai/dsh-event-system'
+      name: '@ankdesh/dsh-event-system'
 
     - id: event-systems-invariant
-      name: '@deepseek-ai/dsh-event-system/invariant'
+      name: '@ankdesh/dsh-event-system/invariant'
 
     - id: event-http-sources
-      name: '@deepseek-ai/dsh-event-system-http'
+      name: '@ankdesh/dsh-event-system-http'
       config:
         allowedOrigins: !!js Array.from(new Set((process.env.ASSISTANT_HTTP_MONITOR_ORIGINS || [process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010', process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'].join(',')).split(',').filter(Boolean).map(value => new URL(value.trim()).origin)))
         tickMillis: 1000
@@ -161,10 +486,10 @@
         maxFailures: 5
 
     - id: event-http-sources-invariant
-      name: '@deepseek-ai/dsh-event-system-http/invariant'
+      name: '@ankdesh/dsh-event-system-http/invariant'
 
     - id: event-systems-yaml
-      name: '@deepseek-ai/dsh-event-system-yaml'
+      name: '@ankdesh/dsh-event-system-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/event-systems'
@@ -172,7 +497,7 @@
         maxPromptBytes: 32768
 
     - id: flow-runtime
-      name: '@deepseek-ai/dsh-flow-runtime'
+      name: '@ankdesh/dsh-flow-runtime'
       config:
         maxRequests: 4
         maxTokens: 1000000
@@ -182,12 +507,12 @@
         maxExpandedNodes: 128
 
     - id: flow-model-native
-      name: '@deepseek-ai/dsh-flow-model-native'
+      name: '@ankdesh/dsh-flow-model-native'
     - id: flow-native-invariant
-      name: '@deepseek-ai/dsh-flow-model-native/invariant'
+      name: '@ankdesh/dsh-flow-model-native/invariant'
 
     - id: flow-yaml
-      name: '@deepseek-ai/dsh-flow-yaml'
+      name: '@ankdesh/dsh-flow-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/flows'

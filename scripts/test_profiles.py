@@ -224,10 +224,9 @@ def prerequisite_errors(requirements: tuple[str, ...], env: dict[str, str]) -> l
             if not shutil.which("npm", path=env.get("PATH")):
                 errors.append("npm is unavailable.")
         if requirement == "harness":
-            harness = Path(env.get("HARNESS_SOURCE", str(ROOT.parent / "deepseek-harness")))
-            if not any((base / "scripts/product-runtime.mjs").exists()
-                       for base in (harness, harness / "deepseek-harness")):
-                errors.append("DeepSeek Harness source is unavailable; set HARNESS_SOURCE.")
+            runtime = ROOT / "ai-assistant/node_modules/@ankdesh/dsh/lib/bin.js"
+            if not runtime.exists():
+                errors.append("Harness packages are unavailable; run npm ci in ai-assistant with GitHub Packages read access.")
         if requirement == "browser":
             if env.get("SPEC2GDS_TEST_PORT_ERROR"):
                 errors.append(env["SPEC2GDS_TEST_PORT_ERROR"])
@@ -465,7 +464,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rtl-cases", help="Limit regression live RTL evaluation to a comma-separated list; retain all other suites.")
     parser.add_argument("--coverage", action="store_true", help="Measure selected unit/service checks; do not select extra checks.")
-    parser.add_argument("--output", type=Path, help="New, empty report directory; default: private /tmp directory.")
+    parser.add_argument("--output", type=Path, help="New, empty report directory; default: an ignored repository TEMP_ directory.")
     args = parser.parse_args(argv)
     scopes = set(args.scope.split(","))
     if scopes != {"all"} and (not scopes or not scopes <= SCOPES):
@@ -490,7 +489,7 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(asdict(suite)))
         print("Dry run complete; no checks executed, reports written, or provider calls made.")
         return 0
-    output = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix="spec2gds-tests-"))
+    output = args.output.resolve() if args.output else Path(tempfile.mkdtemp(prefix="TEMP_tests-", dir=ROOT))
     if output.exists() and any(output.iterdir()):
         parser.error("--output must be a new or empty directory; existing evidence is not replaced.")
     output.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -1,5 +1,5 @@
 /** Product progress reads committed execution records; it grants no controls. */
-import type { FlowView } from "@deepseek-ai/dsh-flow";
+import type { FlowView } from "@ankdesh/dsh-flow";
 import { hasSavedReceipt, presentationFor } from "./change-presentation.js";
 import { isRecord, type ProposalReview } from "./types.js";
 

@@ -1,11 +1,245 @@
+# Explicit browser surface.
+- insert:
+    - id: message-feedback
+      name: '@ankdesh/dsh-message-feedback'
+      config:
+        maxNoteBytes: 8192
+
+    # Browser Session export: `/export` command plus the shared download dialog.
+    - id: session-log-download
+      name: '@ankdesh/dsh-session-log-export'
+
+    # Session-header "Open In..." split button over the host application
+    # resolution (macOS/Windows/Linux; a host with no resolved application
+    # renders no button). Two halves: the host routes and the browser surface.
+    - id: workspace
+      name: '@ankdesh/dsh-workspace'
+
+    - id: session-reference
+      name: '@ankdesh/dsh-session-reference'
+
+    - id: file-reference-local
+      name: '@ankdesh/dsh-file-reference-local'
+
+    # Whole-log turn/step counts for the chat stats strip (the sessionStats
+    # projection key); the projection registry itself is a base-layer row.
+    - id: session-stats
+      name: '@ankdesh/dsh-session-stats'
+
+    # Whole-log turn outline for the chat turn rail (the turnOutline
+    # projection key): every turn stays navigable before its events page in.
+    - id: session-turn-outline
+      name: '@ankdesh/dsh-session-turn-outline'
+
+    # Resolve bind host, SSH launch, and display once at boot, then mount the
+    # matching dual-face directory picker. Mount -native or -browse directly in
+    # an overlay to pin the interaction.
+    - id: session-controller
+      name: '@ankdesh/dsh-api-session-controller'
+
+    # Workspace file service: bounded read, directory listing, and the
+    # agent-write change feed inside the session workspace root.
+    - id: settings-controller
+      name: '@ankdesh/dsh-api-settings-controller'
+
+    # Workspace commands and reconnect-safe projection over Typert Remote.
+    - id: workspace-controller
+      name: '@ankdesh/dsh-api-workspace-controller'
+
+    - id: cordis-host-runner
+      name: '@ankdesh/dsh-cordis-host-runner'
+
+    # Ordinary provider for the parsed Web flags. Its plugin-level injection
+    # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
+    - id: web-startup
+      name: '@ankdesh/dsh-web-runtime/startup'
+
+    # ── layer 2: transport/service ──────────────────────────────────────────────
+
+    # Plain route-registration carrier; host and port come from the app's
+    # webStartup provider, with these deployment fallbacks. The dist is served by
+    # the web-runtime row below through the fallback seat.
+    - id: webserver
+      name: '@ankdesh/dsh-host-webserver'
+      inject: [webStartup]
+      config:
+        host: !!js ctx.webStartup.host ?? '127.0.0.1'
+        port: !!js ctx.webStartup.port ?? 3080
+        compression: gzip
+        compressionLevel: 1
+        compressionThresholdBytes: 1024
+
+    # Web glue owned by this bundle: resolves the built frontend dist (an
+    # assembly fact of dsh-web-app, never user config), mounts the
+    # frontend-static fallback owner, registers the web-surface prompt
+    # section and the bash runtime variable, prints the URL line, and opens the
+    # canonical local URL after the full Loader tree settles and the required-
+    # entry audit passes. The
+    # webStartup provider supplies invocation-only values; after the server binds, this row samples
+    # LAN trust once and provides `webRuntime`. A complete agent-preset persona
+    # suppresses the prompt section for that agent while retaining the host-owned
+    # shell variable.
+    - id: web-runtime
+      name: '@ankdesh/dsh-web-runtime'
+      inject: [webStartup]
+      config:
+        openBrowser: !!js ctx.webStartup.openBrowser
+        printUrl: true
+        surfaceContext: true
+        trustedHosts: !!js ctx.webStartup.trustedHosts
+
+    # The client-plugin reload chain, always mounted: it is idle until a
+    # rebuild watcher (pnpm run dev:web) actually rewrites client bundles. It
+    # is a row rather than a child of web-runtime because its node half is a
+    # client-side package, which a host-side bundle cannot import.
+    - id: modules
+      name: '@ankdesh/dsh-client-modules'
+
+    # Owns both ends of the web transport: node half binds the gateway to the
+    # webserver under /api; browser half is the fetch/SSE client.
+    - id: connection
+      name: '@ankdesh/dsh-client-connection'
+      inject: [webRuntime]
+      config:
+        # LAN literals derived from the active bind plus --trusted-host extras.
+        # A deployment adding authorities keeps this expression and concatenates
+        # its literals, for example: ['app.internal', ...ctx.webRuntime.trustedHosts].
+        trustedHosts: !!js ctx.webRuntime.trustedHosts
+
+    # Raw Blob and ReadableStream uploads run independently of Connection's
+    # RPC and generation service.
+    - id: file-upload
+      name: '@ankdesh/dsh-client-file-upload'
+
+    - id: api-remotes
+      name: '@ankdesh/dsh-api-remotes'
+
+    - id: cordis-client-runner
+      name: '@ankdesh/dsh-cordis-client-runner'
+
+    - id: ui-theme
+      name: '@ankdesh/dsh-client-ui-theme'
+
+    - id: locale
+      name: '@ankdesh/dsh-client-locale'
+
+    - id: ui-layout
+      name: '@ankdesh/dsh-client-ui-layout'
+
+    - id: ui-renderer
+      name: '@ankdesh/dsh-client-ui-renderer'
+
+    - id: ui-session
+      name: '@ankdesh/dsh-client-ui-session'
+
+    # Unified resource model: protocol providers behind the useResource hook.
+    - id: resources
+      name: '@ankdesh/dsh-client-resources'
+
+    - id: ui-sidebar
+      name: '@ankdesh/dsh-client-ui-sidebar'
+
+    # The right Sidebar: one docking surface per session over ui-dockkit.
+    - id: ui-sidebar-right
+      name: '@ankdesh/dsh-client-ui-sidebar-right'
+
+
+    # The right Sidebar's document tab: bounded file reads with selectable
+    # Markdown, code, HTML, PDF, and plain-text renderers.
+    - id: ui-settings
+      name: '@ankdesh/dsh-client-ui-settings'
+
+    - id: ui-settings-general
+      name: '@ankdesh/dsh-client-ui-settings-general'
+
+    - id: ui-settings-unarchive-sessions
+      name: '@ankdesh/dsh-client-ui-settings-unarchive-sessions'
+
+    - id: ui-conversation
+      name: '@ankdesh/dsh-client-ui-conversation'
+
+    - id: ui-approval
+      name: '@ankdesh/dsh-client-ui-approval'
+
+    - id: ui-chat
+      name: '@ankdesh/dsh-client-ui-chat'
+
+    # Official occupants for the generic sidebar and conversation brand slots.
+    - id: ui-tool
+      name: '@ankdesh/dsh-client-ui-tool'
+
+    - id: ui-workspace
+      name: '@ankdesh/dsh-client-ui-workspace'
+
+    # Input triggers: the '/' | '@' pipeline (ui-input-trigger), the command surface over
+    # it (ui-commands), and the reference sources (ui-skill / ui-reference).
+    - id: ui-input-trigger
+      name: '@ankdesh/dsh-client-ui-input-trigger'
+
+    - id: ui-commands
+      name: '@ankdesh/dsh-client-ui-commands'
+
+    - id: ui-goal
+      name: '@ankdesh/dsh-client-ui-goal'
+
+    # The feedback surface: Like/Dislike in the assistant-message action
+    # strip, the feedback dialog behind Dislike and /feedback with its
+    # acknowledgement toast, over the messageFeedback and sessionFeedback Remotes.
+    - id: ui-model-selection
+      name: '@ankdesh/dsh-client-ui-model-selection'
+
+    - id: ui-agent-preset
+      name: '@ankdesh/dsh-client-ui-agent-preset'
+
+    # Plugin configuration: the host-plane sections a user owns, as expandable
+    # cards. A namespace this deployment does not expose renders nothing.
+    - id: ui-user-questions
+      name: '@ankdesh/dsh-client-ui-user-questions'
+
+    - id: agent-presets
+      name: '@ankdesh/dsh-agent-presets'
+      config:
+        default: standard
+
+- insert:
+    - id: agent-presets
+      name: '@ankdesh/dsh-agent-presets'
+      config:
+        default: standard
+
+- id: plan-mode
+  disabled: true
+
+# The token METER stays on the host plane; only the compaction backend that
+# reads it moves. It owns the context-meter projection units, and that table is
+# process-wide, so preset ownership would make the meter a function of which
+# presets happen to be mounted rather than a per-session fact. Same criterion as
+# `tasks` and `goals`; the reasoning has one home in
+# `.agents/notes/implemented/architecture/2026-08-10-host-plane-ownership-after-presets.md`.
+
+- id: compaction-basic
+  disabled: true
+
+- id: command-compact
+  disabled: true
+
+- id: tool-result-pruner
+  disabled: true
+
+# The subagent registry and its backends STAY in the host plane. `subagents` is
+# a process singleton with a cross-session query surface (`listChildren`,
+# `followup`) that the host api-proxy serves to the browser, and a provider
+# registers under a globally unique name, so a per-session copy would both
+# starve that host row and collide on the second session. What a preset
+# chooses is which delegation TOOLS its agent sees, below.
+
+- id: agent-instructions
+  disabled: true
+
 # Browser-only policy layered after dsh-web-app.
 - insert:
     - id: flow-controller
-      name: '@deepseek-ai/dsh-flow-runtime/controller'
-
-    - id: ui-flow
-      name: '@deepseek-ai/dsh-client-ui-flow'
-      disabled: true
+      name: '@ankdesh/dsh-flow-runtime/controller'
 
     - id: spec2gds-ui
       name: '@spec2gds/harness-web'
@@ -85,7 +319,7 @@
     includeShippedRoot: false
     includeUserRoot: false
     roots:
-      - path: !!js process.cwd() + '/profile/presets'
+      - path: !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/../presets'
         trust: system
 - id: ui-goal
   disabled: false

@@ -43,12 +43,12 @@ for (const directory of directories) {
   const manifest = join(directory, "package.json");
   if (!existsSync(manifest)) continue;
   const { name } = JSON.parse(readFileSync(manifest, "utf8"));
-  if (name?.startsWith("@deepseek-ai/")) packages.push([name.slice("@deepseek-ai/".length), directory]);
+  if (name?.startsWith("@ankdesh/") || name?.startsWith("@deepseek-ai/")) packages.push([name.split("/").slice(1).join("/"), directory]);
 }
 const modules = join(product, "node_modules");
 mkdirSync(modules, { recursive: true });
 const generated = mkdtempSync(join(modules, ".harness-links-"));
-const namespace = join(generated, "@deepseek-ai");
+const namespace = join(generated, "@ankdesh");
 mkdirSync(namespace);
 for (const [name, directory] of packages) symlinkSync(directory, join(namespace, name), "dir");
 
@@ -60,7 +60,7 @@ function replaceLink(local, target, backupName, type) {
   else if (previous) renameSync(local, join(generated, backupName));
   symlinkSync(target, local, type);
 }
-replaceLink(join(modules, "@deepseek-ai"), namespace, "previous-installed-scope", "dir");
+replaceLink(join(modules, "@ankdesh"), namespace, "previous-installed-scope", "dir");
 replaceLink(join(modules, "@types"), types, "previous-installed-types", "dir");
 mkdirSync(join(modules, ".bin"), { recursive: true });
 for (const { command, packageName, packageRoot, executable } of toolchain) {

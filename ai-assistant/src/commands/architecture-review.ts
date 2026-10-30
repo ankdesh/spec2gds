@@ -5,7 +5,7 @@ export interface InterfaceParameter { name: string; rtl_type: string; value: str
 export interface ArchitectureInputs { title: string; components: Array<{ name: string; purpose?: string; description?: string }>; designs: Array<{ name: string; purpose?: string; description?: string }>; interfaces: Array<{ component: string; ports: InterfacePort[]; parameters: InterfaceParameter[]; constant_context: string }>; clocks_resets: string[]; decomposition_rationale: string; assumptions: string[]; open_questions: string[]; concrete_configuration: Record<string, unknown>; }
 
 import { defaultInstructions, type InstructionBundle } from "../instructions.js";
-import { snapshotJsonValue, type JsonValue } from "@deepseek-ai/dsh-util-values";
+import { snapshotJsonValue, type JsonValue } from "@ankdesh/dsh-util-values";
 import { artifactDigest, ProductState } from "../state.js";
 import type { ServiceClients } from "../service-clients.js";
 import { isRecord } from "../types.js";

@@ -1,10 +1,10 @@
 - id: persona
-  name: '@deepseek-ai/dsh-persona'
+  name: '@ankdesh/dsh-persona'
   config:
     prefix: You are the goal-oriented spec2gds hardware-design assistant.
 - id: tool-ask-user
-  name: '@deepseek-ai/dsh-tool-ask-user'
+  name: '@ankdesh/dsh-tool-ask-user'
 - id: command-goal
-  name: '@deepseek-ai/dsh-command-goal'
+  name: '@ankdesh/dsh-command-goal'
 - id: tool-goal
-  name: '@deepseek-ai/dsh-tool-goal'
+  name: '@ankdesh/dsh-tool-goal'

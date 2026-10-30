@@ -7,8 +7,8 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createUserMessage } from '@deepseek-ai/dsh-llm';
-import { SessionId } from '@deepseek-ai/dsh-session';
+import { createUserMessage } from '@ankdesh/dsh-llm';
+import { SessionId } from '@ankdesh/dsh-session';
 import { boot, waitFor } from './support/event-runtime.mjs';
 for (const preset of ['goal','orchestrated']) test(`${preset} keeps Spec analysis inside its declared capability boundary`,{timeout:30000},async()=>{
   const directory=await mkdtemp(join(tmpdir(),'spec2gds-analysis-'));

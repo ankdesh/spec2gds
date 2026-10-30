@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { modelProposalResult, proposalPresentation, MODEL_RESULT_LIMIT } from "../src/review-transport.js";
 import { publicReview } from "../src/proposal-presentation.js";
-import { apply as spillApply } from "@deepseek-ai/dsh-spill-policy";
+import { apply as spillApply } from "@ankdesh/dsh-spill-policy";
 
 const preview = { status: "valid", diff: [{ label: "Large SV section", before: "x".repeat(60000), after: "y".repeat(60000) }] };
 const review: any = { proposalId: "proposal", sessionId: "conversation", callId: "call", domain: "spec", state: "ready", baseRevision: "rev",

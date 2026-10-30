@@ -4,8 +4,8 @@ import test from 'node:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ToolCallId } from '@deepseek-ai/dsh-llm';
-import { SessionId } from '@deepseek-ai/dsh-session';
+import { ToolCallId } from '@ankdesh/dsh-llm';
+import { SessionId } from '@ankdesh/dsh-session';
 import { ProductState } from '../lib/state.js';
 import { boot } from './support/event-runtime.mjs';
 const counter = {
