@@ -2,7 +2,7 @@
  * The native runtime measures spending; this adapter restricts deployment input
  * and requires the latest orchestrated observation to have a reviewed ancestor.
  * A review event from an older request cannot authorize a newer proposal. */
-import type { EventSystemSnapshot, ExecutionLimits } from "@ankdesh/dsh-event-system";
+import type { EventSystemSnapshot, ExecutionLimits } from "@ankdesh/ankdesh-event-system";
 import { isRecord } from "./types.js";
 
 const ceilings = {

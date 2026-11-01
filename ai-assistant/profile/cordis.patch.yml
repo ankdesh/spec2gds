@@ -452,10 +452,10 @@
         enabled: true
 
     - id: prompt-catalog
-      name: '@ankdesh/dsh-prompt-catalog'
+      name: '@ankdesh/ankdesh-prompt-catalog'
 
     - id: prompt-catalog-yaml
-      name: '@ankdesh/dsh-prompt-catalog-yaml'
+      name: '@ankdesh/ankdesh-prompt-catalog-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/prompts'
@@ -466,13 +466,13 @@
         path: !!js dshHomePath('event-systems.sqlite3')
 
     - id: event-systems
-      name: '@ankdesh/dsh-event-system'
+      name: '@ankdesh/ankdesh-event-system'
 
     - id: event-systems-invariant
-      name: '@ankdesh/dsh-event-system/invariant'
+      name: '@ankdesh/ankdesh-event-system/invariant'
 
     - id: event-http-sources
-      name: '@ankdesh/dsh-event-system-http'
+      name: '@ankdesh/ankdesh-event-system-http'
       config:
         allowedOrigins: !!js Array.from(new Set((process.env.ASSISTANT_HTTP_MONITOR_ORIGINS || [process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010', process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'].join(',')).split(',').filter(Boolean).map(value => new URL(value.trim()).origin)))
         tickMillis: 1000
@@ -486,10 +486,10 @@
         maxFailures: 5
 
     - id: event-http-sources-invariant
-      name: '@ankdesh/dsh-event-system-http/invariant'
+      name: '@ankdesh/ankdesh-event-system-http/invariant'
 
     - id: event-systems-yaml
-      name: '@ankdesh/dsh-event-system-yaml'
+      name: '@ankdesh/ankdesh-event-system-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/event-systems'
@@ -497,7 +497,7 @@
         maxPromptBytes: 32768
 
     - id: flow-runtime
-      name: '@ankdesh/dsh-flow-runtime'
+      name: '@ankdesh/ankdesh-flow-runtime'
       config:
         maxRequests: 4
         maxTokens: 1000000
@@ -507,12 +507,12 @@
         maxExpandedNodes: 128
 
     - id: flow-model-native
-      name: '@ankdesh/dsh-flow-model-native'
+      name: '@ankdesh/ankdesh-flow-model-native'
     - id: flow-native-invariant
-      name: '@ankdesh/dsh-flow-model-native/invariant'
+      name: '@ankdesh/ankdesh-flow-model-native/invariant'
 
     - id: flow-yaml
-      name: '@ankdesh/dsh-flow-yaml'
+      name: '@ankdesh/ankdesh-flow-yaml'
       config:
         roots:
           - !!js (process.env.SPEC2GDS_CATALOG_ROOT || dshHomePath('profiles', process.env.ASSISTANT_PROFILE || 'spec2gds-web', 'node_modules', '@spec2gds', 'harness-assistant', 'profile', 'catalog')) + '/flows'

@@ -45,7 +45,7 @@ if (!existsSync(resolve(root, "lib/index.js")) || !existsSync(resolve(root, "bun
   throw new Error("Build the assistant first: npm run build");
 }
 // Installed packages prepare the same named profile used by releases.
-const { prepareProductProfile, packageDirectory } = await import("@ankdesh/dsh-product-tools");
+const { prepareProductProfile, packageDirectory } = await import("@ankdesh/ankdesh-product-tools");
 const productConfig = JSON.parse(readFileSync(resolve(root, "harness.product.json"), "utf8"));
 if (profile === "spec2gds-replay") {
   productConfig.profiles[profile] = {

@@ -49,7 +49,7 @@ test("published flow definitions pass the real Harness schema and instruction lo
   const { readFileSync, readdirSync } = await import("node:fs");
   const { fileURLToPath } = await import("node:url");
   const { join } = await import("node:path");
-  const { parseFlowYaml } = await import("@ankdesh/dsh-flow-yaml");
+  const { parseFlowYaml } = await import("@ankdesh/ankdesh-flow-yaml");
   const root = fileURLToPath(new URL("../profile/catalog/flows", import.meta.url));
   for (const file of readdirSync(root).filter(file => file.endsWith(".yaml"))) {
     const definition = parseFlowYaml(readFileSync(join(root, file), "utf8"), file, 1_000_000,

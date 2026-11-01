@@ -12,6 +12,6 @@
     }
   },
   "dependencies": {
-    "@ankdesh/dsh-headless": "0.1.6-ankdesh.1"
+    "@ankdesh/dsh-headless": "0.1.6-ankdesh.2"
   }
 }

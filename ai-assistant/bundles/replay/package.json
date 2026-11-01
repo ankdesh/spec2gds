@@ -12,6 +12,6 @@
     "cordis.patch.yml"
   ],
   "dependencies": {
-    "@ankdesh/dsh-llm-replay": "0.1.6-ankdesh.1"
+    "@ankdesh/dsh-llm-replay": "0.1.6-ankdesh.2"
   }
 }

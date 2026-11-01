@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
-import { prepareProductProfile, packageDirectory } from "@ankdesh/dsh-product-tools";
+import { prepareProductProfile, packageDirectory } from "@ankdesh/ankdesh-product-tools";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 if (process.env.ASSISTANT_ENV_FILE) process.loadEnvFile(process.env.ASSISTANT_ENV_FILE);

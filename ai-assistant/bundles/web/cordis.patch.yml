@@ -52,7 +52,7 @@
     # Ordinary provider for the parsed Web flags. Its plugin-level injection
     # waits for cmdlineArgs; no launcher metadata or special row kind is needed.
     - id: web-startup
-      name: '@ankdesh/dsh-web-runtime/startup'
+      name: '@ankdesh/ankdesh-web-runtime/startup'
 
     # ── layer 2: transport/service ──────────────────────────────────────────────
 
@@ -80,7 +80,7 @@
     # suppresses the prompt section for that agent while retaining the host-owned
     # shell variable.
     - id: web-runtime
-      name: '@ankdesh/dsh-web-runtime'
+      name: '@ankdesh/ankdesh-web-runtime'
       inject: [webStartup]
       config:
         openBrowser: !!js ctx.webStartup.openBrowser
@@ -239,7 +239,7 @@
 # Browser-only policy layered after dsh-web-app.
 - insert:
     - id: flow-controller
-      name: '@ankdesh/dsh-flow-runtime/controller'
+      name: '@ankdesh/ankdesh-flow-runtime/controller'
 
     - id: spec2gds-ui
       name: '@spec2gds/harness-web'

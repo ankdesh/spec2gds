@@ -4,17 +4,17 @@
  * binding/capability scope; model arguments never choose a different owner. */
 import type { Context } from "@ankdesh/cordis";
 import { snapshotJsonValue, type JsonValue } from "@ankdesh/dsh-util-values";
-import { summarizeFlow } from "@ankdesh/dsh-flow";
-import type { FlowRuntime, FlowExecutionId } from "@ankdesh/dsh-flow";
-import type {} from "@ankdesh/dsh-flow-model-native";
+import { summarizeFlow } from "@ankdesh/ankdesh-flow";
+import type { FlowRuntime, FlowExecutionId } from "@ankdesh/ankdesh-flow";
+import type {} from "@ankdesh/ankdesh-flow-model-native";
 import { SpecFlows } from "./spec-flows.js";
 import { flowPresentation, relatedFlowViews } from "./flow-presentation.js";
 import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
 import type { Agent } from "@ankdesh/dsh-agent";
-import type EventSystemService from "@ankdesh/dsh-event-system";
-import type { EventSystemSnapshot } from "@ankdesh/dsh-event-system";
-import type HttpSourceService from "@ankdesh/dsh-event-system-http";
-import type { HttpSourceInput, HttpSourceId } from "@ankdesh/dsh-event-system-http";
+import type EventSystemService from "@ankdesh/ankdesh-event-system";
+import type { EventSystemSnapshot } from "@ankdesh/ankdesh-event-system";
+import type HttpSourceService from "@ankdesh/ankdesh-event-system-http";
+import type { HttpSourceInput, HttpSourceId } from "@ankdesh/ankdesh-event-system-http";
 import type { GoalService } from "@ankdesh/dsh-goal";
 import { executionLimits, proposalExecutionDenial } from "./execution-policy.js";
 import { EventConfigurations } from "./event-configuration.js";

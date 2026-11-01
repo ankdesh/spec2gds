@@ -28,7 +28,7 @@ for(const stage of ['application-fast','application-integration','application-re
 for(const name of Object.keys(recipe.profiles)){
  if(!release.profiles?.[name]?.roots)throw new Error(`Release does not contain ${name}`);
  for(const stage of ['install','graph','config','help','lock','ci','locked-graph','locked-config','assembly','assembled-config'])if(!evidence.records.some(r=>r.name===name+'-'+stage&&r.code===0))throw new Error(`Missing verification: ${name}-${stage}`);
- if(release.profiles[name].packages?.includes('@ankdesh/dsh-web-runtime')&&!evidence.records.some(r=>r.name===name+'-web-start'&&r.code===0))throw new Error(`Missing verification: ${name}-web-start`);
+ if(release.profiles[name].packages?.includes('@ankdesh/ankdesh-web-runtime')&&!evidence.records.some(r=>r.name===name+'-web-start'&&r.code===0))throw new Error(`Missing verification: ${name}-web-start`);
  for(const filename of ['package.json','package-lock.json']) {
  const file=join(verification,name,filename);if(!existsSync(file))throw new Error(`Missing verified production file: ${file}`);
  const fileBytes=readFileSync(file),manifest=JSON.parse(fileBytes);

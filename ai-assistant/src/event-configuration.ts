@@ -4,8 +4,8 @@
  * Template text is configuration data; prompt edits cannot create capabilities. */
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
-import { validateDefinition } from "@ankdesh/dsh-event-system";
-import type { EventSystemDefinition, EventAgentDefinition, ExecutionLimits } from "@ankdesh/dsh-event-system";
+import { validateDefinition } from "@ankdesh/ankdesh-event-system";
+import type { EventSystemDefinition, EventAgentDefinition, ExecutionLimits } from "@ankdesh/ankdesh-event-system";
 import { executionLimits } from "./execution-policy.js";
 import { isRecord } from "./types.js";
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { executionLimits, proposalExecutionDenial } from "../src/execution-policy.js";
-import type { EventSystemSnapshot } from "@ankdesh/dsh-event-system";
+import type { EventSystemSnapshot } from "@ankdesh/ankdesh-event-system";
 const configured = { maxRounds: 8, maxRequests: 48, maxTokens: 500000, maxActiveMillis: 2700000, maxMembers: 3, maxConcurrency: 2, maxPending: 100, maxEvents: 100, maxPayloadBytes: 8192, maxDepth: 8 };
 const state = (mode = "orchestrated", events: unknown[] = []): EventSystemSnapshot => ({ mode, status: "active", definition: { primary: "primary" }, events }) as EventSystemSnapshot;
 const event = (id: string, type: string, causation: string | null = null) => ({ id, type, causation });

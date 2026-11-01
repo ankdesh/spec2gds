@@ -68,12 +68,14 @@ export async function boot(directory,serviceUrl,orchestratedLimits={},interactiv
   }
 
   const names=['agent-default-model','llm','session','session-projection','system-prompt','tools','agent','session-persistence-jsonl','token-meter','storage','storage-sqlite','storage-domain','event-system','event-system-yaml','event-system-http','prompt-catalog','prompt-catalog-yaml','goal','goal-round-driver','invariants','flow-runtime','flow-yaml','flow-model-native','flow-model-native/invariant','agent-loop'];
+  const customAgentic=['event-system','event-system-yaml','event-system-http','prompt-catalog','prompt-catalog-yaml','flow-runtime','flow-yaml','flow-model-native','flow-model-native/invariant'];
+  const packageName=name=>customAgentic.includes(name)?`@ankdesh/ankdesh-${name}`:`@ankdesh/dsh-${name}`;
   const modules=new Map();
-  for(const name of names) modules.set(`@ankdesh/dsh-${name}`,await import(`@ankdesh/dsh-${name}`));
+  for(const name of names) modules.set(packageName(name),await import(packageName(name)));
   modules.set('@spec2gds/harness-assistant',Product);
   modules.set('test:transport',Transport); modules.set('test:connection',Connection);
   const configFor=name=>name==='agent-default-model'?{provider:'mock',model:'mock'}:name==='session-persistence-jsonl'?{root:join(directory,'sessions'),compression:'none'}:name==='storage-sqlite'?{path:join(directory,'events.sqlite3')}:name==='storage-domain'?{backend:'sqlite'}:name==='event-system-yaml'?{roots:[join(productRoot,'profile/catalog/event-systems')],maxFileBytes:262144,maxPromptBytes:32768}:name==='prompt-catalog-yaml'?{roots:[join(productRoot,'profile/catalog/prompts')]}:name==='event-system-http'?{allowedOrigins:[serviceUrl],tickMillis:10,minIntervalMillis:10,maxIntervalMillis:10000,timeoutMillis:1000,maxResponseBytes:4096,maxSourcesPerConversation:2,maxTotalSources:4,maxConcurrentChecks:2,maxFailures:3}:name==='flow-runtime'?{maxRequests:4,maxTokens:500000,maxActiveMillis:300000,maxOutputTokens:16384,maxRetainedBytes:1048576,maxExpandedNodes:128}:name==='flow-yaml'?{roots:[join(productRoot,'profile/catalog/flows')],maxFileBytes:262144,maxInstructionBytes:32768}:name==='goal'?{defaultMaxGoalRounds:8}:name==='agent-loop'?{agents:[]}:undefined;
-  const rows=names.map(name=>({name:`@ankdesh/dsh-${name}`,...configFor(name)?{config:configFor(name)}:{}}));
+  const rows=names.map(name=>({name:packageName(name),...configFor(name)?{config:configFor(name)}:{}}));
   rows.push({name:'test:transport'},{name:'test:connection'});
   rows.push({name:'@spec2gds/harness-assistant',config:{provider:'mock',model:'mock',stateRoot:directory,scratchRoot:join(directory,'workspaces'),specDocumentRoot:join(directory,'documents'),specAllowlist:serviceUrl,circuitAllowlist:'http://127.0.0.1:9/api/circuit-designer/v1',requestTimeoutMs:3000,maxStepsPerTurn:3,maxOutputTokens:1200,interactiveForms,flowReceiptPollMillis:100,execution:{goal:{...limits,maxRequests:32,maxTokens:300000,maxMembers:1,maxConcurrency:1},orchestrated:{...limits,...orchestratedLimits}}}});
   await writeFile(join(directory,'cordis.yml'),JSON.stringify(rows));
