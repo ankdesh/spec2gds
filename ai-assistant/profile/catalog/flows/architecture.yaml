@@ -241,12 +241,7 @@
           "title",
           "components",
           "designs",
-          "interfaces",
-          "clocks_resets",
-          "decomposition_rationale",
-          "assumptions",
-          "open_questions",
-          "concrete_configuration"
+          "interfaces"
         ]
       }
     },

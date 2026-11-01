@@ -34,9 +34,9 @@ function normalizeNarrativeBlock(value: unknown): void {
 export function compactWireRange(value: unknown): unknown {
   if (typeof value !== "string") return value;
   const text = value.trim();
+  if (text === "" || text === "null") return null;
   const range = text.startsWith("[") && text.endsWith("]") ? text.slice(1, -1).trim() : text;
   return range.split(/("(?:\\.|[^"\\])*")/g).map((part, index) => index % 2 ? part : part.replace(/\s*:\s*/g, ":")).join("");
-
 }
 
 /** Only remove presentation fences; never erase HDL declarations or directives. */

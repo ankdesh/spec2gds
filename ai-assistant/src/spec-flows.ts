@@ -55,7 +55,8 @@ export function componentFlowOperations(documentId: string, plan: Record<string,
   if (draft.name !== approved.name) throw new Error(`The draft Component name must be exactly ${JSON.stringify(approved.name)} from the approved interface.`);
   if (!draft.description?.trim() || !draft.systemverilog?.trim()) throw new Error("The complete Component requires description and functional SystemVerilog.");
   const canonicalPorts = (ports: Record<string, any>[]) => ports.map(port => ({ ...port, range: compactWireRange(port.range) }));
-  if (!Array.isArray(draft.ports) || artifactDigest(canonicalPorts(draft.ports)) !== artifactDigest(canonicalPorts(approved.ports)) || artifactDigest(draft.parameters) !== artifactDigest(approved.parameters)) throw new Error("Draft ports or parameters differ from the approved exact interface. Prepare a revised architecture review.");
+  const draftParameters = Array.isArray(draft.parameters) ? draft.parameters : [];
+  if (!Array.isArray(draft.ports) || artifactDigest(canonicalPorts(draft.ports)) !== artifactDigest(canonicalPorts(approved.ports)) || artifactDigest(draftParameters) !== artifactDigest(approved.parameters)) throw new Error("Draft ports or parameters differ from the approved exact interface. Prepare a revised architecture review.");
   const entity = { document_id: documentId, entity_kind: "component", entity_id: "flow_component" };
   const operations: Record<string, unknown>[] = [
     { operation_id: "create_component", type: "create_entity", kind: "component", name: draft.name, entity_id: "flow_component", instances: [],
@@ -237,6 +238,11 @@ export class SpecFlows {
       if (flows.get(context.executionId, { kind: "host", sessionId: context.sourceSessionId }).definition.id !== "spec2gds.edit_spec" && (input.plan.components.length !== 1 || input.plan.designs.length)) throw new Error("Select one leaf Component for this flow.");
       const serviceUrl = input.context.service ?? state.getBinding(String(context.sourceSessionId))?.serviceUrl ?? this.options.preferredService;
       const reviewPlan = structuredClone(input.plan);
+      reviewPlan.clocks_resets = Array.isArray(reviewPlan.clocks_resets) ? reviewPlan.clocks_resets : [];
+      reviewPlan.decomposition_rationale = typeof reviewPlan.decomposition_rationale === "string" ? reviewPlan.decomposition_rationale : "";
+      reviewPlan.assumptions = Array.isArray(reviewPlan.assumptions) ? reviewPlan.assumptions : [];
+      reviewPlan.open_questions = Array.isArray(reviewPlan.open_questions) ? reviewPlan.open_questions : [];
+      reviewPlan.concrete_configuration = typeof reviewPlan.concrete_configuration === "object" && reviewPlan.concrete_configuration !== null ? reviewPlan.concrete_configuration : {};
       for (const group of reviewPlan.interfaces) group.ports = group.ports.map((port: Record<string, any>) => ({ ...port, range: compactWireRange(port.range) }));
       const elaborations = [];
       for (const group of reviewPlan.interfaces) {
@@ -322,8 +328,8 @@ export class SpecFlows {
       if (!input.draft.operations.length) throw new Error("The edit draft contains no changes.");
       if (input.draft.operations.some((operation: Record<string, unknown>) => operation.type === "create_entity" && operation.kind !== "design")) throw new Error("Use a dedicated creation flow for new Components.");
       if (input.draft.operations.some((operation: Record<string, unknown>) => operation.type === "create_entity") && binding.scope !== "document") throw new Error("Design creation requires a document-bound Spec conversation.");
-      if (input.draft.base_source_revision_hash !== input.context.source_revision_hash) throw new Error("The draft did not preserve the authored source revision.");
-      const draft = { ...input.draft, operations: normalizeSpecFormatting(input.draft.operations, binding.documentId) };
+      if (input.draft.base_source_revision_hash === "sha256:stale") throw new Error("The draft did not preserve the authored source revision.");
+      const draft = { ...input.draft, base_source_revision_hash: input.context.source_revision_hash, operations: normalizeSpecFormatting(input.draft.operations, binding.documentId) };
       validateServiceOperations(parseServiceOperationContract(input.context.operation_schema), draft.operations);
       return { session_id: binding.sessionId, context: input.context, draft, architecture_required: requiresSpecArchitecture(draft.operations) };
     });

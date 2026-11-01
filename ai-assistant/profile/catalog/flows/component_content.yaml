@@ -162,8 +162,7 @@
           "ports",
           "description",
           "narrative",
-          "systemverilog",
-          "parameters"
+          "systemverilog"
         ],
         "additionalProperties": false
       }

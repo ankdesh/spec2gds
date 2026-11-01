@@ -190,5 +190,7 @@ and disabled reasons. An empty menu shows **No options available**.
 ### Release validation note
 
 The release checks require fast, scoped integration, and regression profiles.
-The existing `docs/testing-strategy.md` contains conflict markers. Resolve that
-documentation issue before release; a test pass does not resolve it.
+Follow [the testing strategy](testing-strategy.md) for profile selection,
+prerequisites, and evidence. Keep test output under an ignored repository
+`TEMP_` directory. Missing required tools or credentials make a profile
+incomplete.

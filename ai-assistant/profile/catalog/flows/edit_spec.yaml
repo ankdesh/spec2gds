@@ -78,7 +78,8 @@
             ]
           },
           "base_source_revision_hash": {
-            "type": "string"
+            "type": "string",
+            "description": "Must match inputs.context.source_revision_hash."
           },
           "title": {
             "type": "string"

@@ -81,3 +81,14 @@ test("the content prompt keeps interface constants in host context rather than a
   assert.match(prompt, /Do not return a constant_context field/);
   assert.ok(!prompt.includes("in constant_context."));
 });
+
+test("omitted parameters default to empty array when approved interface has no parameters", () => {
+  const operations = componentFlowOperations("doc", plan, { name: "ApprovedAdder", ports, description: "Retains carry.", systemverilog: "assign sum = {1'b0, a};" }, "request");
+  assert.equal(operations[0].name, "ApprovedAdder");
+});
+
+test("omitted parameters are rejected when approved interface requires parameters", () => {
+  const parameters = [{ name: "WIDTH", rtl_type: "int unsigned", value: "4", description: "Operand width" }];
+  const paramPlan = { components: [{ name: "ApprovedAdder" }], designs: [], interfaces: [{ component: "ApprovedAdder", ports, parameters, constant_context: "" }] };
+  assert.throws(() => componentFlowOperations("doc", paramPlan, { name: "ApprovedAdder", ports, description: "Retains carry.", systemverilog: "assign sum = {1'b0, a};" }, "request"), /approved exact interface/);
+});

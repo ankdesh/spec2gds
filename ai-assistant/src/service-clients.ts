@@ -340,7 +340,7 @@ export class ServiceClients {
   async capabilities(): Promise<Record<string, unknown>> {
     // Availability is advisory UI data. Keep a stopped or unroutable owner from
     // delaying the workspace chooser by the full mutation/request timeout.
-    const probeTimeoutMs = Math.min(this.timeoutMs, 2_000);
+    const probeTimeoutMs = Math.min(this.timeoutMs, 10_000);
     const probe = async (domain: "spec" | "circuit", url: string): Promise<Record<string, unknown>> => {
       const target = domain === "spec" ? `${url}/health` : `${url}/capabilities`;
       try {

@@ -448,8 +448,9 @@ Fast includes two deterministic real-service Spec Editor smoke flows and exactly
 three short live model browser checks. Full regression
 includes broader live evaluation. Use Node.js 24.2+ and set `OPENAI_API_KEY` in
 the invoking environment. Missing required prerequisites produce an incomplete
-result and nonzero exit status. Each run writes a report to a private `/tmp`
-directory; `--output` selects a new or empty directory. See
+result and nonzero exit status. Each run writes a report to an ignored repository
+`TEMP_tests-*` directory by default; `--output` selects a new or empty directory
+under an ignored repository `TEMP_` folder. See
 [the software testing strategy](docs/testing-strategy.md) for scope selection,
 coverage limits, and capability matrix.
 
@@ -492,9 +493,9 @@ npm run build
 npm run test:harness
 # Browser dependency setup: docs/ai-assistant-operations.md#browser-checks
 npm run test:ui
-npm run eval -- --output /tmp/spec2gds-assistant-eval
+npm run eval -- --output ../TEMP_assistant_eval
 
-# Separately invoked owner/editor UI scenarios
+# Separately invoked Spec service and editor UI scenarios
 cd ..
 bash tests/ui-scenarios/run-test.sh --scenario automatic
 bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review
