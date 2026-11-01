@@ -1,11 +1,11 @@
 {
   "repository": "https://github.com/ankdesh/deepseek-harness.git",
-  "commit": "7388d01e24fa31ef47a5dcb8f9e71f1a488b0946",
+  "commit": "bb379ee16432281d44adbcf9181542996b8b6ae8",
   "node": "^22.19.0 || >=24.2.0",
   "packageManager": "pnpm@11.7.0",
   "schemaVersion": 2,
   "baseCommit": "7388d01e24fa31ef47a5dcb8f9e71f1a488b0946",
   "releaseId": "0.1.6-ankdesh.1",
-  "releaseManifestSha256": null,
-  "status": "pending-publication"
+  "releaseManifestSha256": "2b2702d4fb9c97db06fa4cf41016915f7df0639924f1b5b53190a51fb4d4e8d7",
+  "status": "promoted"
 }
