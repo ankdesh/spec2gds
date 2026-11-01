@@ -16,9 +16,9 @@ npm --prefix ai-assistant run build
 npm --prefix ai-assistant run dev -- --no-open
 ```
 
-The first package release must be published and adopted before registry installation
-can succeed. The Harness lock records `pending-publication` until adoption. Local
-candidate verification uses a separate read-only registry and does not promote a release.
+The initial package release `0.1.6-ankdesh.1` is published and adopted.
+The Harness lock records status `promoted`. Application and production lockfiles
+are tracked and pinned to the GitHub Packages registry.
 
 ## Create a release
 
@@ -63,10 +63,8 @@ incomplete release must not update the application lock.
 
 ## Production profiles
 
-The first release is not yet available. The publication gate remains closed until
-the required application acceptance checks pass against the candidate archives.
-The production lock files will be created and adopted after those checks pass and
-all packages are published. The commands below require that promoted release.
+Production lock files (`spec2gds-web` and `spec2gds-headless`) are adopted and
+committed under `ai-assistant/production/`. The commands below use that promoted release.
 
 The web and headless profiles use independent production roots. The application
 build supplies its own bundles; GitHub supplies the locked Harness dependencies.
