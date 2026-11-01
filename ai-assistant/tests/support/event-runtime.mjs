@@ -68,8 +68,8 @@ export async function boot(directory,serviceUrl,orchestratedLimits={},interactiv
   }
 
   const names=['agent-default-model','llm','session','session-projection','system-prompt','tools','agent','session-persistence-jsonl','token-meter','storage','storage-sqlite','storage-domain','event-system','event-system-yaml','event-system-http','prompt-catalog','prompt-catalog-yaml','goal','goal-round-driver','invariants','flow-runtime','flow-yaml','flow-model-native','flow-model-native/invariant','agent-loop'];
-  const customAgentic=['event-system','event-system-yaml','event-system-http','prompt-catalog','prompt-catalog-yaml','flow-runtime','flow-yaml','flow-model-native','flow-model-native/invariant'];
-  const packageName=name=>customAgentic.includes(name)?`@ankdesh/ankdesh-${name}`:`@ankdesh/dsh-${name}`;
+  const custom = new Set(['event-system','event-system-yaml','event-system-http','prompt-catalog','prompt-catalog-yaml','flow-runtime','flow-yaml','flow-model-native','flow-model-native/invariant']);
+  const packageName = name => `@ankdesh/${custom.has(name) ? 'ankdesh' : 'dsh'}-${name}`;
   const modules=new Map();
   for(const name of names) modules.set(packageName(name),await import(packageName(name)));
   modules.set('@spec2gds/harness-assistant',Product);

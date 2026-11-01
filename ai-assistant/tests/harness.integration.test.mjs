@@ -117,7 +117,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
   const loopState = await mkdtemp(join(tmpdir(), "spec2gds-harness-loop-limit-"));
   const flowState = await mkdtemp(join(tmpdir(), "spec2gds-headless-flow-"));
   const replayState = await mkdtemp(join(tmpdir(), "spec2gds-harness-replay-"));
-  const harness = resolve(process.env.HARNESS_SOURCE || resolve(root, "../../deepseek-harness"));
   let child;
   let loopChild;
   let replayChild;
@@ -136,7 +135,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       env: {
         ...process.env,
         ...fixtureModelEnv,
-        HARNESS_SOURCE: harness,
         ASSISTANT_STATE: state,
         SPEC2GDS_SESSION_COMPRESSION: "none",
         SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
@@ -197,7 +195,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
 
     const beforeFlow = modelRequests.length;
     flowChild = spawn(process.execPath, [resolve(root, "scripts/request.mjs"), "--json", "--domain", "spec", "--service-url", `http://127.0.0.1:${ownerPort}`, "--document-id", "doc-test", "--", "Start timer flow"], {
-      cwd: root, env: { ...process.env, ...fixtureModelEnv, HARNESS_SOURCE: harness, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
+      cwd: root, env: { ...process.env, ...fixtureModelEnv, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
         SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`, CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1", OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1` }, stdio: ["ignore", "pipe", "pipe"],
     });
     let flowOutput = ""; flowChild.stdout.on("data", value => { flowOutput += value; }); flowChild.stderr.on("data", value => { flowOutput += value; });
@@ -223,7 +221,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       env: {
         ...process.env,
         ...fixtureModelEnv,
-        HARNESS_SOURCE: harness,
         ASSISTANT_STATE: loopState,
         ASSISTANT_MAX_OUTPUT_TOKENS: "4096",
         SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
@@ -269,7 +266,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       env: {
         ...process.env,
         ...fixtureModelEnv,
-        HARNESS_SOURCE: harness,
         ASSISTANT_PROFILE: "spec2gds-replay",
         ASSISTANT_STATE: replayState,
         SPEC2GDS_SESSION_COMPRESSION: "none",

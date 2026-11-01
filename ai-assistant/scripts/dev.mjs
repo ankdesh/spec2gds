@@ -1,8 +1,9 @@
 /** Prepare an installed Harness profile and start the Assistant. */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { checkHarnessPackages } from "./check-harness-packages.mjs";
 
 // The pinned Harness CLI enters through import.meta.main. Older Node 24
 // releases otherwise exit with success without starting the requested profile.
@@ -11,6 +12,7 @@ if (typeof import.meta.main !== "boolean") {
 }
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+checkHarnessPackages(root);
 if (existsSync(resolve(root, ".env"))) process.loadEnvFile(resolve(root, ".env"));
 const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 mkdirSync(state, { recursive: true, mode: 0o700 });

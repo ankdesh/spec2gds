@@ -11,8 +11,8 @@ Node.js 22.19+ in the 22.x line. Set `NODE_AUTH_TOKEN` with GitHub Packages read
 access, then run `scripts/setup-all.sh`. Setup installs locked packages and builds
 the application. It does not clone Harness or require pnpm.
 
-See [Harness package releases](harness-packages.md) for first publication,
-production locks, registry access, release adoption, and explicit source development.
+See [Harness package releases](harness-packages.md) for the published release,
+production locks, registry access, and release adoption.
 The [beginner guide](harness-packages/index.html) explains the package terms.
 
 ## Start and use the browser
@@ -30,7 +30,7 @@ scripts/serve-all.sh start --require-human-approval
 ```
 
 The launcher prints service URLs. It does not open a browser. After rebuilding
-product or Harness code, use `scripts/serve-all.sh restart`. `start` refuses a
+the application or updating Harness packages, use `scripts/serve-all.sh restart`. `start` refuses a
 stale or partial stack on the default ports. Do not restart a shared stack merely
 to run an isolated test.
 

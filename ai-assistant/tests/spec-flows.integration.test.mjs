@@ -195,10 +195,8 @@ test('an active Goal cannot complete during a flow and receives a durable releas
 test('browser reload and closure preserve the host flow and Spec Editor approval', { timeout: 90000 }, async () => {
   process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(root, 'circuit-designer/.playwright-browsers');
   const { createRequire } = await import('node:module');
-  const { existsSync } = await import('node:fs');
   const dependencies = createRequire(resolve(process.env.AI_ASSISTANT_UI_TEST_DEPS || join(root, 'tests/ui-scenarios'), 'package.json'));
-  const harnessPkg = resolve(process.env.HARNESS_SOURCE || join(root, '../deepseek-harness'), 'packages/client/ui-conversation/package.json');
-  const nativeDependencies = createRequire(existsSync(harnessPkg) ? harnessPkg : resolve(root, 'circuit-designer/package.json'));
+  const nativeDependencies = createRequire(join(root, 'ai-assistant/package.json'));
   const { chromium, expect } = dependencies('@playwright/test');
   const { createServer: createHttpServer } = await import('node:http');
   const directory = await mkdtemp(join(tmpdir(), 'spec-flow-browser-')); let owner, runtime, app, browser;

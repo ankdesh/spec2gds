@@ -78,9 +78,9 @@ client bundle, so it is part of setup even when using the combined launcher.
 scripts/setup-all.sh
 ```
 
-Use [Assistant operations](docs/ai-assistant-operations.md#setup-and-source-pin) for
-Harness checkout setup, source-pin checks, tests, state, and packaging. Rerun setup
-after replacing or moving the selected Harness checkout.
+Use [Assistant operations](docs/ai-assistant-operations.md#setup-and-package-release)
+for package setup, tests, state, and packaging. The application uses published
+Harness packages. A local Harness checkout is not required.
 
 The focused Python CLIs use the root uv environment and the built internal Harness
 product. See [CLI workflows](docs/ai-assistant-operations.md#cli-flows) for architecture

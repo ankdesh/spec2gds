@@ -1,55 +1,63 @@
 # Harness package releases
 
-Normal spec2gds setup installs locked `@ankdesh` packages from GitHub Packages.
-It does not clone or build DeepSeek Harness. The [HTML guide](harness-packages/index.html)
-explains the registry, package contents, and release process.
+spec2gds uses published `@ankdesh` packages from GitHub Packages. Setup, builds,
+checks, and application startup do not require a DeepSeek Harness checkout.
+
+## Current release
+
+The application uses `0.1.6-ankdesh.2`. Its registry inventory contains 175
+packages. Harness packages use that version. Supporting packages, such as
+`@ankdesh/cordis`, keep their own base version and the `ankdesh.2` suffix.
+
+The 12 custom packages use `@ankdesh/ankdesh-*` names. For example,
+`@ankdesh/ankdesh-flow-runtime` replaces `@ankdesh/dsh-flow-runtime`, and
+`@ankdesh/ankdesh-product-tools` replaces `@ankdesh/dsh-product-tools`.
+Do not mix the old names or `.1` versions into the installation.
+
+`ai-assistant/releases/harness-release-manifest.json` records the promoted package
+names, versions, archive integrity checksums, and production profile metadata. `harness.lock.json` pins the inventory checksum. The npm lock pins the
+selected application dependencies. Package checks reject source links, changed
+archive checksums, and installed versions that differ from the published release.
 
 ## Install and run
 
-Set `NODE_AUTH_TOKEN` to a GitHub classic personal access token with `read:packages`.
-Do not store its value in tracked files. Grant the spec2gds repository package read
-access before using its Actions token.
+Use Node.js 24.2+ for the complete environment. Assistant alone also supports
+Node.js 22.19+ in the 22.x line. Set `NODE_AUTH_TOKEN` to a GitHub credential with
+`read:packages` access. Keep the credential outside tracked files.
 
 ```sh
 npm --prefix ai-assistant ci
+npm --prefix ai-assistant run check:harness
 npm --prefix ai-assistant run build
 npm --prefix ai-assistant run dev -- --no-open
 ```
 
-The initial package release `0.1.6-ankdesh.1` is published and adopted.
-The Harness lock records status `promoted`. Application and production lockfiles
-are tracked and pinned to the GitHub Packages registry.
+The npm configuration routes the `@ankdesh` scope to `https://npm.pkg.github.com`.
+The remaining public dependencies use the public npm registry. The source-link
+commands and `HARNESS_SOURCE` setting are no longer used. A local Harness checkout
+can be deleted after these checks pass.
 
-## Create a release
+## Update a release
 
-The Harness worktree contains `scripts/package-release/pack.mjs`, `verify.mjs`,
-`acceptance.mjs`, and `publish.mjs`. Start from the shared package branch and a clean commit. Use the
-manual **Private product packages** Actions flow. Supply the exact spec2gds commit
-and a new `ankdesh.N` suffix. The source checkout requires a configured
-`CONSUMER_READ_TOKEN` when the spec2gds repository is private.
-The required live model checks use the `OPENAI_API_KEY` Actions secret. Optional
-`OPENAI_BASE_URL` and `OPENAI_MODEL` Actions variables select the configured endpoint
-and model. Missing credentials or incomplete checks prevent publication.
+Read the package metadata from GitHub Packages. Update the inventory, its pinned
+checksum, the application and bundle dependencies, and the npm lock together.
+Custom package names must match the published release. Regenerate the lock from a
+clean dependency graph when package names change. Do not force incompatible peers.
 
-The build job has no package write token. It builds the selected archives, builds
-spec2gds against a candidate registry, verifies independent production locks and
-assembled releases, and runs the required fast, integration, and regression profiles.
-The separate `package-release` environment publishes the tested bytes. It refuses
-a dirty candidate, failed verification, changed checksums, and conflicting registry versions.
-Only complete publication creates a promotion receipt.
-The receipt records test results and the checksums of the verification file and
-production locks. The release includes `consumer-verification.tgz`, with those
-locks, installed-size measurements, and compact application test reports.
+Run `npm ci`, the package check, builds, and the required application profiles.
+The package check also runs before the Assistant build, typecheck, tests, and
+normal startup. A published registry archive establishes package provenance;
+application tests establish whether spec2gds works with that release.
 
-Package visibility is private on first GitHub publication. Confirm this setting,
-link the packages to `ankdesh/deepseek-harness`, and grant consuming repositories
-read access. Configure environment protection in GitHub if required by the project.
+## Production profiles
 
-## Adopt a release
+The current lock records `promoted` for `0.1.6-ankdesh.2`. Preserve its complete
+release manifest and pinned checksum. The adopted web and headless production
+locks remain under `ai-assistant/production/`. Package checks accept this promoted
+manifest and the smaller published-registry inventory format. Production
+installation still requires matching adopted profile metadata and production locks.
 
-Download the promoted release manifest, receipt, and `consumer-verification.tgz`.
-Extract the archive and use its `consumer-verification` directory as the verified
-consumer directory. From `ai-assistant`:
+When a release supplies complete promotion evidence, adopt it from `ai-assistant`:
 
 ```sh
 node scripts/adopt-harness-release.mjs PROMOTED_RELEASE_DIRECTORY VERIFIED_CONSUMER_DIRECTORY
@@ -57,17 +65,11 @@ npm ci
 npm run build
 ```
 
-Run the required application checks. Commit the updated manifests, development
-lock, production locks, release manifest, and Harness lock together. A failed or
-incomplete release must not update the application lock.
+The adoption command checks the release manifest, promotion receipt, application
+acceptance records, and exact development and production locks before changing
+application files. It does not require a source checkout.
 
-## Production profiles
-
-Production lock files (`spec2gds-web` and `spec2gds-headless`) are adopted and
-committed under `ai-assistant/production/`. The commands below use that promoted release.
-
-The web and headless profiles use independent production roots. The application
-build supplies its own bundles; GitHub supplies the locked Harness dependencies.
+With a promoted release, install and assemble one production profile:
 
 ```sh
 npm --prefix ai-assistant run install:profile -- spec2gds-headless TEMP_headless_install
@@ -75,36 +77,6 @@ ASSISTANT_INSTALL_ROOT="$PWD/TEMP_headless_install" \
   npm --prefix ai-assistant run package -- "$PWD/TEMP_headless_release" spec2gds-headless
 ```
 
-Use a new output directory each time. Release assembly checks the release manifest
-checksum, follows installed package metadata, and keeps dependency links inside the
-output. Native files target Linux x86-64 with glibc. Additional platforms need
-separate built-artifact checks.
-
-## Explicit source development
-
-Harness contributors can select a compatible built checkout. It must contain the
-modules used by the selected profile. The web profile requires the extracted
-`@deepseek-ai/dsh-web-runtime` package in that source checkout.
-
-```sh
-cd ai-assistant
-node scripts/link-harness.mjs /absolute/path/to/deepseek-harness
-HARNESS_SOURCE=/absolute/path/to/deepseek-harness npm run dev:source -- --no-open
-```
-
-This mode changes local development links. Run the locked registry install again
-before testing a release. Do not mix source links into a production installation.
-The source mode uses the upstream package scope inside its generated runtime copy;
-released application files use `@ankdesh` throughout.
-
-## Package measurements
-
-The release manifest lists direct roots, indirect Harness packages, archive bytes,
-unpacked bytes, browser files, native files, and dependency reasons. The clean
-consumer evidence includes all installed third-party packages. An untrimmed npm
-baseline is measurement-only and cannot be published by this pipeline.
-
-The old `s-workflow` execution packages and catalogues are excluded. The core
-conversation decoder retains its known historical event type. A regression test
-reads an old event without loading the retired packages and checks that its bytes
-remain unchanged.
+Use a new output directory each time. Release assembly checks the inventory
+checksum, follows installed package metadata, and keeps dependency links inside
+the output. Native files target Linux x86-64 with glibc.
