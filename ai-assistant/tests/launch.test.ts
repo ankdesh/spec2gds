@@ -154,7 +154,7 @@ test("browser presets use Harness structured questions while headless stays noni
   const packageJson = readFileSync(resolve(root, "package.json"), "utf8");
   const webPatch = readFileSync(resolve(root, "bundles/web/cordis.patch.yml"), "utf8");
   const sharedPatch = readFileSync(resolve(root, "profile/cordis.patch.yml"), "utf8");
-  assert.match(packageJson, /"@ankdesh\/dsh-tool-ask-user": "0\.1\.6-ankdesh\.1"/);
+  assert.match(packageJson, /"@ankdesh\/dsh-tool-ask-user": "0\.1\.6-ankdesh\.2"/);
   assert.doesNotMatch(webPatch, /- id: ui-user-questions\n  disabled: true/);
   assert.doesNotMatch(sharedPatch, /@ankdesh\/dsh-tool-ask-user/);
 });
