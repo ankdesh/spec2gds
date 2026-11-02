@@ -14,6 +14,8 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 
 - [Spec Editor and Spec Service](spec-editor.md): User interface, section registry (text, ports, SystemVerilog), package layout, transactions, and approval modes.
 
+- [Spec Component library implementation](TEMP_spec_library_plan/README.md): Shared contract, 120-entry inventory, and four independent phase handoffs with hardware and software verification gates.
+
 ## 3. Circuit Designer
 
 - [Circuit Designer](circuit-designer.md): Canvas gestures, menubar, pipeline timing stages, user preferences, and embedding `@spec2gds/circuit-app-react`.

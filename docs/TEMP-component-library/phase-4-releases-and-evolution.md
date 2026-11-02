@@ -1,3 +1,5 @@
+> **Superseded on 2 November 2026.** Historical plan only. Do not implement the instructions below. Use the [current library instructions](../TEMP_spec_library_plan/plans/phase-4.md) and [shared contract](../TEMP_spec_library_plan/README.md). The current scope is 120 Components, one `.spec` file per Component, and a standalone hosting service. Authoring-path stress is secondary.
+
 # Phase 4: build the highest level through AI Assistant and qualify release
 
 Status: not started. Required authoring method: live AI Assistant through
