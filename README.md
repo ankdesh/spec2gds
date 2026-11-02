@@ -65,6 +65,7 @@ Install these tools before setting up the repository:
 - Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/);
 - Node.js 24.2+ for the combined stack (Circuit alone requires 24+;
   Assistant alone also supports 22.19+ in the 22.x line);
+- A GitHub Personal Access Token with `read:packages` permission, exported as `NODE_AUTH_TOKEN`;
 - `setsid`, which the combined launcher uses to manage process groups;
 - `lsof`, which the launcher uses when stopping untracked default-port
   listeners; and
@@ -77,18 +78,21 @@ uses `setsid` and other Unix process-management commands.
 
 ## Set up and run everything
 
-From a clean checkout, install the root Python project and both JavaScript
-workspaces. The Assistant build compiles its host plugin and product-owned DSH
-client bundle, so it is part of setup even when using the combined launcher.
+Install the root Python project and the JavaScript workspaces from a clean checkout.
+Setup installs locked `@ankdesh` packages from GitHub Packages and compiles the Assistant bundles.
 
 ```bash
-# Run the complete environment setup (Python, Circuit Designer, DSH, and AI Assistant)
+# Set your GitHub token for package access
+export NODE_AUTH_TOKEN="ghp_..."
+
+# Run the complete environment setup (Python, Circuit Designer, and AI Assistant)
 scripts/setup-all.sh
 ```
 
-Use [Assistant operations](docs/ai-assistant-operations.md#setup-and-package-release)
-for package setup, tests, state, and packaging. The application uses published
-Harness packages. A local Harness checkout is not required.
+See [Assistant operations](docs/ai-assistant-operations.md#setup-and-package-release) for
+package setup, tests, state, and packaging. The application uses published
+Harness packages; a local Harness checkout is not required.
+See [Harness package releases](docs/harness-packages.md) for package publication and adoption details.
 
 The focused Python CLIs use the root uv environment and the built internal Harness
 product. See [CLI workflows](docs/ai-assistant-operations.md#cli-flows) for architecture
@@ -420,7 +424,7 @@ save, conflict, layout, and recovery behavior.
 ## Run only the optional AI Assistant
 
 ```bash
-# Setup all workspaces including DeepSeek Harness and AI Assistant
+# Setup all workspaces including AI Assistant packages
 scripts/setup-all.sh
 
 cd ai-assistant

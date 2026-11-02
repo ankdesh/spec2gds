@@ -62,6 +62,12 @@ flowchart LR
   - Leaf components open as read-only instance previews.
   - Composite designs open as editable, source-bound circuits.
 
+### Circuit Previews and Preservation
+- Every design section displays an SVG circuit preview generated from IP-XACT topology.
+- Previews display component instances, connections, and pipeline cycle markers.
+- Spec Editor preserves circuit layout annotations across saves so manual positions and routing stay stable.
+- Leaf components display a read-only instance preview with attached wire ports.
+
 ---
 
 ## 3. Component and Design Sections

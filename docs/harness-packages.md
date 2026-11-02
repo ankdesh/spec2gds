@@ -32,6 +32,11 @@ npm --prefix ai-assistant run build
 npm --prefix ai-assistant run dev -- --no-open
 ```
 
+The promoted package release is `0.1.6-ankdesh.2`.
+This release adopts custom agentic packages with the `@ankdesh/ankdesh-*` naming pattern (such as `@ankdesh/ankdesh-flow` and `@ankdesh/ankdesh-event-system`).
+The Harness lock records status `promoted`. Application and production lockfiles
+are tracked and pinned to the GitHub Packages registry.
+
 The npm configuration routes the `@ankdesh` scope to `https://npm.pkg.github.com`.
 The remaining public dependencies use the public npm registry. The source-link
 commands and `HARNESS_SOURCE` setting are no longer used. A local Harness checkout

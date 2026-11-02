@@ -1,8 +1,8 @@
 # Spec Editor release checks
 
-The agreed UI cleanup and diagnostic sample Activity are implemented. Full
-release clearance remains blocked by live model evaluation failures and the
-existing conflict markers in `docs/testing-strategy.md`.
+The agreed UI cleanup and diagnostic sample Activity are implemented.
+Full release clearance requires live model evaluation passes.
+Documentation conflict markers in `docs/testing-strategy.md` are resolved.
 
 ## Implemented behavior
 

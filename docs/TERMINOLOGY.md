@@ -5,7 +5,7 @@ This document defines the canonical terminology that must be used consistently a
 ## 1. The AI Component
 - **AI Assistant**: Formal name for the AI system (used in titles, UI buttons, first mentions).
 - **Assistant**: Short form for prose references.
-- **DeepSeek Harness** (first mention) / **Harness**: The underlying framework.
+- **DeepSeek Harness** (first mention) / **Harness**: The underlying framework. Custom agentic and flow packages use the `@ankdesh/ankdesh-*` package scope.
 - **model**: The runtime execution unit (avoid "LLM", "agent", or "copilot" when referring to the text generator).
 
 ## 2. The Human User

@@ -12,6 +12,7 @@ circuit-designer/schema/      Canonical Circuit Designer JSON Schema
 circuit-designer/packages/    Core models, layout engine, React canvas, and app shell
 circuit-designer/apps/        Spec Editor and standalone Circuit Designer applications
 ai-assistant/                 DeepSeek Harness assistant product and UI
+ai-assistant/production/      Production lockfiles (spec2gds-web and spec2gds-headless)
 testplan-service/             Verification Planner service, domain, and static UI
 config/services.json          Shared service registry and port configuration
 tests/                        Automated tests across all subsystems
@@ -75,9 +76,10 @@ Open `http://<SERVER_IP>:6014` to inspect and filter live events.
 ## 4. Environment Setup and Service Launcher
 
 ### Complete First-Time Setup
-Install Python packages and build Node workspaces:
+Export a GitHub Personal Access Token with package read permissions, then install Python packages and build Node workspaces:
 
 ```bash
+export NODE_AUTH_TOKEN="ghp_..."
 scripts/setup-all.sh
 ```
 

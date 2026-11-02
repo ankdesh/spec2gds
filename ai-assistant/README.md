@@ -1,6 +1,6 @@
 # spec2gds AI Assistant
 
-This package adds permanent Spec/Circuit bindings, owner tools, reviews, and
+This package adds permanent Spec/Circuit bindings, product tools, reviews, and
 execution presets to DeepSeek Harness. Harness owns the chat shell, model loop,
 native sessions, and transcript. Spec and Circuit services own their documents.
 
@@ -34,7 +34,7 @@ npm run build
 npm run test:harness
 ```
 
-Set the provider key before model calls. Use the operations guide for owner startup,
+Set the provider key before model calls. Use the operations guide for service startup,
 package release verification, browser dependencies, and flow controls and Spec Editor decisions.
 Keep configuration defaults in that guide. Do not create another behavior or
 setup reference here.

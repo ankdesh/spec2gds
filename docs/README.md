@@ -37,6 +37,7 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 - [AI Assistant Contract](ai-assistant.md): Core behavioral contract, approval gating, document tokens, and boundary invariants.
 - [AI Assistant Operations](ai-assistant-operations.md): Setup, configuration, execution commands, diagnostics, and acceptance matrix.
 - [Reusable Flows](ai-assistant-flows.md): Published flow tools (`flow_create_empty_spec`, `flow_create_spec_with_component`, `flow_add_component`, `flow_edit_spec`) and execution lifecycles.
+- [Harness Package Releases](harness-packages.md): Private GitHub Packages registry, release adoption, and production lockfiles.
 
 ## 6. Activities, RTL, and SystemC
 
@@ -50,5 +51,6 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 - [Development Guide](development.md): Repository layout, port allocations, service configuration (`config/services.json`), unified logging, and launcher commands.
 - [Python Code Guide](python-code-guide.md): Reading order, architectural boundaries, code-quality standards, and static analysis commands.
 - [Software Testing Strategy](testing-strategy.md): Test pyramid, execution profiles (`fast`, `integration`, `regression`), and capability coverage matrix.
-- [Designer Acceptance Catalogue](acceptance/README.md): Twenty complete designer journeys, forty focused checks for later Playwright implementation, complete hardware input packs, weighted criteria, and four independent group scores.
+- [Designer Acceptance Catalogue](ui-test-scenarios/README.md): Twenty complete designer journeys, forty focused checks for future Playwright implementation, complete hardware input packs, and scoring rules.
+- [Spec Editor Release Checks](spec-editor-release-checks.md): Release verification results, command records, and API compatibility reports.
 - [Sample Application Methodology](sample-apps.md): Guidelines for developing small, reproducible hardware scenarios through the full platform.

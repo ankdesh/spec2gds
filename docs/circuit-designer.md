@@ -14,6 +14,7 @@ Circuit Designer uses the **Blueprint Slate** visual profile.
 - Signal routes and boundary terminals use crisp cyan and amber accents.
 - Monospace labels display hardware identifiers and timing stage numbers.
 - Canvas layouts, SVG vector exports, and PNG raster exports share identical coordinate models and styling.
+- A quick theme toggle allows the designer to switch between dark and light themes. Theme preferences persist in local storage.
 
 ---
 
@@ -35,6 +36,13 @@ The designer does not need to switch between Select, Connect, Route, or Pan mode
 | Drag free terminal to another terminal | Create a connected net between terminals |
 | Drag route segment or junction | Adjust orthogonal wire routing |
 | Double-click wire segment | Insert or remove route bend point |
+
+### Net Connections and Scalar Handling
+- Net connections enforce strict port width matching.
+- Scalar 1-bit wire ports connect directly to matching 1-bit scalar ports or terminals.
+- Vector buses require explicit bit-width declarations (such as `[7:0]`).
+- The connection input dialog validates width compatibility before creating the net.
+- Circuit preview layouts preserve port order and wire routes across saves.
 
 ---
 
@@ -75,13 +83,18 @@ flowchart LR
 
 ---
 
-## 5. User Preferences and Shortcuts
+## 5. User Preferences, Recovery, and Shortcuts
 
 Open **Edit → Preferences → Actions and shortcuts** to adjust keybindings:
 - Every action supports customizable keyboard and mouse bindings.
 - The editor automatically detects and clears shortcut conflicts.
 - Preferences save through the Circuit service and persist across sessions.
 - **Reset defaults** restores standard factory shortcuts.
+
+### Error Handling and Session Recovery
+The application shell catches rendering errors and projection faults.
+If an unexpected runtime error occurs, the UI presents a recovery panel.
+The designer can reload the active circuit or restore the last valid snapshot without data loss.
 
 ---
 
@@ -102,13 +115,15 @@ import "@xyflow/react/dist/style.css";
 import "@spec2gds/circuit-react/styles.css";
 import "@spec2gds/circuit-app-react/styles.css";
 
-export function EmbeddedCircuitView({ backend, files, preferences }) {
+export function EmbeddedCircuitView({ backend, files, preferences, source, tools }) {
   return (
     <div style={{ height: "100vh", width: "100%" }}>
       <CircuitDesignerApp
         backend={backend}
         files={files}
         preferences={preferences}
+        source={source}
+        tools={tools}
         launch={{ kind: "document", documentId: "soc_top" }}
       />
     </div>
