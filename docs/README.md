@@ -3,6 +3,13 @@
 This directory contains the living technical documentation for `spec2gds`.
 All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TERMINOLOGY.md) and Simplified Technical English (ASD-STE100).
 
+## Start here: short tutorials
+
+- [HTML tutorial series](tutorials/index.html): Nine 5–8 minute core guides, plus optional feature guides for new designers.
+- [Environment and prepared starts](tutorials/setup.html): Local setup, required tools, and independent lesson checkpoints.
+- [Registered-adder example](tutorials/example.html): The exact ports, behavior, connections, and reference observations.
+- [Validation and learner review](tutorials/validation.html): Evidence rules and remaining human acceptance checks.
+
 ## 1. System Overview and Architecture
 
 - [System Architecture](architecture.md): Subsystems, authoritative service boundaries, state containers, and dependency direction.

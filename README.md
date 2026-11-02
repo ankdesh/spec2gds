@@ -3,6 +3,14 @@
 `spec2gds` is a specification-first hardware design platform.
 It combines a structured Spec Editor, an independent Circuit Designer, an integrated Verification Planner, and an AI Assistant with service-validated transactions.
 
+## Learn the system
+
+Start with the [short HTML tutorials](docs/tutorials/index.html). Nine core guides
+take a 16-bit adder from its first Spec to a saved circuit and an RTL project.
+Each guide includes a prepared start and a saved-state check. Optional guides
+cover Circuit Designer, AI Assistant controls, Verification Planner, and SystemC.
+See [environment setup and checkpoints](docs/tutorials/setup.html) before starting.
+
 ## System at a Glance
 
 ![spec2gds System Architecture](docs/images/system-architecture.png)
