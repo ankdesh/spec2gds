@@ -1,0 +1,41 @@
+{
+  "title": "Registered 16-bit adder",
+  "components": {
+    "add16": {
+      "name": "16-bit modulo adder",
+      "description": "Produce y = (a + b) modulo 65536. This Component is combinational. It has no clock, reset, or carry output. The Ports and SystemVerilog sections define the interface and behavior.",
+      "ports": [["a", "in", "15:0", "First unsigned operand."], ["b", "in", "15:0", "Second unsigned operand."], ["y", "out", "15:0", "Unsigned sum, modulo 65536."]],
+      "systemverilog": "assign y = a + b;\n"
+    },
+    "reg16": {
+      "name": "Enabled 16-bit register",
+      "description": "On each rising clk edge, reset=1 clears dout to zero. Otherwise enable=1 captures din. Otherwise dout holds its value. Reset is synchronous and active high. Reset has priority over enable. There is no ready/valid handshake.",
+      "ports": [["clk", "in", null, "Rising-edge clock."], ["reset", "in", null, "Synchronous active-high reset; highest priority."], ["enable", "in", null, "Capture din when reset is zero."], ["din", "in", "15:0", "Unsigned data to capture."], ["dout", "out", "15:0", "Registered output."]],
+      "systemverilog": "always_ff @(posedge clk) begin\n    if (reset) dout <= '0;\n    else if (enable) dout <= din;\nend\n"
+    },
+    "registered_adder": {
+      "name": "Registered 16-bit adder",
+      "description": "R1: On a rising clk edge with reset=1, y becomes zero, regardless of enable. R2: Otherwise, when enable=1, y captures (a+b) modulo 65536. R3: Otherwise y holds its value. Reset is synchronous and active high. The internal Design contains u_add and u_reg. There is one register stage. No valid signal or carry output is present.",
+      "ports": [["a", "in", "15:0", "First unsigned operand."], ["b", "in", "15:0", "Second unsigned operand."], ["clk", "in", null, "Rising-edge clock."], ["reset", "in", null, "Synchronous active-high reset."], ["enable", "in", null, "Capture the addition result."], ["y", "out", "15:0", "Registered sum, modulo 65536."]]
+    }
+  },
+  "design": {
+    "id": "registered_adder_impl",
+    "name": "Registered adder implementation",
+    "instances": [["u_add", "add16"], ["u_reg", "reg16"]],
+    "nets": [
+      ["operand_a", "top.a", "u_add.a", 16],
+      ["operand_b", "top.b", "u_add.b", 16],
+      ["sum", "u_add.y", "u_reg.din", 16],
+      ["clock", "top.clk", "u_reg.clk", 1],
+      ["reset", "top.reset", "u_reg.reset", 1],
+      ["enable", "top.enable", "u_reg.enable", 1],
+      ["result", "u_reg.dout", "top.y", 16]
+    ]
+  },
+  "verification": [
+    ["reset", "Reset clears output", "reset=1 and enable=1", "A rising clk edge", "y=0", 0],
+    ["capture", "Enable captures the sum", "reset=0, enable=1, a=7, b=9", "A rising clk edge", "y=16", 16],
+    ["hold", "Disabled output holds", "y=16, reset=0, enable=0, a=1, b=2", "A rising clk edge", "y remains 16", 16]
+  ]
+}
