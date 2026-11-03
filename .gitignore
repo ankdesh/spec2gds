@@ -247,6 +247,8 @@ TEMP_*
 **/TEMP_*
 TEMP-*/
 **/TEMP-*/
+.state/
+**/.state/
 artifacts/
 **/artifacts/
 *.artifacts/

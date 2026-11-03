@@ -55,6 +55,8 @@ testplan-service = "testplan_service.cli:main"
 spec2gds-ai-assistant = "scripts.spec2gds_assistant:main"
 spec2gds-spec-service = "spec2gds.spec.api.__main__:server_main"
 spec2gds-spec-editor = "spec2gds.spec.api.__main__:editor_main"
+spec2gds-library = "spec2gds.spec_library.cli:main"
+spec2gds-library-service = "spec2gds.library_service.cli:main"
 verification-planner = "testplan_service.cli:main"
 
 [tool.uv]

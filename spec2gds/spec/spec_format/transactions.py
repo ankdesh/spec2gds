@@ -34,6 +34,7 @@ from spec2gds.spec.spec_format.models import (
     EntityRef,
     NarrativeBlock,
     new_entity_id,
+    validate_vlnv,
 )
 from spec2gds.spec.spec_format.naming import (
     clean_name,
@@ -145,6 +146,7 @@ class CreateHardware:
     ports: tuple[InitialComponentPort, ...] = ()
     systemverilog: str | None = None
     entry_design: bool = True
+    vlnv: str | None = None
 
 
 @dataclass(frozen=True)
@@ -697,9 +699,22 @@ def _create_entity(package: SpecPackage, operation: CreateHardware) -> EntityRef
     existing_revision = SpecRevision.from_package(package)
     require_unique_name(display_name, (entity_name(item) for item in (*existing_revision.components, *existing_revision.designs, *existing_revision.bus_definitions, *existing_revision.abstraction_definitions)))
     name = hardware_name(display_name, (item.vlnv.split(":")[2] for item in (*existing_revision.components, *existing_revision.designs) if item.ref.entity_kind == operation.kind))
-    vlnv = f"spec2gds.local:work:{name}:1.0"
-    if any(item.kind == operation.kind and item.vlnv == vlnv for item in package.manifest.documents):
-        raise ValueError(f"A {operation.kind.replace('_', ' ')} named {name} already exists.")
+    if operation.vlnv is not None:
+        vlnv = validate_vlnv(operation.vlnv)
+        vendor, library, vlnv_name, version = vlnv.split(":")
+        if vlnv_name != name:
+            raise ValueError(f"VLNV name {vlnv_name!r} does not match hardware name {name!r}.")
+        if any(item.vlnv == vlnv for item in package.manifest.documents):
+            raise ValueError(f"A document with VLNV {vlnv} already exists.")
+    else:
+        vendor = "spec2gds.local"
+        library = "work"
+        version = "1.0"
+        vlnv = f"spec2gds.local:work:{name}:1.0"
+        if any(item.kind == operation.kind and item.vlnv == vlnv for item in package.manifest.documents):
+            raise ValueError(f"A {operation.kind.replace('_', ' ')} named {name} already exists.")
+        if any(item.vlnv == vlnv for item in package.manifest.documents):
+            raise ValueError(f"A document with VLNV {vlnv} already exists.")
     entity_id = operation.entity_id or new_entity_id(f"{operation.kind}_{name}")
     if not ID_PATTERN.fullmatch(entity_id):
         raise ValueError("Entity ID must be an XML-compatible identifier.")
@@ -718,10 +733,10 @@ def _create_entity(package: SpecPackage, operation: CreateHardware) -> EntityRef
     root = etree.Element(_q(root_name), nsmap={"ipxact": ipxact.IPXACT_NAMESPACE})
     root.set(f"{{{ipxact.XML_NAMESPACE}}}id", entity_id)
     for field, value in (
-        ("vendor", "spec2gds.local"),
-        ("library", "work"),
+        ("vendor", vendor),
+        ("library", library),
         ("name", name),
-        ("version", "1.0"),
+        ("version", version),
         ("displayName", display_name),
     ):
         etree.SubElement(root, _q(field)).text = value

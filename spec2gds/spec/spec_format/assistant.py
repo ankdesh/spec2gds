@@ -437,6 +437,7 @@ def _compile_assistant_operations(
                     tuple(_initial_component_port(item) for item in ports_value),
                     _optional_string(raw.get("systemverilog")),
                     raw.get("entry_design", True),
+                    vlnv=_optional_string(raw.get("vlnv")),
                 )
             )
         elif operation_type == "set_entity_metadata":
@@ -539,7 +540,7 @@ def _compile_assistant_operations(
 def _allowed_keys(kind: str) -> set[str]:
     common = {"type", "operation_id"}
     shapes = {
-        "create_entity": {"kind", "name", "entity_id", "instances", "ports", "systemverilog", "entry_design"},
+        "create_entity": {"kind", "name", "entity_id", "instances", "ports", "systemverilog", "entry_design", "vlnv"},
         "set_entity_metadata": {"entity", "display_name", "short_description", "description"},
         "upsert_parameter": {"entity", "parameter"},
         "delete_parameter": {"entity", "name"},

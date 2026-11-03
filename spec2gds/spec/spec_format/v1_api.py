@@ -1958,6 +1958,9 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             entry_design = raw.get("entry_design", True)
             if type(entry_design) is not bool or ("entry_design" in raw and entity_kind != "design"):
                 raise ValueError("entry_design must be a boolean on a design creation.")
+            vlnv = raw.get("vlnv")
+            if vlnv is not None and not isinstance(vlnv, str):
+                raise ValueError("create_entity vlnv must be a string.")
             operations.append(
                 CreateHardware(
                     typing.cast(typing.Any, entity_kind),
@@ -1965,6 +1968,7 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
                     str(raw["entity_id"]) if raw.get("entity_id") else None,
                     tuple(InstanceIR(**item) for item in instances),
                     entry_design=entry_design,
+                    vlnv=vlnv,
                 )
             )
         elif kind == "set_document_title":

@@ -89,7 +89,7 @@ def suite_catalogue() -> dict[str, Suite]:
            marker="extensive", dependencies=("build-assistant",))
     python("hardware-extensive", ["tests/spec/activities"], ["spec", "activities"],
            marker="extensive", tools=("hardware",))
-    python("spec-api", ["tests/spec/spec_format", "tests/spec/importers"],
+    python("spec-api", ["tests/spec/spec_format", "tests/spec/importers", "tests/spec_library"],
            ["spec", "circuit", "assistant", "activities"])
     python("verification-api", ["testplan-service/tests"], ["spec", "verification", "activities"])
     python("activity-api", ["tests/spec/activities"], ["spec", "activities"])
