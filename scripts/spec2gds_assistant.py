@@ -16,10 +16,14 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
 from urllib.error import URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
+from uuid import uuid4
 
 import uvicorn
+from spec2gds_runtime.service_config import listener_overrides, resolve_config
 
+from spec2gds.service_registry import load_service_registry
 from spec2gds.spec.spec_format.review_store import (
     _REPO_ROOT,
     list_spec_reviews,
@@ -49,7 +53,8 @@ def _private_spec_service(require_designer_approval: bool = False) -> Iterator[s
     sock.bind(("127.0.0.1", 0))
     sock.listen()
     port = sock.getsockname()[1]
-    config = uvicorn.Config(create_app(require_designer_approval), host="127.0.0.1", port=port, log_level="error", access_log=False)
+    registry = load_service_registry(overrides=listener_overrides("spec_editor", host="127.0.0.1", port=port))
+    config = uvicorn.Config(create_app(require_designer_approval, service_registry=registry), host="127.0.0.1", port=port, log_level="error", access_log=False)
     server = uvicorn.Server(config)
     worker = threading.Thread(target=lambda: asyncio.run(server.serve(sockets=[sock])), daemon=True)
     worker.start()
@@ -76,6 +81,7 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="spec2gds-assistant", description="Run one focused assistant turn against a workspace specification.")
     parser.add_argument("target", help="Workspace directory or exact .spec path")
     parser.add_argument("--preset", default="focused", help="Assistant preset (currently focused only)")
+    parser.add_argument("--service-config", type=Path)
     parser.add_argument("--service-url", help="Running Spec service URL; its policy and receipts remain authoritative")
     return parser
 
@@ -133,7 +139,6 @@ def main(argv: list[str] | None = None) -> int:
             "ASSISTANT_STATE": str(state_root),
             "SPEC2GDS_SCRATCH_ROOT": str(state_root / "workspaces"),
             "SPEC_DOCUMENT_ROOT": str(state_root / "documents"),
-            "SPEC_SERVICE_ALLOWLIST": owner_url,
             "SPEC2GDS_CLI_WORKSPACE_IDENTITY": identity_owner,
             "SPEC2GDS_BINDING_JSON": json.dumps({
                 "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
@@ -142,8 +147,17 @@ def main(argv: list[str] | None = None) -> int:
             }),
             "DSH_PRODUCT_RUN_CWD": str(cwd),
         }
+        # The explicit service URL is the CLI override for this request.
+        selected = urlsplit(owner_url)
+        endpoint = {"scheme": selected.scheme, "host": selected.hostname,
+                    "port": selected.port or (443 if selected.scheme == "https" else 80)}
+        config = resolve_config(args.service_config, overrides={"spec_editor": {surface: endpoint for surface in ("service", "ui")}})
+        run = _REPO_ROOT / "TEMP_serve-all" / ("request_" + uuid4().hex)
+        run.mkdir(parents=True)
+        snapshot = run / "services.json"
+        snapshot.write_text(json.dumps(config))
         result = subprocess.run(
-            [node, str(assistant_root / "scripts/dev.mjs"), "--json", prompt],
+            [node, str(assistant_root / "scripts/dev.mjs"), "--service-config", str(snapshot), "--json", prompt],
             cwd=cwd, env=env, text=True, capture_output=True, check=False,
         )
         events = []

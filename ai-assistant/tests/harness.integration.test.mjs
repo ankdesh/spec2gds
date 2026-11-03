@@ -3,9 +3,9 @@ import { serveIntegrationMetadata } from "./support/integration-metadata.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createServer } from "node:http";
-import { mkdtemp, readFile, readdir, rm, cp } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, cp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -117,13 +117,18 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
   const loopState = await mkdtemp(join(tmpdir(), "spec2gds-harness-loop-limit-"));
   const flowState = await mkdtemp(join(tmpdir(), "spec2gds-headless-flow-"));
   const replayState = await mkdtemp(join(tmpdir(), "spec2gds-harness-replay-"));
+  const serviceConfig = JSON.parse(await readFile(resolve(root, "../config/services.json"), "utf8"));
+  serviceConfig.public_host = "127.0.0.1";
+  for (const surface of ["service", "ui"]) Object.assign(serviceConfig.spec_editor[surface], { host: "127.0.0.1", port: ownerPort });
+  const configPath = join(state, "services.json");
+  await writeFile(configPath, JSON.stringify(serviceConfig));
   let child;
   let loopChild;
   let replayChild;
   let flowChild;
   try {
     child = spawn(process.execPath, [
-      resolve(root, "scripts/request.mjs"),
+      resolve(root, "scripts/request.mjs"), "--service-config", relative(root, configPath),
       "--json",
       "--domain", "spec",
       "--service-url", `http://127.0.0.1:${ownerPort}`,
@@ -137,8 +142,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
         ...fixtureModelEnv,
         ASSISTANT_STATE: state,
         SPEC2GDS_SESSION_COMPRESSION: "none",
-        SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
-        CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1",
         OPENAI_API_KEY: "fixture-key",
         OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1`,
       },
@@ -194,9 +197,9 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
     }
 
     const beforeFlow = modelRequests.length;
-    flowChild = spawn(process.execPath, [resolve(root, "scripts/request.mjs"), "--json", "--domain", "spec", "--service-url", `http://127.0.0.1:${ownerPort}`, "--document-id", "doc-test", "--", "Start timer flow"], {
+    flowChild = spawn(process.execPath, [resolve(root, "scripts/request.mjs"), "--service-config", configPath, "--json", "--domain", "spec", "--service-url", `http://127.0.0.1:${ownerPort}`, "--document-id", "doc-test", "--", "Start timer flow"], {
       cwd: root, env: { ...process.env, ...fixtureModelEnv, ASSISTANT_STATE: flowState, SPEC2GDS_SESSION_COMPRESSION: "none",
-        SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`, CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1", OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1` }, stdio: ["ignore", "pipe", "pipe"],
+        OPENAI_API_KEY: "fixture-key", OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1` }, stdio: ["ignore", "pipe", "pipe"],
     });
     let flowOutput = ""; flowChild.stdout.on("data", value => { flowOutput += value; }); flowChild.stderr.on("data", value => { flowOutput += value; });
     const [flowCode, flowSignal] = await once(flowChild, "exit"); assert.equal(flowSignal, null, flowOutput); assert.equal(flowCode, 2, flowOutput);
@@ -209,7 +212,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
 
     const requestsBeforeLoop = modelRequests.length;
     loopChild = spawn(process.execPath, [
-      resolve(root, "scripts/request.mjs"),
+      resolve(root, "scripts/request.mjs"), "--service-config", configPath,
       "--json",
       "--domain", "spec",
       "--service-url", `http://127.0.0.1:${ownerPort}`,
@@ -223,8 +226,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
         ...fixtureModelEnv,
         ASSISTANT_STATE: loopState,
         ASSISTANT_MAX_OUTPUT_TOKENS: "4096",
-        SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
-        CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1",
         OPENAI_API_KEY: "fixture-key",
         OPENAI_BASE_URL: `http://127.0.0.1:${providerPort}/v1`,
       },
@@ -254,7 +255,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
     assert.ok(recordedMetrics.tokens.output > 0);
     const providerRequestsBeforeReplay = modelRequests.length;
     replayChild = spawn(process.execPath, [
-      resolve(root, "scripts/request.mjs"),
+      resolve(root, "scripts/request.mjs"), "--service-config", configPath,
       "--json",
       "--domain", "spec",
       "--service-url", `http://127.0.0.1:${ownerPort}`,
@@ -270,8 +271,6 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
         ASSISTANT_STATE: replayState,
         SPEC2GDS_SESSION_COMPRESSION: "none",
         DSH_SNAPSHOT_FILE: logs[0],
-        SPEC_SERVICE_ALLOWLIST: `http://127.0.0.1:${ownerPort}`,
-        CIRCUIT_SERVICE_ALLOWLIST: "http://127.0.0.1:9/api/circuit-designer/v1",
         OPENAI_API_KEY: "must-not-be-used",
         OPENAI_BASE_URL: "http://127.0.0.1:9/v1",
       },

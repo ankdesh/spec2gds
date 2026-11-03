@@ -4,7 +4,7 @@ import {
   statSync, unlinkSync, writeFileSync, writeSync,
 } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { defaultConfigPath, resolveConfig, type ServiceConfig } from "../../../../runtime/service-config.mjs";
 import { randomUUID, createHash } from "node:crypto";
 
 export type LogLevel = "info" | "debug";
@@ -33,14 +33,10 @@ export interface LogEventInput {
   timestamp?: string;
 }
 
-export function defaultConfigPath(): string {
-  return process.env.SPEC2GDS_SERVICE_CONFIG
-    ?? resolve(dirname(fileURLToPath(import.meta.url)), "../../../../config/services.json");
-}
+export { defaultConfigPath };
 
-export function loadObservabilityConfig(path = defaultConfigPath()): ObservabilityConfig {
-  const payload = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-  if (payload.schema_version !== 2) throw new Error("Service registry schema_version must be 2.");
+export function loadObservabilityConfig(path = defaultConfigPath(), config?: ServiceConfig): ObservabilityConfig {
+  const payload = (config ?? resolveConfig(path)) as unknown as Record<string, unknown>;
   const logging = payload.logging as Record<string, unknown> | undefined;
   if (!logging) throw new Error("Service registry logging settings are required.");
   const enabled = process.env.SPEC2GDS_LOGGING === undefined

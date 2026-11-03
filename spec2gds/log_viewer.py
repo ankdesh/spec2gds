@@ -15,13 +15,13 @@ from spec2gds_runtime import StructuredLogger
 from spec2gds.service_registry import load_service_registry
 
 
-def create_app() -> Any:
+def create_app(service_config: Path | None = None, *, registry: Any = None) -> Any:
     """Create the configured read-only viewer API and static web application."""
     from fastapi import FastAPI, Query
     from fastapi.responses import FileResponse, StreamingResponse
     from fastapi.staticfiles import StaticFiles
 
-    settings = load_service_registry().logging
+    settings = (registry or load_service_registry(service_config)).logging
     assets = Path(__file__).with_name("log_viewer_static")
     app = FastAPI(title="spec2gds Log Viewer", docs_url=None, redoc_url=None)
     app.mount("/assets", StaticFiles(directory=assets), name="log-viewer-assets")
@@ -136,11 +136,20 @@ async def _tail(path: Path) -> AsyncIterator[str]:
 def main() -> None:
     """Start the configured viewer and open it in the user's default browser."""
     parser = argparse.ArgumentParser(description="View combined spec2gds logs.")
+    parser.add_argument("--service-config", type=Path)
+    parser.add_argument("--host")
+    parser.add_argument("--port", type=int)
+    parser.add_argument("--public-host")
     parser.add_argument("--no-open", action="store_true", help="do not open a browser")
     args = parser.parse_args()
-    settings = load_service_registry().logging
-    public_host = settings.viewer_public_host or settings.viewer_host
-    url = f"http://{public_host}:{settings.viewer_port}"
+    from spec2gds_runtime.service_config import endpoint_url
+    fields = {key: value for key, value in (("host", args.host), ("port", args.port)) if value is not None}
+    overrides = {"logging": {"viewer": fields}}
+    if args.public_host is not None:
+        overrides["public_host"] = args.public_host
+    registry = load_service_registry(args.service_config, overrides=overrides)
+    settings = registry.logging
+    url = endpoint_url(registry.config["logging"]["viewer"], registry.public_host)
     logger = StructuredLogger("log-viewer", settings)
     logger.event(
         "process", "starting", "Starting spec2gds Log Viewer",
@@ -154,5 +163,5 @@ def main() -> None:
         timer.start()
     import uvicorn
 
-    uvicorn.run(create_app(), host=settings.viewer_host, port=settings.viewer_port, access_log=False)
+    uvicorn.run(create_app(registry=registry), host=settings.viewer_host, port=settings.viewer_port, access_log=False)
     logger.event("process", "stopped", "Stopped spec2gds Log Viewer")

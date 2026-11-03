@@ -7,7 +7,7 @@ import { assistantUrl, resolveAssistantLinks } from "./assistant-links";
 
 /** Browser composition for the reusable Circuit Designer application shell. */
 export function App() {
-  const apiBase = import.meta.env.VITE_CIRCUIT_DESIGNER_API_BASE ?? "/api/circuit-designer/v1";
+  const apiBase = "/api/circuit-designer/v1";
   const backend = useMemo(() => new HttpCircuitDesignerBackend({ baseUrl: apiBase }), [apiBase]);
   const files = useMemo(() => createBrowserFileAdapter(), []);
   const preferences = useMemo(() => createBrowserPreferencesAdapter(backend), [backend]);
@@ -17,8 +17,6 @@ export function App() {
     apiBase,
     origin: window.location.origin,
     hostname: window.location.hostname,
-    assistantUiUrl: import.meta.env.VITE_AI_ASSISTANT_UI_URL,
-    circuitServiceUrl: import.meta.env.VITE_CIRCUIT_DESIGNER_SERVICE_URL,
   }), [apiBase]);
   const [assistantLinks, setAssistantLinks] = useState(() => resolveAssistantLinks(linkConfig));
   useEffect(() => {
@@ -37,6 +35,7 @@ export function App() {
     label: "AI Assistant",
     description: "Open a conversation bound to the current circuit.",
     run: ({ snapshot }) => {
+      if (!assistantLinks.uiUrl) throw new Error("The service directory is unavailable.");
       const target = assistantUrl(assistantLinks.uiUrl, assistantLinks.serviceUrl, snapshot.document.document_id);
       const opened = window.open(target, "_blank", "noopener,noreferrer");
       if (opened) opened.opener = null;

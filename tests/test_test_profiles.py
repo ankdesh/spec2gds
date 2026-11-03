@@ -204,8 +204,8 @@ def test_failed_command_retains_first_outcome_and_redacts_secrets(tmp_path):
 
 
 def test_browser_registry_does_not_leak_into_isolated_contract_checks(tmp_path):
-    suite = command_suite("registry", "import os; print(os.environ.get('SPEC2GDS_SERVICE_CONFIG', 'default'))")
-    environment = {**os.environ, "SPEC2GDS_SERVICE_CONFIG": "/private/browser-services.json"}
+    suite = command_suite("registry", "import os; print(os.environ.get('SPEC2GDS_TEST_SERVICE_CONFIG', 'default'))")
+    environment = {**os.environ, "SPEC2GDS_TEST_SERVICE_CONFIG": "/private/browser-services.json"}
     result = runner.run_suite(suite, tmp_path, environment)
     assert result["status"] == "passed"
     assert (tmp_path / "command.log").read_text().strip() == "default"
@@ -277,18 +277,18 @@ def test_isolated_environment_uses_distinct_ports_and_private_storage(tmp_path, 
 
     monkeypatch.setattr(runner.socket, "socket", Listener)
     environment = runner.isolated_environment(tmp_path)
-    config = json.loads(Path(environment["SPEC2GDS_SERVICE_CONFIG"]).read_text())
+    config = json.loads(Path(environment["SPEC2GDS_TEST_SERVICE_CONFIG"]).read_text())
     ports = [config[service][surface]["port"] for service in ("spec_editor", "circuit_designer", "ai_assistant")
              for surface in ("service", "ui")]
-    assert len(set(ports)) == 6
+    assert len(set(ports)) == 4
+    assert config["spec_editor"]["dev_ui"]["port"] not in ports
+    assert config["verification_planner"]["service"]["port"] == config["verification_planner"]["ui"]["port"]
     assert environment["SPEC2GDS_TEST_ISOLATED"] == "1"
     assert environment["SPEC_EDITOR_STATE_ROOT"].startswith(str(tmp_path))
-    assert environment["CIRCUIT_DESIGNER_PREFERENCES_FILE"].startswith(str(tmp_path))
-    assert environment["CIRCUIT_DESIGNER_SERVICE_ORIGIN"] == (
-        f"http://127.0.0.1:{config['circuit_designer']['service']['port']}")
+    assert config["circuit_designer"]["preferences_file"].startswith(str(tmp_path))
     assert config["activities"]["scratch_root"].startswith(str(tmp_path))
-    assert environment["CIRCUIT_DESIGNER_E2E_API_URL"] == (
-        f"http://127.0.0.1:{config['circuit_designer']['service']['port']}/api/circuit-designer/v1")
+    for obsolete in ("SPEC_SERVICE_PORT", "CIRCUIT_DESIGNER_PORT", "CIRCUIT_DESIGNER_SERVICE_ORIGIN"):
+        assert obsolete not in environment
 
 
 def test_unavailable_ports_are_reported_without_stopping_non_browser_checks(tmp_path, monkeypatch):
@@ -298,7 +298,7 @@ def test_unavailable_ports_are_reported_without_stopping_non_browser_checks(tmp_
     monkeypatch.setattr(runner.socket, "socket", unavailable)
     environment = runner.isolated_environment(tmp_path)
     assert "Loopback denied" in environment["SPEC2GDS_TEST_PORT_ERROR"]
-    assert Path(environment["SPEC2GDS_SERVICE_CONFIG"]).exists()
+    assert Path(environment["SPEC2GDS_TEST_SERVICE_CONFIG"]).exists()
     assert runner.prerequisite_errors(("live",), {"OPENAI_API_KEY": "configured"}) == []
 
 

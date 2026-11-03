@@ -1,0 +1,83 @@
+{
+  "schema_version": 2,
+  "public_host": "auto",
+  "logging": {
+    "enabled": false,
+    "level": "info",
+    "file": "../logs/spec2gds.jsonl",
+    "max_bytes": 26214400,
+    "viewer": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6014,
+      "base_path": ""
+    }
+  },
+  "activities": {
+    "scratch_root": "../generated",
+    "extension_modules": []
+  },
+  "spec_editor": {
+    "service": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6010,
+      "base_path": ""
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6010,
+      "base_path": "/editor"
+    },
+    "dev_ui": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6015,
+      "base_path": "/editor-assets/"
+    }
+  },
+  "circuit_designer": {
+    "preferences_file": "../generated/circuit-designer/preferences.json",
+    "service": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6011,
+      "base_path": "/api/circuit-designer/v1"
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6012,
+      "base_path": ""
+    }
+  },
+  "ai_assistant": {
+    "service": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6013,
+      "base_path": ""
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6013,
+      "base_path": ""
+    }
+  },
+  "verification_planner": {
+    "service": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 6016,
+      "base_path": ""
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "127.0.0.1",
+      "port": 6016,
+      "base_path": ""
+    }
+  }
+}

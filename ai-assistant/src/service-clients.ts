@@ -32,7 +32,7 @@ export function normalizeSpecUrl(value: string, allowlist: string[]): string {
   if (url.pathname !== "/" && url.pathname !== "") throw new Error("Spec Editor URL must contain only scheme, host, and port.");
   const normalized = url.origin;
   const allowed = new Set(allowlist.map(normalizedUrl));
-  if (!allowed.has(normalized)) throw new Error("Spec Editor URL is not in SPEC_SERVICE_ALLOWLIST.");
+  if (!allowed.has(normalized)) throw new Error("Spec Editor URL is not in the configured service allowlist.");
   return normalized;
 }
 
@@ -43,7 +43,7 @@ export function normalizeCircuitUrl(value: string, allowlist: string[]): string 
   }
   const normalized = normalizedUrl(value);
   const allowed = new Set(allowlist.map(normalizedUrl));
-  if (!allowed.has(normalized)) throw new Error("Circuit Designer URL is not in CIRCUIT_SERVICE_ALLOWLIST.");
+  if (!allowed.has(normalized)) throw new Error("Circuit Designer URL is not in the configured service allowlist.");
   return normalized;
 }
 

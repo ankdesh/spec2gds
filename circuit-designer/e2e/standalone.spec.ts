@@ -1,3 +1,4 @@
+import { resolveConfig, endpointUrl } from "../../runtime/service-config.mjs";
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
@@ -5,8 +6,8 @@ import { join } from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
 import { createDefaultCircuitDesignerPreferences, simpleDocumentFixture } from "@spec2gds/circuit-core";
 
-const circuitApiUrl = process.env.CIRCUIT_DESIGNER_E2E_API_URL
-  ?? "http://127.0.0.1:6011/api/circuit-designer/v1";
+const registry = resolveConfig(process.env.SPEC2GDS_TEST_SERVICE_CONFIG);
+const circuitApiUrl = endpointUrl(registry.circuit_designer.service, registry.public_host, { local: true });
 
 test("extends one net by connected-pin drag and dialog with local recovery", async ({ page, request }) => {
   const document = simpleDocumentFixture();

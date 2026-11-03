@@ -474,7 +474,7 @@
     - id: event-http-sources
       name: '@ankdesh/ankdesh-event-system-http'
       config:
-        allowedOrigins: !!js Array.from(new Set((process.env.ASSISTANT_HTTP_MONITOR_ORIGINS || [process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010', process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'].join(',')).split(',').filter(Boolean).map(value => new URL(value.trim()).origin)))
+        allowedOrigins: []
         tickMillis: 1000
         minIntervalMillis: 5000
         maxIntervalMillis: 3600000
@@ -527,8 +527,8 @@
         stateRoot: !!js process.env.ASSISTANT_STATE || dshHomePath('product')
         scratchRoot: !!js process.env.SPEC2GDS_SCRATCH_ROOT || dshHomePath('workspaces')
         specDocumentRoot: !!js process.env.SPEC_DOCUMENT_ROOT || dshHomePath('spec-documents')
-        specAllowlist: !!js process.env.SPEC_SERVICE_ALLOWLIST || 'http://127.0.0.1:6010'
-        circuitAllowlist: !!js process.env.CIRCUIT_SERVICE_ALLOWLIST || 'http://127.0.0.1:6011/api/circuit-designer/v1'
+        specAllowlist: ''
+        circuitAllowlist: ''
         requestTimeoutMs: !!js Number(process.env.ASSISTANT_OWNER_TIMEOUT_MS || 30000)
         maxStepsPerTurn: !!js Number(process.env.ASSISTANT_MAX_STEPS_PER_TURN || 3)
         maxOutputTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 16384)

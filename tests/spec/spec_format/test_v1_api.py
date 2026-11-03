@@ -199,9 +199,7 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
     config["activities"]["scratch_root"] = str(tmp_path / "generated")
     local_config = tmp_path / "services.json"
     local_config.write_text(json.dumps(config), encoding="utf-8")
-    monkeypatch.setenv("SPEC2GDS_SERVICE_CONFIG", str(local_config))
-
-    app = create_app()
+    app = create_app(service_config=local_config)
     endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
     path = tmp_path / "activity.spec"
     created = endpoints["create_document"](CreateDocumentRequest(
@@ -287,9 +285,7 @@ def test_v1_api_reports_extension_load_diagnostics(tmp_path: Path, monkeypatch) 
     config["activities"]["extension_modules"] = ["missing_activity_plugin:register"]
     local_config = tmp_path / "services.json"
     local_config.write_text(json.dumps(config), encoding="utf-8")
-    monkeypatch.setenv("SPEC2GDS_SERVICE_CONFIG", str(local_config))
-
-    app = create_app()
+    app = create_app(service_config=local_config)
     endpoints = {
         route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")
     }
@@ -582,7 +578,9 @@ def test_editor_launches_ai_assistant_with_configured_url_override(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("AI_ASSISTANT_URL", "http://127.0.0.1:4400/")
+    from spec2gds.service_registry import load_service_registry
+    config = load_service_registry(overrides={"ai_assistant": {surface: {"host": "127.0.0.1", "port": 4400} for surface in ("service", "ui")}})
+    monkeypatch.setattr("spec2gds.spec.spec_format.v1_api.load_service_registry", lambda _: config)
     endpoints = _endpoints()
     unbound_launch = endpoints["launch_document_assistant"](
         AssistantDocumentLaunchRequest(attach_active_document=False)
@@ -651,21 +649,18 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
 
     calls: list[tuple[str, dict[str, object]]] = []
     monkeypatch.setattr(uvicorn, "run", lambda app, **options: calls.append((app, options)))
-    monkeypatch.setenv("SPEC2GDS_PUBLIC_HOST", "design-host.test")
 
-    production_entry.server_main(["--host", "0.0.0.0", "--port", "8080", "--reload"])
-    production_entry.editor_main(["--port", "8765"])
+    production_entry.server_main(["--host", "0.0.0.0", "--port", "8080", "--public-host", "design-host.test", "--reload"])
+    production_entry.editor_main(["--port", "8765", "--public-host", "design-host.test"])
 
-    assert calls == [
-        (
-            "spec2gds.spec.spec_format.v1_api:create_app",
-                {"factory": True, "host": "0.0.0.0", "port": 8080, "reload": True, "access_log": False},
-        ),
-        (
-            "spec2gds.spec.spec_format.v1_api:create_app",
-                {"factory": True, "host": "0.0.0.0", "port": 8765, "reload": False, "access_log": False},
-        ),
-    ]
+    assert len(calls) == 2
+    import importlib
+    for (factory, options), port in zip(calls, (8080, 8765)):
+        assert factory.startswith("spec2gds_run_")
+        assert options == {"factory": True, "host": "0.0.0.0", "port": port, "reload": port == 8080, "access_log": False}
+        app = importlib.import_module(factory.split(":")[0]).create_app()
+        directory = next(route.endpoint for route in app.routes if route.name == "services")()
+        assert directory["services"]["spec_editor"]["service_url"] == f"http://design-host.test:{port}"
     output = capsys.readouterr().out
     assert "spec2gds Spec service: http://design-host.test:8080" in output
     assert "spec2gds Spec Editor: http://design-host.test:8765/editor" in output

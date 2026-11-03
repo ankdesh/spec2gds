@@ -110,16 +110,15 @@ scripts/serve-all.sh start
 The launcher prints browser URLs using the detected LAN IPv4 address. From
 another computer, open the printed Spec Editor (`6010`), Circuit Designer
 (`6012`), or AI Assistant (`6013`) URL. If automatic detection selects the
-wrong interface, set the advertised IP address or resolvable hostname first:
+wrong interface, pass the advertised IP address or resolvable hostname:
 
 ```bash
-export SPEC2GDS_PUBLIC_HOST="192.168.1.50"  # or design-host.example
-scripts/serve-all.sh start
+scripts/serve-all.sh start --public-host 192.168.1.50
 ```
 
 Services bind to `0.0.0.0` by default. If the host firewall is enabled, allow
-TCP ports `6010` through `6014` for the LAN. Logs and PID files are under
-`logs/serve-all/`.
+the configured TCP ports for LAN access. Run snapshots, logs, and process records are under
+`TEMP_serve-all/`. Verification Planner and the log viewer start separately.
 
 ```bash
 scripts/serve-all.sh stop
@@ -132,8 +131,8 @@ the browser cannot remain attached to an older Assistant bundle:
 scripts/serve-all.sh restart
 ```
 
-`start` refuses a partial or untracked stack on the default ports instead of
-reporting success while an older process continues serving the UI.
+`start` checks the effective addresses and ports. It reports untracked conflicts
+with their PIDs and leaves those listeners running.
 
 The commands above use the tracked defaults in `config/services.json`. See
 the [Development Guide](docs/development.md#2-shared-service-configuration) before using different
@@ -143,15 +142,36 @@ addresses or ports.
 
 The combined spec2gds launcher and its three applications read
 [`config/services.json`](config/services.json).
-It contains the host, port, and base path for each API and browser UI. Change
-that file before starting the services when the defaults are not appropriate;
-set `SPEC2GDS_SERVICE_CONFIG` to point at an alternate registry. Existing
-per-service environment variables remain supported as overrides.
+It contains the bind host, port, and base path for each service and UI,
+including `spec_editor.dev_ui`, `verification_planner`, and `logging.viewer`.
+Precedence is **command line → configuration file → defaults**. Select an
+alternate file with `--service-config PATH`. Omitted fields use the shared
+packaged defaults. An explicitly selected missing file or invalid value fails startup.
 
-The tracked registry uses `host: "0.0.0.0"` for listeners and
-`public_host: "auto"` for browser URLs. `SPEC2GDS_PUBLIC_HOST` overrides the
-advertised host without changing the bind address. Never give another system a
-URL containing `0.0.0.0`; use the detected/overridden public host instead.
+```bash
+scripts/serve-all.sh start --service-config "$PWD/config/services.json" \
+  --public-host design-host.example --spec-port 6420 --circuit-port 6421 \
+  --circuit-ui-port 6422 --assistant-port 6423
+```
+
+The combined launcher also accepts `--host` for its four listeners. Individual
+listeners accept `--host`, `--port`, `--public-host`, and `--service-config`.
+A Spec service or Assistant override updates its service and UI addresses together.
+Their configured service/UI listener fields must agree. Circuit Designer keeps
+separate service and UI listeners; its combined `npm run dev --` command uses
+`--host`/`--port` for the service and `--ui-host`/`--ui-port` for the UI.
+Development and preview servers fail if the selected port is occupied.
+
+Concrete endpoint hosts remain authoritative. Wildcard binds (`0.0.0.0` or `::`)
+use `public_host` in browser links and the matching loopback address in local
+checks and proxies. `public_host: "auto"` detects the preferred outbound IPv4
+address, with a hostname fallback. The combined launcher resolves it once per run.
+IPv6 authorities use brackets in URLs.
+
+Network environment settings, including `SPEC2GDS_SERVICE_CONFIG`,
+`SPEC2GDS_PUBLIC_HOST`, service host/port/URL aliases, Assistant allowlists,
+and browser `VITE_*` endpoints, have no effect. Credential, storage, and
+logging environment settings retain their existing rules.
 
 Unified file logging is disabled by default. Enable concise operational logs
 with `SPEC2GDS_LOGGING=ON`; add boundary data and model request/response
@@ -167,24 +187,19 @@ uv run spec2gds-log-viewer
 See the [Development Guide](docs/development.md#3-unified-logging-system) for filters, redaction, and the event
 format.
 
-The Circuit service can also run independently without the shared registry:
+The Circuit service reads the shared configuration on direct startup:
 
 ```bash
 cd circuit-designer
-CIRCUIT_DESIGNER_PORT=6011 npm run service
+npm run service -- --service-config ../config/services.json --port 6421
+npm run dev -- --service-config ../config/services.json --port 6421 --ui-port 6422
+npm run preview:standalone -- --service-config ../config/services.json
 ```
 
-For a standalone Circuit UI with custom service URLs, set
-`VITE_AI_ASSISTANT_UI_URL` and `VITE_CIRCUIT_DESIGNER_SERVICE_URL` before
-starting or building the UI. The Tools link uses these exact URLs, including
-HTTPS, custom ports, and base paths. Without explicit values it reads the
-Circuit service directory; without a directory it falls back to the local
-Assistant port 6013 and Circuit port 6011.
-
-In independent mode, discover optional functionality through
-`GET /api/circuit-designer/v1/capabilities`. Set
-`SPEC2GDS_SERVICE_CONFIG` only when the legacy shared `/services` directory is
-required.
+The Circuit UI reads Assistant links from the service directory. Use
+`--no-shared-directory` for a Circuit service that does not need that optional
+integration. Independent capabilities remain available at
+`GET /api/circuit-designer/v1/capabilities`.
 
 The Spec Editor exposes **AI Assistant ↗** in its toolbar; Circuit Designer
 uses **Tools → AI Assistant** in its compact menubar. Circuit Designer opens a
@@ -282,22 +297,17 @@ Editor, Circuit Designer service and UI, and AI Assistant together:
 scripts/serve-all.sh start
 ```
 
-Use `scripts/serve-all.sh restart` after rebuilding or changing source; it
-stops tracked and stale default-port listeners before starting the new stack.
-
-Stop the tracked processes and any other services listening on the same default
-ports with:
+Use `scripts/serve-all.sh restart` after rebuilding or changing configuration.
+Stop the recorded process groups with:
 
 ```bash
 scripts/serve-all.sh stop
 ```
 
-Each service reads its address from `config/services.json`; the launcher's
-displayed URLs and untracked-listener cleanup cover the tracked default ports
-`6010` through `6014`. It writes PID files and per-service logs
-under `logs/serve-all/`. The launcher prints the three application URLs but
-does not open them in a browser. Set `OPENAI_API_KEY` before starting if the AI
-Assistant should make OpenAI requests.
+Stop and restart use saved process identities and group IDs, even after the
+configuration changes. They retain unrelated listeners. Startup failures clean
+up only the processes created by that run. Run evidence is in `TEMP_serve-all/`.
+Set `OPENAI_API_KEY` before startup when the AI Assistant needs model access.
 
 ## Build specification Activities
 

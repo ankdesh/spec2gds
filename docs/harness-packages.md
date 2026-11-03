@@ -85,3 +85,16 @@ ASSISTANT_INSTALL_ROOT="$PWD/TEMP_headless_install" \
 Use a new output directory each time. Release assembly checks the inventory
 checksum, follows installed package metadata, and keeps dependency links inside
 the output. Native files target Linux x86-64 with glibc.
+
+The assembled release includes the service resolver and default configuration.
+Launch it with an explicit file when addresses differ from the defaults:
+
+```sh
+node TEMP_web_release/deployment/launch.mjs --service-config config/services.json --port 6423 --public-host design-host.example --no-open
+node TEMP_headless_release/deployment/request.mjs --service-config config/services.json --domain spec --service-url http://127.0.0.1:6010 --document-id example -- "Explain this Spec."
+```
+
+Addresses use command line → file → defaults. Network environment settings have
+no effect. Copy the shipped `config/services.json` to the service manager's
+configured path before enabling the example systemd unit. Credential, storage,
+and logging environment settings keep their existing rules.

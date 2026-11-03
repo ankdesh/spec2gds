@@ -10,7 +10,7 @@ from spec2gds.service_registry import load_service_registry
 
 def test_tracked_service_registry_exposes_all_public_urls(monkeypatch) -> None:
     monkeypatch.setenv("SPEC2GDS_PUBLIC_HOST", "design-host.test")
-    registry = load_service_registry()
+    registry = load_service_registry(overrides={"public_host": "design-host.test"})
     assert registry.spec_editor.service.host == "0.0.0.0"
     assert registry.public_host == "design-host.test"
     assert registry.spec_editor.ui.url == "http://design-host.test:6010/editor"

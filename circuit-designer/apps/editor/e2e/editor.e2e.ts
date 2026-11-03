@@ -1,3 +1,4 @@
+import { resolveConfig, endpointUrl } from "../../../../runtime/service-config.mjs";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { readFile } from "node:fs/promises";
@@ -920,7 +921,7 @@ test("adds an available top-level component instance to the entry design", async
 });
 
 test("keeps Edit state-aware and provides working Copy and Select All", async ({ context, page }) => {
-  const editorOrigin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  const editorOrigin = new URL(endpointUrl(resolveConfig(process.env.SPEC2GDS_TEST_SERVICE_CONFIG).spec_editor.dev_ui, "127.0.0.1", { local: true })).origin;
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: editorOrigin });
   await mockEditorApi(page);
   await openSample(page);
@@ -1314,7 +1315,7 @@ test("keeps a long Spec name and its edit action reachable at narrow widths", as
 });
 
 test("Cut and Paste retain input and textarea selections and save their results", async ({ context, page }) => {
-  const origin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  const origin = new URL(endpointUrl(resolveConfig(process.env.SPEC2GDS_TEST_SERVICE_CONFIG).spec_editor.dev_ui, "127.0.0.1", { local: true })).origin;
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
   const state = await mockEditorApi(page);
   await openSample(page);
@@ -1358,7 +1359,7 @@ test("Cut and Paste retain input and textarea selections and save their results"
 });
 
 test("clipboard denial preserves a draft and SystemVerilog uses its editor model", async ({ context, page }) => {
-  const origin = new URL(process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015").origin;
+  const origin = new URL(endpointUrl(resolveConfig(process.env.SPEC2GDS_TEST_SERVICE_CONFIG).spec_editor.dev_ui, "127.0.0.1", { local: true })).origin;
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
   const state = await mockEditorApi(page);
   await openSample(page);

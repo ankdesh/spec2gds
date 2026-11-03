@@ -35,12 +35,43 @@ The platform defines default bind addresses and ports in [`config/services.json`
 | **Log Viewer** | `6014` | `6014` | Real-time structured log viewer |
 | **Verification Planner** | `6016` | `6016` | Standalone verification planning and reference generator |
 
-### Host Binding and Public Address
-- **Bind Address**: Backend services bind to `0.0.0.0` by default to enable local intranet access.
-- **Public Host**: Defaults to auto-detected local IPv4. Set `SPEC2GDS_PUBLIC_HOST` to specify an explicit IP or hostname:
-  ```bash
-  export SPEC2GDS_PUBLIC_HOST="192.168.1.50"
-  ```
+### Address precedence and launch options
+
+Use **command line → configuration file → defaults** for all listeners.
+Select a file with `--service-config PATH`; omitted fields use the packaged
+shared defaults. Network environment settings have no effect. Credential,
+storage, and logging environment settings keep their existing rules.
+
+```bash
+scripts/serve-all.sh start --service-config config/services.json --public-host design-host.example
+uv run spec2gds-server --service-config config/services.json --port 6420
+npm --prefix circuit-designer run dev -- --service-config "$PWD/config/services.json" --port 6421 --ui-port 6422
+npm --prefix circuit-designer run dev:editor -- --service-config "$PWD/config/services.json" --port 6425
+npm --prefix ai-assistant run dev -- --service-config "$PWD/config/services.json" --port 6423 --no-open
+uv run verification-planner --service-config config/services.json
+uv run spec2gds-log-viewer --service-config config/services.json --no-open
+```
+
+Individual listeners also accept `--host` and `--public-host`. The combined
+launcher accepts `--host`, `--public-host`, `--spec-port`, `--circuit-port`,
+`--circuit-ui-port`, and `--assistant-port`. Circuit Designer's combined command
+uses `--ui-host`/`--ui-port` for its separate UI. Vite development and preview
+adapters consume product options before forwarding other arguments to Vite.
+Assistant adapters do the same before invoking the Harness.
+
+Concrete endpoint hosts control their advertised URLs. Wildcard listeners use
+the public host for browser URLs and matching loopback addresses for probes and
+proxies. `auto` selects the preferred outbound IPv4 address or the hostname.
+Verification Planner keeps its default loopback bind. Shared service/UI
+listeners must agree in the configuration. Python reload workers read an
+importable per-run factory; endpoints are never transported in environment
+variables. Snapshots resolve relative storage paths before they are saved.
+
+The combined launcher starts only Spec Editor, Circuit Designer, and AI
+Assistant. `TEMP_serve-all/` contains resolved snapshots, process identities,
+group IDs, effective endpoints, and logs. Stop and restart affect only recorded
+process groups. Untracked conflicts are reported with their address, port, and
+PID. A configuration change does not expand the stop target list.
 
 ---
 

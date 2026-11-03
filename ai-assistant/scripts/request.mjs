@@ -4,6 +4,7 @@ import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { parseLaunchArgs } from "../../runtime/service-config.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -15,7 +16,7 @@ for (let index = 0; index < args.length; index += 1) {
   if (passthrough) { task.push(value); continue; }
   if (value === "--") { passthrough = true; continue; }
   if (value === "--json") { options.json = true; continue; }
-  if (["--domain", "--service-url", "--document-id", "--document-name", "--entity-name", "--owner-document-key", "--scope", "--entity-kind", "--entity-id", "--session-id"].includes(value)) {
+  if (["--service-config", "--public-host", "--domain", "--service-url", "--document-id", "--document-name", "--entity-name", "--owner-document-key", "--scope", "--entity-kind", "--entity-id", "--session-id"].includes(value)) {
     const next = args[++index];
     if (!next) throw new Error(`${value} requires a value`);
     options[value.slice(2)] = next;
@@ -23,6 +24,7 @@ for (let index = 0; index < args.length; index += 1) {
   }
   task.push(value);
 }
+if (options["service-config"]) options["service-config"] = parseLaunchArgs(["--service-config", options["service-config"]]).options["service-config"];
 if (!task.length) throw new Error("Usage: npm run request -- [binding options] -- <one-off request>");
 const state = resolve(process.env.ASSISTANT_STATE || resolve(root, ".dev"));
 const scratchRoot = resolve(process.env.SPEC2GDS_SCRATCH_ROOT || resolve(state, "workspaces"));
@@ -92,6 +94,6 @@ if (options["session-id"]) {
   mkdirSync(env.DSH_PRODUCT_RUN_CWD, { recursive: true, mode: 0o700 });
 }
 headless.push(task.join(" "));
-const child = spawn(process.execPath, [resolve(root, "scripts/dev.mjs"), ...headless], { cwd: env.DSH_PRODUCT_RUN_CWD || root, env, stdio: "inherit" });
+const child = spawn(process.execPath, [resolve(root, "scripts/dev.mjs"), ...["service-config", "public-host"].flatMap(key => options[key] ? [`--${key}`, options[key]] : []), ...headless], { cwd: env.DSH_PRODUCT_RUN_CWD || root, env, stdio: "inherit" });
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));
 child.on("exit", (code, signal) => { process.exitCode = code ?? (signal ? 1 : 0); });

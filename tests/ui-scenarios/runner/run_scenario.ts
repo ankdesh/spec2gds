@@ -188,28 +188,30 @@ async function run(): Promise<void> {
   config.circuit_designer.preferences_file = join(isolated, "circuit-preferences.json");
   const configPath = join(isolated, "services.json"); writeFileSync(configPath, JSON.stringify(config));
   const fixture = liveModel ? null : await modelFixture(documentId, { title: documentTitle, largeProposal: args.includes("--large-proposal"), presentation });
-  const env = { ...process.env, SPEC2GDS_SERVICE_CONFIG: configPath, SPEC2GDS_PUBLIC_HOST: "127.0.0.1",
+  const env = { ...process.env,
+    SPEC2GDS_SERVICE_CONFIG: "/missing/obsolete-services.json", SPEC2GDS_PUBLIC_HOST: "obsolete.invalid",
+    SPEC_SERVICE_HOST: "obsolete.invalid", SPEC_SERVICE_PORT: "9", AGENT_SPEC_PORT: "9",
+    CIRCUIT_DESIGNER_PORT: "9", CIRCUIT_DESIGNER_UI_PORT: "9", CIRCUIT_DESIGNER_SERVICE_ORIGIN: "http://obsolete.invalid:9",
+    ASSISTANT_HOST: "obsolete.invalid", ASSISTANT_PORT: "9", AI_ASSISTANT_URL: "http://obsolete.invalid:9",
+    SPEC_SERVICE_ALLOWLIST: "http://obsolete.invalid:9", CIRCUIT_SERVICE_ALLOWLIST: "http://obsolete.invalid:9",
+    VITE_AI_ASSISTANT_UI_URL: "http://obsolete.invalid:9", VITE_CIRCUIT_DESIGNER_SERVICE_URL: "http://obsolete.invalid:9",
     SPEC_EDITOR_STATE_ROOT: join(isolated, "owner-state"), ASSISTANT_STATE: join(isolated, "assistant-state"),
     SPEC2GDS_SCRATCH_ROOT: join(isolated, "workspaces"), SPEC_DOCUMENT_ROOT: dirname(packagePath),
-    CIRCUIT_DESIGNER_HOST: "127.0.0.1", CIRCUIT_DESIGNER_PORT: String(circuitPort), CIRCUIT_DESIGNER_UI_HOST: "127.0.0.1", CIRCUIT_DESIGNER_UI_PORT: String(circuitUiPort),
-    CIRCUIT_DESIGNER_PREFERENCES_FILE: join(isolated, "circuit-preferences.json"),
-    CIRCUIT_DESIGNER_SERVICE_ORIGIN: `http://127.0.0.1:${circuitPort}`,
-    ASSISTANT_HOST: "127.0.0.1", ASSISTANT_PORT: String(assistantPort), ASSISTANT_PROFILE: "spec2gds-web",
-    SPEC_SERVICE_ALLOWLIST: owner, CIRCUIT_SERVICE_ALLOWLIST: `http://127.0.0.1:${circuitPort}/api/circuit-designer/v1`,
+    ASSISTANT_PROFILE: "spec2gds-web",
     SPEC2GDS_SESSION_COMPRESSION: "none", ASSISTANT_MAX_STEPS_PER_TURN: scenario === "smoke" ? "6" : process.env.ASSISTANT_MAX_STEPS_PER_TURN || (liveModel ? "12" : "5"),
     ASSISTANT_MAX_OUTPUT_TOKENS: scenario === "smoke" ? "4096" : process.env.ASSISTANT_MAX_OUTPUT_TOKENS || (liveModel ? "8192" : "1200"),
     ...(fixture ? { OPENAI_API_KEY: "local-fixture", OPENAI_BASE_URL: fixture.url, OPENAI_MODEL: "gpt-4o-mini", OPENAI_API: "openai-completions" } : {}) };
-  const ownerArgs = ["run", "--no-sync", "spec2gds-spec-service", "--host", "127.0.0.1", "--port", String(ownerPort), ...(approval === "review" ? ["--require-human-approval"] : [])];
+  const ownerArgs = ["run", "--no-sync", "spec2gds-spec-service", "--service-config", configPath, ...(approval === "review" ? ["--require-human-approval"] : [])];
   let ownerProcess = start("owner", "uv", ownerArgs, root, env);
-  const assistantProcess = start("assistant", process.execPath, ["scripts/dev.mjs", "--no-open"], join(root, "ai-assistant"), env);
+  const assistantProcess = start("assistant", process.execPath, ["scripts/dev.mjs", "--service-config", configPath, "--no-open"], join(root, "ai-assistant"), env);
   let browser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     await Promise.all([healthy(`${owner}/health`, ownerProcess), healthy(`${assistant}/readyz`, assistantProcess)]);
     if (presentation) {
-      const circuitService = start("circuit-service", "npm", ["run", "service"], join(root, "circuit-designer"), env);
+      const circuitService = start("circuit-service", "npm", ["run", "service", "--", "--service-config", configPath], join(root, "circuit-designer"), env);
       const uiMode = process.env.CIRCUIT_DESIGNER_UI_MODE ?? (existsSync(join(root, "circuit-designer/apps/standalone/dist/index.html")) ? "preview" : "dev");
       const uiScript = uiMode === "dev" ? "dev:standalone" : "preview:standalone";
-      const circuitUi = start("circuit-ui", "npm", ["run", uiScript], join(root, "circuit-designer"), env);
+      const circuitUi = start("circuit-ui", "npm", ["run", uiScript, "--", "--service-config", configPath], join(root, "circuit-designer"), env);
       await healthy(`http://127.0.0.1:${circuitUiPort}/api/circuit-designer/v1/health`, circuitUi);
     }
     assert.equal((await json(`${owner}/assistant/capabilities`)).approval_policy, approval);

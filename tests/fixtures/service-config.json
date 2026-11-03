@@ -1,0 +1,17 @@
+[
+  {"name":"defaults", "config":{"public_host":"design.test"}, "url":"http://design.test:6010", "local":"http://127.0.0.1:6010"},
+  {"name":"file", "config":{"public_host":"design.test","spec_editor":{"service":{"port":6420},"ui":{"port":6420}}}, "url":"http://design.test:6420", "local":"http://127.0.0.1:6420"},
+  {"name":"cli", "config":{"public_host":"file.test","spec_editor":{"service":{"port":6420},"ui":{"port":6420}}}, "overrides":{"public_host":"cli.test","spec_editor":{"service":{"port":6421},"ui":{"port":6421}}}, "url":"http://cli.test:6421", "local":"http://127.0.0.1:6421"},
+  {"name":"concrete", "config":{"public_host":"design.test","spec_editor":{"service":{"host":"service.test"},"ui":{"host":"service.test"}}}, "url":"http://service.test:6010", "local":"http://service.test:6010"},
+  {"name":"ipv6", "config":{"public_host":"2001:db8::10","spec_editor":{"service":{"host":"::"},"ui":{"host":"::"}}}, "url":"http://[2001:db8::10]:6010", "local":"http://[::1]:6010"},
+  {"name":"concrete-ipv6", "config":{"public_host":"design.test","spec_editor":{"service":{"host":"[::1]"},"ui":{"host":"[::1]"}}}, "url":"http://[::1]:6010", "local":"http://[::1]:6010"},
+  {"name":"zero", "config":{"spec_editor":{"service":{"port":0}}}, "error":"port must be between"},
+  {"name":"too-high", "config":{"spec_editor":{"service":{"port":65536}}}, "error":"port must be between"},
+  {"name":"boolean", "config":{"spec_editor":{"service":{"port":true}}}, "error":"port must be between"},
+  {"name":"string", "config":{"spec_editor":{"service":{"port":"6420"}}}, "error":"port must be between"},
+  {"name":"fraction", "config":{"spec_editor":{"service":{"port":6420.5}}}, "error":"port must be between"},
+  {"name":"shared-listener", "config":{"ai_assistant":{"service":{"port":6420}}}, "error":"same listener"},
+  {"name":"empty-host", "config":{"public_host":""}, "error":"public_host"},
+  {"name":"url-host", "config":{"public_host":"http://design.test"}, "error":"public_host"},
+  {"name":"schema", "config":{"schema_version":3}, "error":"schema_version"}
+]

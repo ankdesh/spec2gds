@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { prepareServiceLaunch, profileEntries } from "./service-launch.mjs";
 import { checkHarnessPackages } from "./check-harness-packages.mjs";
 
 // The pinned Harness CLI enters through import.meta.main. Older Node 24
@@ -25,24 +26,6 @@ const env = {
 };
 const profile = env.ASSISTANT_PROFILE || "spec2gds-web";
 env.ASSISTANT_PROFILE = profile;
-const registryPath = resolve(env.SPEC2GDS_SERVICE_CONFIG || resolve(root, "../config/services.json"));
-if (existsSync(registryPath)) {
-  const registry = JSON.parse(readFileSync(registryPath, "utf8"));
-  const publicHost = env.SPEC2GDS_PUBLIC_HOST && env.SPEC2GDS_PUBLIC_HOST !== "auto"
-    ? env.SPEC2GDS_PUBLIC_HOST
-    : registry.public_host && registry.public_host !== "auto" ? registry.public_host : "127.0.0.1";
-  const endpoint = (value, host) => {
-    const selectedHost = ["0.0.0.0", "::", "[::]"].includes(String(value.host)) ? host : value.host;
-    const defaultPort = value.scheme === "https" ? 443 : 80;
-    const port = Number(value.port) === defaultPort ? "" : `:${Number(value.port)}`;
-    return `${value.scheme}://${selectedHost}${port}${String(value.base_path || "").replace(/\/$/, "")}`;
-  };
-  const allowlist = (value) => [...new Set([endpoint(value, "127.0.0.1"), endpoint(value, publicHost)])].join(",");
-  env.SPEC_SERVICE_ALLOWLIST ||= allowlist(registry.spec_editor.service);
-  env.CIRCUIT_SERVICE_ALLOWLIST ||= allowlist(registry.circuit_designer.service);
-  env.ASSISTANT_HOST ||= String(registry.ai_assistant.service.host);
-  env.ASSISTANT_PORT ||= String(registry.ai_assistant.service.port);
-}
 if (!existsSync(resolve(root, "lib/index.js")) || !existsSync(resolve(root, "bundles/web/lib/client.js"))) {
   throw new Error("Build the assistant first: npm run build");
 }
@@ -62,7 +45,10 @@ prepareProductProfile(root, env.DSH_HOME, {
   localBundles: selected.localBundles.map(path => resolve(root, path)), patchReload: selected.patchReload,
 });
 env.SPEC2GDS_CATALOG_ROOT = resolve(root, "profile/catalog");
-const child = spawn(process.execPath, [resolve(packageDirectory("@ankdesh/dsh", root), "lib/bin.js"), "--profile", profile, ...process.argv.slice(2)], {
+const anchor = resolve(packageDirectory("@ankdesh/dsh", root), "package.json");
+const launch = prepareServiceLaunch(process.argv.slice(2), resolve(root, ".."), await profileEntries(profile, anchor, env.DSH_HOME));
+if (profile === "spec2gds-web") console.log(`AI Assistant: ${launch.url}`);
+const child = spawn(process.execPath, [resolve(packageDirectory("@ankdesh/dsh", root), "lib/bin.js"), "--profile", profile, ...launch.args], {
   cwd: env.DSH_PRODUCT_RUN_CWD || root, env, stdio: "inherit",
 });
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => child.kill(signal));

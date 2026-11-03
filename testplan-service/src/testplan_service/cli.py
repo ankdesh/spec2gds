@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Sequence
 
 import uvicorn
+from spec2gds_runtime.launch import factory_bootstrap
+from spec2gds_runtime.service_config import endpoint_url, listener_overrides, resolve_config
 
-from testplan_service.api.app import create_app
 from testplan_service.constants import (
     DEFAULT_PRODUCT_TITLE,
-    DEFAULT_SERVICE_HOST,
-    DEFAULT_SERVICE_PORT,
     DEFAULT_STORAGE_DIR,
 )
 
@@ -26,17 +25,10 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         prog="verification-planner",
         description=f"{DEFAULT_PRODUCT_TITLE} Service and Interactive Web Editor",
     )
-    parser.add_argument(
-        "--host",
-        default=DEFAULT_SERVICE_HOST,
-        help=f"Bind host address (default: {DEFAULT_SERVICE_HOST})",
-    )
-    parser.add_argument(
-        "--port",
-        type=int,
-        default=DEFAULT_SERVICE_PORT,
-        help=f"Bind port (default: {DEFAULT_SERVICE_PORT})",
-    )
+    parser.add_argument("--service-config", type=Path)
+    parser.add_argument("--public-host")
+    parser.add_argument("--host")
+    parser.add_argument("--port", type=int)
     parser.add_argument(
         "--storage-dir",
         default=DEFAULT_STORAGE_DIR,
@@ -52,6 +44,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
+    overrides = listener_overrides("verification_planner", host=args.host, port=args.port)
+    if args.public_host is not None:
+        overrides["public_host"] = args.public_host
+    config = resolve_config(args.service_config, overrides=overrides)
+    endpoint = config["verification_planner"]["service"]
+    args.host, args.port = endpoint["host"], endpoint["port"]
+    print(f"Verification Planner: {endpoint_url(config['verification_planner']['ui'], config['public_host'])}")
     storage_path = Path(args.storage_dir).resolve()
 
     logger.info(
@@ -62,10 +61,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         storage_path,
     )
 
-    app = create_app(storage_dir=storage_path)
+    app = factory_bootstrap(
+        "def create_app():\n"
+        "    from testplan_service.api.app import create_app as build\n"
+        f"    return build(storage_dir=Path({str(storage_path)!r}))\n",
+        config,
+    )
 
     uvicorn.run(
         app,
+        factory=True,
         host=args.host,
         port=args.port,
         reload=args.reload,

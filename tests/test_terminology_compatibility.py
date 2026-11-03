@@ -11,11 +11,11 @@ from spec2gds.spec.spec_format.spec_service_store import SpecServiceBindings
 def test_service_environment_and_approval_aliases(monkeypatch):
     monkeypatch.setenv("AGENT_SPEC_HOST", "127.0.0.2")
     monkeypatch.setenv("AGENT_SPEC_PORT", "6020")
-    assert _parser("server").parse_args([]).host == "127.0.0.2"
+    assert _parser("server").parse_args([]).host is None
     monkeypatch.setenv("SPEC_SERVICE_HOST", "127.0.0.3")
     monkeypatch.setenv("SPEC_SERVICE_PORT", "6021")
     args = _parser("server").parse_args(["--require-designer-approval"])
-    assert (args.host, args.port, args.require_designer_approval) == ("127.0.0.3", 6021, True)
+    assert (args.host, args.port, args.require_designer_approval) == (None, None, True)
     assert _parser("server").parse_args(["--require-human-approval"]).require_designer_approval
 
 

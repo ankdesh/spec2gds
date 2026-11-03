@@ -20,3 +20,13 @@ const {writeFileSync}=await import('node:fs');
 recipe.profiles={[profile]:{...recipe.profiles[profile],localBundles:recipe.profiles[profile].bundles.map(name=>'../'+name)}};
 recipe.defaultProfile=profile;
 writeFileSync(resolve(output,'harness.product.json'),JSON.stringify(recipe,null,2)+'\n');
+
+// Ship the shared resolver and defaults. Releases do not require a repository checkout.
+cpSync(resolve(root,'../runtime/service-config.cjs'),resolve(output,'runtime/service-config.cjs'),{recursive:true});
+cpSync(resolve(root,'../runtime/service-config.mjs'),resolve(output,'runtime/service-config.mjs'),{recursive:true});
+cpSync(resolve(root,'../runtime/src/spec2gds_runtime/service-defaults.json'),resolve(output,'runtime/src/spec2gds_runtime/service-defaults.json'),{recursive:true});
+cpSync(resolve(root,'../config/services.json'),resolve(output,'config/services.json'),{recursive:true});
+cpSync(resolve(root,'scripts/service-launch.mjs'),resolve(output,'scripts/service-launch.mjs'),{recursive:true});
+// The release launcher keeps the repository-relative import layout.
+const launcher=readFileSync(resolve(output,'scripts/service-launch.mjs'),'utf8').replace('../../runtime/service-config.mjs','../runtime/service-config.mjs');
+writeFileSync(resolve(output,'scripts/service-launch.mjs'),launcher);

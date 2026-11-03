@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
-import socket
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from spec2gds_runtime import LogSettings, load_log_settings
+from spec2gds_runtime.service_config import default_config_path, resolve_config
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,6 +53,9 @@ class ServiceRegistry:
     logging: LogSettings
     activities: ActivitySettings
     public_host: str
+    verification_planner: HostedService
+    spec_editor_dev_ui: ServiceEndpoint
+    config: dict[str, Any]
 
     def public_dict(self) -> dict[str, dict[str, str]]:
         """Return the safe URL-only directory exposed to browser clients."""
@@ -69,27 +70,26 @@ class ServiceRegistry:
 
 
 def service_config_path() -> Path:
-    """Resolve an explicit registry or the repository's tracked default."""
-    configured = os.environ.get("SPEC2GDS_SERVICE_CONFIG")
-    if configured:
-        return Path(configured).expanduser().resolve()
-    return Path(__file__).resolve().parents[1] / "config" / "services.json"
+    """Return the default file. Alternate files require an explicit parameter."""
+    return default_config_path()
 
 
-def load_service_registry(path: Path | None = None) -> ServiceRegistry:
-    """Read and validate the small versioned JSON registry."""
-    source = path or service_config_path()
-    payload = json.loads(source.read_text(encoding="utf-8"))
-    if payload.get("schema_version") != 2:
-        raise ValueError("Service registry schema_version must be 2.")
-    public_host = _public_host(payload)
+def load_service_registry(path: Path | None = None, *, overrides: dict | None = None,
+                          config: dict | None = None) -> ServiceRegistry:
+    """Read validated effective settings, without network environment inputs."""
+    source = Path(path) if path is not None else service_config_path()
+    payload = config if config is not None else resolve_config(source, overrides=overrides)
+    public_host = payload["public_host"]
     return ServiceRegistry(
         spec_editor=_hosted_service(payload, "spec_editor", public_host),
         circuit_designer=_hosted_service(payload, "circuit_designer", public_host),
         ai_assistant=_hosted_service(payload, "ai_assistant", public_host),
-        logging=load_log_settings(source),
+        verification_planner=_hosted_service(payload, "verification_planner", public_host),
+        spec_editor_dev_ui=_endpoint(payload["spec_editor"]["dev_ui"], "spec_editor.dev_ui", public_host),
+        logging=load_log_settings(source, config=payload),
         activities=_activity_settings(payload, source),
         public_host=public_host,
+        config=payload,
     )
 
 
@@ -145,26 +145,5 @@ def _endpoint(value: Any, name: str, public_host: str) -> ServiceEndpoint:
         host=host.strip(),
         port=port,
         base_path=base_path,
-        public_host=public_host,
+        public_host=public_host if host.strip() in {"0.0.0.0", "::"} else "",
     )
-
-
-def _public_host(payload: dict[str, Any]) -> str:
-    """Resolve the host advertised to browsers separately from wildcard binds."""
-    configured = os.environ.get("SPEC2GDS_PUBLIC_HOST", str(payload.get("public_host", "auto")))
-    value = configured.strip()
-    if value.lower() == "auto":
-        value = _primary_ipv4()
-    if not value or "://" in value or "/" in value:
-        raise ValueError("public_host must be auto, an IP address, or a hostname.")
-    return value
-
-
-def _primary_ipv4() -> str:
-    """Discover the preferred outbound LAN address without sending network data."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-            probe.connect(("192.0.2.1", 9))
-            return str(probe.getsockname()[0])
-    except OSError:
-        return socket.gethostname()

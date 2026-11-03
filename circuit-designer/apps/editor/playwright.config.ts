@@ -1,6 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
-const editorUrl = process.env.SPEC_EDITOR_E2E_UI_URL ?? "http://127.0.0.1:6015";
+import { resolveConfig, endpointUrl } from "../../../runtime/service-config.mjs";
+const configPath = process.env.SPEC2GDS_TEST_SERVICE_CONFIG;
+const config = resolveConfig(configPath);
+const editorUrl = endpointUrl(config.spec_editor.dev_ui, config.public_host, { local: true, origin: true });
+const launchOptions = configPath ? ` -- --service-config ${JSON.stringify(configPath)}` : "";
+
 const isolated = process.env.SPEC2GDS_TEST_ISOLATED === "1";
 
 export default defineConfig({
@@ -15,7 +20,7 @@ export default defineConfig({
     screenshot: isolated ? "only-on-failure" : "off",
   },
   webServer: {
-    command: isolated ? `npm run dev -- --port ${new URL(editorUrl).port} --strictPort` : "npm run dev",
+    command: `npm run dev${launchOptions}`,
     url: editorUrl,
     reuseExistingServer: !isolated,
     timeout: 120_000,

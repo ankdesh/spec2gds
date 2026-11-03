@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
+import { prepareServiceLaunch, profileEntries } from "../scripts/service-launch.mjs";
 import { prepareProductProfile, packageDirectory } from "@ankdesh/ankdesh-product-tools";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -36,8 +37,10 @@ for (const [profileName, profile] of profiles) {
 const profile = env.ASSISTANT_PROFILE || recipe.defaultProfile || profiles[0][0];
 if (!Object.hasOwn(recipe.profiles, profile)) throw new Error(`Unknown assistant profile ${JSON.stringify(profile)}.`);
 env.ASSISTANT_PROFILE = profile;
-if (profile === "spec2gds-web") console.log(`spec2gds Harness assistant: http://127.0.0.1:${env.ASSISTANT_PORT || 6013}`);
-const child = spawn(process.execPath, [resolve(packageDirectory("@ankdesh/dsh", root), "lib/bin.js"), "--profile", profile, ...process.argv.slice(2)], {
+const anchor = resolve(packageDirectory("@ankdesh/dsh", root), "package.json");
+const launch = prepareServiceLaunch(process.argv.slice(2), state, await profileEntries(profile, anchor, env.DSH_HOME));
+if (profile === "spec2gds-web") console.log(`AI Assistant: ${launch.url}`);
+const child = spawn(process.execPath, [resolve(packageDirectory("@ankdesh/dsh", root), "lib/bin.js"), "--profile", profile, ...launch.args], {
   cwd: env.DSH_PRODUCT_RUN_CWD || state,
   env,
   stdio: "inherit",

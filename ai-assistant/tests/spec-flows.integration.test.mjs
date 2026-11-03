@@ -28,8 +28,8 @@ async function service(directory, policy) {
   config.public_host = '127.0.0.1'; config.logging.enabled = false; config.logging.file = join(directory, 'events.jsonl');
   config.activities.scratch_root = join(directory, 'generated'); config.circuit_designer.preferences_file = join(directory, 'preferences.json');
   const configPath = join(directory, 'services.json'); await writeFile(configPath, JSON.stringify(config));
-  const child = spawn(join(root, '.venv/bin/spec2gds-spec-service'), ['--host', '127.0.0.1', '--port', String(port), ...(policy === 'review' ? ['--require-designer-approval'] : [])],
-    { cwd: root, env: { ...process.env, SPEC2GDS_SERVICE_CONFIG: configPath, SPEC_EDITOR_STATE_ROOT: join(directory, 'spec-state') }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(join(root, '.venv/bin/spec2gds-spec-service'), ['--service-config', configPath, '--host', '127.0.0.1', '--port', String(port), ...(policy === 'review' ? ['--require-designer-approval'] : [])],
+    { cwd: root, env: { ...process.env, SPEC_EDITOR_STATE_ROOT: join(directory, 'spec-state') }, stdio: ['ignore', 'pipe', 'pipe'] });
   let log = ''; child.stdout.on('data', data => { log += data; }); child.stderr.on('data', data => { log += data; });
   const url = `http://127.0.0.1:${port}`, deadline = Date.now() + 30000;
   while (Date.now() < deadline) {

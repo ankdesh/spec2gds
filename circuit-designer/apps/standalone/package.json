@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "preview": "vite preview",
+    "dev": "node ../../scripts/run-vite.mjs standalone dev",
+    "preview": "node ../../scripts/run-vite.mjs standalone preview",
     "build": "tsc -b && vite build",
     "test": "vitest run --passWithNoTests"
   },

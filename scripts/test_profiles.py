@@ -93,7 +93,7 @@ def suite_catalogue() -> dict[str, Suite]:
            ["spec", "circuit", "assistant", "activities"])
     python("verification-api", ["testplan-service/tests"], ["spec", "verification", "activities"])
     python("activity-api", ["tests/spec/activities"], ["spec", "activities"])
-    python("shared-api", ["tests/test_service_registry.py", "tests/test_observability.py",
+    python("shared-api", ["tests/test_service_registry.py", "tests/test_service_config.py", "tests/test_serve_all.py", "tests/test_observability.py",
                            "tests/test_log_viewer.py", "tests/test_terminology_compatibility.py",
                            "tests/test_test_tiers.py", "tests/test_test_profiles.py",
                            "tests/test_test_report.py", "tests/test_test_coverage.py"], ["shared"])
@@ -256,14 +256,18 @@ def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[s
     config["public_host"] = "127.0.0.1"
     sockets = []
     try:
-        for name in ("spec_editor", "circuit_designer", "ai_assistant"):
-            for surface in ("service", "ui"):
-                config[name][surface]["host"] = "127.0.0.1"
-                if allocate_ports:
+        for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner"):
+            surfaces = ("service", "ui", "dev_ui") if name == "spec_editor" else ("service", "ui")
+            for surface in surfaces:
+                endpoint = config[name][surface]
+                endpoint["host"] = "127.0.0.1"
+                if surface == "ui" and name != "circuit_designer":
+                    endpoint["port"] = config[name]["service"]["port"]
+                elif allocate_ports:
                     listener = socket.socket()
                     sockets.append(listener)
                     listener.bind(("127.0.0.1", 0))
-                    config[name][surface]["port"] = listener.getsockname()[1]
+                    endpoint["port"] = listener.getsockname()[1]
     except OSError as error:
         env["SPEC2GDS_TEST_PORT_ERROR"] = f"Isolated browser ports are unavailable: {error}"
     finally:
@@ -275,17 +279,11 @@ def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[s
     config["circuit_designer"]["preferences_file"] = str(output / "preferences.json")
     config_path = output / "services.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n")
-    env.update(SPEC2GDS_SERVICE_CONFIG=str(config_path), SPEC2GDS_PUBLIC_HOST="127.0.0.1",
+    temporary = output / "TEMP_process"
+    temporary.mkdir(exist_ok=True)
+    env.update(SPEC2GDS_TEST_SERVICE_CONFIG=str(config_path),
+               TMPDIR=str(temporary), TMP=str(temporary), TEMP=str(temporary),
                SPEC_EDITOR_STATE_ROOT=str(output / "spec-state"),
-               SPEC_EDITOR_E2E_UI_URL=f"http://127.0.0.1:{config['spec_editor']['ui']['port']}",
-               CIRCUIT_DESIGNER_E2E_UI_URL=f"http://127.0.0.1:{config['circuit_designer']['ui']['port']}",
-               CIRCUIT_DESIGNER_E2E_API_URL=f"http://127.0.0.1:{config['circuit_designer']['service']['port']}/api/circuit-designer/v1",
-               CIRCUIT_DESIGNER_HOST="127.0.0.1",
-               CIRCUIT_DESIGNER_PORT=str(config["circuit_designer"]["service"]["port"]),
-               CIRCUIT_DESIGNER_UI_HOST="127.0.0.1",
-               CIRCUIT_DESIGNER_UI_PORT=str(config["circuit_designer"]["ui"]["port"]),
-               CIRCUIT_DESIGNER_PREFERENCES_FILE=str(output / "preferences.json"),
-               CIRCUIT_DESIGNER_SERVICE_ORIGIN=f"http://127.0.0.1:{config['circuit_designer']['service']['port']}",
                ASSISTANT_STATE=str(output / "assistant-state"),
                SPEC_DOCUMENT_ROOT=str(output / "spec-documents"),
                SPEC2GDS_SCRATCH_ROOT=str(output / "scratch"))
@@ -341,7 +339,7 @@ def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
     if suite.evidence in {"isolated", "generated-contract", "catalogued-only"}:
         # Unit/API fixtures control their own registry. Browser configuration
         # must not change the tracked-default contract that those suites verify.
-        command_env.pop("SPEC2GDS_SERVICE_CONFIG", None)
+        command_env.pop("SPEC2GDS_TEST_SERVICE_CONFIG", None)
         command_env.pop("SPEC2GDS_PUBLIC_HOST", None)
     try:
         with raw_log.open("w") as stream:

@@ -21,8 +21,11 @@ uv run python -m pytest testplan-service/tests -q
 ```
 
 For an independent environment, run `uv sync` and `uv run testplan-service`
-inside this directory. Defaults can be set through `VERIFICATION_HOST`,
-`VERIFICATION_PORT` and `VERIFICATION_STORAGE_DIR`. Open `http://127.0.0.1:6016/`;
+inside this directory. Use `--service-config PATH`, `--host`, `--port`, and
+`--public-host` for addresses, with precedence CLI → file → defaults. The
+`verification_planner.service/ui` entries use one listener. `VERIFICATION_HOST`
+and `VERIFICATION_PORT` have no effect. `VERIFICATION_STORAGE_DIR` remains
+supported. Open `http://127.0.0.1:6016/`;
 OpenAPI is at `/docs`, API routes at `/api/verification/v1`. No Node build or
 other service is needed. The combined root launcher does not start this service.
 

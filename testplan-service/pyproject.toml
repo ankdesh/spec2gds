@@ -5,6 +5,7 @@ description = "Self-contained hierarchical testplan management service and inter
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "spec2gds-runtime",
     "fastapi>=0.116.0",
     "pydantic>=2.10.0",
     "uvicorn[standard]>=0.30.0",
@@ -37,3 +38,6 @@ filterwarnings = [
     "ignore:cannot collect test class 'TestIR.*':pytest.PytestCollectionWarning",
     "ignore:.*StarletteDeprecationWarning.*",
 ]
+
+[tool.uv.sources]
+spec2gds-runtime = { path = "../runtime", editable = true }

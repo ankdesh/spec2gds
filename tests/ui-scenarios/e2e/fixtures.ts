@@ -58,6 +58,8 @@ export class Stack {
     Object.assign(config.spec_editor.ui, { host: "127.0.0.1", port: spec });
     Object.assign(config.circuit_designer.service, { host: "127.0.0.1", port: circuit });
     Object.assign(config.circuit_designer.ui, { host: "127.0.0.1", port: ui });
+    Object.assign(config.verification_planner.service, { host: "127.0.0.1", port: planner });
+    Object.assign(config.verification_planner.ui, { host: "127.0.0.1", port: planner });
     config.logging.enabled = false;
     config.logging.file = join(this.directory, "events.jsonl");
     config.activities.scratch_root = join(this.directory, "generated");
@@ -66,24 +68,18 @@ export class Stack {
     const configPath = join(this.directory, "services.json");
     writeFileSync(configPath, JSON.stringify(config));
     this.env = { ...process.env,
-      SPEC2GDS_SERVICE_CONFIG: configPath, SPEC2GDS_PUBLIC_HOST: "127.0.0.1",
       SPEC_EDITOR_STATE_ROOT: join(this.directory, "spec-state"),
       SPEC_DOCUMENT_ROOT: this.directory, ASSISTANT_STATE: join(this.directory, "assistant-state"),
       SPEC2GDS_SCRATCH_ROOT: join(this.directory, "scratch"),
       SPEC2GDS_E2E_BARRIER: join(this.directory, "barrier"),
       PYTHONPATH: `${join(root, "tests/ui-scenarios/e2e")}:${root}${process.env.PYTHONPATH ? `:${process.env.PYTHONPATH}` : ""}`,
-      CIRCUIT_DESIGNER_PREFERENCES_FILE: config.circuit_designer.preferences_file,
-      CIRCUIT_DESIGNER_HOST: "127.0.0.1", CIRCUIT_DESIGNER_PORT: String(circuit),
-      CIRCUIT_DESIGNER_UI_HOST: "127.0.0.1", CIRCUIT_DESIGNER_UI_PORT: String(ui),
-      CIRCUIT_DESIGNER_SERVICE_ORIGIN: this.circuit,
-      CIRCUIT_DESIGNER_E2E_API_URL: `${this.circuit}/api/circuit-designer/v1`,
     };
-    this.commands.set("spec", [join(root, ".venv/bin/spec2gds-spec-service"), ["--host", "127.0.0.1", "--port", String(spec)], root, `${this.spec}/health`]);
-    this.commands.set("verification", [join(root, ".venv/bin/verification-planner"), ["--host", "127.0.0.1", "--port", String(planner), "--storage-dir", join(this.directory, "planner")], root, `${this.planner}/api/verification/v1/health`]);
-    this.commands.set("circuit", ["npm", ["run", "service"], join(root, "circuit-designer"), `${this.circuit}/api/circuit-designer/v1/health`]);
+    this.commands.set("spec", [join(root, ".venv/bin/spec2gds-spec-service"), ["--service-config", configPath], root, `${this.spec}/health`]);
+    this.commands.set("verification", [join(root, ".venv/bin/verification-planner"), ["--service-config", configPath, "--storage-dir", join(this.directory, "planner")], root, `${this.planner}/api/verification/v1/health`]);
+    this.commands.set("circuit", ["npm", ["run", "service", "--", "--service-config", configPath], join(root, "circuit-designer"), `${this.circuit}/api/circuit-designer/v1/health`]);
     const uiMode = process.env.CIRCUIT_DESIGNER_UI_MODE ?? (existsSync(join(root, "circuit-designer/apps/standalone/dist/index.html")) ? "preview" : "dev");
     const uiScript = uiMode === "dev" ? "dev:standalone" : "preview:standalone";
-    this.commands.set("circuit-ui", ["npm", ["run", uiScript], join(root, "circuit-designer"), `${this.circuitUI}/api/circuit-designer/v1/health`]);
+    this.commands.set("circuit-ui", ["npm", ["run", uiScript, "--", "--service-config", configPath], join(root, "circuit-designer"), `${this.circuitUI}/api/circuit-designer/v1/health`]);
   }
 
   static async create(info: TestInfo): Promise<Stack> {

@@ -6,9 +6,8 @@ After=network.target
 Type=simple
 WorkingDirectory=%h/apps/spec2gds-assistant/current
 Environment=ASSISTANT_STATE=%h/.local/state/spec2gds-assistant
-Environment=ASSISTANT_PORT=6013
 EnvironmentFile=%h/.config/spec2gds-assistant/environment
-ExecStart=/usr/bin/env node %h/apps/spec2gds-assistant/current/deployment/launch.mjs
+ExecStart=/usr/bin/env node %h/apps/spec2gds-assistant/current/deployment/launch.mjs --service-config %h/.config/spec2gds-assistant/services.json
 Restart=on-failure
 RestartSec=3
 KillMode=control-group

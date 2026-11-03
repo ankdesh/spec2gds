@@ -79,8 +79,8 @@ test("browser plugin creates and opens the requested unbound session", async () 
 });
 
 test("combined launcher starts the Assistant without opening a browser", () => {
-  const launcher = readFileSync(resolve(root, "../scripts/serve-all.sh"), "utf8");
-  assert.match(launcher, /start_service "ai-assistant"[^\n]+npm run dev -- --no-open/);
+  const launcher = readFileSync(resolve(root, "../scripts/serve_all.py"), "utf8");
+  assert.match(launcher, /"AI Assistant"[^\n]+"npm", "run", "dev"[^\n]+"--no-open"/);
 });
 
 test("concurrent workspace synchronization and launch create once and signal readiness", async () => {

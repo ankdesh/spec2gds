@@ -8,8 +8,8 @@ import os
 DEFAULT_SERVICE_NAME: str = "verification-planner"
 DEFAULT_PRODUCT_TITLE: str = "Verification Planner"
 DEFAULT_SERVICE_VERSION: str = "1.0.0"
-DEFAULT_SERVICE_HOST: str = os.getenv("VERIFICATION_HOST", "127.0.0.1")
-DEFAULT_SERVICE_PORT: int = int(os.getenv("VERIFICATION_PORT", "6016"))
+DEFAULT_SERVICE_HOST: str = "127.0.0.1"
+DEFAULT_SERVICE_PORT: int = 6016
 DEFAULT_STORAGE_DIR: str = os.getenv("VERIFICATION_STORAGE_DIR", "verification-data")
 LEGACY_STORAGE_DIR: str = ".testplans"
 

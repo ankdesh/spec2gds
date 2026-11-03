@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite --host 0.0.0.0",
+    "dev": "node ../../scripts/run-vite.mjs editor dev",
     "build": "tsc -b && vite build",
     "test": "vitest run --passWithNoTests",
-    "test:e2e": "node scripts/run-playwright.mjs"
+    "test:e2e": "node scripts/run-playwright.mjs",
+    "preview": "node ../../scripts/run-vite.mjs editor preview"
   },
   "dependencies": {
     "@a2ui/react": "0.9.1",

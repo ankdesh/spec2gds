@@ -16,7 +16,6 @@ import dataclasses
 import hashlib
 import json
 import os
-import socket
 import threading
 import time
 import traceback
@@ -53,10 +52,12 @@ class LogSettings:
     viewer_public_host: str | None = None
 
 
-def load_log_settings(config_path: Path) -> LogSettings:
+def load_log_settings(config_path: Path, *, config: dict | None = None) -> LogSettings:
     """Load logging settings, allowing only the two documented env overrides."""
     source = config_path.expanduser().resolve()
-    payload = json.loads(source.read_text(encoding="utf-8"))
+    from .service_config import resolve_config
+
+    payload = config if config is not None else resolve_config(source)
     if payload.get("schema_version") != 2:
         raise ValueError("Service registry schema_version must be 2.")
     value = payload.get("logging")
@@ -95,24 +96,8 @@ def load_log_settings(config_path: Path) -> LogSettings:
         max_bytes,
         host,
         port,
-        _public_host(payload),
+        payload["public_host"] if host in {"0.0.0.0", "::"} else host,
     )
-
-
-def _public_host(payload: dict[str, Any]) -> str:
-    """Choose the host shown in viewer links without changing its bind address."""
-    configured = os.environ.get("SPEC2GDS_PUBLIC_HOST", str(payload.get("public_host", "auto")))
-    value = configured.strip()
-    if value.lower() == "auto":
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-                probe.connect(("192.0.2.1", 9))
-                value = str(probe.getsockname()[0])
-        except OSError:
-            value = socket.gethostname()
-    if not value or "://" in value or "/" in value:
-        raise ValueError("public_host must be auto, an IP address, or a hostname.")
-    return value
 
 
 def _environment_boolean(value: str) -> bool:

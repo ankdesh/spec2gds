@@ -1,6 +1,11 @@
 import { defineConfig } from "@playwright/test";
 
-const circuitUiUrl = process.env.CIRCUIT_DESIGNER_E2E_UI_URL ?? "http://127.0.0.1:6012";
+import { resolveConfig, endpointUrl } from "../runtime/service-config.mjs";
+const configPath = process.env.SPEC2GDS_TEST_SERVICE_CONFIG;
+const config = resolveConfig(configPath);
+const circuitUiUrl = endpointUrl(config.circuit_designer.ui, config.public_host, { local: true });
+const launchOptions = configPath ? ` -- --service-config ${JSON.stringify(configPath)}` : "";
+
 const isolated = process.env.SPEC2GDS_TEST_ISOLATED === "1";
 
 export default defineConfig({
@@ -14,7 +19,7 @@ export default defineConfig({
     screenshot: isolated ? "only-on-failure" : "off",
   },
   webServer: {
-    command: "npm run dev",
+    command: `npm run dev${launchOptions}`,
     url: circuitUiUrl,
     reuseExistingServer: !isolated,
     timeout: 120_000,

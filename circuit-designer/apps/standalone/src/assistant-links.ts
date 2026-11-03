@@ -10,15 +10,13 @@ export interface AssistantLinkConfig {
   } };
 }
 
-/** Resolve explicit URLs first, then the service directory, then local standalone defaults. */
+/** Read browser links from the effective service directory. */
 export function resolveAssistantLinks(config: AssistantLinkConfig): { uiUrl: string; serviceUrl: string } {
-  const protocol = new URL(config.origin).protocol;
   return {
     uiUrl: config.assistantUiUrl || config.directory?.services?.ai_assistant?.ui_url
-      || `${protocol}//${config.hostname}:6013`,
+      || "",
     serviceUrl: config.circuitServiceUrl || config.directory?.services?.circuit_designer?.service_url
-      || (/^https?:\/\//.test(config.apiBase) ? config.apiBase
-        : `${protocol}//${config.hostname}:6011/api/circuit-designer/v1`),
+      || new URL(config.apiBase, config.origin).href,
   };
 }
 

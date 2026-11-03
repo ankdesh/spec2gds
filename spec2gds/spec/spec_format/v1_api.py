@@ -376,7 +376,7 @@ def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtens
     return load_extension_modules(extension_modules, registry)
 
 
-def create_app(require_designer_approval: bool | None = None, *, require_human_approval: bool | None = None) -> typing.Any:
+def create_app(require_designer_approval: bool | None = None, *, require_human_approval: bool | None = None, service_config: Path | None = None, service_registry: typing.Any = None) -> typing.Any:
     """Create the production local V1 API; only the deterministic source format is accepted."""
     try:
         import fastapi
@@ -396,7 +396,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     @app.exception_handler(SpecDiskConflict)
     async def disk_conflict_handler(_request: typing.Any, exc: SpecDiskConflict) -> typing.Any:
         return fastapi.responses.JSONResponse(status_code=409, content={"detail": str(exc)})
-    registry = load_service_registry()
+    registry = service_registry or load_service_registry(service_config)
     activity_registry = _product_activity_registry(registry.activities.extension_modules)
     logger = StructuredLogger("spec-editor", registry.logging)
     app.state.structured_logger = logger
@@ -422,22 +422,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         return payload
 
     def service_urls() -> dict[str, dict[str, str]]:
-        configured = registry.public_dict()
-        configured["spec_editor"]["service_url"] = os.environ.get(
-            "SPEC_SERVICE_URL", os.environ.get("SPEC_EDITOR_SERVICE_URL", configured["spec_editor"]["service_url"])
-        ).rstrip("/")
-        configured["circuit_designer"]["service_url"] = os.environ.get(
-            "CIRCUIT_SERVICE_URL",
-            os.environ.get("CIRCUIT_DESIGNER_SERVICE_URL", configured["circuit_designer"]["service_url"]),
-        ).rstrip("/")
-        configured["circuit_designer"]["ui_url"] = os.environ.get(
-            "CIRCUIT_DESIGNER_UI_URL", configured["circuit_designer"]["ui_url"]
-        ).rstrip("/")
-        assistant_override = os.environ.get("AI_ASSISTANT_URL")
-        if assistant_override:
-            configured["ai_assistant"]["service_url"] = assistant_override.rstrip("/")
-            configured["ai_assistant"]["ui_url"] = assistant_override.rstrip("/")
-        return configured
+        return registry.public_dict()
 
     @app.middleware("http")
     async def log_request(request: typing.Any, call_next: typing.Any) -> typing.Any:

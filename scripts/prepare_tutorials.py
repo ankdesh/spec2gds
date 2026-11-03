@@ -117,8 +117,7 @@ def prepare(output: Path, planner_url: str | None = None):
     config_path = output / "services.json"
     config_path.write_text(json.dumps(config, indent=2) + "\n")
     # Scoped configuration for this process only; the tracked registry stays unchanged.
-    saved = {key: os.environ.get(key) for key in ["SPEC2GDS_SERVICE_CONFIG", "SPEC_EDITOR_STATE_ROOT"]}
-    os.environ["SPEC2GDS_SERVICE_CONFIG"] = str(config_path)
+    saved = {key: os.environ.get(key) for key in ["SPEC_EDITOR_STATE_ROOT"]}
     os.environ["SPEC_EDITOR_STATE_ROOT"] = str(output / "spec-state")
     try:
         from fastapi.testclient import TestClient
@@ -129,7 +128,7 @@ def prepare(output: Path, planner_url: str | None = None):
         from spec2gds.spec.spec_format.v1_api import create_app
 
         starts = {}
-        with TestClient(create_app()) as client:
+        with TestClient(create_app(service_config=config_path)) as client:
             for lesson, stage in STARTS.items():
                 destination = output / f"{lesson}-start.spec"
                 source = build_start(client, destination, stage, example)

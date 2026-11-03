@@ -73,10 +73,16 @@ that still differ. Tests of the current code can pass while those gaps remain op
 
 This section is the single assistant-defaults reference. Other guides must link here.
 The deployment profile is [cordis.patch.yml](../ai-assistant/profile/cordis.patch.yml).
+Service addresses use **CLI → file → defaults**. Both development and packaged
+launchers accept `--service-config PATH`, `--host`, `--port`, and `--public-host`.
+They apply effective listener addresses, service allowlists, and HTTP monitor
+origins through a generated Harness `--patch` overlay. Obsolete network
+environment variables have no effect. Releases include the resolver and default
+configuration and can run without a repository checkout. See the
+[configuration guide](../README.md#configure-service-addresses).
 
 | Variable | Default / role |
 | --- | --- |
-| `ASSISTANT_HOST` / `ASSISTANT_PORT` | `0.0.0.0` / `6013`. |
 | `ASSISTANT_STATE` | `ai-assistant/.dev` in development. Back up the complete root. |
 | `ASSISTANT_PROFILE` | `spec2gds-web`; `spec2gds-headless` omits the web UI. |
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces`; private logical-source grouping paths. |
@@ -86,12 +92,9 @@ The deployment profile is [cordis.patch.yml](../ai-assistant/profile/cordis.patc
 | `OPENAI_API` | Optional protocol override: `openai-responses` or `openai-completions`. Luna defaults to Responses when selected with `OPENAI_MODEL`; other models retain Chat Completions. |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1`. |
 | `OPENAI_API_KEY` | No default credential. Required for provider model calls. |
-| `SPEC_SERVICE_ALLOWLIST` | `http://127.0.0.1:6010`; comma-separated exact service URLs. |
-| `CIRCUIT_SERVICE_ALLOWLIST` | `http://127.0.0.1:6011/api/circuit-designer/v1`; comma-separated exact service URLs. |
 | `ASSISTANT_OWNER_TIMEOUT_MS` | `30000`; service request deadline. |
 | `ASSISTANT_MAX_OUTPUT_TOKENS` | `16384` (16,384); cap for each model response and configured compaction. Product range: 128–32,768. |
 | `ASSISTANT_MAX_STEPS_PER_TURN` | `3`; focused base model-request steps. Product range: 1–20. |
-| `ASSISTANT_HTTP_MONITOR_ORIGINS` | Configured service allowlists when unset; comma-separated exact monitoring origins. |
 
 The focused step limit gets one extra step after a visible structured-question
 call in that turn. Goal/orchestrated turns currently allow eight model steps.
@@ -318,7 +321,7 @@ Follow the failed request in this order:
    count, and last confirmed phase. A token cap can stop the answer after a context
    read while the document remains empty.
 
-Service output is under `logs/serve-all` for the combined launcher. Durable conversations
+Service output is under `TEMP_serve-all/` for the combined launcher. Durable conversations
 are under the configured Assistant runtime state; development snapshots commonly
 use `session.v3.jsonl.zstd`. Locate them with:
 

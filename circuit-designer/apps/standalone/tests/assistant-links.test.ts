@@ -16,7 +16,7 @@ describe("standalone Assistant links", () => {
     expect(launched.searchParams.get("document_id")).toBe("design a");
   });
 
-  it("uses the directory and retains documented local defaults", () => {
+  it("uses the directory and waits for an Assistant address", () => {
     const directory = { services: {
       ai_assistant: { ui_url: "https://assistant.example/ui" },
       circuit_designer: { service_url: "https://circuit.example:9443/api/circuit-designer/v1" },
@@ -26,8 +26,8 @@ describe("standalone Assistant links", () => {
       serviceUrl: "https://circuit.example:9443/api/circuit-designer/v1",
     });
     expect(resolveAssistantLinks(local)).toMatchObject({
-      uiUrl: "http://localhost:6013",
-      serviceUrl: "http://localhost:6011/api/circuit-designer/v1",
+      uiUrl: "",
+      serviceUrl: "http://localhost:5173/api/circuit-designer/v1",
     });
   });
 });
