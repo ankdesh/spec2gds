@@ -200,3 +200,13 @@ Follow [the testing strategy](testing-strategy.md) for profile selection,
 prerequisites, and evidence. Keep test output under an ignored repository
 `TEMP_` directory. Missing required tools or credentials make a profile
 incomplete.
+
+## Content actions and catalog import
+
+Use the right-side **Options** menu for saved-content actions. Collection menus add Components and Designs. Component and Design menus provide Verify, Activities, and Delete. Parameter, port, and instance rows use the same menu pattern. Save, Cancel, input fields, and top toolbar shortcuts remain visible.
+
+Select **Components → Options → Import from catalog…** to browse published Component releases. Search or filter the catalog, select a version, and review its interface, defaults, usage, and evidence. Select **Review import**, resolve conflicts with **Import as a renamed copy**, then select **Import into Spec**. Import adds an editable local definition. Add instances through a Design's Options menu. Catalog origin records remain separate from verification of the current Spec.
+
+**Options → Generate RTL** checks the saved revision and runs Verilator verification before starting the Activity. A separate Verify action is available. Source changes and unsaved draft text do not start lint. Generation uses saved source and preserves private drafts. Failed checks show target diagnostics and do not start a job.
+
+The [Spec Catalog service guide](../spec_catalog_service/README.md) lists startup commands and configuration. Store temporary output under the repository's ignored `temp/TEMP_*` directories.

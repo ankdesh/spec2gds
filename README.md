@@ -53,7 +53,7 @@ The independent **Verification Planner** (`testplan-service`, port `6016`) provi
 Run it separately in the root virtual environment:
 
 ```bash
-uv sync
+uv sync --all-packages
 uv run testplan-service --host 127.0.0.1 --port 6016 --storage-dir verification-data
 uv run python -m pytest testplan-service/tests -q
 ```
@@ -118,7 +118,7 @@ scripts/serve-all.sh start --public-host 192.168.1.50
 
 Services bind to `0.0.0.0` by default. If the host firewall is enabled, allow
 the configured TCP ports for LAN access. Run snapshots, logs, and process records are under
-`TEMP_serve-all/`. Verification Planner and the log viewer start separately.
+`temp/TEMP_serve-all/`. Verification Planner and the log viewer start separately.
 
 ```bash
 scripts/serve-all.sh stop
@@ -140,10 +140,10 @@ addresses or ports.
 
 ## Configure service addresses
 
-The combined spec2gds launcher and its three applications read
+The combined spec2gds launcher, its applications, and the Spec Catalog service read
 [`config/services.json`](config/services.json).
 It contains the bind host, port, and base path for each service and UI,
-including `spec_editor.dev_ui`, `verification_planner`, and `logging.viewer`.
+including `spec_editor.dev_ui`, `spec_catalog`, `verification_planner`, and `logging.viewer`.
 Precedence is **command line → configuration file → defaults**. Select an
 alternate file with `--service-config PATH`. Omitted fields use the shared
 packaged defaults. An explicitly selected missing file or invalid value fails startup.
@@ -151,10 +151,10 @@ packaged defaults. An explicitly selected missing file or invalid value fails st
 ```bash
 scripts/serve-all.sh start --service-config "$PWD/config/services.json" \
   --public-host design-host.example --spec-port 6420 --circuit-port 6421 \
-  --circuit-ui-port 6422 --assistant-port 6423
+  --circuit-ui-port 6422 --assistant-port 6423 --catalog-port 6427
 ```
 
-The combined launcher also accepts `--host` for its four listeners. Individual
+The combined launcher also accepts `--host` for its five listeners. Individual
 listeners accept `--host`, `--port`, `--public-host`, and `--service-config`.
 A Spec service or Assistant override updates its service and UI addresses together.
 Their configured service/UI listener fields must agree. Circuit Designer keeps
@@ -226,7 +226,7 @@ Configuration and execution limits are defined in
 Python development uses `uv` and the repository virtual environment.
 
 ```bash
-uv sync
+uv sync --all-packages
 uv run spec2gds-server
 ```
 
@@ -306,7 +306,7 @@ scripts/serve-all.sh stop
 
 Stop and restart use saved process identities and group IDs, even after the
 configuration changes. They retain unrelated listeners. Startup failures clean
-up only the processes created by that run. Run evidence is in `TEMP_serve-all/`.
+up only the processes created by that run. Run evidence is in `temp/TEMP_serve-all/`.
 Set `OPENAI_API_KEY` before startup when the AI Assistant needs model access.
 
 ## Build specification Activities
@@ -530,3 +530,7 @@ Readable document and entity names are independent of stable internal IDs and ha
 Creation accepts a Name; display renames preserve the saved source path. See
 [Names and identifiers](docs/naming-and-identifiers.md) for naming rules, migration,
 name-based commands, and technical details.
+
+## Spec Catalog
+
+The [Spec Catalog service](spec_catalog_service/README.md) starts with `scripts/serve-all.sh start` on port 6017. In Spec Editor, select **Components → Options → Import from catalog…** to copy a published Component into the loaded Spec. **Options → Generate RTL** verifies the saved target before starting the Activity.

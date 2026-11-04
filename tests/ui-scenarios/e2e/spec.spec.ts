@@ -8,7 +8,8 @@ documentImports();
 test("renames the Spec through its authoring control and retains the title after reopen", async ({ page, stack }) => {
   await newSpec(page, stack);
   const before = await stack.snapshot();
-  await page.locator(".spec-cover").getByRole("button", { name: "Edit name", exact: true }).click();
+  await page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
+  await page.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
   await page.getByLabel("Spec name", { exact: true }).fill("Released Spec 1.0");
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Released Spec 1.0", exact: true })).toBeVisible();
@@ -22,13 +23,15 @@ test("renames the Spec through its authoring control and retains the title after
 
 test("manual authoring: readable names, pasted ports and explicit verification", async ({ page, stack }) => {
   await newSpec(page, stack);
-  await page.locator("#components").getByRole("button", { name: "Add Component", exact: true }).click();
+  await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
+  await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
   await page.getByLabel("Component name").fill("Readable pass-through");
   await page.getByRole("button", { name: "Create component", exact: true }).click();
   await expect.poll(async () => (await stack.snapshot()).components.length).toBe(1);
   const ref = (await stack.snapshot()).components[0].ref;
   const component = page.locator(`#component-${ref.entity_id.replaceAll("_", "-")}`);
-  await component.getByRole("button", { name: "Paste rows", exact: true }).click();
+  await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Paste rows", exact: true }).click();
   await component.getByLabel("Paste port rows (TSV or Markdown)").fill("Port ID\tDirection\tRange\tDescription\na\tin\t7:0\tInput\ny\tout\t7:0\tOutput");
   await component.getByRole("button", { name: "Add 2 ports", exact: true }).click();
   await expect(component.locator(".spec-port-row")).toHaveCount(2);
@@ -38,7 +41,8 @@ test("manual authoring: readable names, pasted ports and explicit verification",
   await component.getByRole("button", { name: "Add section", exact: true }).click();
   await expect(component).not.toContainText("RTL implementation missing");
   await expect(component.locator(".spec-validation-badge")).toHaveText("Not verified");
-  await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
   await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
   await expect(component.getByText("Interface preview (read-only)", { exact: true })).toBeVisible();
   const beforeTheme = (await stack.snapshot()).source_revision_hash;
@@ -65,11 +69,13 @@ test("manual authoring: readable names, pasted ports and explicit verification",
     await page.setViewportSize({ width: 1440, height: 900 });
   }
   expect((await stack.snapshot()).source_revision_hash).toBe(beforeTheme);
-  await component.locator(".spec-sv-section").getByRole("button", { name: "Edit", exact: true }).click();
+  await component.locator(".spec-sv-section").getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
+  await component.locator(".spec-sv-section").getByRole("menuitem", { name: "Edit", exact: true }).click();
   await component.locator(".cm-content").fill("assign y = ;");
   await component.locator(".spec-sv-section").getByRole("button", { name: "Save to Spec", exact: true }).click();
   expect((await stack.snapshot()).entity_sections[0].content).toContain("assign y = ;");
-  await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
   await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint failed");
   await expect(page.locator(".app-notice")).toContainText("Lint failed. Your saved text is preserved.");
   await expect(page.locator(".app-notice")).not.toContainText("Use Verify Component");
@@ -81,7 +87,8 @@ test("manual authoring: readable names, pasted ports and explicit verification",
 test("manual authoring: repeated ports, duplication and deletion retain saved rows", async ({ page, stack }) => {
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
-  await component.getByRole("button", { name: "Add port", exact: true }).click();
+  await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
   let draft = component.locator(".spec-port-editor");
   await expect(draft.getByLabel("Range", { exact: true })).toHaveValue("0:0");
   await draft.getByLabel("Port ID").fill("a");
@@ -91,14 +98,14 @@ test("manual authoring: repeated ports, duplication and deletion retain saved ro
   await draft.getByLabel("Range", { exact: true }).fill("");
   await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
   const row = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a", exact: true }) });
-  await row.getByRole("button", { name: "More actions for port a", exact: true }).click();
+  await row.getByRole("button", { name: "Options for port a", exact: true }).click();
   await page.getByRole("menuitem", { name: "Duplicate", exact: true }).click();
   draft = component.locator(".spec-port-editor");
   await expect(draft.getByLabel("Port ID")).toHaveValue("a_2");
   await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(component.locator(".spec-port-row")).toHaveCount(3);
   page.once("dialog", dialog => dialog.accept());
-  await component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a_2", exact: true }) }).getByRole("button", { name: "More actions for port a_2", exact: true }).click();
+  await component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "a_2", exact: true }) }).getByRole("button", { name: "Options for port a_2", exact: true }).click();
   await page.getByRole("menuitem", { name: "Delete port", exact: true }).click();
   await expect(component.locator(".spec-port-row")).toHaveCount(2);
   const saved = (await stack.snapshot()).components[0].ports;
@@ -108,7 +115,7 @@ test("manual authoring: repeated ports, duplication and deletion retain saved ro
 
 async function addComponent(page: Page, stack: Stack): Promise<Locator> {
   const section = page.locator("#components");
-  await section.getByRole("button", { name: "Options" }).click();
+  await section.getByRole("button", { name: "Options", exact: true }).click();
   await section.getByRole("menuitem", { name: "Add component…" }).click();
   await page.getByLabel("Component name").fill("counter");
   await page.getByRole("button", { name: "Create component" }).click();
@@ -119,12 +126,12 @@ async function addComponent(page: Page, stack: Stack): Promise<Locator> {
   return component;
 }
 async function portDraft(component: Locator, family = "wire"): Promise<Locator> {
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: `Add ${family} port…` }).click();
   return component.locator(".spec-port-editor");
 }
 async function editText(component: Locator, text: string): Promise<void> {
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill(text);
 }
@@ -163,7 +170,7 @@ test("@smoke preserves an invalid draft, cancels it, and saves a corrected draft
   await expect(draft.getByLabel("Range")).toHaveValue("31::0");
   expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
   await draft.getByRole("button", { name: "Cancel" }).click();
-  await expect(component.getByRole("button", { name: "Options" })).toBeFocused();
+  await expect(component.getByRole("button", { name: "Options", exact: true })).toBeFocused();
   expect(stack.archive(stack.path())).toEqual(source);
   draft = await portDraft(component);
   await draft.getByLabel("Port ID").fill("count");
@@ -187,7 +194,8 @@ for (const family of ["wire", "transactional", "structured"]) {
     const row = component.locator(".spec-port-row", { hasText: "interface0" });
     await expect(row).toContainText("Interface contract");
     if (family === "wire") {
-      await row.getByRole("button", { name: "Edit", exact: true }).click();
+      await row.getByRole("button", { name: /^Options for port/ }).click();
+      await row.getByRole("menuitem", { name: "Edit", exact: true }).click();
       const draft = component.locator(".spec-port-editor");
       await expect(draft.getByLabel("Port ID")).toHaveCount(0);
       await draft.getByLabel("Description").fill("Updated interface contract");
@@ -258,7 +266,7 @@ test("names retain identity and keyboard editing works at a narrow width", async
   const save = component.getByRole("button", { name: "Save to Spec", exact: true });
   await save.focus(); await page.keyboard.press("Enter");
   await expect(component).toContainText("Keyboard-authored description");
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Rename", exact: true }).click();
   await component.getByLabel("Name", { exact: true }).fill("Counter display name");
   await save.focus(); await page.keyboard.press("Enter");
@@ -275,7 +283,7 @@ test("creates an entry Design and Component instance through the UI and reopens 
   await addComponent(page, stack);
   const before = await stack.snapshot();
   const designs = page.locator("#designs");
-  await designs.getByRole("button", { name: "Options" }).click();
+  await designs.getByRole("button", { name: "Options", exact: true }).click();
   await designs.getByRole("menuitem", { name: "Add design…", exact: true }).click();
   await page.getByLabel("Design name").fill("top");
   await page.getByRole("button", { name: "Create design", exact: true }).click();
@@ -283,7 +291,7 @@ test("creates an entry Design and Component instance through the UI and reopens 
   const saved = await stack.snapshot();
   expect(saved.entry_designs).toHaveLength(1);
   const design = page.locator(`#design-${saved.designs[0].ref.entity_id.replaceAll("_", "-")}`);
-  await design.getByRole("button", { name: "Options" }).click();
+  await design.getByRole("button", { name: "Options", exact: true }).click();
   await design.getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
   await design.getByLabel("Instance ID").fill("counter0");
   await design.getByLabel("Component", { exact: true }).selectOption(before.components[0].vlnv);
@@ -299,20 +307,22 @@ test("creates an entry Design and Component instance through the UI and reopens 
 test("SystemVerilog add, edit, delete and reopen use real source", async ({ page, stack }) => {
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
   await component.locator(".cm-content").fill("logic saved_marker;\n");
   await component.getByRole("button", { name: "Add section", exact: true }).click();
   await expect(component.locator(".cm-content")).toHaveCount(0);
   expect(Object.values(stack.archive(stack.path())).join("\n")).toContain("saved_marker");
   await openSpec(page, stack);
-  await component.getByRole("button", { name: "Edit", exact: true }).click();
+  await component.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await component.locator(".cm-content").fill("logic edited_marker;\n");
   await component.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(component.locator(".cm-content")).toHaveCount(0);
   expect(Object.values(stack.archive(stack.path())).join("\n")).toContain("edited_marker");
   page.once("dialog", dialog => dialog.accept());
-  await component.getByRole("button", { name: "Delete", exact: true }).click();
+  await component.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Delete", exact: true }).click();
   await openSpec(page, stack);
   expect((await stack.snapshot()).entity_sections).toEqual([]);
   expect(Object.values(stack.archive(stack.path())).join("\n")).not.toContain("edited_marker");
@@ -345,11 +355,13 @@ test("renders and downloads a source-derived SVG without a Circuit service", asy
   const before = await stack.snapshot();
   const card = page.locator(".spec-topology-card").filter({ has: page.getByRole("img") }).first();
   await expect(card.getByRole("img")).toBeVisible();
-  await card.getByRole("button", { name: "Expand", exact: true }).click();
+  await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+  await card.getByRole("menuitem", { name: "Expand", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Circuit topology", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   const event = page.waitForEvent("download");
-  await card.getByRole("link", { name: "Download SVG" }).click();
+  await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+  await card.getByRole("menuitem", { name: "Download SVG" }).click();
   const path = await (await event).path();
   expect(readFileSync(path!, "utf8")).toContain("<svg");
   expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
@@ -409,7 +421,7 @@ test("an Activity retains its enqueued source after source editing and service r
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
   const baseline = await stack.snapshot();
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Controlled barrier", exact: true }).click();
   await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
   await stack.commit([{ type: "set_entity_metadata", entity: baseline.components[0].ref, description: "Later source description" }]);
@@ -432,20 +444,22 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     await newSpec(page, stack);
     const component = await addComponent(page, stack);
     const before = await stack.snapshot();
-    await component.getByRole("button", { name: "Options" }).click();
+    await component.getByRole("button", { name: "Options", exact: true }).click();
     await component.getByRole("menuitem", { name: title, exact: true }).click();
     if (status === "cancelled") {
       await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
       await page.getByRole("button", { name: /^Activity \d/ }).click();
-      const cancel = page.locator(".activity-item").filter({ hasText: title }).getByRole("button", { name: "Cancel", exact: true });
-      await expect(cancel).toBeEnabled();
-      await page.getByRole("button", { name: "Refresh", exact: true }).click();
-      await expect(cancel).toBeEnabled();
+      const job = page.locator(".activity-item").filter({ hasText: title });
+      const options = job.getByRole("button", { name: "Options", exact: true });
+      const cancel = job.getByRole("menuitem", { name: "Cancel", exact: true });
+      await options.click(); await expect(cancel).toBeEnabled(); await page.keyboard.press("Escape");
+      await page.locator(".utility-heading").getByRole("button", { name: "Options", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Refresh", exact: true }).click();
+      await options.click(); await expect(cancel).toBeEnabled(); await page.keyboard.press("Escape");
       await page.reload();
       await openSpec(page, stack);
       await page.getByRole("button", { name: /^Activity \d/ }).click();
-      await expect(cancel).toBeEnabled();
-      await cancel.click();
+      await options.click(); await expect(cancel).toBeEnabled(); await cancel.click();
     }
     await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe(status);
     if (!await page.getByRole("heading", { name: "Activity", exact: true }).isVisible()) {
@@ -477,7 +491,7 @@ test("exports target Section details as a downloadable saved JSON artifact", asy
   }]);
   await openSpec(page, stack);
   const before = await stack.snapshot();
-  await component.getByRole("button", { name: "Options" }).click();
+  await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Export target details (JSON)", exact: true }).click();
   await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe("succeeded");
   await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
@@ -493,4 +507,97 @@ test("exports target Section details as a downloadable saved JSON artifact", asy
   await openSpec(page, stack);
   await page.getByRole("button", { name: /^Activity \d/ }).click();
   await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
+});
+
+test("catalog: browse, import, rename a copy, reopen, and generate RTL without prior Verify", async ({ page, stack }) => {
+  await stack.start("catalog");
+  await newSpec(page, stack);
+  const browse = async () => {
+    await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Import from catalog…", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "Import from catalog", exact: true });
+    await dialog.getByLabel("Search catalog").fill("barrel_shift");
+    await dialog.getByRole("button", { name: /barrel_shift/ }).click();
+    await expect(dialog.getByRole("heading", { name: "barrel_shift", exact: true })).toBeVisible();
+    return dialog;
+  };
+  let dialog = await browse();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Import into Spec", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  const first = await stack.snapshot();
+  expect(first.components).toHaveLength(1);
+  expect(first.catalog_origins).toHaveLength(1);
+  const component = page.locator(`#component-${first.components[0].ref.entity_id.replaceAll("_", "-")}`);
+  await expect(component.locator(".spec-sv-source")).toContainText("always_comb");
+  expect(first.components[0].parameters.find((p: any) => p.name === "W").value).toBe("32");
+  const parameters = component.locator(".spec-hardware-controls > details").filter({ has: page.getByText("Parameters", { exact: true }) });
+  await parameters.locator("summary").click();
+  await parameters.getByRole("button", { name: "Options for parameter W", exact: true }).click();
+  await parameters.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await parameters.getByLabel("Default expression", { exact: true }).fill("16");
+  await parameters.getByRole("button", { name: "Save parameter to Spec", exact: true }).click();
+  await expect.poll(async () => (await stack.snapshot()).components[0].parameters.find((p: any) => p.name === "W").value).toBe("16");
+  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await expect(component.getByRole("menuitem", { name: "Generate RTL", exact: true })).toBeEnabled();
+  await component.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
+  await expect.poll(async () => (await stack.json("/documents/view")).activity.executions.some((e: any) => e.status === "succeeded")).toBe(true);
+  expect((await stack.snapshot()).verifications[0].status).toBe("passed");
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+  dialog = await browse();
+  await dialog.getByLabel("Import as a renamed copy").check();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(dialog.getByLabel(/Local name for/).first()).toBeVisible();
+  await dialog.getByLabel(/Local name for/).first().fill("Local barrel shifter");
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await dialog.getByRole("button", { name: "Import into Spec", exact: true }).click();
+  await expect.poll(async () => (await stack.snapshot()).components.length).toBe(2);
+  await openSpec(page, stack);
+  const reopened = await stack.snapshot();
+  expect(reopened.components).toHaveLength(2);
+  expect(reopened.components.some((c: any) => c.display_name === "Local barrel shifter")).toBe(true);
+  expect(reopened.catalog_origins).toHaveLength(2);
+  await stack.start("circuit"); await stack.start("circuit-ui");
+  await page.locator("#designs").getByRole("button", { name: "Options", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Add design…", exact: true }).click();
+  await page.getByLabel("Design name", { exact: true }).fill("Catalog integration");
+  await page.getByRole("button", { name: "Create design", exact: true }).click();
+  const importedDesign = (await stack.snapshot()).designs[0];
+  const design = page.locator(`#design-${importedDesign.ref.entity_id.replaceAll("_", "-")}`);
+  await design.getByRole("button", { name: "Options", exact: true }).click();
+  await design.getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
+  await design.getByLabel("Instance ID", { exact: true }).fill("u_barrel");
+  await design.getByLabel("Component", { exact: true }).selectOption(first.components[0].vlnv);
+  await design.getByRole("button", { name: "Add instance", exact: true }).click();
+  expect((await stack.snapshot()).designs[0].instances[0].component_vlnv).toBe(first.components[0].vlnv);
+  const opened = page.waitForEvent("popup");
+  await design.getByRole("button", { name: "Options", exact: true }).click();
+  await design.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+  const circuit = await opened;
+  await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
+  await expect(circuit.locator(".react-flow__node")).toHaveCount(1);
+  await circuit.close();
+  await design.getByRole("button", { name: "Options", exact: true }).click();
+  await design.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+  await expect.poll(async () => (await stack.json("/executions")).executions.filter((e: any) => e.target?.entity_id === importedDesign.ref.entity_id).at(-1)?.status).toBe("succeeded");
+  await page.getByRole("button", { name: "Document", exact: true }).click();
+  for (const theme of ["clean", "obsidian"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /Switch theme/ }).click();
+    await page.setViewportSize({ width: 560, height: 760 });
+    await component.getByRole("button", { name: "Options", exact: true }).click();
+    const menu = component.getByRole("menu", { name: "Options for barrel_shift", exact: true });
+    await expect(menu).toBeVisible();
+    expect(await menu.evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true);
+    const bounds = await menu.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.y).toBeGreaterThanOrEqual(0);
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(560);
+    expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(760);
+    await page.screenshot({ path: test.info().outputPath(`catalog-options-${theme}.png`) });
+    await page.keyboard.press("Escape");
+    await expect(component.getByRole("button", { name: "Options", exact: true })).toBeFocused();
+  }
 });

@@ -1,0 +1,23 @@
+[project]
+name = "spec-catalog-service"
+version = "0.1.0"
+description = "Spec Catalog hosting and Component publication tools"
+requires-python = ">=3.12"
+dependencies = ["spec2gds"]
+
+[project.scripts]
+spec2gds-catalog = "spec_catalog_service.catalog.cli:main"
+spec2gds-catalog-service = "spec_catalog_service.http.cli:main"
+
+[tool.uv.sources]
+spec2gds = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/spec_catalog_service"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

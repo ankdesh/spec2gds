@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
         endpoint = {"scheme": selected.scheme, "host": selected.hostname,
                     "port": selected.port or (443 if selected.scheme == "https" else 80)}
         config = resolve_config(args.service_config, overrides={"spec_editor": {surface: endpoint for surface in ("service", "ui")}})
-        run = _REPO_ROOT / "TEMP_serve-all" / ("request_" + uuid4().hex)
+        run = _REPO_ROOT / "temp" / "TEMP_serve-all" / ("request_" + uuid4().hex)
         run.mkdir(parents=True)
         snapshot = run / "services.json"
         snapshot.write_text(json.dumps(config))

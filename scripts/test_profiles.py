@@ -72,7 +72,7 @@ def suite_catalogue() -> dict[str, Suite]:
                  "--junitxml={output}/pytest.xml"], scopes, "service/API", "isolated",
             dependencies=dependencies, requirements=("python", *tools))
 
-    python("python-fast", ["tests", "testplan-service/tests"], sorted(SCOPES))
+    python("python-fast", ["tests", "testplan-service/tests", "spec_catalog_service/tests"], sorted(SCOPES))
     add("circuit-units", ["npm", "test"], ["spec", "circuit", "shared"],
         "unit/component/API", "isolated", cwd="circuit-designer", requirements=("circuit",))
     add("assistant-units", ["npm", "test"], ["assistant"], "unit/contract", "isolated",
@@ -89,7 +89,7 @@ def suite_catalogue() -> dict[str, Suite]:
            marker="extensive", dependencies=("build-assistant",))
     python("hardware-extensive", ["tests/spec/activities"], ["spec", "activities"],
            marker="extensive", tools=("hardware",))
-    python("spec-api", ["tests/spec/spec_format", "tests/spec/importers", "tests/spec_library"],
+    python("spec-api", ["tests/spec/spec_format", "tests/spec/importers", "spec_catalog_service/tests"],
            ["spec", "circuit", "assistant", "activities"])
     python("verification-api", ["testplan-service/tests"], ["spec", "verification", "activities"])
     python("activity-api", ["tests/spec/activities"], ["spec", "activities"])
@@ -256,7 +256,7 @@ def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[s
     config["public_host"] = "127.0.0.1"
     sockets = []
     try:
-        for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner"):
+        for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner", "spec_catalog"):
             surfaces = ("service", "ui", "dev_ui") if name == "spec_editor" else ("service", "ui")
             for surface in surfaces:
                 endpoint = config[name][surface]
@@ -273,6 +273,8 @@ def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[s
     finally:
         for listener in sockets:
             listener.close()
+    config["spec_catalog"]["catalog_root"] = str(ROOT / "spec_catalog_service/catalog")
+    config["spec_catalog"]["state_dir"] = str(output / "catalog-state")
     config["logging"]["enabled"] = False
     config["logging"]["file"] = str(output / "events.jsonl")
     config["activities"]["scratch_root"] = str(output / "generated")

@@ -251,6 +251,7 @@ export type EditorTransactionOperation =
   | { type: "set_document_title"; title: string }
   | { type: "upsert_narrative_block"; block: NarrativeBlock }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
+  | { type: "delete_instance"; design: EntityRef; instance_name: string }
   | { type: "upsert_instance"; design: EntityRef; instance: ComponentInstanceInput }
   | { type: "add_component_port"; component: EntityRef; port: ComponentPortInput }
   | {
@@ -285,6 +286,7 @@ export interface TransactionResult {
 }
 
 export interface DocumentSnapshot {
+  catalog_origins?: CatalogOrigin[];
   /** Present on Open when the service saved normalized names. */
   open_notice?: string;
   verifications?: ComponentVerification[];
@@ -344,6 +346,7 @@ export interface ServiceDirectory {
     spec_editor: HostedServiceLocation;
     circuit_designer: HostedServiceLocation;
     ai_assistant: HostedServiceLocation;
+    spec_catalog: HostedServiceLocation;
   };
   logging: { enabled: boolean; level: "info" | "debug" };
 }
@@ -409,6 +412,25 @@ export interface EntityActivity {
   availability: { available: boolean; diagnostics: string[] };
 }
 
+export interface CatalogComponent { key: string; id: string; version: string; category: string; summary: string; package_sha256: string; functional_status: string }
+export interface CatalogVersion extends CatalogComponent {
+  ports: Array<{ name: string; direction: string; width: string | number | null }>;
+  parameters: ParameterInput[];
+  metadata: { summary: string; presets: Record<string, Record<string, string>>; timing: Record<string, string>; licence: string; limitations: string[] };
+  evidence: unknown[]; usage_markdown: string;
+}
+export interface CatalogImportRequest { component_key: string; version: string; package_sha256: string; expected_source_revision_hash: string; renames: Record<string, string>; renamed_copy: boolean }
+export interface CatalogImportPreview {
+  can_import: boolean; reused: boolean; root: EntityRef;
+  definitions: Array<{ source_id: string; name: string; vlnv: string; reused: boolean }>;
+  conflicts: Array<{ source_id: string; name: string; reason: string; suggested_name: string }>;
+}
+export interface CatalogOrigin {
+  component_key: string; version: string; package_sha256: string; source_vlnv: string; root: EntityRef;
+  metadata?: { summary?: string; licence?: string };
+  evidence?: Array<{ evidence_sha256: string; report: { checks: Array<{ kind: string; status: string; preset?: string | null; summary: string }> } }>;
+}
+
 export class SpecEditorHttpError extends Error {
   constructor(message: string, readonly status: number, readonly detail?: unknown) {
     super(message);
@@ -419,6 +441,7 @@ export class SpecEditorHttpError extends Error {
 function errorMessage(detail: unknown): string {
   if (typeof detail === "string") return detail;
   if (detail && typeof detail === "object" && "message" in detail && typeof detail.message === "string") return detail.message;
+  if (detail && typeof detail === "object" && "verification" in detail) return "RTL verification did not pass. Review the target verification details.";
   if (detail && typeof detail === "object" && "diagnostics" in detail) {
     const diagnostics = (detail as { diagnostics: unknown }).diagnostics;
     if (Array.isArray(diagnostics)) return diagnostics.map(String).join(" ");
@@ -521,6 +544,19 @@ export class SpecEditorHttpClient {
         operations,
       }),
     });
+  }
+
+  catalogCapabilities(): Promise<{ categories: string[] }> { return this.request("/catalog/capabilities"); }
+  listCatalogComponents(filters: Record<string, string>): Promise<{ items: CatalogComponent[]; total: number }> {
+    return this.request(`/catalog/components?${new URLSearchParams(filters)}`);
+  }
+  getCatalogComponent(key: string): Promise<{ versions: CatalogComponent[] }> { return this.request(`/catalog/components/${encodeURIComponent(key)}`); }
+  getCatalogVersion(key: string, version: string): Promise<CatalogVersion> { return this.request(`/catalog/components/${encodeURIComponent(key)}/versions/${encodeURIComponent(version)}`); }
+  previewCatalogImport(value: CatalogImportRequest, key: string): Promise<CatalogImportPreview> {
+    return this.request(this.documentPath("/catalog/imports/preview", key), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
+  }
+  importCatalogComponent(value: CatalogImportRequest, key: string): Promise<{ root: EntityRef; reused: boolean }> {
+    return this.request(this.documentPath("/catalog/imports", key), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) });
   }
 
   verifyComponent(ref: EntityRef, revision: string): Promise<ComponentVerification> {

@@ -113,7 +113,7 @@ uv run python scripts/generate_rtl_examples.py --update
 1. Open a specification in Spec Editor.
 2. Select the top-level Design or Component.
 3. Click **Options → Generate RTL**.
-4. The Activity executes and publishes output files into the generated project directory.
+4. The Spec service verifies the saved target and its reachable implementations. If verification passes, the Activity starts and publishes the project. Failed lint or missing tools show diagnostics without starting a job. A separate **Options → Verify Component** or **Verify Design** action is also available.
 
 ### Compile and Verify with Verilator
 In each generated project directory, run Verilator lint:

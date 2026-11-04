@@ -65,6 +65,13 @@ from spec2gds.spec.spec_format.assistant import (
 from spec2gds.spec.spec_format.assistant_context_pages import build_context_page
 from spec2gds.spec.spec_format.assistant_integration import ASSISTANT_ACTIONS, integration_metadata
 from spec2gds.spec.spec_format.assistant_operation_contract import operation_contract
+from spec2gds.spec.spec_format.catalog_import import (
+    CatalogClient,
+    CatalogImportRequest,
+    CatalogUnavailable,
+    origins,
+    prepare_import,
+)
 from spec2gds.spec.spec_format.circuit_adapter import (
     CircuitAdapterError,
     CircuitDesignerConnectionError,
@@ -103,12 +110,12 @@ from spec2gds.spec.spec_format.transactions import (
     AddEntryDesign,
     ClearInternalDesign,
     CreateHardware,
+    DeleteComponentPort,
     DeleteConnection,
     DeleteDocument,
     DeleteInstance,
-    DeleteComponentPort,
-    DeleteParameter,
     DeleteNarrativeBlock,
+    DeleteParameter,
     DeleteSection,
     RemoveAsset,
     RemoveEntryDesign,
@@ -1490,18 +1497,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             if not definition.scopes.supports(target):
                 continue
             if definition.activity_id == "rtl.generate":
-                # This GET must not elaborate symbolic interfaces. The UI
-                # gates generation on a current receipt; launch still runs
-                # the Activity's full validation for every API client.
-                receipt = session.verifications.get(f"{kind}:{entity_id}")
-                current = receipt and receipt["source_revision_hash"] == session.revision.source_revision_hash
-                failed = current and receipt["status"] == "failed"
-                availability = ActivityAvailability(
-                    available=not bool(failed),
-                    diagnostics=("The saved target failed explicit verification.",) if failed else
-                        () if current and receipt["status"] == "passed" else
-                        ("RTL validation runs during explicit verification or generation.",),
-                )
+                # Discovery is a pure read. Verification runs on launch.
+                availability = ActivityAvailability(available=True, diagnostics=())
             else:
                 availability = activity_availability(
                     activity_registry,
@@ -1535,6 +1532,17 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 definition = activity_registry.activity(activity_id).definition
                 if not definition.scopes.supports(target):
                     raise ValueError("Activity does not support the selected entity kind.")
+                if activity_id == "rtl.generate":
+                    from spec2gds.spec.spec_format.component_verification import verify_target
+                    result = verify_target(session.revision, target)
+                    session.verifications[f"{kind}:{entity_id}"] = result
+                    if result["status"] != "passed":
+                        unavailable = result["tool_version"] == "Unavailable" or any(
+                            item["code"] in {"VERILATOR_UNAVAILABLE", "VERILATOR_TIMEOUT"}
+                            for item in result["diagnostics"]
+                        )
+                        raise fastapi.HTTPException(status_code=503 if unavailable else 422,
+                                                    detail={"verification": result})
                 snapshot = ActivitySnapshot.create(session.revision, target)
                 availability = activity_availability(activity_registry, activity_id, snapshot)
                 if not availability.available:
@@ -1645,6 +1653,75 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             return fastapi.Response(content=data, media_type=asset.media_type)
         except KeyError as exc:
             raise fastapi.HTTPException(status_code=404, detail=str(exc)) from exc
+
+    from spec2gds_runtime.service_config import endpoint_url
+    catalog = CatalogClient(endpoint_url(registry.config["spec_catalog"]["service"], registry.public_host, local=True))
+    app.state.catalog_client = catalog
+
+    def catalog_error(exc: Exception) -> typing.NoReturn:
+        status = 503 if isinstance(exc, CatalogUnavailable) else 404 if isinstance(exc, KeyError) else 409 if "Stale" in str(exc) else 422
+        raise fastapi.HTTPException(status_code=status, detail=str(exc)) from exc
+
+    @app.get("/catalog/capabilities")
+    def catalog_capabilities() -> dict:
+        try:
+            return catalog.get("/capabilities")
+        except (CatalogUnavailable, KeyError, ValueError) as exc:
+            catalog_error(exc)
+
+    @app.get("/catalog/components")
+    def catalog_components(q: str = "", category: str = "", implementation: str = "", functional_status: str = "", limit: int = 25, offset: int = 0) -> dict:
+        try:
+            return catalog.get("/components", {key: value for key, value in {"q": q, "category": category, "implementation": implementation, "functional_status": functional_status, "limit": limit, "offset": offset}.items() if value != ""})
+        except (CatalogUnavailable, KeyError, ValueError) as exc:
+            catalog_error(exc)
+
+    @app.get("/catalog/components/{key}")
+    def catalog_component(key: str) -> dict:
+        from urllib.parse import quote
+        try:
+            return catalog.get("/components/" + quote(key, safe=""))
+        except (CatalogUnavailable, KeyError, ValueError) as exc:
+            catalog_error(exc)
+
+    @app.get("/catalog/components/{key}/versions/{version}")
+    def catalog_version(key: str, version: str) -> dict:
+        from urllib.parse import quote
+        try:
+            details = catalog.get(f"/components/{quote(key, safe='')}/versions/{quote(version, safe='')}")
+            request = CatalogImportRequest(component_key=key, version=version, package_sha256=details["package_sha256"], expected_source_revision_hash="")
+            source, details = catalog.release(request)
+            root = source.resolve(EntityRef.model_validate(details["metadata"]["root"]))
+            return {**details, "ports": [dataclasses.asdict(p) for p in root.ports], "parameters": [dataclasses.asdict(p) for p in root.parameters]}
+        except (CatalogUnavailable, KeyError, ValueError) as exc:
+            catalog_error(exc)
+
+    def catalog_import(request: CatalogImportRequest, owner_document_key: str | None, *, commit: bool) -> dict:
+        from spec2gds.spec.spec_format.transactions import ImportCatalogPackage
+        session = bound_session(owner_document_key)
+        try:
+            # Network operations do not hold the destination document lock.
+            source, details = catalog.release(request)
+            with session.lock:
+                preview, candidate = prepare_import(session.revision, source, details, request)
+                if not commit:
+                    return preview
+                if candidate is None:
+                    raise fastapi.HTTPException(status_code=409, detail={"message": "Resolve import conflicts.", "preview": preview})
+                if preview["reused"]:
+                    return {"committed": False, "reused": True, "root": preview["root"], "snapshot": _snapshot(session)}
+                result = SpecEditTransaction(request.expected_source_revision_hash, (ImportCatalogPackage(source, details, request),), "authoring").apply(session.revision)
+                return {**result_or_error(result, session), "root": preview["root"], "reused": False}
+        except (CatalogUnavailable, KeyError, ValueError) as exc:
+            catalog_error(exc)
+
+    @app.post("/catalog/imports/preview")
+    def preview_catalog_import(request: CatalogImportRequest, owner_document_key: str | None = None) -> dict:
+        return catalog_import(request, owner_document_key, commit=False)
+
+    @app.post("/catalog/imports")
+    def commit_catalog_import(request: CatalogImportRequest, owner_document_key: str | None = None) -> dict:
+        return catalog_import(request, owner_document_key, commit=True)
 
     @app.post("/transactions")
     def transaction(request: TransactionRequest, owner_document_key: str | None = None) -> dict[str, typing.Any]:
@@ -2154,6 +2231,7 @@ def _snapshot(session: V1Session) -> dict[str, typing.Any]:
         "component_compositions": [_jsonable(item) for item in revision.manifest.component_compositions],
         "narrative": _jsonable(revision.narrative),
         "assets": [_jsonable(item) for item in revision.assets],
+        "catalog_origins": origins(revision),
         "entity_sections": [_jsonable(item) for item in revision.entity_sections],
         "section_validation": [item.as_json() for item in section_validation],
         "verifications": [{**item, "status": item["status"] if item["source_revision_hash"] == revision.source_revision_hash else "stale"}

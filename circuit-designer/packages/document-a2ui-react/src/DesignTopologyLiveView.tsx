@@ -1,3 +1,4 @@
+import { OptionsMenu } from "./OptionsMenu";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { getCircuitTheme } from "@spec2gds/circuit-core";
@@ -161,10 +162,10 @@ export function DesignTopologyLiveView({
           <strong>{label}</strong>
           <span>Derived from the current specification revision</span>
         </div>
-        <div className="spec-topology-card__actions">
-          {onOpenCircuit && <button onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
-          <button disabled={!imageUrl} onClick={() => setExpanded(true)} ref={expandRef} type="button">Expand</button>
-          <a
+        <OptionsMenu label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
+          {onOpenCircuit && <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
+          <button role="menuitem" disabled={!imageUrl} onClick={() => setExpanded(true)} type="button">Expand</button>
+          <a role="menuitem"
             aria-disabled={!imageUrl}
             download={circuitSvgFilename(String(block.options.document_name || "Specification"), entityName)}
             href={imageUrl || undefined}
@@ -172,7 +173,7 @@ export function DesignTopologyLiveView({
           >
             Download SVG
           </a>
-        </div>
+        </OptionsMenu>
       </figcaption>
       <div className="spec-topology-card__preview">
         {imageUrl

@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { globSync, readFileSync } from "node:fs";
+import { globSync, readFileSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const environment = { ...process.env };
 if (process.platform !== "win32") {
-  environment.TMPDIR = "/tmp";
-  environment.TMP = "/tmp";
-  environment.TEMP = "/tmp";
+  environment.TMPDIR ||= resolve("../temp/TEMP_circuit-tests");
+  mkdirSync(environment.TMPDIR, { recursive: true });
+  environment.TMP ||= environment.TMPDIR;
+  environment.TEMP ||= environment.TMPDIR;
 }
 if (environment.SPEC2GDS_TEST_COVERAGE_DIR) {
   let failed = false;

@@ -10,6 +10,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, build_opener
 
 import pytest
@@ -35,7 +36,7 @@ def launch_config(tmp_path):
         allocated.add(selected)
         return selected
 
-    for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner"):
+    for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner", "spec_catalog"):
         selected = port()
         for surface in ("service", "ui"):
             value[name][surface].update(host="127.0.0.1", port=port() if name == "circuit_designer" and surface == "ui" else selected)
@@ -90,6 +91,18 @@ def running(command, health, directory, *, cwd=ROOT):
             os.killpg(child.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        # The wrapper can exit before the kernel closes a descendant's listener.
+        address = urlsplit(health)
+        deadline = time.monotonic() + 5
+        while True:
+            with socket.socket() as listener:
+                listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                try:
+                    listener.bind((address.hostname, address.port))
+                    break
+                except OSError:
+                    assert time.monotonic() < deadline, log.read_text()
+            time.sleep(0.05)
 
 
 def test_real_reload_worker_retains_cli_addresses(launch_config, tmp_path):

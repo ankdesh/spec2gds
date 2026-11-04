@@ -222,6 +222,10 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
             "instance": {"name": "dut", "component_vlnv": created["components"][0]["vlnv"]},
         }],
     ))["snapshot"]
+    created = endpoints["transaction"](TransactionRequest(
+        expected_source_revision_hash=created["source_revision_hash"],
+        operations=[{"type": "upsert_entity_section", "parent": created["components"][0]["ref"], "section_type": "sv", "payload": {"content": "initial begin end"}}],
+    ))["snapshot"]
     target = created["entry_designs"][0]["ref"]
     available = endpoints["entity_activities"]("design", target["entity_id"])["activities"]
     rtl = next(item for item in available if item["definition"]["activity_id"] == "rtl.generate")

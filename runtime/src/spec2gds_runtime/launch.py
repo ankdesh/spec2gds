@@ -10,7 +10,7 @@ from uuid import uuid4
 
 def factory_bootstrap(body: str, config: dict, *, root: Path | None = None) -> str:
     """Keep resolved settings in files, including when uvicorn spawns a worker."""
-    directory = (root or Path.cwd()) / "TEMP_serve-all" / f"python_{uuid4().hex}"
+    directory = (root or Path.cwd()) / "temp" / "TEMP_serve-all" / f"python_{uuid4().hex}"
     directory.mkdir(parents=True)
     snapshot = directory / "services.json"
     snapshot.write_text(json.dumps(config, indent=2) + "\n")

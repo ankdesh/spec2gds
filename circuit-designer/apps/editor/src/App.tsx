@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   A2UIDocumentSurface,
+  OptionsMenu,
   SPEC_OPEN_CIRCUIT_EVENT,
   type SpecDocumentCommandController,
   type SpecDocumentEditController,
@@ -31,6 +32,7 @@ import {
 
 import { publicFilenameStem } from "@spec2gds/circuit-core";
 
+import { CatalogDialog } from "./CatalogDialog";
 import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
 import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
 import { browserRandomUuid } from "@spec2gds/circuit-app-react";
@@ -58,6 +60,7 @@ export default function App() {
     [],
   );
   const [path, setPath] = useState("");
+  const [catalogDocument, setCatalogDocument] = useState<{ key: string; revision: string } | null>(null);
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null);
   const [batch, setBatch] = useState<A2UIDocumentBatch | null>(null);
   const [activity, setActivity] = useState<ActivityState>({
@@ -418,7 +421,11 @@ export default function App() {
 
   const executeActivity = async (ref: EntityRef, item: EntityActivity) => {
     if (!snapshot) return;
-    await client.launchEntityActivity(ref, item.definition.activity_id, snapshot.source_revision_hash);
+    try {
+      await client.launchEntityActivity(ref, item.definition.activity_id, snapshot.source_revision_hash);
+    } finally {
+      if (activeKey.current === snapshot.owner_document_key) await loadView();
+    }
     if (activeKey.current !== snapshot.owner_document_key) return;
     await refreshActivity();
     if (activeKey.current !== snapshot.owner_document_key) return;
@@ -563,6 +570,10 @@ export default function App() {
   const editController = useMemo<SpecDocumentEditController | undefined>(() => {
     if (!snapshot) return undefined;
     return {
+      browseCatalog() {
+        if (editing.current || commandPending.current) { setError("Save or cancel the current draft first."); return; }
+        setCatalogDocument({ key: snapshot.owner_document_key, revision: snapshot.source_revision_hash });
+      },
       async updateDocumentTitle(title: string) {
         await commitEditorOperations(
           [{ type: "set_document_title", title }],
@@ -696,9 +707,7 @@ export default function App() {
         assertCurrent(ref);
         const [actions, activities] = await Promise.all([client.listEntityActions(ref), client.listEntityActivities(ref)]);
         assertCurrent(ref);
-        const checked = snapshot.verifications?.some(item => item.target.entity_id === ref.entity_id && item.source_revision_hash === revision && item.status === "passed");
-        return { actions: actions.actions, activities: activities.activities.map(item => item.definition.activity_id === "rtl.generate" && !checked
-          ? { ...item, availability: { available: false, diagnostics: ["Use Verify Component or Verify Design before generating RTL."] } } : item) };
+        return { actions: actions.actions, activities: activities.activities };
       },
       explore: ref => run(ref, () => launchAssistant(ref)),
       executeAction: (ref, action) => run(ref, () => executeAction(ref, action)),
@@ -764,6 +773,13 @@ export default function App() {
       </aside>}
       {error && <div className="app-error" role="alert">{error}<button aria-label="Dismiss error" onClick={() => setError("")}>×</button></div>}
 
+      {catalogDocument && <CatalogDialog key={catalogDocument.key} client={client} documentKey={catalogDocument.key} revision={catalogDocument.revision}
+        onClose={() => { setCatalogDocument(null); setTimeout(() => document.querySelector<HTMLButtonElement>("#components .spec-options-trigger")?.focus(), 0); }}
+        onImported={async (root, reused) => {
+          if (activeKey.current !== catalogDocument.key) throw new Error("The active Spec changed. Reopen the catalog from that Spec.");
+          await loadView(); setCatalogDocument(null); setNotice(reused ? "Reused the unchanged catalog Component." : "Component imported and saved to Spec.");
+          setTimeout(() => { const section = document.getElementById(`component-${root.entity_id.replaceAll("_", "-")}`) ?? document.getElementById(root.entity_id); section?.scrollIntoView({ block: "start" }); section?.querySelector<HTMLElement>("h2,h3")?.focus(); }, 100);
+        }} />}
       <main>
         {loading && <LoadingState />}
         {!loading && batch && <div style={{ display: view === "document" ? undefined : "none" }}>
@@ -832,16 +848,17 @@ function AssistantHistory({ client, documentKey, revision, onChanged }: {
       <strong>{text(item.title)}</strong><p>{text(item.summary)}</p>
       <p>{text(item.state)} · Proposal {String(item.ordinal)} · {text(item.created_at)}</p>
       <details><summary>Technical details</summary><p>Proposal {text(item.proposal_id)} · conversation {text(item.session_id)}</p><small>Base {text(item.base_source_revision_hash)} → saved {text(record((item.service_result ?? item.owner_result)).source_revision_hash)}</small></details>
-      <button onClick={() => {
+      <OptionsMenu label="Assistant submission" triggerLabel="Options for Assistant submission"><button role="menuitem" onClick={() => {
         const token = epoch.current;
         void client.getAssistantSubmission(text(item.proposal_id)).then(value => {
           if (token === epoch.current) setDetails(value);
         }).catch(caught => { if (token === epoch.current) setError(String(caught)); });
       }}>Details and diff</button>
       {item.state === "ready" && <>
-        <button onClick={() => void decide(text(item.proposal_id), "approve")}>Approve</button>
-        <button onClick={() => void decide(text(item.proposal_id), "reject")}>Reject</button>
+        <button role="menuitem" onClick={() => void decide(text(item.proposal_id), "approve")}>Approve</button>
+        <button role="menuitem" onClick={() => void decide(text(item.proposal_id), "reject")}>Reject</button>
       </>}
+      </OptionsMenu>
     </article>)}
     {details && <pre style={{ maxHeight: 400, overflow: "auto" }}>{JSON.stringify(details, null, 2)}</pre>}
     {page.next_cursor !== null && <button onClick={() => void fetchPage(page.next_cursor!)}>Older submissions</button>}
@@ -868,7 +885,7 @@ function entityName(vlnv?: string): string {
 
 function TechnicalDetails({ value }: { value: unknown }) {
   const content = JSON.stringify(value, null, 2);
-  return <details><summary>Technical details</summary><pre>{content}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(content)}>Copy details</button></details>;
+  return <details><summary>Technical details</summary><pre>{content}</pre><OptionsMenu label="Technical details" triggerLabel="Options for Technical details"><button role="menuitem" type="button" onClick={() => void navigator.clipboard.writeText(content)}>Copy details</button></OptionsMenu></details>;
 }
 
 function LoadingState() {
@@ -901,7 +918,7 @@ function ActivityView({
     <div className="utility-page">
       <header className="utility-heading">
         <h1>Activity</h1>
-        <button type="button" onClick={onRefresh}>Refresh</button>
+        <OptionsMenu label="Activity"><button role="menuitem" type="button" onClick={onRefresh}>Refresh</button></OptionsMenu>
       </header>
       <div className="activity-grid">
         <UtilityPanel title="Action executions" count={activity.executions.length}>
@@ -933,11 +950,8 @@ function ActivityView({
                 {activityExecution && text(report.top_module, "") && <p>RTL generation: {status}. Generated-project lint and functional simulation require separate checks.</p>}
                 {warnings.map((warning, index) => <p className="activity-warning" key={index}>{String(warning)}</p>)}
                 {activityExecution && ["queued", "running"].includes(status) && (
-                  <div className="button-row">
-                    <button disabled={cancelling} onClick={() => void onCancel(executionId)}>
-                      {cancelling ? "Cancelling…" : "Cancel"}
-                    </button>
-                  </div>
+                  <OptionsMenu label={text(item.title, "Activity execution")}><button role="menuitem" disabled={cancelling} onClick={() => void onCancel(executionId)}>
+                      {cancelling ? "Cancelling…" : "Cancel"}</button></OptionsMenu>
                 )}
               </article>
             );
@@ -974,8 +988,8 @@ function ActivityView({
                 <small>{operations.length} proposed {operations.length === 1 ? "operation" : "operations"}</small>
                 {status === "pending" && (
                   <div className="button-row">
-                    <button onClick={() => onReview(proposalId, "accept")}>Accept</button>
-                    <button className="secondary" onClick={() => onReview(proposalId, "reject")}>Reject</button>
+                    <OptionsMenu label="Change proposal"><button role="menuitem" onClick={() => onReview(proposalId, "accept")}>Accept</button>
+                    <button role="menuitem" className="secondary" onClick={() => onReview(proposalId, "reject")}>Reject</button></OptionsMenu>
                   </div>
                 )}
               </article>
@@ -1029,10 +1043,10 @@ function UtilityPanel({
 
 function CopyPathButton({ path }: { path: string }) {
   const [message, setMessage] = useState("");
-  return <><button type="button" onClick={async () => {
+  return <><OptionsMenu label="Activity output" triggerLabel="Options for Activity output"><button role="menuitem" type="button" onClick={async () => {
     try { await navigator.clipboard.writeText(path); setMessage("Copied"); }
     catch { setMessage("Could not copy. Select the path to copy it."); }
-  }}>Copy path</button><span role="status">{message}</span></>;
+  }}>Copy path</button></OptionsMenu><span role="status">{message}</span></>;
 }
 
 function DiagnosticsView({

@@ -41,7 +41,7 @@ if ! command -v uv >/dev/null 2>&1; then
   echo "Error: uv is required for Python dependency management. Please install uv." >&2
   exit 1
 fi
-uv sync
+uv sync --all-packages
 echo "Python workspace synced successfully."
 
 # --- Step 2: Circuit Designer Workspace ---

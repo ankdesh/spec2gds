@@ -68,7 +68,7 @@ importable per-run factory; endpoints are never transported in environment
 variables. Snapshots resolve relative storage paths before they are saved.
 
 The combined launcher starts only Spec Editor, Circuit Designer, and AI
-Assistant. `TEMP_serve-all/` contains resolved snapshots, process identities,
+Assistant. `temp/TEMP_serve-all/` contains resolved snapshots, process identities,
 group IDs, effective endpoints, and logs. Stop and restart affect only recorded
 process groups. Untracked conflicts are reported with their address, port, and
 PID. A configuration change does not expand the stop target list.
@@ -169,3 +169,7 @@ npm --prefix ai-assistant test
 3. Every mutation must cross a revision-checked boundary.
 4. Separate connectivity from layout geometry.
 5. Update documentation immediately when architecture, APIs, or commands change.
+
+### Spec Catalog service
+
+Run `uv sync --all-packages` after updating the workspace. The `spec_catalog` service entry defines the listener (port 6017), catalog root, and state directory. `serve-all` starts and checks this service. Its CLI commands and HTTP prefix use catalog names; see [the service guide](../spec_catalog_service/README.md).

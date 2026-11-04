@@ -382,9 +382,10 @@ async function run(): Promise<void> {
         const targetId = roots[0].ref.entity_id;
         await openEditor(editor, owner, generatedPackage);
         const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
-        await section.getByRole("button", { name: "Verify Component", exact: true }).click();
+        await section.getByRole("button", { name: "Options", exact: true }).click();
+        await section.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
         await expect(section.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
-        await section.getByRole("button", { name: "Options" }).click();
+        await section.getByRole("button", { name: "Options", exact: true }).click();
         await section.getByRole("menuitem", { name: /Generate RTL/ }).click();
         let execution: any;
         await expect.poll(async () => {
@@ -487,7 +488,7 @@ async function run(): Promise<void> {
           }finally{database.close();}
         }
         assert.equal((await snapshot()).source_revision_hash,initial.source_revision_hash);
-        await editor.goto(await link.getAttribute("href") || ""); await editor.getByRole("button",{name:"Approve",exact:true}).click();
+        await editor.goto(await link.getAttribute("href") || ""); await editor.locator(".activity-history .activity-item").filter({ hasText: "ready · Proposal" }).getByRole("button", { name: "Options for Assistant submission", exact: true }).click(); await editor.getByRole("menuitem", { name: "Approve", exact: true }).click();
       }
       await expect.poll(async () => (await snapshot()).components.length).toBe(1);
       const componentId = (await snapshot()).components[0].ref.entity_id;
@@ -542,7 +543,7 @@ async function run(): Promise<void> {
       } else {
         if (scenario === "live") {
           const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
-          await component.getByRole("button", { name: "Options" }).click();
+          await component.getByRole("button", { name: "Options", exact: true }).click();
           await component.getByRole("menuitem", { name: "Edit text…" }).click();
           await component.getByLabel("Component explanation").fill("Preserve this exact draft.");
         }
@@ -585,7 +586,7 @@ async function run(): Promise<void> {
           await designCard.scrollIntoViewIfNeeded();
           await capture(editor, "06_spec_editor_topology.png", "Spec Editor", "Spec Editor derives a circuit preview from two instances and the declared bit-zero connection.");
           const popup = context.waitForEvent("page");
-          await designCard.getByRole("button", { name: "Options" }).click();
+          await designCard.getByRole("button", { name: "Options", exact: true }).click();
           await designCard.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
           const circuit = await popup;
           observePage(circuit);
@@ -620,7 +621,7 @@ async function run(): Promise<void> {
           let count = 0, before: number | null = null;
           do { const page = await json(scoped(`/assistant/history?limit=25${before === null ? "" : `&before=${before}`}`)); count += page.items.length; before = page.next_cursor; } while (before !== null);
           assert.equal(count, 100);
-          await editor.getByRole("button", { name: /Activity/ }).click();
+          await editor.getByRole("button", { name: /^Activity \d/ }).click();
           await expect(editor.getByText("AI Assistant submission history", { exact: true })).toBeVisible();
           assert.ok(await editor.locator(".activity-item").count() <= 75);
         }
@@ -628,9 +629,10 @@ async function run(): Promise<void> {
       // Capture the execution queued by the UI; never substitute a CLI run.
       await openEditor(editor, owner, packagePath);
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
-      await component.getByRole("button", { name: "Verify Component", exact: true }).click();
+      await component.getByRole("button", { name: "Options", exact: true }).click();
+      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
-      await component.getByRole("button", { name: "Options" }).click();
+      await component.getByRole("button", { name: "Options", exact: true }).click();
       await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
       await component.getByRole("menuitem", { name: /Generate RTL/ }).click();
       let launched: any;
@@ -658,8 +660,9 @@ async function run(): Promise<void> {
       await conversation.screenshot({ path: join(output, "assistant.png"), fullPage: true });
       await editor.screenshot({ path: join(output, "editor.png"), fullPage: true });
       if (presentation) {
-        await editor.getByRole("button", { name: /Activity/ }).click();
-        await editor.getByRole("button", { name: "Refresh", exact: true }).click();
+        await editor.getByRole("button", { name: /^Activity \d/ }).click();
+        await editor.locator(".utility-heading").getByRole("button", { name: "Options", exact: true }).click();
+        await editor.getByRole("menuitem", { name: "Refresh", exact: true }).click();
         await expect(editor.getByText("succeeded", { exact: true })).toBeVisible();
         await editor.getByRole("heading", { name: "Action executions" }).evaluate(element => element.scrollIntoView({ block: "start" }));
       }

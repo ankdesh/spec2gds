@@ -1633,3 +1633,20 @@
   object-fit: contain;
   box-shadow: none;
 }
+
+/* One action pattern for content, rows, and Activity records. */
+.spec-options-menu--portal { position: fixed; z-index: 10000; right: auto; width: min(25rem, calc(100vw - 1rem)); min-width: 0; overflow-x: hidden; box-sizing: border-box; }
+.spec-options-menu button { display: grid; grid-template-columns: minmax(0, 1fr); gap: .25rem; white-space: normal; overflow-wrap: anywhere; min-width: 0; }
+.spec-options-menu small { max-width: 100%; }
+.spec-options-menu hr { width: 100%; border: 0; border-top: 1px solid var(--spec-line, #3f3f46); }
+.spec-section-options { margin-left: auto; }
+.spec-cover__title-row h1 { flex: 1; }
+.spec-hardware-controls > details > .spec-section-options { display: flex; justify-content: flex-end; }
+.spec-hardware-controls .spec-edit-actions > code { flex: 1; }
+
+.spec-options-menu { background: var(--spec-paper, #18181b); color: var(--spec-text, #f4f4f5); border-color: var(--spec-line-strong, #3f3f46); }
+.spec-options-menu button, .spec-options-menu a { color: inherit; }
+.spec-options-menu button:hover, .spec-options-menu button:focus-visible { background: var(--spec-line, #27272a); color: var(--spec-text, #f4f4f5); }
+.spec-options-menu button:disabled, .spec-options-menu small { color: var(--spec-muted, #9ca3af); }
+.spec-options-menu .spec-delete-button { color: var(--spec-danger, #f97316); }
+.spec-options-menu a { display: block; padding: .55rem .65rem; text-decoration: none; overflow-wrap: anywhere; }

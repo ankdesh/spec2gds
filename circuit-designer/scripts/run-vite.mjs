@@ -18,7 +18,7 @@ if (options["public-host"] !== undefined) overrides.public_host = options["publi
 const config = resolveConfig(options["service-config"], overrides);
 console.log(`${application === "editor" ? "Spec Editor" : "Circuit Designer"}: ${endpointUrl(application === "editor" ? config.spec_editor.dev_ui : config.circuit_designer.ui, config.public_host)}`);
 const root = fileURLToPath(new URL("../..", import.meta.url));
-const directory = resolve(root, "TEMP_serve-all", `vite_${randomUUID()}`);
+const directory = resolve(root, "temp", "TEMP_serve-all", `vite_${randomUUID()}`);
 mkdirSync(directory, { recursive: true });
 const source = resolve(root, `circuit-designer/apps/${application}/vite.config.ts`);
 const overlay = resolve(directory, "vite.config.mts");

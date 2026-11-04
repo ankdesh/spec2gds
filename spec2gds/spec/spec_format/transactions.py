@@ -62,6 +62,15 @@ from spec2gds.spec.spec_format.sv_validation import (
 
 
 @dataclass(frozen=True)
+class ImportCatalogPackage:
+    """Import a validated catalog package through the atomic transaction boundary."""
+
+    source: SpecRevision
+    details: dict[str, typing.Any]
+    request: typing.Any
+
+
+@dataclass(frozen=True)
 class UpsertDocumentXml:
     """Add or replace a profiled IP-XACT source document by its root ``xml:id``."""
 
@@ -373,6 +382,7 @@ class UpsertCircuitTiming:
 
 
 EditOperation = typing.Union[
+    ImportCatalogPackage,
     UpsertDocumentXml,
     DeleteDocument,
     CreateHardware,
@@ -453,6 +463,7 @@ class SpecEditTransaction:
             if previous is None or component.ports != previous.ports or component.parameters != previous.parameters:
                 updated_owners.add(component.ref)
         from dataclasses import asdict
+
         from spec2gds.spec.spec_format.rtl_interface import resolve_interface
         for component in next_revision.components:
             if component.ref not in updated_owners:
@@ -509,6 +520,14 @@ class EditResult:
 
 def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRef | None:
     """Apply a typed operation and return the stable reference for a creation."""
+    if isinstance(operation, ImportCatalogPackage):
+        from spec2gds.spec.spec_format.catalog_import import prepare_import
+        preview, imported = prepare_import(SpecRevision.from_package(package), operation.source, operation.details, operation.request)
+        if imported is None:
+            raise ValueError("Resolve catalog import conflicts before saving.")
+        candidate = imported.to_package()
+        package.manifest, package.narrative, package.files = candidate.manifest, candidate.narrative, candidate.files
+        return EntityRef.model_validate(preview["root"])
     if isinstance(operation, UpsertDocumentXml):
         package.add_document(operation.kind, operation.xml)
     elif isinstance(operation, DeleteDocument):

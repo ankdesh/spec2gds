@@ -30,7 +30,7 @@ export function prepareServiceLaunch(args, directory, entries = []) {
     { id: "event-http-sources", config: { ...baseline("event-http-sources"), allowedOrigins: [...new Set([specAllowlist, circuitAllowlist].join(",").split(",").map(value => new URL(value).origin))] } },
     { id: "webserver", config: { ...baseline("webserver"), host: config.ai_assistant.service.host, port: config.ai_assistant.service.port } },
   ];
-  const run = resolve(directory, "TEMP_serve-all", randomUUID());
+  const run = resolve(directory, "temp", "TEMP_serve-all", randomUUID());
   mkdirSync(run, { recursive: true, mode: 0o700 });
   const overlay = resolve(run, "network.patch.yml");
   writeFileSync(overlay, JSON.stringify(patch, null, 2));

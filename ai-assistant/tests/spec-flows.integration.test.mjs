@@ -241,8 +241,10 @@ test('browser reload and closure preserve the host flow and Spec Editor approval
     assert.equal(pending.status, 'waiting'); assert.equal(pending.pending.request.kind, 'spec-receipt');
     browser = await chromium.launch(browserOptions); const editor = await browser.newPage();
     await editor.goto(editorUrl);
-    await expect(editor.getByRole('button', { name: 'Approve', exact: true })).toBeVisible({ timeout: 30000 });
-    await editor.getByRole('button', { name: 'Approve', exact: true }).click();
+    const submission = editor.locator('.activity-history .activity-item').filter({ hasText: 'ready · Proposal' });
+    await expect(submission.getByRole('button', { name: 'Options for Assistant submission', exact: true })).toBeVisible({ timeout: 30000 });
+    await submission.getByRole('button', { name: 'Options for Assistant submission', exact: true }).click();
+    await editor.getByRole('menuitem', { name: 'Approve', exact: true }).click();
     await waitFor(() => runtime.ctx.flows.get(waiting.id, { kind: 'host', sessionId: source.id }).status === 'succeeded');
     const state = new ProductState(join(directory, 'assistant.sqlite3'));
     try {

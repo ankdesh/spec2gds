@@ -10,8 +10,8 @@ const defaultConfigPath = () => {
   const path = resolve(__dirname, "../config/services.json");
   return existsSync(path) ? path : defaultsPath;
 };
-const names = ["spec_editor", "circuit_designer", "ai_assistant", "verification_planner"];
-const shared = ["spec_editor", "ai_assistant", "verification_planner"];
+const names = ["spec_editor", "circuit_designer", "ai_assistant", "verification_planner", "spec_catalog"];
+const shared = ["spec_editor", "ai_assistant", "verification_planner", "spec_catalog"];
 function merge(base, supplied) {
   const result = structuredClone(base);
   for (const [key, item] of Object.entries(supplied)) {
@@ -59,7 +59,7 @@ function resolveConfig(path = defaultConfigPath(), overrides = {}) {
     if (["scheme", "host", "port"].some(key => value[name].service[key] !== value[name].ui[key])) throw new Error(`${name}.service and ui must use the same listener.`);
   }
   endpoint(value.logging?.viewer, "logging.viewer");
-  for (const [section, field] of [["logging", "file"], ["activities", "scratch_root"], ["circuit_designer", "preferences_file"]]) {
+  for (const [section, field] of [["logging", "file"], ["activities", "scratch_root"], ["circuit_designer", "preferences_file"], ["spec_catalog", "catalog_root"], ["spec_catalog", "state_dir"]]) {
     const file = value[section]?.[field];
     if (typeof file !== "string" || !file.trim()) throw new Error(`${section}.${field} must be a non-empty string.`);
     value[section][field] = resolve(dirname(path), file.replace(/^~(?=\/)/, homedir()));
@@ -94,7 +94,7 @@ function parseLaunchArgs(args, extra = []) {
   return { options, rest };
 }
 function serviceDirectory(config) {
-  return Object.fromEntries(names.slice(0, 3).map(name => [name, {
+  return Object.fromEntries(names.filter(name => name !== "verification_planner").map(name => [name, {
     service_url: endpointUrl(config[name].service, config.public_host),
     ui_url: endpointUrl(config[name].ui, config.public_host),
   }]));

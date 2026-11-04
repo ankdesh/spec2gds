@@ -78,3 +78,14 @@ def test_reload_factory_preserves_configuration_and_approval(tmp_path, monkeypat
 def test_shared_listener_override_updates_both_surfaces():
     config = resolve_config(overrides=listener_overrides("verification_planner", host="::1", port=6430))
     assert config["verification_planner"]["service"] == config["verification_planner"]["ui"]
+
+
+def test_catalog_paths_listener_and_public_directory(tmp_path):
+    from spec2gds.service_registry import load_service_registry
+    path = tmp_path / "services.json"
+    path.write_text(json.dumps({"schema_version": 2, "public_host": "design.test", "spec_catalog": {"catalog_root": "catalog", "state_dir": "state"}}))
+    config = resolve_config(path, overrides=listener_overrides("spec_catalog", host="0.0.0.0", port=6447))
+    assert config["spec_catalog"]["catalog_root"] == str(tmp_path / "catalog")
+    assert config["spec_catalog"]["state_dir"] == str(tmp_path / "state")
+    directory = load_service_registry(config=config).public_dict()
+    assert directory["spec_catalog"] == {"service_url": "http://design.test:6447/api/spec-catalog/v1", "ui_url": "http://design.test:6447"}

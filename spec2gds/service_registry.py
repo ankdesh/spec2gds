@@ -47,6 +47,7 @@ class ActivitySettings:
 @dataclass(frozen=True, slots=True)
 class ServiceRegistry:
     """Validated addresses and logging policy shared by every application."""
+    spec_catalog: HostedService
     spec_editor: HostedService
     circuit_designer: HostedService
     ai_assistant: HostedService
@@ -65,6 +66,7 @@ class ServiceRegistry:
                 ("spec_editor", self.spec_editor),
                 ("circuit_designer", self.circuit_designer),
                 ("ai_assistant", self.ai_assistant),
+                ("spec_catalog", self.spec_catalog),
             )
         }
 
@@ -81,6 +83,7 @@ def load_service_registry(path: Path | None = None, *, overrides: dict | None = 
     payload = config if config is not None else resolve_config(source, overrides=overrides)
     public_host = payload["public_host"]
     return ServiceRegistry(
+        spec_catalog=_hosted_service(payload, "spec_catalog", public_host),
         spec_editor=_hosted_service(payload, "spec_editor", public_host),
         circuit_designer=_hosted_service(payload, "circuit_designer", public_host),
         ai_assistant=_hosted_service(payload, "ai_assistant", public_host),

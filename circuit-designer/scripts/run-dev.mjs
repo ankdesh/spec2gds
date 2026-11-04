@@ -15,7 +15,7 @@ const overrides = listenerOverrides("circuit_designer", options);
 overrides.circuit_designer.ui = Object.fromEntries([["host", options["ui-host"]], ["port", options["ui-port"]]].filter(([, value]) => value !== undefined));
 if (options["public-host"] !== undefined) overrides.public_host = options["public-host"];
 const serviceConfig = resolveConfig(options["service-config"], overrides);
-const directory = resolve(dirname(fileURLToPath(import.meta.url)), "../../TEMP_serve-all", `circuit_${randomUUID()}`);
+const directory = resolve(dirname(fileURLToPath(import.meta.url)), "../../temp/TEMP_serve-all", `circuit_${randomUUID()}`);
 mkdirSync(directory, { recursive: true });
 const configPath = resolve(directory, "services.json");
 writeFileSync(configPath, JSON.stringify(serviceConfig, null, 2));

@@ -1,4 +1,4 @@
-"""Start the three applications and stop only recorded process groups."""
+"""Start the applications and Spec Catalog and stop only recorded process groups."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from uuid import uuid4
 from spec2gds_runtime.service_config import endpoint_url, listener_overrides, resolve_config
 
 ROOT = Path(__file__).resolve().parents[1]
-STATE = ROOT / "TEMP_serve-all"
+STATE = ROOT / "temp" / "TEMP_serve-all"
 RECORD = STATE / "processes.json"
 
 
@@ -90,14 +90,14 @@ def start(args: argparse.Namespace, previous: list[dict]) -> None:
     if any(tracked(record) for record in previous):
         raise RuntimeError("Tracked applications are running. Use restart to apply configuration changes.")
     overrides = {}
-    for name, port in (("spec_editor", args.spec_port), ("circuit_designer", args.circuit_port), ("ai_assistant", args.assistant_port)):
+    for name, port in (("spec_editor", args.spec_port), ("circuit_designer", args.circuit_port), ("ai_assistant", args.assistant_port), ("spec_catalog", getattr(args, "catalog_port", None))):
         overrides.update(listener_overrides(name, host=args.host, port=port))
     ui = {key: value for key, value in (("host", args.host), ("port", args.circuit_ui_port)) if value is not None}
     overrides["circuit_designer"]["ui"] = ui
     if args.public_host is not None:
         overrides["public_host"] = args.public_host
     config = resolve_config(args.service_config, overrides=overrides)
-    endpoints = [config["spec_editor"]["service"], config["circuit_designer"]["service"], config["circuit_designer"]["ui"], config["ai_assistant"]["service"]]
+    endpoints = [config["spec_editor"]["service"], config["circuit_designer"]["service"], config["circuit_designer"]["ui"], config["ai_assistant"]["service"], config["spec_catalog"]["service"]]
     seen = set()
     for endpoint in endpoints:
         address = (endpoint["host"], endpoint["port"])
@@ -111,6 +111,7 @@ def start(args: argparse.Namespace, previous: list[dict]) -> None:
     snapshot.write_text(json.dumps(config, indent=2) + "\n")
     common = ["--service-config", str(snapshot)]
     commands = [
+        ("Spec Catalog", ROOT, ["uv", "run", "--package", "spec-catalog-service", "--no-sync", "spec2gds-catalog-service", *common]),
         ("Spec Editor", ROOT, ["uv", "run", "--no-sync", "spec2gds-server", *common, *(["--require-designer-approval"] if args.require_designer_approval else [])]),
         ("Circuit Designer", ROOT / "circuit-designer", ["npm", "run", "dev", "--", *common]),
         ("AI Assistant", ROOT / "ai-assistant", ["npm", "run", "dev", "--", *common, "--no-open"]),
@@ -124,7 +125,7 @@ def start(args: argparse.Namespace, previous: list[dict]) -> None:
             children.append(child)
             records.append({"name": name, "pid": child.pid, "pgid": child.pid, "leader_identity": identity(child.pid, include_zombie=True), "members": [{"pid": child.pid, "identity": identity(child.pid)}], "command": command, "log": str(log), "config": str(snapshot), "endpoints": endpoints})
             save(records)
-        checks = [(endpoints[0], "/health"), (endpoints[1], "/api/circuit-designer/v1/health"), (endpoints[2], "/api/circuit-designer/v1/health"), (endpoints[3], "/readyz")]
+        checks = [(endpoints[4], "/api/spec-catalog/v1/health"), (endpoints[0], "/health"), (endpoints[1], "/api/circuit-designer/v1/health"), (endpoints[2], "/api/circuit-designer/v1/health"), (endpoints[3], "/readyz")]
         opener = build_opener(ProxyHandler({}))
         pending = list(checks)
         deadline = time.monotonic() + 60
@@ -155,7 +156,7 @@ def start(args: argparse.Namespace, previous: list[dict]) -> None:
         for child in children:
             child.wait()
         raise
-    for name, key in (("Spec Editor", "spec_editor"), ("Circuit Designer", "circuit_designer"), ("AI Assistant", "ai_assistant")):
+    for name, key in (("Spec Editor", "spec_editor"), ("Circuit Designer", "circuit_designer"), ("AI Assistant", "ai_assistant"), ("Spec Catalog", "spec_catalog")):
         print(f"{name}: {endpoint_url(config[key]['ui'], config['public_host'])}")
     print(f"Run records and logs: {run}")
 
@@ -165,17 +166,17 @@ def interrupt_startup(*_) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Start Spec Editor, Circuit Designer, and AI Assistant. Precedence: CLI > file > defaults.")
+    parser = argparse.ArgumentParser(description="Start Spec Editor, Circuit Designer, AI Assistant, and Spec Catalog. Precedence: CLI > file > defaults.")
     parser.add_argument("command", choices=("start", "stop", "restart"))
     parser.add_argument("--service-config", type=Path)
     parser.add_argument("--host")
     parser.add_argument("--public-host")
-    for name in ("spec", "circuit", "circuit-ui", "assistant"):
+    for name in ("spec", "circuit", "circuit-ui", "assistant", "catalog"):
         parser.add_argument(f"--{name}-port", type=int)
     parser.add_argument("--require-designer-approval", action="store_true")
     args = parser.parse_args()
     signal.signal(signal.SIGTERM, interrupt_startup)
-    STATE.mkdir(exist_ok=True)
+    STATE.mkdir(parents=True, exist_ok=True)
     with (STATE / "launcher.lock").open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         records = json.loads(RECORD.read_text()) if RECORD.exists() else []

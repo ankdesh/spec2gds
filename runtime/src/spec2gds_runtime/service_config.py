@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import Any
 
 DEFAULTS_PATH = Path(__file__).with_name("service-defaults.json")
-SERVICE_NAMES = ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner")
-SHARED_LISTENERS = ("spec_editor", "ai_assistant", "verification_planner")
+SERVICE_NAMES = ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner", "spec_catalog")
+SHARED_LISTENERS = ("spec_editor", "ai_assistant", "verification_planner", "spec_catalog")
 
 
 def default_config_path() -> Path:
@@ -87,7 +87,7 @@ def resolve_config(path: str | Path | None = None, *, overrides: dict | None = N
     if not isinstance(value["logging"], dict):
         raise ValueError("logging must be an object.")
     _validate_endpoint(value["logging"]["viewer"], "logging.viewer")
-    for section, field in (("logging", "file"), ("activities", "scratch_root"), ("circuit_designer", "preferences_file")):
+    for section, field in (("logging", "file"), ("activities", "scratch_root"), ("circuit_designer", "preferences_file"), ("spec_catalog", "catalog_root"), ("spec_catalog", "state_dir")):
         configured = value[section][field]
         if not isinstance(configured, str) or not configured.strip():
             raise ValueError(f"{section}.{field} must be a non-empty string.")

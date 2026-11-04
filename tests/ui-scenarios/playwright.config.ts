@@ -1,9 +1,10 @@
 import { defineConfig } from "@playwright/test";
 import { resolve } from "node:path";
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 
 process.env.PLAYWRIGHT_BROWSERS_PATH ??= resolve("../../circuit-designer/.playwright-browsers");
-const output = process.env.SPEC2GDS_TEST_OUTPUT_DIR ??= mkdtempSync("/tmp/spec2gds-e2e-");
+mkdirSync(resolve("../../temp"), { recursive: true });
+const output = process.env.SPEC2GDS_TEST_OUTPUT_DIR ??= mkdtempSync(resolve("../../temp/TEMP_spec2gds-e2e-"));
 export default defineConfig({
   testDir: "./e2e",
   outputDir: `${output}/artifacts`,

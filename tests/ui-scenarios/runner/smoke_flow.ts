@@ -91,7 +91,8 @@ export async function runSmoke(context: SmokeContext): Promise<void> {
   if (restricted) {
     const link = conversation.getByRole("link", { name: "Review in Spec Editor", exact: true });
     await editor.goto(await link.getAttribute("href") || "");
-    await editor.getByRole("button", { name: "Approve", exact: true }).click();
+    await editor.locator(".activity-history .activity-item").filter({ hasText: "ready · Proposal" }).getByRole("button", { name: "Options for Assistant submission", exact: true }).click();
+    await editor.getByRole("menuitem", { name: "Approve", exact: true }).click();
   }
   await expect.poll(async () => (await readSnapshot()).source_revision_hash,
     { timeout: 30_000 }).not.toBe(baseline.source_revision_hash);

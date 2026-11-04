@@ -6,7 +6,8 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { resolveConfig, endpointUrl, parseLaunchArgs } from "./service-config.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const directory = mkdtempSync(resolve(root, "TEMP_config-"));
+mkdirSync(resolve(root, "temp"), { recursive: true });
+const directory = mkdtempSync(resolve(root, "temp/TEMP_config-"));
 const cases = JSON.parse(readFileSync(resolve(root, "tests/fixtures/service-config.json"), "utf8"));
 for (const item of cases) test(item.name, () => {
   for (const key of ["SPEC2GDS_SERVICE_CONFIG", "SPEC2GDS_PUBLIC_HOST", "CIRCUIT_DESIGNER_HOST", "ASSISTANT_PORT"]) process.env[key] = "obsolete-invalid-value";

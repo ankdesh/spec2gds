@@ -79,5 +79,21 @@
       "port": 6016,
       "base_path": ""
     }
+  },
+  "spec_catalog": {
+    "service": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6017,
+      "base_path": "/api/spec-catalog/v1"
+    },
+    "ui": {
+      "scheme": "http",
+      "host": "0.0.0.0",
+      "port": 6017,
+      "base_path": ""
+    },
+    "catalog_root": "../spec_catalog_service/catalog",
+    "state_dir": "../spec_catalog_service/.state"
   }
 }

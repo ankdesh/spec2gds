@@ -37,6 +37,7 @@ export class Stack {
   readonly planner: string;
   readonly circuit: string;
   readonly circuitUI: string;
+  readonly catalog: string;
   readonly env: NodeJS.ProcessEnv;
   private readonly children = new Map<string, ChildProcess>();
   private readonly sentinels: Map<string, Buffer | undefined>;
@@ -45,7 +46,8 @@ export class Stack {
   private constructor(info: TestInfo, ports: number[]) {
     this.directory = info.outputPath("private");
     mkdirSync(this.directory, { recursive: true, mode: 0o700 });
-    const [spec, planner, circuit, ui] = ports;
+    const [spec, planner, circuit, ui, catalog] = ports;
+    this.catalog = `http://127.0.0.1:${catalog}`;
     this.spec = `http://127.0.0.1:${spec}`;
     this.planner = `http://127.0.0.1:${planner}`;
     this.circuit = `http://127.0.0.1:${circuit}`;
@@ -60,6 +62,10 @@ export class Stack {
     Object.assign(config.circuit_designer.ui, { host: "127.0.0.1", port: ui });
     Object.assign(config.verification_planner.service, { host: "127.0.0.1", port: planner });
     Object.assign(config.verification_planner.ui, { host: "127.0.0.1", port: planner });
+    Object.assign(config.spec_catalog.service, { host: "127.0.0.1", port: catalog });
+    Object.assign(config.spec_catalog.ui, { host: "127.0.0.1", port: catalog });
+    config.spec_catalog.catalog_root = join(root, "spec_catalog_service/catalog");
+    config.spec_catalog.state_dir = join(this.directory, "catalog-state");
     config.logging.enabled = false;
     config.logging.file = join(this.directory, "events.jsonl");
     config.activities.scratch_root = join(this.directory, "generated");
@@ -74,6 +80,7 @@ export class Stack {
       SPEC2GDS_E2E_BARRIER: join(this.directory, "barrier"),
       PYTHONPATH: `${join(root, "tests/ui-scenarios/e2e")}:${root}${process.env.PYTHONPATH ? `:${process.env.PYTHONPATH}` : ""}`,
     };
+    this.commands.set("catalog", [join(root, ".venv/bin/spec2gds-catalog-service"), ["--service-config", configPath], root, `${this.catalog}/api/spec-catalog/v1/health`]);
     this.commands.set("spec", [join(root, ".venv/bin/spec2gds-spec-service"), ["--service-config", configPath], root, `${this.spec}/health`]);
     this.commands.set("verification", [join(root, ".venv/bin/verification-planner"), ["--service-config", configPath, "--storage-dir", join(this.directory, "planner")], root, `${this.planner}/api/verification/v1/health`]);
     this.commands.set("circuit", ["npm", ["run", "service", "--", "--service-config", configPath], join(root, "circuit-designer"), `${this.circuit}/api/circuit-designer/v1/health`]);
@@ -84,7 +91,7 @@ export class Stack {
 
   static async create(info: TestInfo): Promise<Stack> {
     const ports = new Set<number>();
-    while (ports.size < 4) ports.add(await freePort());
+    while (ports.size < 5) ports.add(await freePort());
     return new Stack(info, [...ports]);
   }
   async start(name: string): Promise<void> {

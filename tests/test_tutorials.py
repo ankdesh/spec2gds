@@ -62,7 +62,7 @@ def test_tutorial_html_is_current_and_local_navigation_resolves():
 def test_preparation_refuses_source_directories_and_existing_outputs():
     with pytest.raises(ValueError, match="TEMP_"):
         prepare(ROOT / "docs/tutorials/not-an-output")
-    existing = ROOT / "TEMP_tutorials" / f"existing-{uuid4().hex}"
+    existing = ROOT / "temp" / "TEMP_tutorials" / f"existing-{uuid4().hex}"
     existing.mkdir(parents=True)
     with pytest.raises(FileExistsError, match="refusing to replace"):
         prepare(existing)
@@ -72,7 +72,7 @@ def test_preparation_refuses_source_directories_and_existing_outputs():
 
 @pytest.fixture(scope="module")
 def tutorial_run():
-    directory = ROOT / "TEMP_tutorials" / f"test-{uuid4().hex}"
+    directory = ROOT / "temp" / "TEMP_tutorials" / f"test-{uuid4().hex}"
     before = (ROOT / "config/services.json").read_bytes()
     previous = os.environ.get("SPEC2GDS_SERVICE_CONFIG")
     result = prepare(directory)

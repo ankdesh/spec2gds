@@ -331,6 +331,12 @@ class SpecPackage:
         except (ValueError, pydantic.ValidationError) as exc:
             diagnostics.append(f"Invalid circuit timing: {exc}")
 
+        try:
+            from spec2gds.spec.spec_format.catalog_import import validate_origin_annotation
+            validate_origin_annotation(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid catalog origins: {exc}")
+
         diagnostics.extend(_reference_diagnostics(self.manifest, self.files))
         return sorted(set(diagnostics))
 
