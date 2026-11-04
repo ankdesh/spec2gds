@@ -1,10 +1,15 @@
 # Phase 2: storage, streams, CDC, and reset
 
-Status: implementation instructions. Requires completed Phase 1.
+Status: planned; the runtime inventory records 32 Phase 2 entries as planned.
+Requires validated Phase 1 releases. Read the shared guide's
+[current baseline](../README.md#current-baseline-for-coding-agents) before work.
+Extend `spec_catalog_service/`; its commands, hosting, and Spec Editor import
+already exist. Preserve the runtime inventory and all published releases.
 
 ## 1. Inputs, outputs, and ordered implementation
 
-Read [the shared contract](../README.md) and `handoffs/phase-1.md`. Verify the 32
+Read [the shared contract](../README.md) and
+`spec_catalog_service/catalog/handoffs/phase-1.md`. Verify the 32
 previous releases and their digests before changes. Deliver 32 new entries,
 64 total. Preserve all accepted Phase 1 bytes.
 
@@ -22,8 +27,8 @@ previous releases and their digests before changes. Deliver 32 new entries,
    recovery authority. Concurrent search must return either pre-commit or
    post-commit state, never a partial version record.
 5. Execute the Spec Editor stress scenarios below on temporary copies only.
-   Fix confirmed source, validation, and browser defects. Do not implement an
-   editor library import or catalogue feature for this secondary check.
+   Fix confirmed source, validation, and browser defects. Reuse the existing
+   Options menus and catalog import dialog; do not create a second import path.
 6. Run all Phase 2 checks, selected predecessor hardware regressions, service
    checks, and required profiles. Publish exact candidate bytes and complete handoff.
 
@@ -331,7 +336,10 @@ available; absence is `not_run`, not a reason to weaken simulation or structure.
 
 Use a real browser and real isolated services. Start from a temporary copy of
 `fifo_sync` and a temporary `reset_sync` Spec. Opening a local `.spec` with the
-existing application is sufficient; no library-service integration is needed.
+existing application is sufficient. The existing catalog dialog can also import
+a published definition, with its published defaults. Use Options menus for content
+actions, and edit parameters explicitly after import. Generate RTL verifies the
+saved target on click; a separate Verify action is optional for this check.
 
 1. Open fifo_sync. Inspect ports/parameters/SV. Edit W from 32 to 7 using the
    actual parameter control and save. Reopen and verify symbolic ranges and SV
@@ -367,15 +375,15 @@ predecessor package digests unchanged.
 ## 6. Commands and completion gate
 
 ```bash
-uv run spec2gds-library check --phase 1 --output temp/TEMP_p2/prerequisite
-uv run spec2gds-library check --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/check
-uv run spec2gds-library verify --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/verify
-uv run pytest tests/spec_library -m 'not extensive'
+uv run --package spec-catalog-service spec2gds-catalog check --phase 1 --output temp/TEMP_p2/prerequisite
+uv run --package spec-catalog-service spec2gds-catalog check --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/check
+uv run --package spec-catalog-service spec2gds-catalog verify --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/verify
+uv run --package spec-catalog-service python -m pytest spec_catalog_service/tests -m 'not extensive' --basetemp temp/TEMP_p2/pytest
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,activities
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 2 --candidates temp/TEMP_p2/candidates --evidence temp/TEMP_p2/verify --output temp/TEMP_p2/publish
-uv run spec2gds-library check --phase 2 --output temp/TEMP_p2/published-check
+uv run --package spec-catalog-service spec2gds-catalog publish --phase 2 --candidates temp/TEMP_p2/candidates --evidence temp/TEMP_p2/verify --output temp/TEMP_p2/publish
+uv run --package spec-catalog-service spec2gds-catalog check --phase 2 --output temp/TEMP_p2/published-check
 ```
 
 `circuit` covers the browser application used by Spec Editor where selected by
@@ -384,6 +392,7 @@ correct existing suite. Regression is required for index persistence and any
 shared parameter/range fixes. Do not omit required live checks in fast.
 
 Accept 32 new files only after every mandatory matrix passes. The service must
-index 64 accepted versions and survive rebuild. Handoff must record memory
+index 64 accepted versions and survive rebuild. Write the handoff to
+`spec_catalog_service/catalog/handoffs/phase-2.md` and record memory
 collision policy, CDC clock/reset assumptions, structural evidence limits,
 Spec Editor stress results, fixes, and exact preserved predecessor digests.

@@ -1,6 +1,12 @@
 # Phase 4: protocols, peripherals, and complete IP starters
 
-Status: implementation instructions. Requires completed Phases 1, 2, and 3.
+Status: planned; the runtime inventory records 24 Phase 4 entries as planned.
+Requires completed Phases 1, 2, and 3. Read the shared guide's
+[current baseline](../README.md#current-baseline-for-coding-agents) before work.
+Extend `spec_catalog_service/` and its maintained tests. Use predecessor handoffs
+under `spec_catalog_service/catalog/handoffs/` and the runtime inventory there.
+Hosting, launcher startup, and Spec Editor import already exist; validate and
+extend them for composites without recreating the removed library packages.
 
 ## 1. Inputs, outputs, and ordered implementation
 
@@ -443,15 +449,15 @@ original checkout path or other application processes.
 ## 7. Commands and final gate
 
 ```bash
-uv run spec2gds-library check --phase 3 --output temp/TEMP_p4/prerequisite
-uv run spec2gds-library check --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/check
-uv run spec2gds-library verify --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/verify
-uv run pytest tests/spec_library -m 'not extensive'
+uv run --package spec-catalog-service spec2gds-catalog check --phase 3 --output temp/TEMP_p4/prerequisite
+uv run --package spec-catalog-service spec2gds-catalog check --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/check
+uv run --package spec-catalog-service spec2gds-catalog verify --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/verify
+uv run --package spec-catalog-service python -m pytest spec_catalog_service/tests -m 'not extensive' --basetemp temp/TEMP_p4/pytest
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,assistant,activities,shared
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 4 --candidates temp/TEMP_p4/candidates --evidence temp/TEMP_p4/verify --output temp/TEMP_p4/publish
-uv run spec2gds-library check --phase 4 --output temp/TEMP_p4/published-check
+uv run --package spec-catalog-service spec2gds-catalog publish --phase 4 --candidates temp/TEMP_p4/candidates --evidence temp/TEMP_p4/verify --output temp/TEMP_p4/publish
+uv run --package spec-catalog-service spec2gds-catalog check --phase 4 --output temp/TEMP_p4/published-check
 ```
 
 After exact candidate publication, run `check` and `verify` separately for phases
@@ -465,7 +471,8 @@ Accept only with120 delivered inventory records,120 self-contained `.spec` files
 120 usage documents and digest-bound evidence records; working local upload/
 browse/search/download service; two composite closure/functional passes; complete
 hardware matrices; and passing required software profiles. Record secondary
-stress limitations separately. Create final `handoffs/phase-4.md` with a category
+stress limitations separately. Create the final handoff at
+`spec_catalog_service/catalog/handoffs/phase-4.md` with a category
 coverage table, exact source/evidence digests, complete matrix results, service
 startup/example requests, confirmed defect fixes, and deferred families. Update
 the shared README status to describe the actual delivered state only then.

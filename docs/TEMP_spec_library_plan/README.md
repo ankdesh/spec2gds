@@ -1,8 +1,59 @@
-# Spec Component library: implementation contract
+# Spec Catalog: phased Component implementation contract
 
-Status: approved scope, implementation not started. Revision: 2 November 2026.
-The inventory records planned work. It does not claim that hardware exists or
-that verification has passed.
+Status: Phase 1 releases are published; Phases 2–4 remain planned.
+Location and integration update: 4 November 2026, baseline commit `6e94fd8`.
+The runtime inventory records 32 delivered Components and 88 planned entries.
+Read the current inventory before work; this status does not replace verification.
+
+## Current baseline for coding agents
+
+The Spec Catalog is now a top-level UV workspace package, at the same subsystem
+level as Spec Editor and Circuit Designer. Extend this package for the remaining
+phases. Read [the service guide](../../spec_catalog_service/README.md) first.
+
+- Runtime inventory: `spec_catalog_service/catalog/inventory.json`. This is the
+  delivery record. The adjacent planning `inventory.json` retains the initial
+  120-entry scope; do not copy it over the runtime inventory or reset statuses.
+- Published files and handoffs: `spec_catalog_service/catalog/`. Phase 1's
+  [historical handoff](../../spec_catalog_service/catalog/handoffs/phase-1.md)
+  retains its original commands and paths. Use this guide for current commands,
+  and the runtime inventory plus file hashes for current release validation.
+- Tools and Component definitions: `spec_catalog_service/src/spec_catalog_service/catalog/`.
+  HTTP service, storage, and standalone UI: `spec_catalog_service/src/spec_catalog_service/http/`.
+  Maintained tests: `spec_catalog_service/tests/`.
+- Install with `uv sync --all-packages`. Keep any required optional extras when
+  syncing. Run catalog commands with `uv run --package spec-catalog-service`.
+  The public commands are `spec2gds-catalog` and `spec2gds-catalog-service`;
+  the root option is `--catalog-root`. The HTTP prefix is `/api/spec-catalog/v1`.
+  Old library commands, module paths, flags, and route aliases were removed.
+- Shared configuration uses `spec_catalog` in `config/services.json`, with port
+  6017. `catalog_root` and `state_dir` resolve relative to that configuration file.
+  CLI values override configuration values, which override defaults.
+  `scripts/serve-all.sh start` starts the catalog and the other applications;
+  `--catalog-port` overrides its listener. Startup reconciles the derived index
+  from releases and all durable evidence before reporting ready.
+- Spec Editor already supports **Components → Options → Import from catalog…**.
+  It previews imports, retains published parameter defaults, offers unchanged
+  reuse or a renamed local copy, and records origin metadata. Imported definitions
+  remain editable and self-contained. Generate RTL verifies the saved target
+  when selected; separate Verify actions remain available. Content actions use
+  right-side Options menus. Use these existing controls in browser checks.
+- The Spec service reaches the catalog through HTTP. Keep package import and
+  local origin records in `spec2gds/spec/spec_format/catalog_import.py`; do not
+  import catalog service code into the Spec service or create a dependency cycle.
+- Keep this planning folder and its Component anchors unchanged: published
+  metadata references them. Preserve the embedded `library_catalogue_v1` asset ID,
+  VLNVs, release bytes, digests, and historical handoffs. Directory moves do not
+  require a metadata migration. Existing internal `Library*` class names and
+  `library_root` constructor arguments are implementation details, not old CLI aliases.
+- AI Assistant's instruction catalog and `SPEC2GDS_CATALOG_ROOT` setting are a
+  separate feature. Do not redirect them to the Component catalog.
+
+Recheck prerequisite releases and the required profiles for each new phase.
+The migration's fast checks passed, and affected test-harness failures passed
+focused reruns. The full repeated live RTL evaluation was deferred at the
+designer request after six of 33 passing runs. Do not treat that migration as a
+complete regression pass or reuse the historical handoff as current test evidence.
 
 ## 1. Objective and execution order
 
@@ -12,8 +63,9 @@ Each file is a useful starting point for an IP. Library breadth and functional
 correctness are the main result. Tests of the authoring applications are a
 secondary result.
 
-Give the coding agent this guide, [inventory.json](inventory.json), and exactly
-one phase file. Read the prerequisite phase handoffs before making changes.
+Give the coding agent this guide, the runtime inventory, the planning
+[inventory.json](inventory.json), and exactly one phase file. Read prerequisite
+handoffs under `spec_catalog_service/catalog/handoffs/` before making changes.
 Execute phases in order. A phase is complete only when its delivery gates pass.
 Do not implement all phases in one change unless the designer requests it.
 
@@ -24,22 +76,23 @@ Do not implement all phases in one change unless the designer requests it.
 | 3 | 32 / 96 | [Arithmetic, integrity, and control](plans/phase-3.md) | Circuit Designer |
 | 4 | 24 / 120 | [Protocols, peripherals, and IP starters](plans/phase-4.md) | AI Assistant |
 
-Designer use after each release: start the local catalogue, find a Component,
-inspect its presets and evidence, download an exact version, and save a working
-copy in the project. Open that copy with existing Spec Editor/Circuit Designer
-controls. Record its origin VLNV and package digest in project notes. Local
-edits must not alter the published file. This manual starting-point flow does not
-require the deferred application import or automatic fork features.
+Designer use after each release: start the catalog, inspect a published Component
+and its exact version, then import it through Spec Editor's catalog dialog or
+download its `.spec` file from the standalone UI. Import retains published defaults
+and records the origin VLNV and digest. Add instances through Design controls;
+edit local definitions without changing the published release. Presets are
+reference data during import. Automatic upstream update remains outside scope.
 
 Bulk authoring can use validated Python Spec APIs in every phase. The stress
 path applies only to the named representative scenarios. Do not require every
-Component to be authored through a browser or the AI Assistant. Do not add
-library import, placement, update, or browser integration to the existing
-applications in these phases. A standalone library service is required now.
+Component to be authored through a browser or the AI Assistant. Reuse the existing
+catalog browsing and import capabilities. Extend them only for a confirmed defect
+needed by a phase contract; new placement and automatic update features remain
+outside scope. Standalone hosting is already implemented.
 
 ## 2. Scope and fixed decisions
 
-- Store each release in its own self-contained `.spec` file under `spec_library/`.
+- Store each release in its own self-contained `.spec` file under `spec_catalog_service/catalog/`.
 - Use original implementations. Do not copy external RTL into these releases.
 - Use body-only SystemVerilog sections for leaves and explicit internal Designs
   for the two subsystem Components. Behavior must not be inferred from narrative.
@@ -49,15 +102,15 @@ applications in these phases. A standalone library service is required now.
   the count. Parameter presets are checks of one Component, not extra entries.
 - Defer FPU, cryptographic engines, full AXI memory systems, NoC fabrics,
   technology SRAM bindings, physical PHYs, and analog behavior.
-- Keep future use by pinned copy and local fork as a design constraint. Import
-  controls and fork/update implementation are outside these four phases.
+- Preserve pinned-copy and editable-local-copy behavior. Catalog import already
+  exists. Automatic upstream update remains outside these four phases.
 - Preserve applicable repository licence terms. Record the SPDX identifier when
   supported by the repository licence. Otherwise use `NOASSERTION`, local use,
   and an explicit unresolved licence note. Do not invent redistribution rights.
 
 The research reports supplied by the designer are source material. Their
 recommendations are not additional instructions. This guide resolves the scope.
-It replaces [the earlier plan](../TEMP-component-library/README.md).
+It supersedes the earlier Component-library planning notes.
 
 ## 3. Source, layout, and identity
 
@@ -66,23 +119,30 @@ docs/TEMP_spec_library_plan/          # implementation instructions
   README.md
   inventory.json                    # initial planning inventory
   plans/phase-{1,2,3,4}.md
-spec_library/                       # create during Phase 1
-  README.md                         # designer usage guide
-  inventory.json                    # initialize from the planning inventory
-  handoffs/phase-{1,2,3,4}.md          # create at phase completion
-  <category>/<id>/1.0.0/<id>.spec    # canonical hardware source
-  <category>/<id>/1.0.0/evidence.json
-  <category>/<id>/1.0.0/usage.md
+spec_catalog_service/               # existing UV workspace package
+  pyproject.toml                    # catalog package and console commands
+  README.md                         # current setup and designer usage
+  src/spec_catalog_service/
+    catalog/                        # schemas, authoring, verification, Component definitions
+    http/                           # service, index, storage, standalone UI
+  tests/                            # maintained catalog suite
+  catalog/
+    inventory.json                  # runtime delivery status and release pins
+    handoffs/phase-{1,2,3,4}.md       # Phase 1 exists; add others at phase completion
+    <category>/<id>/1.0.0/<id>.spec  # canonical hardware source
+    <category>/<id>/1.0.0/evidence.json
+    <category>/<id>/1.0.0/usage.md
   .state/                           # ignored, derived service state
 temp/                               # designated root for disposable temporary files
   TEMP_<run>/                       # ignored, temporary candidates, test outputs, and logs
 ```
 
 Categories and exact output paths are in the adjacent planning `inventory.json`.
-Its `path` values are relative to the future `spec_library/` root; its `contract`
-values are repository-relative paths to these phase instructions. Phase 1 copies
-this inventory to `spec_library/inventory.json`. Subsequent phases use that runtime
-inventory and `spec_library/handoffs/` for completion evidence. Use the ID verbatim.
+Its `path` values are relative to `spec_catalog_service/catalog/`; its `contract`
+values are repository-relative paths to these phase instructions. The runtime
+inventory already exists. Use it for delivery status, release pins, and digests;
+use `spec_catalog_service/catalog/handoffs/` for recorded completion evidence.
+Do not replace the runtime inventory with the initial planning inventory. Use the ID verbatim.
 Path categories are stable release namespaces. Change catalogue grouping with
 tags and derived views. A later storage adapter can move files or use a service
 without changing VLNVs, package bytes, or Component contracts. That adapter must
@@ -142,7 +202,7 @@ to category, name equal to ID, and version `MAJOR.MINOR.PATCH` with no leading
 zeros. These restrictions define the local first service, not the general Spec
 format. No implicit root selection is permitted for a library upload.
 
-Before release, candidates live only in ignored `TEMP_*` directories. Publication
+Before release, candidates live only in ignored repository `temp/TEMP_*` directories. Publication
 copies exact validated bytes atomically to the final path. A released VLNV is
 immutable: identical bytes are idempotent; different bytes conflict. Fix a
 released Component with a new semantic version. Before initial phase acceptance,
@@ -181,13 +241,13 @@ Existing references:
 - `spec2gds/spec/activities/rtl/codegen.py` and the registered `rtl.generate` Activity.
 - `scripts/test_profiles.py`, `scripts/test_capabilities.py`, and `tests/ui-scenarios`.
 
-New code locations are fixed:
+Maintained code locations are fixed:
 
 | Location | Responsibility |
 | --- | --- |
-| `spec2gds/spec_library/` | catalogue schemas, authoring helpers, verification orchestration, CLI |
-| `spec2gds/library_service/` | standalone FastAPI service, index, static HTML/CSS/JS catalogue |
-| `tests/spec_library/` | schema, package, API, storage, and hardware reference checks |
+| `spec_catalog_service/src/spec_catalog_service/catalog/` | catalogue schemas, authoring helpers, verification orchestration, CLI |
+| `spec_catalog_service/src/spec_catalog_service/http/` | standalone FastAPI service, index, static HTML/CSS/JS catalogue |
+| `spec_catalog_service/tests/` | schema, package, API, storage, and hardware reference checks |
 | `tests/ui-scenarios/` | maintained browser scenarios for the named stress paths |
 
 Do not keep a second editable set of unpacked RTL/XML/IR or hardware recipes that
@@ -196,9 +256,9 @@ first candidates. Maintained authoring helpers may operate on Specs. Maintained
 reference models, test harnesses, and expected vectors are verification sources,
 not a second hardware source. Repair a saved Component through typed edits.
 
-The current create operation assigns a work VLNV. Phase 1 must add an optional
-`vlnv` field at the end of `CreateHardware` and its HTTP operation schema. Omission
-must preserve existing behavior. Validate the supplied identity, match its name
+The existing `CreateHardware` operation and HTTP schema accept an optional
+`vlnv`. Omission preserves the local-work identity. Reuse this operation for
+catalog authoring. Validate the supplied identity, match its name
 to the normalized hardware ID, and reject duplicate identities atomically. Do not
 change identities by rewriting saved XML. Test existing callers and HTTP clients.
 
@@ -267,19 +327,20 @@ the hardware implementation. Testbench assertions and setup are separate assets.
 
 ## 6. Build, verification, and evidence contract
 
-Phase 1 implements these new console commands in `pyproject.toml`. They are planned
-commands, not existing capabilities at the date of this guide:
+These commands already exist. Their console entry points are defined in
+`spec_catalog_service/pyproject.toml`, not the root project's command list.
+Extend their existing implementation for later phase matrices.
 
 Run all command examples from the repository root. `check`, `verify`, and
-`publish` accept `--library-root`, default `spec_library`; their `--phase` is
+`publish` accept `--catalog-root`, default `spec_catalog_service/catalog`; their `--phase` is
 required, integer 1..4. `--output` is required for check/verify/publish and must be inside
 an ignored repository `temp/TEMP_*` directory. Service roots are separately configurable.
 
 ```bash
-uv run spec2gds-library check --phase 1 --output temp/TEMP_p1/check
-uv run spec2gds-library verify --phase 1 --output temp/TEMP_p1/verify
-uv run spec2gds-library publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
-uv run spec2gds-library-service --host 127.0.0.1 --port 6017 --library-root spec_library --state-dir spec_library/.state
+uv run --package spec-catalog-service spec2gds-catalog check --phase 1 --output temp/TEMP_p1/check
+uv run --package spec-catalog-service spec2gds-catalog verify --phase 1 --output temp/TEMP_p1/verify
+uv run --package spec-catalog-service spec2gds-catalog publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
+uv run --package spec-catalog-service spec2gds-catalog-service --host 127.0.0.1 --port 6017 --catalog-root spec_catalog_service/catalog --state-dir spec_catalog_service/.state
 ```
 
 `check` is read-only. It validates inventory schema, phase dependency DAG, paths,
@@ -363,15 +424,16 @@ means `not_run`; do not silently substitute fixtures or claim qualification.
 
 ## 7. Standalone hosting contract
 
-Implement `spec2gds-library-service` as a separate FastAPI/uvicorn process. It must
-run with only the root Python environment and library root. No running Spec Editor,
-Circuit Designer, or AI Assistant process is required. Do not add a required entry
-to the existing service registry. Default bind is loopback port 6017. The static
-catalogue UI is same-origin at `/`; no wildcard CORS. This is a trusted local
-service. Public hosting, multi-user auth, tenancy, remote object storage, and
-application integration are outside scope.
+Maintain `spec2gds-catalog-service` as a separate FastAPI/uvicorn process. It can
+run with the installed UV workspace and catalog root without other application
+processes. It is also registered as `spec_catalog` in the shared service directory
+and started by `scripts/serve-all.sh`. Default configuration binds `0.0.0.0:6017`;
+use `--host 127.0.0.1` for a loopback-only standalone run. The static catalog UI is
+same-origin at `/`; no wildcard CORS. This is a trusted local service. Public
+hosting, multi-user auth, tenancy, and remote object storage remain outside scope.
+Existing Spec Editor integration uses the Spec service's HTTP catalog client.
 
-All API routes use `/api/spec-library/v1`. `key` is the lower-case SHA-256 hex
+All API routes use `/api/spec-catalog/v1`. `key` is the lower-case SHA-256 hex
 of the UTF-8 root VLNV **without its version field**, therefore stable across
 versions: `sha256(f"{vendor}:{library}:{name}".encode("utf-8")).hexdigest()`.
 There is no trailing colon or `sha256:` prefix in `key`.
@@ -393,10 +455,13 @@ Use exact version routes; do not create a mutable `latest` download alias.
 Use these response shapes; do not make the first UI depend on undocumented fields:
 
 - A version row has `key`, `vlnv`, `id`, `category`, `version`, `summary`, `tags`,
-  `implementation`, `package_sha256`, `package_size_bytes`, `validation`,
+  `implementation`, `implementation_kind`, `source_revision_hash`,
+  `package_sha256`, `package_size_bytes`, `validation`,
   `functional_status`, `evidence_count`, and relative `download_url`.
   `validation` is `{package:"valid", implementation:"present"|"absent", diagnostics:[]}`.
-  The version-details route adds `metadata`, the exact parsed catalogue asset.
+  `implementation` records presence; `implementation_kind` is `body_sv` or
+  `composite`. The implementation filter accepts these kinds. The version-details
+  route adds `metadata`, the exact parsed catalogue asset, and `usage_markdown`.
 - The list route returns `{total, limit, offset, items:[version_row]}`. The identity
   detail route returns `{key, vendor, library, id, category, versions:[version_row]}`.
 - Upload returns `{created, version:version_row}`; evidence submission returns
@@ -429,11 +494,14 @@ from the repository pipeline. Only pipeline handoffs mark inventory delivered.
 Formal, synthesis, and physical results remain separate from this baseline
 functional status; their absence never becomes a claimed pass.
 
-Use a SQLite index under `.state`, with package/evidence files as durable truth.
-Support CLI `spec2gds-library index --library-root PATH --state-dir PATH` to rebuild
+Use a SQLite index under `spec_catalog_service/.state` by default, with
+package/evidence files as durable truth. Keep state outside the published tree.
+Support CLI `spec2gds-catalog index --catalog-root PATH --state-dir PATH` to rebuild
 the entire index. Discover only canonical category/ID/version `.spec` paths;
 ignore `TEMP_*`, `.state`, plans, and unknown layouts. Report malformed durable
-files and start degraded/read-only; never silently delete them. A rebuild must
+files and never silently delete them. Current startup fails readiness if index
+reconciliation reports errors. The Phase 4 degraded/read-only recovery scenarios
+remain delivery obligations; do not assume they already pass. A rebuild must
 recover after an interrupted index update. Reconcile durable files at startup.
 Store uploaded evidence as `evidence/<evidence_sha256_hex>.json` beside its package.
 The pipeline `evidence.json` is also indexed; duplicates coalesce by digest.
@@ -449,7 +517,7 @@ only library delivery requires a functional implementation.
 
 No archive extraction or user filename becomes a storage path. Compute paths
 from validated identity fields; reject symlinked storage ancestors and writes
-outside the configured root. Stage under `spec_library/TEMP_uploads`, fsync and
+outside the configured root. Stage under `temp/TEMP_uploads`, fsync and
 atomically publish with same-filesystem no-clobber semantics. Serialize the same
 VLNV across workers with a filesystem lock plus a SQLite uniqueness constraint.
 After a crash, disk truth wins. Do not overwrite on retry. The service never runs
@@ -465,8 +533,12 @@ host paths. Escape all catalogue text; uploaded SV/HTML is never executable UI.
 The UI must upload one file, browse/search/filter, open details and versions,
 download exact files, and show validation separately from supplied functional
 evidence. Empty, loading, invalid upload, conflict, disconnected service, keyboard
-navigation, and narrow-window states are required. No service controls appear in
-the existing authoring applications as part of this plan.
+navigation, and narrow-window states are required. Preserve Spec Editor's existing
+catalog browse/import dialog and its Spec-service proxy. The proxy provides
+`GET /catalog/components`, Component/version details, `POST /catalog/imports/preview`,
+and `POST /catalog/imports`, relative to the Spec service API base. Imported
+published evidence is an origin record, separate from current-Spec verification.
+Planned inventory entries remain unavailable for import until published.
 
 ## 8. Integration checks, defects, and phase handoff
 
@@ -482,7 +554,7 @@ release preparation. Each phase file states its minimum scope. Fast includes
 exactly three live model checks. Missing credentials/tools makes a profile
 incomplete. Continue independent checks and report the limits. A dry-run is suite
 selection evidence only, not executed tests. Put all outputs, including child
-temporary files, in ignored repository `TEMP_*` directories; configure child
+temporary files, in ignored repository `temp/TEMP_*` directories; configure child
 `TMPDIR` as needed. Never use system `/tmp` for this work.
 
 For every confirmed defect: retain the reproducer and source revision; add the
@@ -495,7 +567,8 @@ when its actual user path was unavailable. Functional library failures block
 delivery; an unavailable secondary path is recorded as an explicit incomplete
 stress result and must not expand this library into an application redesign.
 
-At each phase end create `handoffs/phase-N.md` with: commit/revision; commands and
+At each phase end create `spec_catalog_service/catalog/handoffs/phase-N.md` with:
+commit/revision; commands and
 exit codes; tool versions; delivered IDs and digests; preset results; reproducible
 evidence directory; service API examples; confirmed defects and regression tests;
 secondary stress results; prerequisites and limits; and exact next-phase inputs.

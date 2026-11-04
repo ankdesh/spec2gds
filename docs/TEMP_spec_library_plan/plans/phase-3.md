@@ -1,6 +1,11 @@
 # Phase 3: arithmetic, DSP, integrity, and monitoring
 
-Status: implementation instructions. Requires completed Phases 1 and 2.
+Status: planned; the runtime inventory records 32 Phase 3 entries as planned.
+Requires completed Phases 1 and 2. Read the shared guide's
+[current baseline](../README.md#current-baseline-for-coding-agents) before work.
+Extend `spec_catalog_service/` and its maintained tests. Use predecessor handoffs
+under `spec_catalog_service/catalog/handoffs/` and the runtime inventory there.
+Spec Editor catalog import already exists; preserve it and the published releases.
 
 ## 1. Inputs, outputs, and ordered implementation
 
@@ -397,7 +402,8 @@ Through actual Circuit Designer controls:
 Record concrete specialization origin in temporary metadata. This is not a new
 library entry. If a required existing UI action is unavailable, retain the case
 as incomplete stress evidence and test the same topology via typed APIs for
-hardware integrity. Do not build a library placement UI as a substitute objective.
+hardware integrity. Reuse existing import and Options controls. Automatic upstream
+update and new placement features remain outside this phase.
 
 ## 6. Required checks and commands
 
@@ -415,19 +421,20 @@ search tags, preset display without expression execution, saved evidence matchin
 byte-identical downloads and restart/reindex.
 
 ```bash
-uv run spec2gds-library check --phase 2 --output temp/TEMP_p3/prerequisite
-uv run spec2gds-library check --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/check
-uv run spec2gds-library verify --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/verify
-uv run pytest tests/spec_library -m 'not extensive'
+uv run --package spec-catalog-service spec2gds-catalog check --phase 2 --output temp/TEMP_p3/prerequisite
+uv run --package spec-catalog-service spec2gds-catalog check --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/check
+uv run --package spec-catalog-service spec2gds-catalog verify --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/verify
+uv run --package spec-catalog-service python -m pytest spec_catalog_service/tests -m 'not extensive' --basetemp temp/TEMP_p3/pytest
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,activities
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 3 --candidates temp/TEMP_p3/candidates --evidence temp/TEMP_p3/verify --output temp/TEMP_p3/publish
-uv run spec2gds-library check --phase 3 --output temp/TEMP_p3/published-check
+uv run --package spec-catalog-service spec2gds-catalog publish --phase 3 --candidates temp/TEMP_p3/candidates --evidence temp/TEMP_p3/verify --output temp/TEMP_p3/publish
+uv run --package spec-catalog-service spec2gds-catalog check --phase 3 --output temp/TEMP_p3/published-check
 ```
 
 Regression protects Circuit projection/save boundaries, persistence, and shared
 numeric-range changes. Accept all 32 entries only after bit-exact checks, CORDIC
 bounds, exhaustive small SECDED cases, service obligations, and required profiles
-pass. Handoff includes measured CORDIC bounds, CRC vectors, ECC injection counts,
+pass. Write `spec_catalog_service/catalog/handoffs/phase-3.md` with measured CORDIC
+bounds, CRC vectors, ECC injection counts,
 latency/throughput tables, Circuit stress status, and defect regression evidence.

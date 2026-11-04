@@ -1,39 +1,43 @@
 # Phase 1: logic, state, and standalone hosting
 
-Status: implementation instructions. No completion is claimed.
+Status: published baseline. The runtime inventory records 32 delivered entries.
+Use this file as the hardware contract and for defect fixes or new release versions.
+Read the shared guide's [current baseline](../README.md#current-baseline-for-coding-agents)
+before work. Historical acceptance records do not replace checks on this checkout.
 
 ## 1. Inputs, outputs, and ordered implementation
 
 Read [the shared contract](../README.md) in full. This file supplies the complete
-Phase 1 delta. There is no predecessor implementation requirement. Deliver the
-32 entries below and the first useful standalone catalogue service. Do not add
-Spec Editor or Circuit Designer library integration.
+Phase 1 hardware scope. The 32 releases and standalone Spec Catalog service
+already exist under `spec_catalog_service/`. Spec Editor catalog import is also
+implemented. Preserve these capabilities and the published release bytes.
 
 Execute this order:
 
 1. Inspect the source-format APIs and `rtl.generate` tests listed in the guide.
    Record tool/credential availability under `temp/TEMP_p1_<run>/`.
-   Add ignored `.state/` storage, the new package directories, CLI entry points,
-   strict catalogue/evidence schemas, and maintained test scaffolding. Create
-   `spec_library/`, copy this plan's `inventory.json` to
-   `spec_library/inventory.json`, and add its designer usage README. Keep the
-   implementation instructions in `docs/TEMP_spec_library_plan/`.
-2. Add optional explicit creation VLNV through the typed operation and HTTP
-   operation. Preserve the old work identity when omitted. Prove atomic duplicate
+   Inspect the existing catalog package, commands, schemas, tests, and runtime
+   inventory. Read `spec_catalog_service/catalog/handoffs/phase-1.md` as a historical
+   record and verify current release hashes. Do not recreate the removed library
+   packages or replace the runtime inventory with the planning copy.
+2. Reuse optional explicit creation VLNV through the typed operation and HTTP
+   operation. Preserve the local-work identity when omitted. Prove atomic duplicate
    rejection, normalized-name agreement, unchanged existing callers, and unchanged
-   source when a transaction fails. This is a shared source contract change.
-3. Create candidate Specs with typed operations. Complete combinational entries
+   source when a transaction fails. Protect the existing shared source contract.
+3. Create candidates with typed operations only for a required fix or new version.
+   A changed published Component requires a new semantic version. Complete combinational entries
    before state entries. Each entry needs declared parameters, expanded wire
    ports, a narrative contract, an executable SV section, and catalogue asset.
    Persist before RTL execution. Do not call tie-off RTL functional hardware.
-4. Implement `check`, `verify`, and `publish` with the exact shared CLI semantics.
-   Make the independent reference harness load saved candidates. Establish
+4. Extend the existing `check`, `verify`, and `publish` commands when required.
+   Make the independent reference harness load saved candidates. Preserve
    deterministic simulation and evidence records before bulk publication.
-5. Implement all hosting routes and the basic static UI in shared section 7.
+5. Maintain the existing hosting routes and standalone UI in shared section 7.
    Use only package validators during upload; run functional checks offline.
 6. Run all entry matrices, real HTTP stress below, service/browser checks, and
    required software profiles. Publish only exact tested candidate bytes.
-   Write the handoff and update the 32 inventory statuses after acceptance.
+   Record new evidence without rewriting the historical handoff. Advance runtime
+   release pins only after acceptance; retain every existing release record.
 
 A missing authoring operation is a small source API extension, not permission to
 write XML or mutate SpecIR. Use current implementation conventions for parameter
@@ -362,24 +366,26 @@ summary/tag containing HTML and verify it remains text.
 
 ## 5. Required commands and completion gate
 
-The commands below run after code exists. Use a unique ignored output directory;
+For baseline validation, run canonical `check`, `verify`, and maintained tests.
+The candidate and publish commands below apply only to an explicit new release,
+not to recreating the delivered baseline. Use a unique ignored output directory;
 pass that run directory to child tools for their temporary files. Record actual
 commands, exit codes, and evidence. Candidate CLI commands use `--candidates`
 before publication; repeat `check` against canonical paths after publication.
 
 ```bash
-uv run spec2gds-library check --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/check
-uv run spec2gds-library verify --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/verify
-uv run pytest tests/spec_library -m 'not extensive'
+uv run --package spec-catalog-service spec2gds-catalog check --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/check
+uv run --package spec-catalog-service spec2gds-catalog verify --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/verify
+uv run --package spec-catalog-service python -m pytest spec_catalog_service/tests -m 'not extensive' --basetemp temp/TEMP_p1/pytest
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,activities,shared
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
-uv run spec2gds-library check --phase 1 --output temp/TEMP_p1/published-check
+uv run --package spec-catalog-service spec2gds-catalog publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
+uv run --package spec-catalog-service spec2gds-catalog check --phase 1 --output temp/TEMP_p1/published-check
 ```
 
-Regression is required because explicit identity creation and durable hosting
-change shared contracts/persistence. Register the hardware matrix under maintained
+Regression is required when a fix changes shared source contracts or durable hosting,
+and for release preparation. Keep the hardware matrix under maintained
 suite selection; it must also be runnable through `verify` without a browser.
 
 Accept only if all 32 IDs have canonical files, usage and evidence; all presets
