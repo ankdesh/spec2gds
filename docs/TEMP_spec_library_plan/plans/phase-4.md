@@ -443,15 +443,15 @@ original checkout path or other application processes.
 ## 7. Commands and final gate
 
 ```bash
-uv run spec2gds-library check --phase 3 --output spec_library/TEMP_p4/prerequisite
-uv run spec2gds-library check --phase 4 --candidates spec_library/TEMP_p4/candidates --output spec_library/TEMP_p4/check
-uv run spec2gds-library verify --phase 4 --candidates spec_library/TEMP_p4/candidates --output spec_library/TEMP_p4/verify
+uv run spec2gds-library check --phase 3 --output temp/TEMP_p4/prerequisite
+uv run spec2gds-library check --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/check
+uv run spec2gds-library verify --phase 4 --candidates temp/TEMP_p4/candidates --output temp/TEMP_p4/verify
 uv run pytest tests/spec_library -m 'not extensive'
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,assistant,activities,shared
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 4 --candidates spec_library/TEMP_p4/candidates --evidence spec_library/TEMP_p4/verify --output spec_library/TEMP_p4/publish
-uv run spec2gds-library check --phase 4 --output spec_library/TEMP_p4/published-check
+uv run spec2gds-library publish --phase 4 --candidates temp/TEMP_p4/candidates --evidence temp/TEMP_p4/verify --output temp/TEMP_p4/publish
+uv run spec2gds-library check --phase 4 --output temp/TEMP_p4/published-check
 ```
 
 After exact candidate publication, run `check` and `verify` separately for phases

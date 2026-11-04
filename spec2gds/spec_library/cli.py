@@ -23,14 +23,14 @@ def build_parser() -> argparse.ArgumentParser:
     # check
     check_p = subparsers.add_parser("check", help="Validate inventory, DAG, packages, and evidence")
     check_p.add_argument("--phase", type=int, required=True, choices=[1, 2, 3, 4], help="Library rollout phase")
-    check_p.add_argument("--output", type=Path, required=True, help="Directory inside TEMP_* for report")
+    check_p.add_argument("--output", type=Path, required=True, help="Directory inside temp/TEMP_* for report")
     check_p.add_argument("--candidates", type=Path, default=None, help="Optional candidate tree root")
     check_p.add_argument("--library-root", type=Path, default=Path("spec_library"), help="Canonical library root")
 
     # verify
     verify_p = subparsers.add_parser("verify", help="Run hardware verification across presets")
     verify_p.add_argument("--phase", type=int, required=True, choices=[1, 2, 3, 4], help="Library rollout phase")
-    verify_p.add_argument("--output", type=Path, required=True, help="Directory inside TEMP_* for evidence and report")
+    verify_p.add_argument("--output", type=Path, required=True, help="Directory inside temp/TEMP_* for evidence and report")
     verify_p.add_argument("--candidates", type=Path, default=None, help="Optional candidate tree root")
     verify_p.add_argument("--library-root", type=Path, default=Path("spec_library"), help="Canonical library root")
 
@@ -39,7 +39,7 @@ def build_parser() -> argparse.ArgumentParser:
     pub_p.add_argument("--phase", type=int, required=True, choices=[1, 2, 3, 4], help="Library rollout phase")
     pub_p.add_argument("--candidates", type=Path, required=True, help="Candidate tree root")
     pub_p.add_argument("--evidence", type=Path, required=True, help="Verification evidence directory")
-    pub_p.add_argument("--output", type=Path, required=True, help="Directory inside TEMP_* for publication report")
+    pub_p.add_argument("--output", type=Path, required=True, help="Directory inside temp/TEMP_* for publication report")
     pub_p.add_argument("--library-root", type=Path, default=Path("spec_library"), help="Canonical library root")
 
     # index
@@ -57,7 +57,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.subcommand in {"check", "verify", "publish"}:
         if not is_temp_directory(args.output):
-            print(f"Error: --output directory {args.output} must be inside an ignored TEMP_* directory.", file=sys.stderr)
+            print(f"Error: --output directory {args.output} must be inside an ignored temp/TEMP_* directory.", file=sys.stderr)
             return 2
 
     if args.subcommand == "check":

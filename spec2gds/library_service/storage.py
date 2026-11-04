@@ -73,7 +73,7 @@ class LibraryStorage:
 
     def __init__(self, library_root: Path, staging_root: Path | None = None) -> None:
         self.library_root = library_root.resolve()
-        self.staging_root = (staging_root or (self.library_root / "TEMP_uploads")).resolve()
+        self.staging_root = (staging_root or Path("temp/TEMP_uploads")).resolve()
         self.staging_root.mkdir(parents=True, exist_ok=True)
 
     def is_root_readable(self) -> bool:

@@ -12,7 +12,7 @@ Spec Editor or Circuit Designer library integration.
 Execute this order:
 
 1. Inspect the source-format APIs and `rtl.generate` tests listed in the guide.
-   Record tool/credential availability under `spec_library/TEMP_p1_<run>/`.
+   Record tool/credential availability under `temp/TEMP_p1_<run>/`.
    Add ignored `.state/` storage, the new package directories, CLI entry points,
    strict catalogue/evidence schemas, and maintained test scaffolding. Create
    `spec_library/`, copy this plan's `inventory.json` to
@@ -368,14 +368,14 @@ commands, exit codes, and evidence. Candidate CLI commands use `--candidates`
 before publication; repeat `check` against canonical paths after publication.
 
 ```bash
-uv run spec2gds-library check --phase 1 --candidates spec_library/TEMP_p1/candidates --output spec_library/TEMP_p1/check
-uv run spec2gds-library verify --phase 1 --candidates spec_library/TEMP_p1/candidates --output spec_library/TEMP_p1/verify
+uv run spec2gds-library check --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/check
+uv run spec2gds-library verify --phase 1 --candidates temp/TEMP_p1/candidates --output temp/TEMP_p1/verify
 uv run pytest tests/spec_library -m 'not extensive'
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,activities,shared
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 1 --candidates spec_library/TEMP_p1/candidates --evidence spec_library/TEMP_p1/verify --output spec_library/TEMP_p1/publish
-uv run spec2gds-library check --phase 1 --output spec_library/TEMP_p1/published-check
+uv run spec2gds-library publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
+uv run spec2gds-library check --phase 1 --output temp/TEMP_p1/published-check
 ```
 
 Regression is required because explicit identity creation and durable hosting

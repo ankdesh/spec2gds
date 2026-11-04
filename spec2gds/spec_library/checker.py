@@ -21,10 +21,10 @@ from spec2gds.spec_library.schemas import (
 
 
 def is_temp_directory(path: Path) -> bool:
-    """Check if the path is located inside an ignored TEMP_* directory."""
+    """Check if the path is located inside an ignored temp/TEMP_* directory."""
     resolved = path.resolve()
     for part in resolved.parts:
-        if part.startswith("TEMP_"):
+        if part == "temp" or part.startswith("TEMP_"):
             return True
     return False
 
@@ -37,7 +37,7 @@ class LibraryChecker:
         phase: int,
         library_root: Path = Path("spec_library"),
         candidates: Path | None = None,
-        output: Path = Path("spec_library/TEMP_check"),
+        output: Path = Path("temp/TEMP_check"),
     ) -> None:
         self.phase = phase
         self.library_root = library_root
@@ -47,8 +47,8 @@ class LibraryChecker:
     def check(self) -> tuple[int, dict[str, Any]]:
         """Run all check stages and write report.json. Returns (exit_code, report_dict)."""
         if not is_temp_directory(self.output):
-            print(f"Error: Output directory {self.output} must be inside an ignored TEMP_* directory.")
-            return 2, {"error": "Output directory not in TEMP_*"}
+            print(f"Error: Output directory {self.output} must be inside an ignored temp/TEMP_* directory.")
+            return 2, {"error": "Output directory not in temp/TEMP_*"}
 
         self.output.mkdir(parents=True, exist_ok=True)
         report: dict[str, Any] = {

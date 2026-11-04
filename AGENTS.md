@@ -31,8 +31,12 @@ We have strict terminology rules to disambiguate overloaded terms (e.g., never u
   Add browser protection when the defect depends on browser behaviour.
 
 ## 4. Temporary Artifacts and File Hygiene
-- All temporary artifacts created during testing, exploration, or execution—including pictures/screenshots (`.png`, `.svg`), temporary `.spec` packages, activity outputs, logs, and progress files—MUST be written to an ignored temporary folder inside the repository with the prefix `TEMP_` (e.g., `TEMP_artifacts/`, `TEMP_tests/`, `TEMP_run/`, etc.).
-- **DO NOT use the system `/tmp` directory or any path outside the repository.** All temporary files and generated artifacts must remain inside the repository within an ignored folder prefixed with `TEMP_`.
-- Never write temporary artifacts, test pictures/screenshots, scratch specs, or activity run outputs directly to tracked source directories.
-- Ensure all temporary folders used for outputs are listed in `.gitignore` (specifically `TEMP_*`, `**/TEMP_*`, etc.) to prevent them from being tracked or added to git.
+- **Disposable Temporary Output Folders (`temp/TEMP_*`)**:
+  - All disposable temporary folders created during testing, exploration, or execution—including pictures/screenshots (`.png`, `.svg`), temporary `.spec` packages, candidate authoring outputs, activity outputs, logs, and progress files—MUST be written to an ignored temporary directory inside the repository's `temp/` folder with the prefix `TEMP_` (e.g., `temp/TEMP_artifacts/`, `temp/TEMP_tests/`, `temp/TEMP_run/`, `temp/TEMP_p1/`, etc.).
+  - Do NOT create disposable `TEMP_*` folders directly in the repository root or scattered across source directories.
+  - **DO NOT use the system `/tmp` directory or any path outside the repository.** All temporary files and generated artifacts must remain inside the repository within `temp/`.
+  - Never write temporary artifacts, test pictures/screenshots, scratch specs, or activity run outputs directly to tracked source directories.
+- **Temporary Planning Documents (`docs/TEMP_*`)**:
+  - Temporary documents, plans, roadmaps, and audit notes (e.g., `docs/TEMP_spec_library_plan/`, `docs/TEMP_plan.md`, `docs/TEMP_*.md`) MUST be created inside `docs/` with the `TEMP_` prefix.
+- Ensure all temporary folders used for outputs are listed in `.gitignore` (specifically `temp/`, `**/temp/`, `TEMP_*`, `**/TEMP_*`, etc.) to prevent them from being tracked or added to git.
 

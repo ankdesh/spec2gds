@@ -94,7 +94,7 @@ class ServerProcess:
 
 @pytest.fixture
 def stress_env() -> Generator[tuple[Path, int], None, None]:
-    temp_dir = Path("TEMP_tests/http_stress").resolve()
+    temp_dir = Path("temp/TEMP_tests/http_stress").resolve()
     if temp_dir.exists():
         shutil.rmtree(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)

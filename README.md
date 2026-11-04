@@ -471,8 +471,8 @@ three short live model browser checks. Full regression
 includes broader live evaluation. Use Node.js 24.2+ and set `OPENAI_API_KEY` in
 the invoking environment. Missing required prerequisites produce an incomplete
 result and nonzero exit status. Each run writes a report to an ignored repository
-`TEMP_tests-*` directory by default; `--output` selects a new or empty directory
-under an ignored repository `TEMP_` folder. See
+`temp/TEMP_tests-*` directory by default; `--output` selects a new or empty directory
+under an ignored repository `temp/TEMP_*` folder. See
 [the software testing strategy](docs/testing-strategy.md) for scope selection,
 coverage limits, and capability matrix.
 

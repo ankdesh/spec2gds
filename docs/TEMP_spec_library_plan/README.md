@@ -74,7 +74,8 @@ spec_library/                       # create during Phase 1
   <category>/<id>/1.0.0/evidence.json
   <category>/<id>/1.0.0/usage.md
   .state/                           # ignored, derived service state
-  TEMP_<run>/                       # ignored, temporary candidates and logs
+temp/                               # designated root for disposable temporary files
+  TEMP_<run>/                       # ignored, temporary candidates, test outputs, and logs
 ```
 
 Categories and exact output paths are in the adjacent planning `inventory.json`.
@@ -272,12 +273,12 @@ commands, not existing capabilities at the date of this guide:
 Run all command examples from the repository root. `check`, `verify`, and
 `publish` accept `--library-root`, default `spec_library`; their `--phase` is
 required, integer 1..4. `--output` is required for check/verify/publish and must be inside
-an ignored repository `TEMP_*` directory. Service roots are separately configurable.
+an ignored repository `temp/TEMP_*` directory. Service roots are separately configurable.
 
 ```bash
-uv run spec2gds-library check --phase 1 --output spec_library/TEMP_p1/check
-uv run spec2gds-library verify --phase 1 --output spec_library/TEMP_p1/verify
-uv run spec2gds-library publish --phase 1 --candidates spec_library/TEMP_p1/candidates --evidence spec_library/TEMP_p1/verify --output spec_library/TEMP_p1/publish
+uv run spec2gds-library check --phase 1 --output temp/TEMP_p1/check
+uv run spec2gds-library verify --phase 1 --output temp/TEMP_p1/verify
+uv run spec2gds-library publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
 uv run spec2gds-library-service --host 127.0.0.1 --port 6017 --library-root spec_library --state-dir spec_library/.state
 ```
 

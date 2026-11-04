@@ -367,15 +367,15 @@ predecessor package digests unchanged.
 ## 6. Commands and completion gate
 
 ```bash
-uv run spec2gds-library check --phase 1 --output spec_library/TEMP_p2/prerequisite
-uv run spec2gds-library check --phase 2 --candidates spec_library/TEMP_p2/candidates --output spec_library/TEMP_p2/check
-uv run spec2gds-library verify --phase 2 --candidates spec_library/TEMP_p2/candidates --output spec_library/TEMP_p2/verify
+uv run spec2gds-library check --phase 1 --output temp/TEMP_p2/prerequisite
+uv run spec2gds-library check --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/check
+uv run spec2gds-library verify --phase 2 --candidates temp/TEMP_p2/candidates --output temp/TEMP_p2/verify
 uv run pytest tests/spec_library -m 'not extensive'
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,activities
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 2 --candidates spec_library/TEMP_p2/candidates --evidence spec_library/TEMP_p2/verify --output spec_library/TEMP_p2/publish
-uv run spec2gds-library check --phase 2 --output spec_library/TEMP_p2/published-check
+uv run spec2gds-library publish --phase 2 --candidates temp/TEMP_p2/candidates --evidence temp/TEMP_p2/verify --output temp/TEMP_p2/publish
+uv run spec2gds-library check --phase 2 --output temp/TEMP_p2/published-check
 ```
 
 `circuit` covers the browser application used by Spec Editor where selected by

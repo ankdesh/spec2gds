@@ -37,15 +37,15 @@ spec_library/
 
 - **Check library integrity**:
   ```bash
-  uv run spec2gds-library check --phase 1 --output spec_library/TEMP_p1/check
+  uv run spec2gds-library check --phase 1 --output temp/TEMP_p1/check
   ```
 - **Verify components**:
   ```bash
-  uv run spec2gds-library verify --phase 1 --output spec_library/TEMP_p1/verify
+  uv run spec2gds-library verify --phase 1 --output temp/TEMP_p1/verify
   ```
 - **Publish candidates**:
   ```bash
-  uv run spec2gds-library publish --phase 1 --candidates spec_library/TEMP_p1/candidates --evidence spec_library/TEMP_p1/verify --output spec_library/TEMP_p1/publish
+  uv run spec2gds-library publish --phase 1 --candidates temp/TEMP_p1/candidates --evidence temp/TEMP_p1/verify --output temp/TEMP_p1/publish
   ```
 - **Rebuild service index**:
   ```bash

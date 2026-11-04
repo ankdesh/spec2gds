@@ -243,6 +243,7 @@ docs/evidence/
 tmp/
 .tmp/
 temp/
+**/temp/
 TEMP_*
 **/TEMP_*
 TEMP-*/
@@ -253,3 +254,5 @@ artifacts/
 **/artifacts/
 *.artifacts/
 **/.spec2gds/
+!docs/TEMP_*
+!docs/**/TEMP_*

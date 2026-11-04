@@ -37,8 +37,8 @@ class LibraryPublisher:
     def publish(self) -> tuple[int, dict[str, Any]]:
         """Validate candidate releases and evidence, then publish to canonical library."""
         if not is_temp_directory(self.output):
-            print(f"Error: Output directory {self.output} must be inside an ignored TEMP_* directory.")
-            return 2, {"error": "Output directory not in TEMP_*"}
+            print(f"Error: Output directory {self.output} must be inside an ignored temp/TEMP_* directory.")
+            return 2, {"error": "Output directory not in temp/TEMP_*"}
 
         self.output.mkdir(parents=True, exist_ok=True)
         report: dict[str, Any] = {

@@ -21,7 +21,7 @@ class LibraryVerifier:
         phase: int,
         library_root: Path = Path("spec_library"),
         candidates: Path | None = None,
-        output: Path = Path("spec_library/TEMP_verify"),
+        output: Path = Path("temp/TEMP_verify"),
     ) -> None:
         self.phase = phase
         self.library_root = library_root
@@ -31,8 +31,8 @@ class LibraryVerifier:
     def verify(self) -> tuple[int, dict[str, Any]]:
         """Execute verification across all target phase components."""
         if not is_temp_directory(self.output):
-            print(f"Error: Output directory {self.output} must be inside an ignored TEMP_* directory.")
-            return 2, {"error": "Output directory not in TEMP_*"}
+            print(f"Error: Output directory {self.output} must be inside an ignored temp/TEMP_* directory.")
+            return 2, {"error": "Output directory not in temp/TEMP_*"}
 
         # 1. Run prerequisite checks
         checker = LibraryChecker(

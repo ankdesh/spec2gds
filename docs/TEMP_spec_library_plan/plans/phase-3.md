@@ -415,15 +415,15 @@ search tags, preset display without expression execution, saved evidence matchin
 byte-identical downloads and restart/reindex.
 
 ```bash
-uv run spec2gds-library check --phase 2 --output spec_library/TEMP_p3/prerequisite
-uv run spec2gds-library check --phase 3 --candidates spec_library/TEMP_p3/candidates --output spec_library/TEMP_p3/check
-uv run spec2gds-library verify --phase 3 --candidates spec_library/TEMP_p3/candidates --output spec_library/TEMP_p3/verify
+uv run spec2gds-library check --phase 2 --output temp/TEMP_p3/prerequisite
+uv run spec2gds-library check --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/check
+uv run spec2gds-library verify --phase 3 --candidates temp/TEMP_p3/candidates --output temp/TEMP_p3/verify
 uv run pytest tests/spec_library -m 'not extensive'
 scripts/test-all.sh fast
 scripts/test-all.sh integration --scope spec,circuit,activities
 scripts/test-all.sh regression
-uv run spec2gds-library publish --phase 3 --candidates spec_library/TEMP_p3/candidates --evidence spec_library/TEMP_p3/verify --output spec_library/TEMP_p3/publish
-uv run spec2gds-library check --phase 3 --output spec_library/TEMP_p3/published-check
+uv run spec2gds-library publish --phase 3 --candidates temp/TEMP_p3/candidates --evidence temp/TEMP_p3/verify --output temp/TEMP_p3/publish
+uv run spec2gds-library check --phase 3 --output temp/TEMP_p3/published-check
 ```
 
 Regression protects Circuit projection/save boundaries, persistence, and shared
