@@ -645,9 +645,10 @@ async function run(): Promise<void> {
       const report = await json(`${owner}/artifacts/${launched.artifact_ids[0]}/content`);
       assert.equal(report.source_revision_hash, current.source_revision_hash);
       assert.equal(report.target.entity_id, componentId);
-      assert.equal(report.activity_version, "1.2.0");
+      assert.equal(report.activity_version, "1.3.0");
       assert.ok(existsSync(join(launched.workspace_output_path, "generation-manifest.json")));
       assert.ok(existsSync(join(launched.workspace_output_path, "rtl/components/timer_core.sv")));
+      assert.ok(existsSync(join(launched.workspace_output_path, "sim/smoke_tb.sv")));
       records.push({ ui_activity_execution: launched, ui_activity_report: report });
       current = await snapshot(); const disk = savedSnapshot(packagePath);
       assert.equal(disk.source_revision_hash, current.source_revision_hash);

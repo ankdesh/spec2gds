@@ -263,7 +263,7 @@ def test_activity_generates_hierarchy_report_warnings_and_name_map(tmp_path: Pat
     definition = registry.activity("rtl.generate").definition
     availability = activity_availability(registry, "rtl.generate", snapshot)
 
-    assert definition.version == "1.2.0"
+    assert definition.version == "1.3.0"
     assert definition.scopes.entity_kinds == ("component", "design")
     assert definition.requires_workspace_output
     assert availability.available

@@ -104,7 +104,7 @@ def _availability(context: ActivitySelectionContext) -> ActivityAvailability:
     activity_id=ACTIVITY_ID,
     version=ACTIVITY_VERSION,
     title="Generate RTL",
-    description="Generate deterministic SystemVerilog from IP-XACT structure and stored module bodies.",
+    description="Generate deterministic SystemVerilog and a runnable smoke testbench from IP-XACT structure and stored module bodies.",
     scopes=ActivityScopes(entity_kinds=("component", "design")),
     report_model=RtlGenerationReport,
     artifact_roles=(REPORT_ROLE,),

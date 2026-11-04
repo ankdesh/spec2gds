@@ -9,10 +9,57 @@ regeneration.
 
 ## Verify
 
-Install Verilator 5.x and GNU Make, then run:
+Install Verilator 5.x, GNU Make, and a C++ compiler, then run:
 
 ```bash
 make lint
+make smoke
 ```
 
 The selected top module is `{{ top_module }}`.
+
+## Smoke check
+
+For a clocked check, supply the generated one-bit input IDs explicitly:
+
+```bash
+make smoke CLOCK=clk RESET=rst_n RESET_ACTIVE=0
+```
+
+Replace the example IDs with the IDs in the table below. No signal roles are
+inferred. Omit RESET when the module has no reset. RESET_ACTIVE defaults to 0;
+use 1 for an active-high reset. One clock and one reset are supported. With no
+CLOCK, the check applies unclocked input patterns and does not verify sequential
+behavior. Parameter defaults come from the Spec; parameter overrides are not
+part of this check.
+
+The generated `sim/smoke_tb.sv` exercises only the selected top module. It holds
+reset for two cycles when supplied, applies 16 patterns (zero, all-one,
+alternating-bit, then counters), and runs two final cycles with inputs held.
+Each cycle takes 11 ns. Inputs change with the clock low. The clock rises after
+5 ns and falls after another 5 ns; sampling occurs 1 ns later, after sequential
+updates settle. Each sample prints its number, simulation time, phase, and all
+port values in hexadecimal.
+
+There are no expected values, output comparisons, or protocol transactions.
+`Smoke run completed.` means that simulation completed, not that the RTL is
+functionally correct. Unimplemented scaffolds can also complete this check.
+Bidirectional ports are left undriven by the testbench. Verilator's two-state
+simulation cannot establish unknown-value or high-impedance correctness.
+
+{% if ports %}
+| Generated port ID | Direction | Resolved range | Width |
+| --- | --- | --- | --- |
+{% for port in ports %}
+| `{{ port.name }}` | {{ port.direction }} | {{ port.range_text or 'scalar' }} | {{ port.width }} |
+{% endfor %}
+{% else %}
+This top module has no external ports. No external stimulus or input/output
+observation is possible. The check compiles and runs the selected top module;
+it does not generate checks for child Components.
+To exercise external signals, select a Component with ports and generate its RTL.
+{% endif %}
+
+Build files and logs are in `TEMP_smoke/`. `make clean-smoke` removes them.
+Regeneration replaces the complete generated project, including local edits
+and smoke output. Copy any files that you need before regeneration.

@@ -22,7 +22,7 @@ from spec2gds.spec.spec_format.naming import entity_name
 from spec2gds.spec.spec_format.sections import SectionIR
 
 ACTIVITY_ID = "rtl.generate"
-ACTIVITY_VERSION = "1.2.0"
+ACTIVITY_VERSION = "1.3.0"
 GENERATION_SCHEMA = "spec2gds.rtl-generation.v3"
 
 _TEMPLATES = Environment(
@@ -372,6 +372,7 @@ class _Analysis:
     errors: tuple[str, ...]
     warnings: tuple[str, ...]
     sections_by_parent: dict[str, SectionIR]
+    port_shapes: dict[tuple[str, str], _PortShape]
 
 
 @dataclass(frozen=True)
@@ -380,6 +381,8 @@ class _RtlPort:
     name: str
     direction: str
     range_text: str
+    resolved_range_text: str
+    width: int
 
 
 @dataclass(frozen=True)
@@ -467,6 +470,7 @@ class _Analyzer:
                 errors=("RTL generation requires a selected component or design.",),
                 warnings=(),
                 sections_by_parent={},
+                port_shapes={},
             )
 
         root_parent = entity if isinstance(entity, ComponentIR) else self.parent_by_design_id.get(entity.ref.entity_id)
@@ -512,6 +516,7 @@ class _Analyzer:
             errors=tuple(sorted(set(self.errors))),
             warnings=tuple(sorted(set(self.warnings))),
             sections_by_parent=self.sections_by_parent,
+            port_shapes=self.shapes,
         )
 
     def _validate_active_body_names(self, analysis: _DesignAnalysis) -> None:
@@ -863,15 +868,20 @@ class _Normalizer:
     def _ports(self, component: ComponentIR | None) -> tuple[_RtlPort, ...]:
         if component is None:
             return ()
-        return tuple(
-            _RtlPort(
+        ports = []
+        for port in component.ports:
+            bounds = self.analysis.port_shapes[(component.ref.entity_id, port.name)].key
+            ports.append(_RtlPort(
                 source_name=port.name,
                 name=self.port_names[(component.ref.entity_id, port.name)],
                 direction=port.direction,
                 range_text=port.width if isinstance(port.width, str) else "",
-            )
-            for port in component.ports
-        )
+                resolved_range_text=(
+                    f"[{bounds[0]}:{bounds[1]}]" if bounds is not None else ""
+                ),
+                width=abs(bounds[0] - bounds[1]) + 1 if bounds is not None else 1,
+            ))
+        return tuple(ports)
 
     def _allocate(
         self,
@@ -909,12 +919,42 @@ def generate_project(spec: SpecAccess, target: EntityRef) -> GeneratedProject:
         module.file_path: _render_module(module).encode("utf-8") for module in modules
     }
     source_files = tuple(module.file_path.removeprefix("rtl/") for module in modules)
+    top = next(module for module in modules if module.name == top_module)
+    smoke_top = _IdentifierPool({module.name for module in modules}).allocate(
+        "spec2gds_smoke_tb", "smoke-testbench"
+    )
+    smoke_ports = tuple(
+        {
+            "name": port.name,
+            "direction": port.direction,
+            "range_text": port.resolved_range_text,
+            "width": port.width,
+            "alternating": f"{port.width}'h{((1 << port.width) - 1) // 3:x}",
+            "index": index,
+        }
+        for index, port in enumerate(top.ports)
+    )
+    has_scaffolds = any(
+        module.leaf and not any(
+            section is not None and section.content.strip()
+            for section in (module.component_sv, module.design_sv)
+        )
+        for module in modules
+    )
+    files["sim/smoke_tb.sv"] = _render_template(
+        "smoke_tb.sv.j2", top_module=top_module, smoke_top=smoke_top,
+        ports=smoke_ports, has_scaffolds=has_scaffolds,
+    ).encode("utf-8")
     files["rtl/files.f"] = _render_template("files.f.j2", files=source_files).encode("utf-8")
-    files["Makefile"] = _render_template("Makefile.j2", top_module=top_module).encode("utf-8")
+    files["Makefile"] = _render_template(
+        "Makefile.j2", top_module=top_module, smoke_top=smoke_top,
+        rtl_sources=tuple(module.file_path for module in modules),
+    ).encode("utf-8")
     files["README.md"] = _render_template(
         "README.md.j2",
         design_name=entity_name(analysis.target),
         top_module=top_module,
+        ports=smoke_ports,
     ).encode("utf-8")
 
     warnings = tuple(f"Warning: {item}" for item in analysis.warnings)

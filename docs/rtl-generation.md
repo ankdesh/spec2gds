@@ -1,8 +1,9 @@
 # Deterministic RTL Generation
 
-The `rtl.generate` Activity (version `1.2.0`) generates a standard SystemVerilog 2017 project from a selected Component or Design.
-The generator preserves reachable component hierarchy, emits reusable hardware modules, and translates direct wire connections.
-It does not invoke an LLM, inspect narrative text, or infer missing clock or reset signals.
+The `rtl.generate` Activity (version `1.3.0`) generates a standard SystemVerilog 2017 project from a selected Component or Design.
+The Activity preserves reachable Component hierarchy, emits reusable hardware modules, and translates direct wire connections.
+It also generates a deterministic smoke testbench for the selected top module.
+It does not invoke a model, inspect narrative text, infer clock or reset roles, or run simulation during generation.
 
 ```mermaid
 flowchart LR
@@ -10,7 +11,9 @@ flowchart LR
     Snapshot --> RTLGen["rtl.generate Activity"]
     RTLGen --> SVFiles["Generated SystemVerilog Modules"]
     RTLGen --> Report["Generation Report & Sidecar"]
+    RTLGen --> Smoke["Smoke Testbench & Makefile"]
     SVFiles --> Verilator["Verilator Lint & Simulation"]
+    Smoke --> Verilator
 ```
 
 ## 1. Supported Source Profile
@@ -56,7 +59,7 @@ Components and Designs store behavioral code in the inline **SystemVerilog** sec
 - The stored code block contains only declarations and sequential logic (such as `logic`, `always_ff`, and `assign`).
 - Do **not** include `module`, `endmodule`, or port list headers in the section.
 - The `rtl.generate` Activity reads ports and Component parameters from IP-XACT and constructs the module parameter declarations and ANSI port list. Parameter types, signedness, and default expressions are retained. Local constants and constant functions remain in the SystemVerilog Section.
-- If a component has no SystemVerilog section, the generator emits tie-offs (`'0` for outputs) so the module compiles cleanly.
+- If a Component has no SystemVerilog section, the Activity emits tie-offs (`'0` for outputs) so the module compiles cleanly.
 
 ### Example: Single-Cycle Registered Pipeline
 ```systemverilog
@@ -119,3 +122,56 @@ In each generated project directory, run Verilator lint:
 cd generated/rtl/<project-name>/
 make lint
 ```
+
+### Run the generated smoke check
+
+Install Verilator 5.x, GNU Make, and a C++ compiler. In the generated project,
+run an unclocked check with:
+
+```bash
+make smoke
+```
+
+For a clocked check, supply the generated one-bit input IDs explicitly:
+
+```bash
+make smoke CLOCK=clk RESET=rst_n RESET_ACTIVE=0
+```
+
+Use the port IDs listed in the generated README. The check accepts one clock
+and one optional reset. Omit RESET when it is not needed. RESET_ACTIVE defaults
+to 0; use 1 for an active-high reset. Invalid names, non-input ports, ports wider
+than one bit, and using the same port for clock and reset cause an error. No
+clock or reset roles are inferred from IDs or SystemVerilog text. With no CLOCK,
+the check applies unclocked patterns and reports sequential behavior as unverified.
+
+The generated `sim/smoke_tb.sv` uses stored parameter defaults and resolved port
+bounds. It holds the supplied reset active for two cycles, applies 16 fixed
+patterns (zero, all-one, alternating-bit, then counters), and runs two final
+cycles with inputs held. Inputs change while the clock is low. The clock rises
+after 5 ns and falls after another 5 ns. Sampling occurs 1 ns later, after
+sequential updates settle. Each sample prints its number, simulation time,
+phase, and all port values in hexadecimal. No expected outputs, comparisons,
+or protocol behavior are generated.
+
+`Smoke run completed.` reports simulation completion. It is not a functional
+pass. A module with unimplemented output tie-offs can also complete the check;
+the run reports those scaffolds. Bidirectional ports are left undriven by the
+testbench. Verilator's two-state simulation does not establish unknown-value
+or high-impedance correctness. Multiple clock domains and parameter overrides
+are outside this small check.
+
+The check targets only the selected top module. If a Design has no external
+ports, it compiles and runs that Design and reports that no external stimulus
+or input/output observation is possible. It does not generate child Component
+checks or force internal signals.
+To exercise external signals, select a Component with ports and generate its RTL.
+
+Build files, `build.log`, and `run.log` are stored in `TEMP_smoke/` inside the
+generated project. Run `make clean-smoke` to remove them. The Makefile checks
+the completion marker and returns a nonzero status for compiler failures,
+simulation errors, or an early finish before the marker. Regeneration replaces
+the complete generated project, including smoke output and local edits.
+
+The generated testbench is part of the existing file inventory and hashes in
+`generation-manifest.json` and the Activity report. The report schema is unchanged.

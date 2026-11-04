@@ -1,0 +1,121 @@
+// Deterministic input exercise. No expected output or functional verdict.
+module {{ smoke_top }};
+    timeunit 1ns;
+    timeprecision 1ps;
+
+    string clock_name;
+    string reset_name;
+    string reset_active;
+    int clock_index = -1;
+    int reset_index = -1;
+    int sample_number = 0;
+{% for port in ports %}
+    {{ 'wire' if port.direction == 'inout' else 'logic' }} {{ port.range_text }} smoke_io_{{ port.index }};
+{% endfor %}
+
+    {{ top_module }} dut{% if ports %} (
+{% for port in ports %}
+        .{{ port.name }}(smoke_io_{{ port.index }}){{ ',' if not loop.last else '' }}
+{% endfor %}
+    ){% endif %};
+
+    task automatic set_clock(input bit value);
+        case (clock_index)
+{% for port in ports if port.direction == 'in' and port.width == 1 %}
+            {{ port.index }}: smoke_io_{{ port.index }} = value;
+{% endfor %}
+            default: begin end
+        endcase
+    endtask
+
+    task automatic set_reset(input bit value);
+        case (reset_index)
+{% for port in ports if port.direction == 'in' and port.width == 1 %}
+            {{ port.index }}: smoke_io_{{ port.index }} = value;
+{% endfor %}
+            default: begin end
+        endcase
+    endtask
+
+    task automatic drive_pattern(input int pattern);
+{% for port in ports if port.direction == 'in' %}
+        if (clock_index != {{ port.index }} && reset_index != {{ port.index }}) begin
+            case (pattern)
+                0: smoke_io_{{ port.index }} = '0;
+                1: smoke_io_{{ port.index }} = '1;
+                2: smoke_io_{{ port.index }} = {{ port.alternating }};
+                3: smoke_io_{{ port.index }} = ~{{ port.alternating }};
+                default: smoke_io_{{ port.index }} = {{ port.width }}'(int'(pattern - 4 + {{ port.index }}));
+            endcase
+        end
+{% endfor %}
+    endtask
+
+    // Drive inputs with the clock low. Observe after both edges and NBA updates.
+    task automatic observe_cycle(input string phase);
+        #5;
+        set_clock(1'b1);
+        #5;
+        set_clock(1'b0);
+        #1;
+        $write("sample=%0d time=%0t phase=%s", sample_number, $time, phase);
+{% for port in ports %}
+        $write(" {{ port.direction }}:{{ port.name }}=%h", smoke_io_{{ port.index }});
+{% endfor %}
+        $display("");
+        sample_number++;
+    endtask
+
+    initial begin
+        $timeformat(-9, 0, "ns", 0);
+        if (!$value$plusargs("clock=%s", clock_name)) clock_name = "";
+        if (!$value$plusargs("reset=%s", reset_name)) reset_name = "";
+        if (!$value$plusargs("reset_active=%s", reset_active)) reset_active = "0";
+{% for port in ports if port.direction == 'in' and port.width == 1 %}
+        if (clock_name == "{{ port.name }}") clock_index = {{ port.index }};
+        if (reset_name == "{{ port.name }}") reset_index = {{ port.index }};
+{% endfor %}
+        if (clock_name != "" && clock_index < 0)
+            $fatal(1, "CLOCK must name a one-bit input port: %s", clock_name);
+        if (reset_name != "" && reset_index < 0)
+            $fatal(1, "RESET must name a one-bit input port: %s", reset_name);
+        if (clock_index >= 0 && clock_index == reset_index)
+            $fatal(1, "CLOCK and RESET must name different input ports.");
+        if (reset_active != "0" && reset_active != "1")
+            $fatal(1, "RESET_ACTIVE must be 0 or 1.");
+
+        $display("Smoke check for {{ top_module }}. No expected output or functional verdict.");
+        $display("CLOCK=%s RESET=%s RESET_ACTIVE=%s", clock_name, reset_name, reset_active);
+        if (clock_index < 0)
+            $display("No clock supplied. Sequential behavior is unverified.");
+{% if not ports %}
+        $display("No external stimulus or input/output observation is possible.");
+{% endif %}
+{% if has_scaffolds %}
+        $display("Unimplemented scaffolds are present. Output tie-offs are not functional implementations.");
+{% endif %}
+{% for port in ports if port.direction == 'inout' %}
+        $display("Bidirectional port {{ port.name }} is undriven by this testbench.");
+{% endfor %}
+{% for port in ports if port.direction == 'in' %}
+        smoke_io_{{ port.index }} = '0;
+{% endfor %}
+        if (reset_index >= 0) begin
+            set_reset(reset_active == "1");
+            repeat (2) observe_cycle("reset");
+            set_reset(reset_active != "1");
+        end
+        for (int pattern = 0; pattern < 16; pattern++) begin
+            drive_pattern(pattern);
+            observe_cycle("stimulus");
+        end
+        repeat (2) observe_cycle("drain");
+        $display("Smoke run completed.");
+        $finish;
+    end
+
+    initial begin
+        #1000;
+        $fatal(1, "Smoke run exceeded its simulation time limit.");
+    end
+endmodule

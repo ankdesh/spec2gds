@@ -85,7 +85,7 @@ def test_example_package_generates_a_complete_project(
 
     source = (output / "rtl/components/new_component.sv").read_text()
 
-    assert result.report["activity_version"] == "1.2.0"
+    assert result.report["activity_version"] == "1.3.0"
     assert [item["section_id"] for item in result.report["source_sections"]] == [
         section.section_id
     ]

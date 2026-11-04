@@ -1,7 +1,14 @@
 VERILATOR ?= verilator
 TOP_MODULE := {{ top_module }}
+SMOKE_TOP := {{ smoke_top }}
+SMOKE_BINARY := TEMP_smoke/obj/smoke-bin
+RTL_SOURCES := {{ rtl_sources | join(' ') }}
+export SPEC2GDS_SMOKE_CLOCK := $(CLOCK)
+export SPEC2GDS_SMOKE_RESET := $(RESET)
+export SPEC2GDS_SMOKE_RESET_ACTIVE := $(if $(RESET_ACTIVE),$(RESET_ACTIVE),0)
 
-.PHONY: check-verilator lint
+.DEFAULT_GOAL := lint
+.PHONY: check-verilator lint smoke clean-smoke
 
 check-verilator:
 	@command -v $(VERILATOR) >/dev/null 2>&1 || { echo "Verilator 5.x is required"; exit 1; }
@@ -9,3 +16,22 @@ check-verilator:
 
 lint: check-verilator
 	$(VERILATOR) --lint-only --language 1800-2017 -Wall -Wno-PINCONNECTEMPTY --top-module $(TOP_MODULE) -F rtl/files.f
+
+$(SMOKE_BINARY): $(RTL_SOURCES) rtl/files.f sim/smoke_tb.sv Makefile | check-verilator
+	@mkdir -p TEMP_smoke
+	# Ascending packed ranges are part of the supported source profile.
+	@$(VERILATOR) --binary --timing --language 1800-2017 --timescale 1ns/1ps \
+		-Wno-PINCONNECTEMPTY -Wno-ASCRANGE --top-module $(SMOKE_TOP) --Mdir TEMP_smoke/obj \
+		-o smoke-bin -F rtl/files.f sim/smoke_tb.sv > TEMP_smoke/build.log 2>&1; \
+		status=$$?; cat TEMP_smoke/build.log; exit $$status
+
+smoke: $(SMOKE_BINARY)
+	@ulimit -c 0; ./$(SMOKE_BINARY) \
+		"+clock=$$SPEC2GDS_SMOKE_CLOCK" "+reset=$$SPEC2GDS_SMOKE_RESET" \
+		"+reset_active=$$SPEC2GDS_SMOKE_RESET_ACTIVE" > TEMP_smoke/run.log 2>&1; \
+		status=$$?; cat TEMP_smoke/run.log; \
+		if [ "$$status" -ne 0 ]; then exit "$$status"; fi; \
+		grep -Fxq 'Smoke run completed.' TEMP_smoke/run.log
+
+clean-smoke:
+	rm -rf TEMP_smoke
