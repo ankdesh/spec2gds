@@ -139,6 +139,8 @@ class LibraryChecker:
 
         spec_file = base_dir / entry.path
         if not spec_file.is_file():
+            if entry.status == "planned":
+                return
             report["errors"].append(f"Spec package missing for {entry.id}: {spec_file}")
             return
 
@@ -155,22 +157,24 @@ class LibraryChecker:
             report["errors"].append(f"Failed to load package for {entry.id} ({spec_file}): {e}")
             return
 
-        if len(rev.components) != 1:
+        expected_vlnv = f"spec2gds.local:{entry.category}:{entry.id}:{entry.version}"
+        root_comp = next((c for c in rev.components if c.vlnv == expected_vlnv), None)
+        if root_comp is None:
+            report["errors"].append(
+                f"Root component with VLNV {expected_vlnv} missing in package for {entry.id}"
+            )
+            return
+
+        if entry.phase < 3 and len(rev.components) != 1:
             report["errors"].append(f"Expected 1 component in package for {entry.id}, found {len(rev.components)}")
             return
 
-        root_comp = rev.components[0]
-        expected_vlnv = f"spec2gds.local:{entry.category}:{entry.id}:{entry.version}"
-        if root_comp.vlnv != expected_vlnv:
-            report["errors"].append(
-                f"VLNV mismatch for {entry.id}: expected {expected_vlnv}, got {root_comp.vlnv}"
-            )
-
-        # Required implementation check
+        # Required implementation check (either direct SV section or internal design composition)
+        has_internal = rev.internal_design(root_comp.ref) is not None
         sections = rev.entity_sections_for(root_comp.ref)
         has_sv = any(s.section_type == "sv" and s.content.strip() for s in sections)
-        if not has_sv:
-            report["errors"].append(f"Required SystemVerilog implementation missing for {entry.id}")
+        if not (has_sv or has_internal):
+            report["errors"].append(f"Required SystemVerilog implementation or internal design missing for {entry.id}")
 
         # Catalogue asset check
         cat_asset_bytes = get_package_asset(pkg, "library_catalogue_v1")

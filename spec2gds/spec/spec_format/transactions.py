@@ -469,7 +469,7 @@ class SpecEditTransaction:
             if component.ref not in updated_owners:
                 continue
             body = "\n".join(section.content for section in next_revision.entity_sections_for(component.ref, "sv"))
-            if not body and not component.parameters:
+            if not body and (not component.parameters or next_revision.internal_design(component.ref) is not None):
                 continue
             try:
                 resolved = resolve_interface(

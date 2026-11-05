@@ -346,6 +346,7 @@ class _Endpoint:
     port: PortIR
     instance_name: str = ""
     slice: EndpointSliceIR | None = None
+    component_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -404,6 +405,7 @@ class _RtlInstance:
     name: str
     module_name: str
     connections: tuple[_PortConnection, ...]
+    parameter_string: str = ""
 
 
 @dataclass(frozen=True)
@@ -613,16 +615,16 @@ class _Analyzer:
                 if endpoint.symbolic_slice is not None:
                     self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
                 referenced.add((endpoint.instance_name, endpoint.port_name))
-                endpoints.append(_Endpoint("instance", port, endpoint.instance_name, endpoint.slice))
+                endpoints.append(_Endpoint("instance", port, endpoint.instance_name, endpoint.slice, component.ref.entity_id))
             for endpoint in connection.external_ports:
                 if endpoint.symbolic_slice is not None:
                     self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
                 if parent is not None:
                     port = next(item for item in parent.ports if item.name == endpoint.port_name)
-                    endpoints.append(_Endpoint("boundary", port, slice=endpoint.slice))
+                    endpoints.append(_Endpoint("boundary", port, slice=endpoint.slice, component_id=parent.ref.entity_id))
             widths: list[int] = []
             for endpoint in endpoints:
-                shape = _port_shape(endpoint.port)
+                shape = self.shapes.get((endpoint.component_id, endpoint.port.name)) or _port_shape(endpoint.port)
                 if shape is None:
                     continue
                 left, right = shape.key if shape.key is not None else (0, 0)
@@ -654,7 +656,9 @@ class _Analyzer:
                 self.errors.append(f"{label} has no driver or bidirectional endpoint.")
             if len(self.errors) == start_errors and widths:
                 width = widths[0]
-                shape = _PortShape(f"[{width-1}:0]" if width > 1 else "", (width-1, 0) if width > 1 else None)
+                first_shape = self.shapes.get((endpoints[0].component_id, endpoints[0].port.name)) or _port_shape(endpoints[0].port)
+                text = first_shape.text if first_shape and first_shape.text else (f"[{width-1}:0]" if width > 1 else "")
+                shape = _PortShape(text, (width-1, 0) if width > 1 else None)
                 connections.append(_Connection(connection, tuple(endpoints), shape))
         for instance in design.instances:
             component = self.components_by_vlnv[instance.component_vlnv]
@@ -791,7 +795,7 @@ class _Normalizer:
             name = local_pool.allocate(f"{key[0]}_{key[1]}_bits", f"slice:{analysis.design.ref.entity_id}:{key}")
             expressions[key] = name
             port = endpoints[0].port
-            shape = _port_shape(port)
+            shape = self.analysis.port_shapes.get((endpoints[0].component_id, port.name)) or _port_shape(port)
             assert shape is not None
             nets.append(_RtlNet(port.name, name, shape.text))
             if port.direction == "in":
@@ -807,7 +811,8 @@ class _Normalizer:
             if connection.source.external_ports:
                 assert parent is not None
                 external = next(endpoint for endpoint in connection.endpoints if endpoint.kind == "boundary")
-                expression = _slice_expression(self.port_names[(parent.ref.entity_id, external.port.name)], external.slice, _port_shape(external.port))
+                ext_shape = self.analysis.port_shapes.get((parent.ref.entity_id, external.port.name)) or _port_shape(external.port)
+                expression = _slice_expression(self.port_names[(parent.ref.entity_id, external.port.name)], external.slice, ext_shape)
             else:
                 expression = connection_names[connection.source.name]
                 nets.append(_RtlNet(connection.source.name, expression, connection.shape.text))
@@ -818,7 +823,8 @@ class _Normalizer:
                 if endpoint.slice is None:
                     expressions[key] = expression
                 else:
-                    bits = _slice_expression(expressions[key], endpoint.slice, _port_shape(endpoint.port))
+                    inst_shape = self.analysis.port_shapes.get((endpoint.component_id, endpoint.port.name)) or _port_shape(endpoint.port)
+                    bits = _slice_expression(expressions[key], endpoint.slice, inst_shape)
                     lhs, rhs = (bits, expression) if endpoint.port.direction == "in" else (expression, bits)
                     assignments.append(f"assign {lhs} = {rhs};")
 
@@ -840,12 +846,22 @@ class _Normalizer:
                         expression=expression,
                     )
                 )
+            param_assigns = []
+            if parent is not None:
+                parent_params = {p.name for p in parent.parameters}
+                param_assigns = [
+                    f".{param.name}({param.name})"
+                    for param in component.parameters
+                    if param.name in parent_params
+                ]
+            param_str = f" #(\n        " + ",\n        ".join(param_assigns) + "\n    )" if param_assigns else ""
             instances.append(
                 _RtlInstance(
                     source_name=instance.name,
                     name=instance_names[instance.name],
                     module_name=self.module_names[component.ref.entity_id],
                     connections=tuple(hookups),
+                    parameter_string=param_str,
                 )
             )
 
@@ -1036,7 +1052,7 @@ def _render_module(module: _RtlModule) -> str:
         for net in module.nets
     )
     instance_blocks = tuple(
-        f"    {instance.module_name} {instance.name} (\n"
+        f"    {instance.module_name}{instance.parameter_string} {instance.name} (\n"
         + ",\n".join(
             f"        .{connection.port_name}({connection.expression})"
             for connection in instance.connections

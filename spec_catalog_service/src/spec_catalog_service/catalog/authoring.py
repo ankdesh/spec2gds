@@ -14,6 +14,7 @@ from spec2gds.spec.spec_format.transactions import (
     WirePortInput,
 )
 from spec_catalog_service.catalog.components.models import ComponentDef
+from spec_catalog_service.catalog.phase3_hierarchy import build_phase3_hierarchy_ops
 from spec_catalog_service.catalog.schemas import CatalogueAssetV1
 
 
@@ -24,6 +25,8 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
     doc_id = pkg.manifest.document_id
     comp_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}", entity_kind="component")
 
+    is_hierarchical = comp_def.phase == 3
+
     cat_meta = CatalogueAssetV1(
         schema_version=1,
         root=comp_ref,
@@ -33,7 +36,7 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
         summary=comp_def.summary,
         tags=sorted(set(comp_def.tags)),
         licence=comp_def.licence,
-        implementation="body_sv",
+        implementation="composite" if is_hierarchical else "body_sv",
         contracts=f"docs/TEMP_spec_library_plan/plans/phase-{comp_def.phase}.md#{comp_def.contract_anchor or comp_def.id}",
         presets=comp_def.presets,
         timing=comp_def.timing,
@@ -41,41 +44,44 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
         dependencies=[],
     )
 
-    initial_ports = tuple(
-        InitialComponentPort(
-            name=port.name,
-            port=WirePortInput(
-                direction=port.direction,  # type: ignore[arg-type]
-                range=port.range_expr,
-                description=port.description,
-            ),
-        )
-        for port in comp_def.ports
-    )
-
-    ops = [
-        CreateHardware(
-            kind="component",
-            name=comp_def.id,
-            entity_id=comp_ref.entity_id,
-            vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}:{comp_def.version}",
-            systemverilog=comp_def.systemverilog,
-            ports=initial_ports,
-        )
-    ]
-
-    for param in comp_def.parameters:
-        ops.append(
-            UpdateParameter(
-                comp_ref,
-                {
-                    "name": param.name,
-                    "rtl_type": param.rtl_type,
-                    "value": param.default_value,
-                    "description": param.description,
-                },
+    if is_hierarchical:
+        ops = build_phase3_hierarchy_ops(comp_def, doc_id)
+    else:
+        initial_ports = tuple(
+            InitialComponentPort(
+                name=port.name,
+                port=WirePortInput(
+                    direction=port.direction,  # type: ignore[arg-type]
+                    range=port.range_expr,
+                    description=port.description,
+                ),
             )
+            for port in comp_def.ports
         )
+
+        ops = [
+            CreateHardware(
+                kind="component",
+                name=comp_def.id,
+                entity_id=comp_ref.entity_id,
+                vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}:{comp_def.version}",
+                systemverilog=comp_def.systemverilog,
+                ports=initial_ports,
+            )
+        ]
+
+        for param in comp_def.parameters:
+            ops.append(
+                UpdateParameter(
+                    comp_ref,
+                    {
+                        "name": param.name,
+                        "rtl_type": param.rtl_type,
+                        "value": param.default_value,
+                        "description": param.description,
+                    },
+                )
+            )
 
     cat_bytes = cat_meta.model_dump_json(indent=2).encode("utf-8")
     ops.append(
@@ -98,7 +104,8 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
 def build_component_usage_markdown(comp_def: ComponentDef, saved_pkg: SpecPackage) -> str:
     """Generate usage.md derived from the saved Spec and component contract."""
     rev = SpecRevision.from_package(saved_pkg)
-    comp = rev.components[0]
+    expected_vlnv = f"spec2gds.local:{comp_def.category}:{comp_def.id}:{comp_def.version}"
+    comp = next((c for c in rev.components if c.vlnv == expected_vlnv), rev.components[0])
 
     port_rows = []
     for port in comp.ports:

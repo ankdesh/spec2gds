@@ -57,6 +57,9 @@ class LibraryVerifier:
         all_passed = True
 
         for entry in target_entries:
+            spec_path = base_dir / entry.path
+            if self.candidates and entry.status == "planned" and not spec_path.is_file():
+                continue
             comp_def = ALL_COMPONENTS_BY_ID.get(entry.id)
             if not comp_def:
                 print(f"Error: Component definition for {entry.id} not found in runner.")

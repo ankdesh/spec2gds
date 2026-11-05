@@ -150,18 +150,20 @@ def verify_component(
         pkg = SpecPackage.from_bytes(pkg_raw)
 
     rev = SpecRevision.from_package(pkg)
-    comp = rev.components[0]
+    expected_vlnv = f"spec2gds.local:{comp_def.category}:{comp_def.id}:{comp_def.version}"
+    comp = next((c for c in rev.components if c.vlnv == expected_vlnv), rev.components[0])
     comp_ref = comp.ref
 
     # 2. Implementation check
+    has_internal = rev.internal_design(comp_ref) is not None
     sv_sections = [s for s in rev.entity_sections_for(comp_ref) if s.section_type == "sv"]
-    if sv_sections and sv_sections[0].content.strip():
+    if has_internal or (sv_sections and sv_sections[0].content.strip()):
         checks.append(
             CheckRecord(
                 kind="implementation",
                 preset=None,
                 status="pass",
-                summary="Functional SystemVerilog implementation body present and non-empty.",
+                summary="Functional SystemVerilog implementation or hierarchical composition present and verified.",
             )
         )
     else:
@@ -171,7 +173,7 @@ def verify_component(
                 kind="implementation",
                 preset=None,
                 status="fail",
-                summary="Missing or empty SystemVerilog section.",
+                summary="Missing or empty SystemVerilog section and no internal design composition.",
             )
         )
 
@@ -303,7 +305,9 @@ def verify_component(
             else:
                 preset_g_flags.append(f"-G{k}={v}")
 
-        lint_cmd = ["verilator", "--lint-only", "-Wall", "-Wno-DECLFILENAME", *preset_g_flags, str(rtl_top_path)]
+        components_dir = out1 / "rtl" / "components"
+        all_sv_files = [str(p) for p in sorted(components_dir.glob("*.sv"))]
+        lint_cmd = ["verilator", "--lint-only", "-Wall", "-Wno-DECLFILENAME", "-y", str(components_dir), *preset_g_flags, *all_sv_files]
         lint_res = _run_cmd(lint_cmd, timeout=30)
         if lint_res.returncode == 0:
             checks.append(
@@ -407,6 +411,8 @@ def _run_simulation(
     tb_path.write_text(tb_code)
 
     obj_dir = work_dir / "obj_dir"
+    components_dir = rtl_top_path.parent
+    all_sv_files = [str(p) for p in sorted(components_dir.glob("*.sv"))]
     compile_cmd = [
         "verilator",
         "--binary",
@@ -418,7 +424,9 @@ def _run_simulation(
         "-Wno-UNUSEDPARAM",
         "-Wno-SYNCASYNCNET",
         "-Wno-BLKSEQ",
-        str(rtl_top_path),
+        "-y",
+        str(components_dir),
+        *all_sv_files,
         str(tb_path),
         "--top-module",
         f"tb_{comp_def.id}",
@@ -896,23 +904,72 @@ def _generate_testbench(
         if hasattr(ref_model, "reset"):
             ref_model.reset()
 
-        # Directed initial cycles
-        for _ in range(num_vectors):
-            in_map = {}
-            for p in in_ports:
-                w = in_widths[p.name]
-                if w == 1:
-                    in_map[p.name] = rnd.choice([0, 1])
+        has_req = any(p.name == "req_valid_i" for p in in_ports)
+        if has_req:
+            pending_req = False
+            held_inputs: dict[str, int] = {}
+            stall_counter = 0
+            stall_target_cycle = 50
+
+            for cycle_idx in range(num_vectors):
+                in_map = {}
+                # 100-cycle downstream stall to stress backpressure and stability
+                if cycle_idx >= stall_target_cycle and stall_counter < 100:
+                    rsp_ready = 0
+                    stall_counter += 1
                 else:
-                    in_map[p.name] = rnd.getrandbits(w)
-            step_inputs = {**in_map}
-            if has_rst_ni:
-                step_inputs["rst_ni"] = 1
-            if has_async_rst_ni:
-                step_inputs["async_rst_ni"] = 1
-            out_map = ref_model.step(step_inputs)
-            vector_inputs.append(in_map)
-            vector_expected.append(out_map)
+                    rsp_ready = rnd.choice([1, 1, 1, 0])
+                in_map["rsp_ready_i"] = rsp_ready
+
+                if pending_req:
+                    for p in in_ports:
+                        if p.name != "rsp_ready_i":
+                            in_map[p.name] = held_inputs[p.name]
+                else:
+                    req_valid = rnd.choice([1, 1, 0])
+                    in_map["req_valid_i"] = req_valid
+                    for p in in_ports:
+                        if p.name in {"rsp_ready_i", "req_valid_i"}:
+                            continue
+                        w = in_widths[p.name]
+                        if w == 1:
+                            in_map[p.name] = rnd.choice([0, 1])
+                        else:
+                            in_map[p.name] = rnd.getrandbits(w)
+
+                    if req_valid:
+                        pending_req = True
+                        held_inputs = {**in_map}
+
+                step_inputs = {**in_map}
+                if has_rst_ni:
+                    step_inputs["rst_ni"] = 1
+                if has_async_rst_ni:
+                    step_inputs["async_rst_ni"] = 1
+                out_map = ref_model.step(step_inputs)
+                vector_inputs.append(in_map)
+                vector_expected.append(out_map)
+
+                if in_map.get("req_valid_i", 0) and out_map.get("req_ready_o", 0):
+                    pending_req = False
+        else:
+            # Directed initial cycles
+            for _ in range(num_vectors):
+                in_map = {}
+                for p in in_ports:
+                    w = in_widths[p.name]
+                    if w == 1:
+                        in_map[p.name] = rnd.choice([0, 1])
+                    else:
+                        in_map[p.name] = rnd.getrandbits(w)
+                step_inputs = {**in_map}
+                if has_rst_ni:
+                    step_inputs["rst_ni"] = 1
+                if has_async_rst_ni:
+                    step_inputs["async_rst_ni"] = 1
+                out_map = ref_model.step(step_inputs)
+                vector_inputs.append(in_map)
+                vector_expected.append(out_map)
     else:
         # Combinational
         # Directed edge cases

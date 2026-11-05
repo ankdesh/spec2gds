@@ -272,7 +272,7 @@ def test_all_published_components_import_with_their_defaults():
         imported = candidate.resolve(type(source.components[0].ref).model_validate(preview["root"]))
         assert imported.parameters == source.components[0].parameters
         destination = candidate
-    assert len(destination.components) == len(paths)
+    assert len(destination.components) >= len(paths)
     assert len(origins(destination)) == len(paths)
 
 

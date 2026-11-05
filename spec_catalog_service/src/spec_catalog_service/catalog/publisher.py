@@ -80,6 +80,8 @@ class LibraryPublisher:
         staged_items: list[dict[str, Any]] = []
         for entry in target_entries:
             spec_file = self.candidates / entry.path
+            if entry.status == "planned" and not spec_file.is_file():
+                continue
             if not spec_file.is_file():
                 report["errors"].append(f"Candidate spec file missing: {spec_file}")
                 continue

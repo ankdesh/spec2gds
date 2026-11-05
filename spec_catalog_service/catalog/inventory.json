@@ -1225,8 +1225,16 @@
       "path": "arithmetic_dsp/add_sub/1.0.0/add_sub.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#add_sub",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/add_sub/1.0.0/add_sub.spec",
+          "package_sha256": "sha256:6c44c98b29c4c2090779acce47f9a2cc0f34f9030cb2e2502c4de7aaa78e0e46",
+          "evidence_path": "arithmetic_dsp/add_sub/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:80f577aae9cdc97a4c9bd24126ba4148698db6f4259774c2c73af9184fb40963"
+        }
+      ]
     },
     {
       "id": "saturating_add_sub",
@@ -1236,8 +1244,16 @@
       "path": "arithmetic_dsp/saturating_add_sub/1.0.0/saturating_add_sub.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#saturating_add_sub",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/saturating_add_sub/1.0.0/saturating_add_sub.spec",
+          "package_sha256": "sha256:ff356fa9ef23bcbd0b85e42dda79b183f0c277b18b6b87a08451b4cdd101e190",
+          "evidence_path": "arithmetic_dsp/saturating_add_sub/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:93e0f42d83b4be51c4f11bf34f9c1f88f141e71493cf8aa20d8aa5b37288dbdc"
+        }
+      ]
     },
     {
       "id": "comparator",
@@ -1247,8 +1263,16 @@
       "path": "arithmetic_dsp/comparator/1.0.0/comparator.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#comparator",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/comparator/1.0.0/comparator.spec",
+          "package_sha256": "sha256:bd8497b50d504d1e8304900f3c860d3bbb9c2c33cf843fa97a05fc5ff42f49d7",
+          "evidence_path": "arithmetic_dsp/comparator/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:eced47cc57abed40111e121f3c334a934759459eda6c0f427d456a6a8cd5939d"
+        }
+      ]
     },
     {
       "id": "min_max",
@@ -1258,8 +1282,16 @@
       "path": "arithmetic_dsp/min_max/1.0.0/min_max.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#min_max",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/min_max/1.0.0/min_max.spec",
+          "package_sha256": "sha256:8401180fe1411179e1e6ae9cd936c718e73999ce8ae74fcf55eddcfed2c1a4da",
+          "evidence_path": "arithmetic_dsp/min_max/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:08829dff37a8d5ddbcd9d9bd5fc7018fe1a8a0005cb1de69e5f5dae81341d61f"
+        }
+      ]
     },
     {
       "id": "absolute_value",
@@ -1269,8 +1301,16 @@
       "path": "arithmetic_dsp/absolute_value/1.0.0/absolute_value.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#absolute_value",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/absolute_value/1.0.0/absolute_value.spec",
+          "package_sha256": "sha256:faf73b6a159e47cf83fc0ff49d35067a8a16cbcecd72de68ce8c6b9323dfae43",
+          "evidence_path": "arithmetic_dsp/absolute_value/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:89557dd7203aceb58c18c8e67b76b40d30272c996c9f0e3d813ae73064bb102f"
+        }
+      ]
     },
     {
       "id": "multiplier_comb",
@@ -1280,8 +1320,16 @@
       "path": "arithmetic_dsp/multiplier_comb/1.0.0/multiplier_comb.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#multiplier_comb",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/multiplier_comb/1.0.0/multiplier_comb.spec",
+          "package_sha256": "sha256:4d8886597a445737a01cdd2cbd1c67c8eead3e2cfc72b557219fe1f9a0d01346",
+          "evidence_path": "arithmetic_dsp/multiplier_comb/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:1b3a8d1636bf6065859bd0b4927639121b8760cf7cf4c0052f8c1bedfaf165ff"
+        }
+      ]
     },
     {
       "id": "multiplier_pipeline",
@@ -1291,8 +1339,16 @@
       "path": "arithmetic_dsp/multiplier_pipeline/1.0.0/multiplier_pipeline.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#multiplier_pipeline",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/multiplier_pipeline/1.0.0/multiplier_pipeline.spec",
+          "package_sha256": "sha256:e20673fe1e4b126789642d1ddf5dc97c0c0f14e5533aeb81bb593c297e6616e9",
+          "evidence_path": "arithmetic_dsp/multiplier_pipeline/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:bc7cbd511df7e05db108045101611f963be9617ae4b54238f373b273ccab6ec8"
+        }
+      ]
     },
     {
       "id": "multiplier_iterative",
@@ -1302,8 +1358,16 @@
       "path": "arithmetic_dsp/multiplier_iterative/1.0.0/multiplier_iterative.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#multiplier_iterative",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/multiplier_iterative/1.0.0/multiplier_iterative.spec",
+          "package_sha256": "sha256:3cbc79ddfc3f29eb8b77faa438ed1a38be832c985b903bd6de7dae632d2831b3",
+          "evidence_path": "arithmetic_dsp/multiplier_iterative/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:d51c9fcfd8ac3051d996ae0a3d3d4aa39a1e16263196e12394d793e3a4efb095"
+        }
+      ]
     },
     {
       "id": "mac",
@@ -1313,8 +1377,16 @@
       "path": "arithmetic_dsp/mac/1.0.0/mac.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#mac",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/mac/1.0.0/mac.spec",
+          "package_sha256": "sha256:d1ee5427e1dd34c13b98106eebbb2308d51648642fb01a3961bf23e65e2976cc",
+          "evidence_path": "arithmetic_dsp/mac/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:ad3f461c59fa506d802758240bf5bd84352bd1bea07629b9270f315a841f04ec"
+        }
+      ]
     },
     {
       "id": "divider_iterative",
@@ -1324,8 +1396,16 @@
       "path": "arithmetic_dsp/divider_iterative/1.0.0/divider_iterative.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#divider_iterative",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/divider_iterative/1.0.0/divider_iterative.spec",
+          "package_sha256": "sha256:43fee44e18d0b0667420e5009de4d73a314381c16a01eb2381be143050cd9fb5",
+          "evidence_path": "arithmetic_dsp/divider_iterative/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:7afc86b374559a624e1fd6f4445edb75a21f829fc7b9da2ce081dc4cf6d29484"
+        }
+      ]
     },
     {
       "id": "divider_pipeline",
@@ -1335,8 +1415,16 @@
       "path": "arithmetic_dsp/divider_pipeline/1.0.0/divider_pipeline.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#divider_pipeline",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/divider_pipeline/1.0.0/divider_pipeline.spec",
+          "package_sha256": "sha256:0f467accd896d0e3c4d07e4da6f74f1e9c80bec1b3361ca9b3db18741a20f1f8",
+          "evidence_path": "arithmetic_dsp/divider_pipeline/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:10df684ca9c22de00bf84595f5a7704ceccdc7340bf1f51b3f91db791a7fd974"
+        }
+      ]
     },
     {
       "id": "integer_sqrt",
@@ -1346,8 +1434,16 @@
       "path": "arithmetic_dsp/integer_sqrt/1.0.0/integer_sqrt.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#integer_sqrt",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/integer_sqrt/1.0.0/integer_sqrt.spec",
+          "package_sha256": "sha256:31ed5826ea44c49232cc41ab375debf00bcf173810120caa3126127fced601be",
+          "evidence_path": "arithmetic_dsp/integer_sqrt/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:f64a288b1ca379efb9c94092fbf9495fcd7c51eae72affffee45e29bc3b24b0f"
+        }
+      ]
     },
     {
       "id": "fixed_round",
