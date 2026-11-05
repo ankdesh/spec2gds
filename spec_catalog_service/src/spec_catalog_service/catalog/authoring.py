@@ -34,7 +34,7 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
         tags=sorted(set(comp_def.tags)),
         licence=comp_def.licence,
         implementation="body_sv",
-        contracts=f"docs/TEMP_spec_library_plan/plans/phase-1.md#{comp_def.contract_anchor}",
+        contracts=f"docs/TEMP_spec_library_plan/plans/phase-{comp_def.phase}.md#{comp_def.contract_anchor or comp_def.id}",
         presets=comp_def.presets,
         timing=comp_def.timing,
         limitations=comp_def.limitations,

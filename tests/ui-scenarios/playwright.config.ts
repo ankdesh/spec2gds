@@ -22,7 +22,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     launchOptions: { args: ["--no-sandbox"] },
   },
-  projects: ["spec", "circuit", "assistant", "verification"].map(name => ({
+  projects: ["spec", "circuit", "assistant", "verification", "stress"].map(name => ({
     name, testMatch: `${name}.spec.ts`,
   })),
 });

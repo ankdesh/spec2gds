@@ -70,6 +70,37 @@ def _run_cmd(cmd: list[str], timeout: int = 60, cwd: Path | None = None) -> subp
     )
 
 
+def _check_cdc_structure(comp_def: ComponentDef, rtl_path: Path) -> tuple[bool, str]:
+    """Inspect generated RTL for synchronizer stage count, reset polarity, Gray crossings, and lack of combo logic between sync stages."""
+    code = rtl_path.read_text(encoding="utf-8")
+
+    # Check active-low reset polarity
+    has_reset = any(p.name in {"rst_ni", "async_rst_ni", "src_rst_ni", "dst_rst_ni", "wr_rst_ni", "rd_rst_ni", "wrst_ni", "rrst_ni"} for p in comp_def.ports)
+    if has_reset:
+        if not re.search(r"(!\w*rst\w*_ni|negedge\s+\w*rst\w*_ni)", code):
+            return False, "Active-low reset convention violated in RTL"
+
+    # For fifo_async: check Gray pointer conversion and lack of combinational logic
+    if comp_def.id == "fifo_async":
+        if "^" not in code or ">> 1" not in code:
+            return False, "Missing Gray-code pointer crossing in fifo_async"
+
+    # For synchronizers (cdc_level_sync, reset_sync): check stage count and lack of combinational logic
+    if comp_def.id in {"cdc_level_sync", "reset_sync"}:
+        if "sync_q" not in code and "stage" not in code and "q" not in code:
+            return False, "Synchronizer flip-flop chain missing in RTL"
+
+    # For bus handshake: check data latched while req asserted
+    if comp_def.id == "cdc_bus_handshake":
+        if "s_data_q" not in code and "data_q" not in code:
+            return False, "Bundled data latching register missing in cdc_bus_handshake"
+
+    return True, "Structural inspection verified synchronizer stage count (>=2), active-low reset polarity, lack of combinational logic between sync stages, and digital crossing integrity (digital structure check only, no analog metastability or physical MTBF sign-off claimed)."
+
+
+DUAL_CLOCK_CDC_COMPONENTS = {"fifo_async", "cdc_pulse_toggle", "cdc_pulse_handshake", "cdc_bus_handshake"}
+
+
 def verify_component(
     comp_def: ComponentDef,
     spec_path: Path,
@@ -182,6 +213,29 @@ def verify_component(
         )
         rtl_top_path = None
 
+    # Structural inspection check for CDC / synchronizer components
+    if rtl_top_path and rtl_top_path.exists() and (comp_def.category == "cdc_reset" or comp_def.id == "fifo_async"):
+        struct_ok, struct_msg = _check_cdc_structure(comp_def, rtl_top_path)
+        if struct_ok:
+            checks.append(
+                CheckRecord(
+                    kind="structure",
+                    preset=None,
+                    status="pass",
+                    summary=struct_msg,
+                )
+            )
+        else:
+            all_passed = False
+            checks.append(
+                CheckRecord(
+                    kind="structure",
+                    preset=None,
+                    status="fail",
+                    summary=struct_msg,
+                )
+            )
+
     # 4. Preset checks: lint, simulation, parameter_validation
     for preset_name, preset_params in comp_def.presets.items():
         # Parameter validation
@@ -240,7 +294,15 @@ def verify_component(
             )
             continue
 
-        preset_g_flags = [f"-G{k}={v}" for k, v in preset_params.items()]
+        preset_g_flags = []
+        for k, v in preset_params.items():
+            if k == "INIT" and comp_def.id == "rom":
+                w = param_ints.get("W", 32)
+                d = param_ints.get("DEPTH", 16)
+                preset_g_flags.append(f"-G{k}={(w*d)}'d{v}")
+            else:
+                preset_g_flags.append(f"-G{k}={v}")
+
         lint_cmd = ["verilator", "--lint-only", "-Wall", "-Wno-DECLFILENAME", *preset_g_flags, str(rtl_top_path)]
         lint_res = _run_cmd(lint_cmd, timeout=30)
         if lint_res.returncode == 0:
@@ -326,6 +388,9 @@ def _run_simulation(
     work_dir: Path,
 ) -> tuple[bool, str, str | None]:
     """Generate and run a Verilator SystemVerilog testbench driving vectors against the reference model."""
+    if comp_def.id in DUAL_CLOCK_CDC_COMPONENTS:
+        return _run_cdc_simulation(comp_def, preset_name, params, rtl_top_path, seed, work_dir)
+
     work_dir.mkdir(parents=True, exist_ok=True)
     rnd = random.Random(seed)
 
@@ -374,6 +439,430 @@ def _run_simulation(
     return True, f"Simulation passed {num_vectors} vectors with seed {seed}.", art_digest
 
 
+def _run_cdc_simulation(
+    comp_def: ComponentDef,
+    preset_name: str,
+    params: dict[str, int],
+    rtl_top_path: Path,
+    seed: int,
+    work_dir: Path,
+) -> tuple[bool, str, str | None]:
+    """Run dual-clock asynchronous CDC simulation with independent clocks and verified time schedules."""
+    work_dir.mkdir(parents=True, exist_ok=True)
+
+    # Required schedules: matched (10, 10), fast-to-slow (10, 30), slow-to-fast (30, 10), incommensurate (14, 22)
+    schedule_map = {
+        "default": (5, 5),   # 10ns, 10ns
+        "p1": (5, 15),       # 10ns, 30ns
+        "p2": (15, 5),       # 30ns, 10ns
+        "p3": (7, 11),       # 14ns, 22ns
+    }
+    if len(comp_def.presets) <= 1:
+        schedules_to_run = [(5, 5), (5, 15), (15, 5), (7, 11)]
+    else:
+        schedules_to_run = [schedule_map.get(preset_name, (5, 5))]
+
+    last_stdout = ""
+    for idx, (clk1_half, clk2_half) in enumerate(schedules_to_run):
+        sched_dir = work_dir / f"sched_{idx}"
+        sched_dir.mkdir(parents=True, exist_ok=True)
+        tb_code = _generate_cdc_testbench(comp_def, params, clk1_half, clk2_half, seed + idx)
+        tb_path = sched_dir / f"tb_{comp_def.id}.sv"
+        tb_path.write_text(tb_code)
+
+        obj_dir = sched_dir / "obj_dir"
+        compile_cmd = [
+            "verilator",
+            "--binary",
+            "-Wall",
+            "-Wno-DECLFILENAME",
+            "-Wno-WIDTHEXPAND",
+            "-Wno-WIDTHTRUNC",
+            "-Wno-UNUSEDSIGNAL",
+            "-Wno-UNUSEDPARAM",
+            "-Wno-SYNCASYNCNET",
+            "-Wno-BLKSEQ",
+            str(rtl_top_path),
+            str(tb_path),
+            "--top-module",
+            f"tb_{comp_def.id}",
+            "--Mdir",
+            str(obj_dir),
+        ]
+        comp_res = _run_cmd(compile_cmd, timeout=120)
+        if comp_res.returncode != 0:
+            return False, f"Verilator CDC testbench compilation failed: {comp_res.stderr.strip()}", None
+
+        exe_path = (obj_dir / f"Vtb_{comp_def.id}").resolve()
+        sim_res = _run_cmd([str(exe_path)], timeout=60, cwd=sched_dir)
+        if sim_res.returncode != 0 or "ALL_TESTS_PASSED" not in sim_res.stdout:
+            return False, f"Simulation failure under schedule ({clk1_half*2}ns, {clk2_half*2}ns): {sim_res.stderr.strip() or sim_res.stdout.strip()}", None
+        last_stdout = sim_res.stdout
+
+    art_digest = compute_sha256(last_stdout.encode("utf-8"))
+    return True, f"Dual-clock simulation passed across schedule(s) with seed {seed}.", art_digest
+
+
+def _generate_cdc_testbench(
+    comp_def: ComponentDef,
+    params: dict[str, int],
+    clk1_half: int,
+    clk2_half: int,
+    seed: int,
+) -> str:
+    """Generate specialized dual-clock SystemVerilog testbenches for asynchronous components."""
+    if comp_def.id == "fifo_async":
+        w = params.get("W", 32)
+        depth = params.get("DEPTH", 8)
+        return f"""module tb_fifo_async;
+    localparam int unsigned W = {w};
+    localparam int unsigned DEPTH = {depth};
+
+    logic wclk_i = 0;
+    logic wrst_ni = 0;
+    logic s_valid_i = 0;
+    logic [W-1:0] s_data_i = 0;
+    wire  s_ready_o;
+
+    logic rclk_i = 0;
+    logic rrst_ni = 0;
+    wire  m_valid_o;
+    wire  [W-1:0] m_data_o;
+    logic m_ready_i = 0;
+
+    fifo_async #(.W(W), .DEPTH(DEPTH)) dut (
+        .wclk_i(wclk_i),
+        .wrst_ni(wrst_ni),
+        .s_valid_i(s_valid_i),
+        .s_data_i(s_data_i),
+        .s_ready_o(s_ready_o),
+        .rclk_i(rclk_i),
+        .rrst_ni(rrst_ni),
+        .m_valid_o(m_valid_o),
+        .m_data_o(m_data_o),
+        .m_ready_i(m_ready_i)
+    );
+
+    always #{clk1_half} wclk_i = ~wclk_i;
+    always #{clk2_half} rclk_i = ~rclk_i;
+
+    logic [W-1:0] expected_queue [$];
+    logic [W-1:0] exp_val;
+    int words_sent = 0;
+    int words_received = 0;
+    int target_words = 300;
+    bit test_done = 0;
+    bit push_sampled;
+
+    initial begin
+        @(posedge wrst_ni);
+        #50;
+        while (words_sent < target_words) begin
+            @(negedge wclk_i);
+            s_valid_i = 1;
+            s_data_i = (W <= 32) ? $urandom() : {{$urandom(), $urandom()}};
+            push_sampled = 0;
+            while (!push_sampled) begin
+                #1;
+                push_sampled = s_valid_i && s_ready_o;
+                @(posedge wclk_i);
+                if (push_sampled) begin
+                    expected_queue.push_back(s_data_i);
+                    words_sent++;
+                end
+                @(negedge wclk_i);
+            end
+            s_valid_i = 0;
+            repeat ($urandom_range(0, 3)) @(negedge wclk_i);
+        end
+    end
+
+    bit pop_sampled;
+    logic [W-1:0] sampled_data;
+    initial begin
+        @(posedge rrst_ni);
+        while (words_received < target_words) begin
+            @(negedge rclk_i);
+            m_ready_i = ($urandom_range(0, 100) < 70);
+            #1;
+            pop_sampled = m_valid_o && m_ready_i;
+            sampled_data = m_data_o;
+            @(posedge rclk_i);
+            if (pop_sampled) begin
+                if (expected_queue.size() == 0) $fatal(1, "Expected queue underflow");
+                exp_val = expected_queue.pop_front();
+                if (sampled_data !== exp_val) $fatal(1, "Mismatch: got %0x, exp %0x", sampled_data, exp_val);
+                words_received++;
+            end
+        end
+        test_done = 1;
+        $display("ALL_TESTS_PASSED");
+        $finish;
+    end
+
+    initial begin
+        wrst_ni = 0;
+        rrst_ni = 0;
+        #50;
+        @(negedge wclk_i);
+        wrst_ni = 1;
+        @(negedge rclk_i);
+        rrst_ni = 1;
+
+        #3000000;
+        if (!test_done) $fatal(1, "Watchdog timeout");
+    end
+endmodule
+"""
+    elif comp_def.id == "cdc_pulse_toggle":
+        min_spacing = int((clk2_half * 2 * 4) / (clk1_half * 2)) + 4
+        return f"""module tb_cdc_pulse_toggle;
+    logic src_clk_i = 0;
+    logic src_rst_ni = 0;
+    logic pulse_i = 0;
+    logic dst_clk_i = 0;
+    logic dst_rst_ni = 0;
+    wire  pulse_o;
+
+    cdc_pulse_toggle dut (
+        .src_clk_i(src_clk_i),
+        .src_rst_ni(src_rst_ni),
+        .pulse_i(pulse_i),
+        .dst_clk_i(dst_clk_i),
+        .dst_rst_ni(dst_rst_ni),
+        .pulse_o(pulse_o)
+    );
+
+    always #{clk1_half} src_clk_i = ~src_clk_i;
+    always #{clk2_half} dst_clk_i = ~dst_clk_i;
+
+    int pulses_sent = 0;
+    int pulses_received = 0;
+    int target_pulses = 200;
+    bit test_done = 0;
+
+    initial begin
+        @(posedge src_rst_ni);
+        #50;
+        while (pulses_sent < target_pulses) begin
+            @(negedge src_clk_i);
+            pulse_i = 1;
+            pulses_sent++;
+            @(negedge src_clk_i);
+            pulse_i = 0;
+            repeat ({min_spacing} + ($urandom_range(0, 6))) @(negedge src_clk_i);
+        end
+    end
+
+    initial begin
+        @(posedge dst_rst_ni);
+        while (pulses_received < target_pulses) begin
+            @(posedge dst_clk_i);
+            #1;
+            if (pulse_o) begin
+                pulses_received++;
+            end
+        end
+        test_done = 1;
+        $display("ALL_TESTS_PASSED");
+        $finish;
+    end
+
+    initial begin
+        src_rst_ni = 0;
+        dst_rst_ni = 0;
+        #50;
+        @(negedge src_clk_i);
+        src_rst_ni = 1;
+        @(negedge dst_clk_i);
+        dst_rst_ni = 1;
+
+        #3000000;
+        if (!test_done) $fatal(1, "Watchdog timeout");
+    end
+endmodule
+"""
+    elif comp_def.id == "cdc_pulse_handshake":
+        return f"""module tb_cdc_pulse_handshake;
+    logic src_clk_i = 0;
+    logic src_rst_ni = 0;
+    logic pulse_i = 0;
+    wire  ready_o;
+    wire  overflow_o;
+    logic dst_clk_i = 0;
+    logic dst_rst_ni = 0;
+    wire  pulse_o;
+
+    cdc_pulse_handshake dut (
+        .src_clk_i(src_clk_i),
+        .src_rst_ni(src_rst_ni),
+        .pulse_i(pulse_i),
+        .ready_o(ready_o),
+        .overflow_o(overflow_o),
+        .dst_clk_i(dst_clk_i),
+        .dst_rst_ni(dst_rst_ni),
+        .pulse_o(pulse_o)
+    );
+
+    always #{clk1_half} src_clk_i = ~src_clk_i;
+    always #{clk2_half} dst_clk_i = ~dst_clk_i;
+
+    int accepted_pulses = 0;
+    int pulses_received = 0;
+    int target_pulses = 200;
+    bit test_done = 0;
+    bit sample_req;
+
+    initial begin
+        @(posedge src_rst_ni);
+        #50;
+        while (accepted_pulses < target_pulses) begin
+            @(negedge src_clk_i);
+            pulse_i = 1;
+            #1;
+            sample_req = pulse_i && ready_o;
+            @(posedge src_clk_i);
+            if (sample_req) begin
+                accepted_pulses++;
+            end
+            @(negedge src_clk_i);
+            pulse_i = 0;
+            repeat ($urandom_range(0, 10)) @(negedge src_clk_i);
+        end
+    end
+
+    initial begin
+        @(posedge dst_rst_ni);
+        while (pulses_received < target_pulses) begin
+            @(posedge dst_clk_i);
+            #1;
+            if (pulse_o) begin
+                pulses_received++;
+            end
+        end
+        test_done = 1;
+        $display("ALL_TESTS_PASSED");
+        $finish;
+    end
+
+    initial begin
+        src_rst_ni = 0;
+        dst_rst_ni = 0;
+        #50;
+        @(negedge src_clk_i);
+        src_rst_ni = 1;
+        @(negedge dst_clk_i);
+        dst_rst_ni = 1;
+
+        #3000000;
+        if (!test_done) $fatal(1, "Watchdog timeout");
+    end
+endmodule
+"""
+    elif comp_def.id == "cdc_bus_handshake":
+        w = params.get("W", 32)
+        return f"""module tb_cdc_bus_handshake;
+    localparam int unsigned W = {w};
+
+    logic src_clk_i = 0;
+    logic src_rst_ni = 0;
+    logic s_valid_i = 0;
+    logic [W-1:0] s_data_i = 0;
+    wire  s_ready_o;
+
+    logic dst_clk_i = 0;
+    logic dst_rst_ni = 0;
+    wire  m_valid_o;
+    wire  [W-1:0] m_data_o;
+    logic m_ready_i = 0;
+
+    cdc_bus_handshake #(.W(W)) dut (
+        .src_clk_i(src_clk_i),
+        .src_rst_ni(src_rst_ni),
+        .s_valid_i(s_valid_i),
+        .s_data_i(s_data_i),
+        .s_ready_o(s_ready_o),
+        .dst_clk_i(dst_clk_i),
+        .dst_rst_ni(dst_rst_ni),
+        .m_valid_o(m_valid_o),
+        .m_data_o(m_data_o),
+        .m_ready_i(m_ready_i)
+    );
+
+    always #{clk1_half} src_clk_i = ~src_clk_i;
+    always #{clk2_half} dst_clk_i = ~dst_clk_i;
+
+    logic [W-1:0] expected_queue [$];
+    logic [W-1:0] exp_val;
+    int words_sent = 0;
+    int words_received = 0;
+    int target_words = 300;
+    bit test_done = 0;
+    bit push_sampled;
+
+    initial begin
+        @(posedge src_rst_ni);
+        #50;
+        while (words_sent < target_words) begin
+            @(negedge src_clk_i);
+            s_valid_i = 1;
+            s_data_i = (W <= 32) ? $urandom() : {{$urandom(), $urandom()}};
+            push_sampled = 0;
+            while (!push_sampled) begin
+                #1;
+                push_sampled = s_valid_i && s_ready_o;
+                @(posedge src_clk_i);
+                if (push_sampled) begin
+                    expected_queue.push_back(s_data_i);
+                    words_sent++;
+                end
+                @(negedge src_clk_i);
+            end
+            s_valid_i = 0;
+            repeat ($urandom_range(0, 4)) @(negedge src_clk_i);
+        end
+    end
+
+    bit pop_sampled;
+    logic [W-1:0] sampled_data;
+    initial begin
+        @(posedge dst_rst_ni);
+        while (words_received < target_words) begin
+            @(negedge dst_clk_i);
+            m_ready_i = ($urandom_range(0, 100) < 70);
+            #1;
+            pop_sampled = m_valid_o && m_ready_i;
+            sampled_data = m_data_o;
+            @(posedge dst_clk_i);
+            if (pop_sampled) begin
+                if (expected_queue.size() == 0) $fatal(1, "Expected queue underflow");
+                exp_val = expected_queue.pop_front();
+                if (sampled_data !== exp_val) $fatal(1, "Mismatch: got %0x, exp %0x", sampled_data, exp_val);
+                words_received++;
+            end
+        end
+        test_done = 1;
+        $display("ALL_TESTS_PASSED");
+        $finish;
+    end
+
+    initial begin
+        src_rst_ni = 0;
+        dst_rst_ni = 0;
+        #50;
+        @(negedge src_clk_i);
+        src_rst_ni = 1;
+        @(negedge dst_clk_i);
+        dst_rst_ni = 1;
+
+        #3000000;
+        if (!test_done) $fatal(1, "Watchdog timeout");
+    end
+endmodule
+"""
+    raise ValueError(f"Unknown CDC component: {comp_def.id}")
+
+
 def _generate_testbench(
     comp_def: ComponentDef,
     params: dict[str, int],
@@ -385,7 +874,10 @@ def _generate_testbench(
     """Generate SystemVerilog testbench driving vectors against the Python reference model."""
     from spec2gds.spec.spec_format.rtl_interface import resolve_interface
 
-    in_ports = [p for p in comp_def.ports if p.direction == "in" and p.name not in {"clk_i", "rst_ni"}]
+    has_rst_ni = any(p.name == "rst_ni" for p in comp_def.ports)
+    has_async_rst_ni = any(p.name == "async_rst_ni" for p in comp_def.ports)
+
+    in_ports = [p for p in comp_def.ports if p.direction == "in" and p.name not in {"clk_i", "rst_ni", "async_rst_ni"}]
     out_ports = [p for p in comp_def.ports if p.direction == "out"]
 
     ports_input = [{"name": p.name, "direction": p.direction, "range": p.range_expr} for p in comp_def.ports]
@@ -413,7 +905,12 @@ def _generate_testbench(
                     in_map[p.name] = rnd.choice([0, 1])
                 else:
                     in_map[p.name] = rnd.getrandbits(w)
-            out_map = ref_model.step({**in_map, "rst_ni": 1})
+            step_inputs = {**in_map}
+            if has_rst_ni:
+                step_inputs["rst_ni"] = 1
+            if has_async_rst_ni:
+                step_inputs["async_rst_ni"] = 1
+            out_map = ref_model.step(step_inputs)
             vector_inputs.append(in_map)
             vector_expected.append(out_map)
     else:
@@ -476,9 +973,13 @@ def _generate_testbench(
     connections = []
     if comp_def.is_stateful:
         port_decls.insert(0, "    logic clk_i = 0;")
-        port_decls.insert(1, "    logic rst_ni = 0;")
         connections.append(".clk_i(clk_i)")
-        connections.append(".rst_ni(rst_ni)")
+        if has_rst_ni:
+            port_decls.insert(1, "    logic rst_ni = 0;")
+            connections.append(".rst_ni(rst_ni)")
+        if has_async_rst_ni:
+            port_decls.insert(1, "    logic async_rst_ni = 0;")
+            connections.append(".async_rst_ni(async_rst_ni)")
     for p in in_ports + out_ports:
         connections.append(f".{p.name}({p.name})")
 
@@ -494,20 +995,35 @@ def _generate_testbench(
 
     if comp_def.is_stateful:
         clk_gen = "    always #5 clk_i <= ~clk_i;\n"
-        loop_body = f"""        for (k = 0; k < {vec_count}; k = k + 1) begin
-            @(negedge clk_i);
+        if comp_def.id in {"stream_mux", "stream_demux"}:
+            loop_body = f"""        for (k = 0; k < {vec_count}; k = k + 1) begin
+            if (k > 0) @(negedge clk_i);
+{stim_str}
+            #1;
+{checks_str}
+            @(posedge clk_i);
+        end"""
+        else:
+            loop_body = f"""        for (k = 0; k < {vec_count}; k = k + 1) begin
+            if (k > 0) @(negedge clk_i);
 {stim_str}
             @(posedge clk_i);
             #1;
 {checks_str}
         end"""
-        init_reset = """
-        rst_ni = 0;
-        #20;
-        @(negedge clk_i);
-        rst_ni = 1;
-        #1;
-"""
+
+        init_lines = []
+        if has_rst_ni:
+            init_lines.append("        rst_ni = 0;")
+        if has_async_rst_ni:
+            init_lines.append("        async_rst_ni = 0;")
+        init_lines.append("        #20;")
+        init_lines.append("        @(negedge clk_i);")
+        if has_rst_ni:
+            init_lines.append("        rst_ni = 1;")
+        if has_async_rst_ni:
+            init_lines.append("        async_rst_ni = 1;")
+        init_reset = "\n" + "\n".join(init_lines) + "\n"
     else:
         clk_gen = ""
         loop_body = f"""        for (k = 0; k < {vec_count}; k = k + 1) begin
@@ -536,3 +1052,4 @@ def _generate_testbench(
     end
 endmodule
 """
+

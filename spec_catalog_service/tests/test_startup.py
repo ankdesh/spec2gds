@@ -15,12 +15,12 @@ def test_fresh_service_indexes_all_published_releases_without_changing_bytes(tmp
     with TestClient(create_app(root, tmp_path / "index")) as client:
         response = client.get("/api/spec-catalog/v1/components?limit=100")
         assert response.status_code == 200
-        assert response.json()["total"] == 32
+        assert response.json()["total"] == len(before)
         assert (
             client.get("/api/spec-catalog/v1/components?implementation=body_sv&limit=100").json()[
                 "total"
             ]
-            == 32
+            == len(before)
         )
         assert (
             client.get("/api/spec-catalog/v1/components?implementation=composite").json()["total"]

@@ -256,7 +256,8 @@ def test_composite_renamed_copy_has_its_own_internal_design_and_reuses_leaf_defi
 
 def test_all_published_components_import_with_their_defaults():
     destination = SpecRevision.from_package(SpecPackage.create(title="All published Components"))
-    for path in sorted(CATALOG.rglob("*.spec")):
+    paths = sorted(CATALOG.rglob("*.spec"))
+    for path in paths:
         source = bounded_package(path.read_bytes())
         package = source.to_package()
         metadata = next(a for a in source.assets if a.asset_id == "library_catalogue_v1")
@@ -271,8 +272,8 @@ def test_all_published_components_import_with_their_defaults():
         imported = candidate.resolve(type(source.components[0].ref).model_validate(preview["root"]))
         assert imported.parameters == source.components[0].parameters
         destination = candidate
-    assert len(destination.components) == 32
-    assert len(origins(destination)) == 32
+    assert len(destination.components) == len(paths)
+    assert len(origins(destination)) == len(paths)
 
 
 def test_narrative_assets_and_nested_references_are_remapped():

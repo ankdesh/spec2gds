@@ -586,6 +586,7 @@ test("catalog: browse, import, rename a copy, reopen, and generate RTL without p
   for (const theme of ["clean", "obsidian"]) {
     if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /Switch theme/ }).click();
     await page.setViewportSize({ width: 560, height: 760 });
+    await component.scrollIntoViewIfNeeded();
     await component.getByRole("button", { name: "Options", exact: true }).click();
     const menu = component.getByRole("menu", { name: "Options for barrel_shift", exact: true });
     await expect(menu).toBeVisible();

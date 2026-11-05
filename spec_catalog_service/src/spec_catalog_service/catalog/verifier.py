@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from spec_catalog_service.catalog.checker import LibraryChecker, is_temp_directory
-from spec_catalog_service.catalog.components.phase1 import PHASE1_COMPONENTS_BY_ID
+from spec_catalog_service.catalog.components import ALL_COMPONENTS_BY_ID
 from spec_catalog_service.catalog.schemas import InventoryV1
 from spec_catalog_service.catalog.verification import verify_component
 
@@ -57,7 +57,7 @@ class LibraryVerifier:
         all_passed = True
 
         for entry in target_entries:
-            comp_def = PHASE1_COMPONENTS_BY_ID.get(entry.id)
+            comp_def = ALL_COMPONENTS_BY_ID.get(entry.id)
             if not comp_def:
                 print(f"Error: Component definition for {entry.id} not found in runner.")
                 all_passed = False

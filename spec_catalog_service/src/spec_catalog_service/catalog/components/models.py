@@ -42,6 +42,7 @@ class ComponentDef:
     licence: str = "NOASSERTION"
     implementation: str = "body_sv"
     contract_anchor: str = ""
+    phase: int = 1
     parameters: list[ParamDef] = field(default_factory=list)
     ports: list[PortDef] = field(default_factory=list)
     systemverilog: str = ""

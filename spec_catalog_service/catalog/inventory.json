@@ -617,8 +617,16 @@
       "path": "storage/fifo_sync/1.0.0/fifo_sync.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#fifo_sync",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/fifo_sync/1.0.0/fifo_sync.spec",
+          "package_sha256": "sha256:9d7b22738f054a4dd0c0f6d6c4ee5973f26e555db4d8821fc5bf61d281b342c1",
+          "evidence_path": "storage/fifo_sync/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:c8b92b34b89a6dd251c1e1fd9d7c9055d51985ec42b272e605fa9ee110f593dd"
+        }
+      ]
     },
     {
       "id": "fifo_fallthrough",
@@ -628,8 +636,16 @@
       "path": "storage/fifo_fallthrough/1.0.0/fifo_fallthrough.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#fifo_fallthrough",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/fifo_fallthrough/1.0.0/fifo_fallthrough.spec",
+          "package_sha256": "sha256:b497adeea8103e19b3f59a1596e812e3575a3f012c5e35bc1b11920d85eebd3a",
+          "evidence_path": "storage/fifo_fallthrough/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:700493b9bf0214c735635028aa9c35ce365204af9e2287404fb3dead7a9604fd"
+        }
+      ]
     },
     {
       "id": "fifo_async",
@@ -639,8 +655,16 @@
       "path": "storage/fifo_async/1.0.0/fifo_async.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#fifo_async",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/fifo_async/1.0.0/fifo_async.spec",
+          "package_sha256": "sha256:c30e4e52f28448136dbf9088af8f61751466c66be392c28f856080115538a44c",
+          "evidence_path": "storage/fifo_async/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:1e9e53f29df6009f6d715f99fd355dc085b419048097b5565ffa2eb510c96a27"
+        }
+      ]
     },
     {
       "id": "fifo_packet",
@@ -650,8 +674,16 @@
       "path": "storage/fifo_packet/1.0.0/fifo_packet.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#fifo_packet",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/fifo_packet/1.0.0/fifo_packet.spec",
+          "package_sha256": "sha256:82d73d03add5a9b0ae5d2686d239d35ba4b62899b283c5052878839ff9fa9a92",
+          "evidence_path": "storage/fifo_packet/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:64d209c2c4e4409947d68c5eb59754a6bb55a6b6b6ae270f76499206df59fb3a"
+        }
+      ]
     },
     {
       "id": "lifo_stack",
@@ -661,8 +693,16 @@
       "path": "storage/lifo_stack/1.0.0/lifo_stack.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#lifo_stack",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/lifo_stack/1.0.0/lifo_stack.spec",
+          "package_sha256": "sha256:f1cb82de5946d1d841f07a8a1249d3c96acce8e6d081b861ba66b274e7aec1ed",
+          "evidence_path": "storage/lifo_stack/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:64ad1636e45d01f20388861cca0eeaafd45a779e07cc6e164882642803721bc1"
+        }
+      ]
     },
     {
       "id": "ring_buffer",
@@ -672,8 +712,16 @@
       "path": "storage/ring_buffer/1.0.0/ring_buffer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#ring_buffer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/ring_buffer/1.0.0/ring_buffer.spec",
+          "package_sha256": "sha256:d490d3a0ce92a3debf76a7ddb9b9ed3aacbb7794c4031822460f366dba2fc4ad",
+          "evidence_path": "storage/ring_buffer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:653717724325099a9aac049d1324f93909841518b3b211aeb293a482cdca828a"
+        }
+      ]
     },
     {
       "id": "ram_1rw",
@@ -683,8 +731,16 @@
       "path": "storage/ram_1rw/1.0.0/ram_1rw.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#ram_1rw",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/ram_1rw/1.0.0/ram_1rw.spec",
+          "package_sha256": "sha256:af4988e7294753b4e80ef7e3ae039dfd90619064853a8d6e3b7df241030b3ca7",
+          "evidence_path": "storage/ram_1rw/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:012ad6d12d40adf88a4813ac50542d5d3e04c14d4c6721853b1193ea7d0bff55"
+        }
+      ]
     },
     {
       "id": "ram_1r1w",
@@ -694,8 +750,16 @@
       "path": "storage/ram_1r1w/1.0.0/ram_1r1w.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#ram_1r1w",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/ram_1r1w/1.0.0/ram_1r1w.spec",
+          "package_sha256": "sha256:c93c0dec1974ab7147c1210a39e3e001dce2e77a6feaabf370fd84f8734fb44d",
+          "evidence_path": "storage/ram_1r1w/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:95d7be124c48cbbdd09c6c3143abd97c48b994349ee0e7a666008002df62588e"
+        }
+      ]
     },
     {
       "id": "ram_2rw",
@@ -705,8 +769,16 @@
       "path": "storage/ram_2rw/1.0.0/ram_2rw.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#ram_2rw",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/ram_2rw/1.0.0/ram_2rw.spec",
+          "package_sha256": "sha256:63957e599d1d36afab2b873b8e1a291f7579e418917065670e2a1be9e371441b",
+          "evidence_path": "storage/ram_2rw/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:779de72303a8a52e34387cb26fd66bd7aa0522e407ed6a48300d9a73c6d26002"
+        }
+      ]
     },
     {
       "id": "rom",
@@ -716,8 +788,16 @@
       "path": "storage/rom/1.0.0/rom.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#rom",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/rom/1.0.0/rom.spec",
+          "package_sha256": "sha256:c99793cbe7636f654684bd249858356318e54de6a90cf0b2942f3f6cf7803a67",
+          "evidence_path": "storage/rom/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:7cc4a6578732ec9dbc258298a50b94fae5ea1f0f6a452ff68d2267517b600736"
+        }
+      ]
     },
     {
       "id": "register_file_2r1w",
@@ -727,8 +807,16 @@
       "path": "storage/register_file_2r1w/1.0.0/register_file_2r1w.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#register_file_2r1w",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/register_file_2r1w/1.0.0/register_file_2r1w.spec",
+          "package_sha256": "sha256:72b1dcbd4caebf15ca73e5c37c81f89996a21f6fe23f1c7039b2d98f0e098600",
+          "evidence_path": "storage/register_file_2r1w/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:ec243b47213a7c80c35e87be6fc78565b415738f7f71c8830486716adaa7f1b4"
+        }
+      ]
     },
     {
       "id": "cam_binary",
@@ -738,8 +826,16 @@
       "path": "storage/cam_binary/1.0.0/cam_binary.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#cam_binary",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "storage/cam_binary/1.0.0/cam_binary.spec",
+          "package_sha256": "sha256:596e0526dc26ecec6977367dd08f7416e09142a57661d8c3521f627a5f81fd21",
+          "evidence_path": "storage/cam_binary/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:2e25c2d2a75f931e40ae27980263c7ed3524aeb3b6cb803ac64b1fac4765b8db"
+        }
+      ]
     },
     {
       "id": "stream_register",
@@ -749,8 +845,16 @@
       "path": "streams/stream_register/1.0.0/stream_register.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_register",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_register/1.0.0/stream_register.spec",
+          "package_sha256": "sha256:8aa3980ab78d0ec98adc6a951d851c568ce2da853a4e222bd3370692f134241e",
+          "evidence_path": "streams/stream_register/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:7f3669b234c5390af4ac5cf327f3ac8a3ea5515b298fa52af93ca5d57e9a134f"
+        }
+      ]
     },
     {
       "id": "stream_skid_buffer",
@@ -760,8 +864,16 @@
       "path": "streams/stream_skid_buffer/1.0.0/stream_skid_buffer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_skid_buffer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_skid_buffer/1.0.0/stream_skid_buffer.spec",
+          "package_sha256": "sha256:426d0b5a9d4761207157a41f4f1ad1ee34d3da030a70ad811f9b2b4f5e3b225f",
+          "evidence_path": "streams/stream_skid_buffer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:12a86abcf42ebbbb0ec2af1559d4b962adf6d00869fa114f71349ac32817f460"
+        }
+      ]
     },
     {
       "id": "stream_spill_buffer",
@@ -771,8 +883,16 @@
       "path": "streams/stream_spill_buffer/1.0.0/stream_spill_buffer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_spill_buffer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_spill_buffer/1.0.0/stream_spill_buffer.spec",
+          "package_sha256": "sha256:83fd198b4c7df7bbfaa5f1502ddfe83f43f9313da283b0e98c74147feab71005",
+          "evidence_path": "streams/stream_spill_buffer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:0797ddb379e0a8e72b99160fc6a43d41328f11a460a7d7ba1fe1bc2226a7fe99"
+        }
+      ]
     },
     {
       "id": "stream_half_buffer",
@@ -782,8 +902,16 @@
       "path": "streams/stream_half_buffer/1.0.0/stream_half_buffer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_half_buffer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_half_buffer/1.0.0/stream_half_buffer.spec",
+          "package_sha256": "sha256:1b9a103faab318e0371b3d9e420376cb997b682656239ccf06c5ceac65395f30",
+          "evidence_path": "streams/stream_half_buffer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:784ee15376273610c4785e8280dc40a0010ab00f58e5b61407abef29a682406d"
+        }
+      ]
     },
     {
       "id": "stream_mux",
@@ -793,8 +921,16 @@
       "path": "streams/stream_mux/1.0.0/stream_mux.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_mux",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_mux/1.0.0/stream_mux.spec",
+          "package_sha256": "sha256:362d5a5398e18a041d96a0689e3515f7a85f8f8d64f005b7b20c022dfb4c34a2",
+          "evidence_path": "streams/stream_mux/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:c06928c78fe41ae568bf60fd996f3b7880b884fe416b847dadfad6f1c693161f"
+        }
+      ]
     },
     {
       "id": "stream_demux",
@@ -804,8 +940,16 @@
       "path": "streams/stream_demux/1.0.0/stream_demux.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_demux",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_demux/1.0.0/stream_demux.spec",
+          "package_sha256": "sha256:9a30512a4148cb70456d91bb6018c79b0a37639d6e64a55d728acfd5cb164f0b",
+          "evidence_path": "streams/stream_demux/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:8286f3b8062d9c893625ebe5b4f6fd77d93cc585d58914153120afdf450cfe3c"
+        }
+      ]
     },
     {
       "id": "stream_fork",
@@ -815,8 +959,16 @@
       "path": "streams/stream_fork/1.0.0/stream_fork.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_fork",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_fork/1.0.0/stream_fork.spec",
+          "package_sha256": "sha256:030ea9b98b325c2f29e15fe3260d3a1f92817465a5db0c6570f68ab68c48d4aa",
+          "evidence_path": "streams/stream_fork/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:67bd288350b3d3ed1e4c9fd074b3038f52e2ccbeaef2417f2c514638a960db40"
+        }
+      ]
     },
     {
       "id": "stream_join",
@@ -826,8 +978,16 @@
       "path": "streams/stream_join/1.0.0/stream_join.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_join",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_join/1.0.0/stream_join.spec",
+          "package_sha256": "sha256:80862806ba96ceb21a930e5f77aa83376316a0042602eee2cb4d1b85899bc70d",
+          "evidence_path": "streams/stream_join/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:940f1e5db75426c9d83c90358c64eaa2137b5e4827fbbec05ab0ea0ab41f5fe9"
+        }
+      ]
     },
     {
       "id": "stream_upsizer",
@@ -837,8 +997,16 @@
       "path": "streams/stream_upsizer/1.0.0/stream_upsizer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_upsizer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_upsizer/1.0.0/stream_upsizer.spec",
+          "package_sha256": "sha256:c4d38739a46398f2cbd77dfb39a3b98ece9f57cfc455ae1fb6973b0d13e0c03c",
+          "evidence_path": "streams/stream_upsizer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:0bfaceb8ffce562ddb19cb6eeec587ce92bfe7986298382df561cb01202cd87a"
+        }
+      ]
     },
     {
       "id": "stream_downsizer",
@@ -848,8 +1016,16 @@
       "path": "streams/stream_downsizer/1.0.0/stream_downsizer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_downsizer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_downsizer/1.0.0/stream_downsizer.spec",
+          "package_sha256": "sha256:c051d3349223796a4514a134b4025fa3cca6ad1f264550cc4ae2781a42965640",
+          "evidence_path": "streams/stream_downsizer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:a5c2df5bb9d22d546a8a34b870a8fed7aa52fcd520bce680e8a6e329c8666d06"
+        }
+      ]
     },
     {
       "id": "stream_credit_adapter",
@@ -859,8 +1035,16 @@
       "path": "streams/stream_credit_adapter/1.0.0/stream_credit_adapter.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_credit_adapter",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_credit_adapter/1.0.0/stream_credit_adapter.spec",
+          "package_sha256": "sha256:d72e654dbf8fe61dff98218af773dae4a5881066d1c00d66f7f27c374a045d10",
+          "evidence_path": "streams/stream_credit_adapter/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:a3b1520342c5f87c25a055aa3d45736b0493148a9645ae5d24545aa6e8854d44"
+        }
+      ]
     },
     {
       "id": "stream_rate_limiter",
@@ -870,8 +1054,16 @@
       "path": "streams/stream_rate_limiter/1.0.0/stream_rate_limiter.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#stream_rate_limiter",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "streams/stream_rate_limiter/1.0.0/stream_rate_limiter.spec",
+          "package_sha256": "sha256:1823d5104f33cfb86dab8e8686b7d1d8ec8e5a29d4de61bab95f04bc1b30238f",
+          "evidence_path": "streams/stream_rate_limiter/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:c5a3cdfd2e215a48e153f839ebb0cf56b68430dfbb54a59f438e3801471f5517"
+        }
+      ]
     },
     {
       "id": "cdc_level_sync",
@@ -881,8 +1073,16 @@
       "path": "cdc_reset/cdc_level_sync/1.0.0/cdc_level_sync.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#cdc_level_sync",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/cdc_level_sync/1.0.0/cdc_level_sync.spec",
+          "package_sha256": "sha256:baccd805bee3b6fd90322bbd0f34c057de649545c48120737a2692b84bb40338",
+          "evidence_path": "cdc_reset/cdc_level_sync/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:2a186dd47082f5361012297cd84e74e42ac4f6c5ac683c704c6bab4dc54f409c"
+        }
+      ]
     },
     {
       "id": "cdc_pulse_toggle",
@@ -892,8 +1092,16 @@
       "path": "cdc_reset/cdc_pulse_toggle/1.0.0/cdc_pulse_toggle.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#cdc_pulse_toggle",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/cdc_pulse_toggle/1.0.0/cdc_pulse_toggle.spec",
+          "package_sha256": "sha256:5b821d5d6c7c4e35405aa84915df54f063bef4abab7604eada6af202ea078e9f",
+          "evidence_path": "cdc_reset/cdc_pulse_toggle/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:55fc4f69b6a300fe6a6b0eaeeb16c30a4487560995b3c8f743ed01c4f8701bec"
+        }
+      ]
     },
     {
       "id": "cdc_pulse_handshake",
@@ -903,8 +1111,16 @@
       "path": "cdc_reset/cdc_pulse_handshake/1.0.0/cdc_pulse_handshake.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#cdc_pulse_handshake",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/cdc_pulse_handshake/1.0.0/cdc_pulse_handshake.spec",
+          "package_sha256": "sha256:d9b41c0ac7b5216fafd15d01a81bea284a738362a946c357fc90cb028b30227f",
+          "evidence_path": "cdc_reset/cdc_pulse_handshake/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:aeaa21f0e861ce9cbd617e72b9ac5a98b3c6229b8449d97f3a2036a0716dca76"
+        }
+      ]
     },
     {
       "id": "cdc_bus_handshake",
@@ -914,8 +1130,16 @@
       "path": "cdc_reset/cdc_bus_handshake/1.0.0/cdc_bus_handshake.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#cdc_bus_handshake",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/cdc_bus_handshake/1.0.0/cdc_bus_handshake.spec",
+          "package_sha256": "sha256:0efb723c1adfe8426a4c6e84b3849313b08fbc47878113b30fac615ac8eb4810",
+          "evidence_path": "cdc_reset/cdc_bus_handshake/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:06bdac24b2e42fd3301faaefb6eeaa749b1dac28599c6ee1085359c8e0a33da5"
+        }
+      ]
     },
     {
       "id": "reset_sync",
@@ -925,8 +1149,16 @@
       "path": "cdc_reset/reset_sync/1.0.0/reset_sync.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#reset_sync",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/reset_sync/1.0.0/reset_sync.spec",
+          "package_sha256": "sha256:86b88b194f3a2d8eff76ffbf39d4a94c73d329620808654bbb6412094d603a58",
+          "evidence_path": "cdc_reset/reset_sync/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:520e758c600fff2d543d43695ee370a33793f92bc2414cf61910794a07dbaba6"
+        }
+      ]
     },
     {
       "id": "reset_stretcher",
@@ -936,8 +1168,16 @@
       "path": "cdc_reset/reset_stretcher/1.0.0/reset_stretcher.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#reset_stretcher",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/reset_stretcher/1.0.0/reset_stretcher.spec",
+          "package_sha256": "sha256:dd672b31350d857e2e0078532226cf512c9e42c4d81bd1eba7bf4d9b8b0ae2fb",
+          "evidence_path": "cdc_reset/reset_stretcher/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:ff451995d3a040dcb4e3f17bdd62627df2479bea29261d77a3993881d67627ae"
+        }
+      ]
     },
     {
       "id": "reset_sequencer",
@@ -947,8 +1187,16 @@
       "path": "cdc_reset/reset_sequencer/1.0.0/reset_sequencer.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#reset_sequencer",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/reset_sequencer/1.0.0/reset_sequencer.spec",
+          "package_sha256": "sha256:066cbbc235b449982f2fee0b60a53e73dc1973b3541e1f14e2e7f3b860b2723a",
+          "evidence_path": "cdc_reset/reset_sequencer/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:955c4b973403996e7f07f55379fc40dd0b0be43e36500cdbd92c5d41a3a69239"
+        }
+      ]
     },
     {
       "id": "input_deglitch",
@@ -958,8 +1206,16 @@
       "path": "cdc_reset/input_deglitch/1.0.0/input_deglitch.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-2.md#input_deglitch",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "cdc_reset/input_deglitch/1.0.0/input_deglitch.spec",
+          "package_sha256": "sha256:249eeabc96ea6ba87a572aded125adac7914adf8b7b00bfdd8bd5d3e87df9516",
+          "evidence_path": "cdc_reset/input_deglitch/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:44bed533d4f05b847941c2167dcf71f9d710fe03309e6c2f8867213369989d8a"
+        }
+      ]
     },
     {
       "id": "add_sub",
