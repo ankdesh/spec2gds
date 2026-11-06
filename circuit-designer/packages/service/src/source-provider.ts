@@ -32,6 +32,14 @@ export class HttpSourceDesignProvider {
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
+  async renew(): Promise<Record<string, unknown>> {
+    const response = await this.fetchImpl(new URL("renew", `${this.callback.toString().replace(/\/?$/, "/")}`), {
+      method: "POST", headers: { Authorization: `Bearer ${this.token}` },
+    });
+    if (!response.ok) throw new Error(`Spec edit access returned HTTP ${response.status}.`);
+    return await response.json() as Record<string, unknown>;
+  }
+
   resolve(binding: CircuitSourceBindingV1): Promise<CircuitSourceSyncResult> {
     return this.call("resolve", {
       request_id: `resolve:${Date.now()}`,

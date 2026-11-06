@@ -1,5 +1,5 @@
 /** Apply resolved endpoints through a Harness patch, without network env settings. */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -14,11 +14,13 @@ export async function profileEntries(profile, anchor, home) {
 }
 
 export function prepareServiceLaunch(args, directory, entries = []) {
-  const { options, rest } = parseLaunchArgs(args);
-  if (rest.includes("--help")) console.log("AI Assistant launch options: --service-config PATH --host HOST --port PORT --public-host HOST (CLI > file > defaults). Other options go to the Harness.");
+  const { options, rest } = parseLaunchArgs(args, ["spec-root"]);
+  if (rest.includes("--help")) console.log("AI Assistant launch options: --service-config PATH --host HOST --port PORT --public-host HOST --spec-root PATH (CLI > file > defaults). Other options go to the Harness.");
   const overrides = listenerOverrides("ai_assistant", options);
   if (options["public-host"] !== undefined) overrides.public_host = options["public-host"];
+  if (options["spec-root"] !== undefined) overrides.spec_editor = { spec_root: resolve(process.cwd(), options["spec-root"]) };
   const config = resolveConfig(options["service-config"], overrides);
+  if (options["spec-root"] !== undefined && (!existsSync(config.spec_editor.spec_root) || !statSync(config.spec_editor.spec_root).isDirectory())) throw new Error("Spec root must be an existing directory.");
   const allowlist = endpoint => [...new Set([
     endpointUrl(endpoint, config.public_host, { local: true }), endpointUrl(endpoint, config.public_host),
   ])].join(",");
@@ -26,7 +28,7 @@ export function prepareServiceLaunch(args, directory, entries = []) {
   const circuitAllowlist = allowlist(config.circuit_designer.service);
   const baseline = id => entries.find(row => row.id === id)?.config ?? {};
   const patch = [
-    { id: "spec2gds-assistant", config: { ...baseline("spec2gds-assistant"), specAllowlist, circuitAllowlist } },
+    { id: "spec2gds-assistant", config: { ...baseline("spec2gds-assistant"), specAllowlist, circuitAllowlist, specDocumentRoot: config.spec_editor.spec_root } },
     { id: "event-http-sources", config: { ...baseline("event-http-sources"), allowedOrigins: [...new Set([specAllowlist, circuitAllowlist].join(",").split(",").map(value => new URL(value).origin))] } },
     { id: "webserver", config: { ...baseline("webserver"), host: config.ai_assistant.service.host, port: config.ai_assistant.service.port } },
   ];

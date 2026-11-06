@@ -1,6 +1,7 @@
 """Tests for explicit creation VLNV and atomic transactions in Spec source format."""
 
 from __future__ import annotations
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
 
 from pathlib import Path
 
@@ -149,7 +150,7 @@ def test_transaction_failure_leaves_source_unchanged() -> None:
 def test_http_api_create_entity_with_explicit_vlnv(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
     app = create_app()
-    endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    endpoints = direct_api_endpoints(app)
 
     spec_path = tmp_path / "test_api.spec"
     package = SpecPackage.create("api_test")

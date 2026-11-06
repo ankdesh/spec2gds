@@ -310,9 +310,26 @@
         ]
       },
       "response_kind": "object"
+    },
+    "edit_access": {
+      "method": "POST",
+      "path": "/documents/edit-access/{action}",
+      "parameters": {
+        "path": [
+          "action"
+        ],
+        "query": [
+          "owner_document_key"
+        ],
+        "body": [
+          "context_id",
+          "participant_id"
+        ]
+      },
+      "response_kind": "object"
     }
   },
   "operation_schema_action": "operation_schema",
   "capabilities_action": "capabilities",
-  "digest": "sha256:c4852330252e8c76eb9f803cafb2a2c924ea0fb57f4dec55f78198368e84e02d"
+  "digest": "sha256:95b2462dfbc52ac62caf38964cc8f30232143d707c8696965c2b13226cd12c56"
 }

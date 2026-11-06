@@ -308,6 +308,23 @@ export const specActions = {
       ]
     },
     "response_kind": "object"
+  },
+  "edit_access": {
+    "method": "POST",
+    "path": "/documents/edit-access/{action}",
+    "parameters": {
+      "path": [
+        "action"
+      ],
+      "query": [
+        "owner_document_key"
+      ],
+      "body": [
+        "context_id",
+        "participant_id"
+      ]
+    },
+    "response_kind": "object"
   }
 } as const;
 

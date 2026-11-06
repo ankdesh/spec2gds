@@ -139,6 +139,8 @@ function bindingInput(value: Record<string, unknown>): BindingInput {
     eventTemplateRevision: typeof value.eventTemplateRevision === "number" ? value.eventTemplateRevision : undefined,
     serviceBaseUrl: value.serviceBaseUrl.trim(),
     documentId: value.documentId.trim(),
+    editContextId: typeof value.editContextId === "string" ? value.editContextId : undefined,
+    editParticipantId: typeof value.editParticipantId === "string" ? value.editParticipantId : undefined,
     serviceDocumentKey: typeof value.serviceDocumentKey === "string" ? value.serviceDocumentKey : typeof value.ownerDocumentKey === "string" ? value.ownerDocumentKey : undefined,
     scope,
     entityKind: typeof value.entityKind === "string" ? value.entityKind.trim() : undefined,
@@ -362,9 +364,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       config.maxStepsPerTurn,
       clarifiedTurns.get(String(agent.id)) === turn,
     );
-    return step > limit
-      ? { kind: "reject" }
-      : next();
+    if (step > limit) return { kind: "reject" };
+    const binding = state.getBinding(String(agent.id));
+    const renew = () => binding && (binding.editContextId || binding.domain === "circuit") ? owners.editAccess(binding).catch(() => undefined) : Promise.resolve();
+    await renew();
+    const heartbeat = setInterval(() => void renew(), 30_000);
+    try { return await next(); } finally { clearInterval(heartbeat); }
   });
   ctx.on("agent/request", async (
     payload: { agent: ProductAgent; turn: number; step: number },
@@ -415,10 +420,14 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       const workspace = workspaceDescriptor(config.scratchRoot, input, validated.serviceUrl, validated.context,
         await owners.circuitSourceBinding(temporary));
       await mkdir(workspace.path, { recursive: true, mode: 0o700 });
-      state.createBinding(String(agent.id), { ...input, serviceUrl: validated.serviceUrl, sourceName: sourceName(validated.context),
+      state.createBinding(String(agent.id), { ...input, serviceDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.serviceDocumentKey, serviceUrl: validated.serviceUrl, sourceName: sourceName(validated.context),
         workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
-        workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId });
+        workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId, workspaceServiceDocumentKey: workspace.serviceDocumentKey });
       binding = state.activateBinding(String(agent.id));
+      if (binding.domain === "spec") {
+        const granted = await owners.editAccess({ ...binding, editContextId: input.editContextId, editParticipantId: `assistant:${binding.sessionId}` }, "acquire");
+        binding = state.setEditAccess(binding.sessionId, typeof granted.context_id === "string" ? granted.context_id : undefined, typeof granted.participant_id === "string" ? granted.participant_id : undefined);
+      }
     }
     if (!binding) (agent as unknown as Agent).ctx.tools.guard(exec =>
       ["create_goal", "update_goal"].includes(exec.name) && !state.getBinding(String(agent.id))
@@ -480,7 +489,12 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
     const binding = state.createBinding(sessionId, { ...input, serviceUrl: validated.serviceUrl, sourceName: sourceName(validated.context),
       serviceDocumentKey: typeof validated.context.owner_document_key === "string" ? validated.context.owner_document_key : input.serviceDocumentKey,
       workspaceKey: workspace.key, workspaceTitle: workspace.title, workspacePath: workspace.path,
-      workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId });
+      workspaceDomain: workspace.domain, workspaceServiceUrl: workspace.serviceUrl, workspaceDocumentId: workspace.documentId, workspaceServiceDocumentKey: workspace.serviceDocumentKey });
+    if (binding.domain === "spec") {
+      const granted = await owners.editAccess({ ...binding, editContextId: input.editContextId, editParticipantId: `assistant:${sessionId}` }, "acquire");
+      state.setEditAccess(sessionId, typeof granted.context_id === "string" ? granted.context_id : undefined, typeof granted.participant_id === "string" ? granted.participant_id : undefined);
+      Object.assign(binding, state.getBinding(sessionId));
+    }
     snapshots.pin(sessionId, sourceSessionId);
     if (binding.preset !== "focused") {
       // Do not leave a usable reservation when its selected configuration fails
@@ -726,7 +740,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
         if (path === "/spec2gds-api/workspaces" && request.method === "GET") {
           const workspaces = [...new Map(state.listBindings().map(binding => [binding.workspaceKey, {
             key: binding.workspaceKey, title: binding.workspaceTitle, path: binding.workspacePath,
-            domain: binding.workspaceDomain, serviceUrl: binding.workspaceServiceUrl, documentId: binding.workspaceDocumentId,
+            domain: binding.workspaceDomain, serviceUrl: binding.workspaceServiceUrl, documentId: binding.workspaceDocumentId, serviceDocumentKey: binding.workspaceServiceDocumentKey,
           }])).values()];
           return writeJson(response, 200, { workspaces, unbound_workspace: { key: "assistant-unbound", title: "AI Assistant", path: resolve(config.scratchRoot, "unbound") } });
         }
@@ -734,6 +748,15 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const body = await readBody(request);
           const result = await reserve(bindingInput(body), typeof body.sessionId === "string" ? body.sessionId : undefined);
           return writeJson(response, 201, { session: result.binding, workspace: result.workspace });
+        }
+        const accessMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)\/edit-access$/);
+        if (accessMatch && request.method === "POST") {
+          const id = decodeURIComponent(accessMatch[1]!);
+          const binding = state.getBinding(id);
+          if (!binding) throw new HttpError(404, "Unknown binding.");
+          const granted = await owners.editAccess(binding, "acquire");
+          if (binding.domain === "spec") state.setEditAccess(id, typeof granted.context_id === "string" ? granted.context_id : undefined, typeof granted.participant_id === "string" ? granted.participant_id : undefined);
+          return writeJson(response, 200, { edit_access: granted });
         }
         const bindingMatch = path.match(/^\/spec2gds-api\/bindings\/([^/]+)(?:\/(activate|abandon|reviews|execution))?$/);
         if (bindingMatch) {
@@ -747,6 +770,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
               }
               throw new HttpError(404, "Unknown binding.");
             }
+            if (binding.editContextId || binding.domain === "circuit") { try { await owners.editAccess(binding); } catch { /* Expired access stays read-only until explicitly acquired. */ } }
             try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
             catch { /* Retain the last source name while the owner is unavailable. */ }
             return writeJson(response, 200, { session: binding, instruction_release: (() => {
@@ -864,7 +888,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
       webCtx.effect(() => webCtx.webServer.register({ kind: "exact", path: route, handler: async (request: any, response: any) => {
         try {
           const url = new URL(request.url ?? route, "http://localhost");
-          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", serviceDocumentKey: url.searchParams.get("owner_document_key") ?? undefined, scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
+          const result = await reserve({ domain: route === "/launch/circuit" ? "circuit" : "spec", serviceBaseUrl: url.searchParams.get("service_base_url") ?? "", documentId: url.searchParams.get("document_id") ?? "", serviceDocumentKey: url.searchParams.get("owner_document_key") ?? undefined, editContextId: url.searchParams.get("edit_context_id") || undefined, scope: route === "/launch/spec" ? "entity" : "document", entityKind: url.searchParams.get("entity_kind") ?? undefined, entityId: url.searchParams.get("entity_id") ?? undefined });
           response.writeHead(303, {
             Location: authenticatedLaunchLocation(webCtx.connection, result.binding.sessionId),
             "Cache-Control": "no-store",

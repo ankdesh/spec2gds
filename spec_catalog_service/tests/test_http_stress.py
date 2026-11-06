@@ -12,6 +12,7 @@ Covers:
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import socket
 import subprocess
@@ -60,17 +61,15 @@ class ServerProcess:
     def start(self) -> None:
         env = os.environ.copy()
         env["SPEC_EDITOR_STATE_ROOT"] = str(self.state_dir)
-        cmd = [
-            sys.executable,
-            "-m",
-            "uvicorn",
-            "spec2gds.spec.spec_format.v1_api:create_app",
-            "--factory",
-            "--host",
-            "127.0.0.1",
-            "--port",
-            str(self.port),
-        ]
+        from spec2gds.service_registry import service_config_path
+        config = json.loads(service_config_path().read_text())
+        config["spec_editor"]["spec_root"] = str(self.state_dir.parent)
+        config["activities"]["scratch_root"] = str(self.state_dir / "generated")
+        config["logging"]["file"] = str(self.state_dir / "events.jsonl")
+        config_path = self.state_dir / "services.json"
+        config_path.write_text(json.dumps(config))
+        cmd = [sys.executable, "-m", "spec2gds.spec.api", "--host", "127.0.0.1",
+               "--port", str(self.port), "--service-config", str(config_path)]
         self.process = subprocess.Popen(
             cmd,
             env=env,
@@ -125,6 +124,8 @@ def test_real_http_spec_service_lifecycle_and_stress(stress_env: tuple[Path, int
             )
             assert res_create.status_code == 200, res_create.text
             created = res_create.json()
+            client.params = {"owner_document_key": created["owner_document_key"]}
+            client.headers.update({"X-Spec-Edit-Context": created["edit_access"]["context_id"], "X-Spec-Participant": created["edit_access"]["participant_id"]})
             curr_rev = created["source_revision_hash"]
 
             # 2. Add mux, register_enable, counter_modulo with explicit VLNVs and SV sections

@@ -202,3 +202,26 @@ test("dialogs trap focus and Escape returns focus to triggering menu", async ({ 
   await expect(dialog).toBeHidden();
   await expect(page.locator("#circuit-help-menu-trigger")).toBeFocused();
 });
+
+test("Circuit preferences stay in each browser and leave service defaults unchanged", async ({ page, browser, stack }) => {
+  const snapshot = await sourceDesign(stack);
+  const opened = await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
+  const defaultsBefore = await (await fetch(`${stack.circuit}/api/circuit-designer/v1/preferences`)).json();
+  const otherContext = await browser.newContext();
+  const other = await otherContext.newPage();
+  try {
+    await other.goto(opened.editor_url);
+    await expect(other.getByTestId("circuit-canvas")).toBeVisible();
+    const previous = await page.locator(".cd-app").getAttribute("data-theme");
+    await expect(other.locator(".cd-app")).toHaveAttribute("data-theme", previous!);
+    await page.getByRole("button", { name: /^Switch theme/ }).click();
+    await expect(page.locator(".cd-app")).not.toHaveAttribute("data-theme", previous!);
+    await expect(other.locator(".cd-app")).toHaveAttribute("data-theme", previous!);
+    await expect.poll(() => page.evaluate(() => localStorage.getItem("spec2gds.circuit.preferences.v1"))).not.toBeNull();
+    const chosen = await page.locator(".cd-app").getAttribute("data-theme");
+    await page.reload();
+    await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", chosen!);
+    const defaultsAfter = await (await fetch(`${stack.circuit}/api/circuit-designer/v1/preferences`)).json();
+    expect(defaultsAfter).toEqual(defaultsBefore);
+  } finally { await otherContext.close(); }
+});

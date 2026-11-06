@@ -22,6 +22,12 @@ def request(client, method, path, **kwargs):
     response = client.request(method, path, **kwargs)
     if not response.is_success:
         raise ValueError(f"{method} {path}: {response.status_code} {response.text}")
+    if path in {"/documents/create", "/documents/open"}:
+        source = response.json()
+        client.params = {"owner_document_key": source["owner_document_key"]}
+        access = source["edit_access"]
+        client.headers.update({"X-Spec-Edit-Context": access["context_id"],
+                               "X-Spec-Participant": access["participant_id"]})
     return response
 
 
@@ -111,6 +117,7 @@ def prepare(output: Path, planner_url: str | None = None):
     output.mkdir(parents=True)
     example = json.loads(EXAMPLE.read_text())
     config = json.loads((ROOT / "config/services.json").read_text())
+    config["spec_editor"]["spec_root"] = str(output)
     config["logging"].update(enabled=False, file=str(output / "events.jsonl"))
     config["activities"]["scratch_root"] = str(output / "generated")
     config["circuit_designer"]["preferences_file"] = str(output / "preferences.json")

@@ -88,7 +88,7 @@ flowchart LR
 Open **Edit → Preferences → Actions and shortcuts** to adjust keybindings:
 - Every action supports customizable keyboard and mouse bindings.
 - The editor automatically detects and clears shortcut conflicts.
-- Preferences save through the Circuit service and persist across sessions.
+- Preferences save in browser-local storage. The Circuit service preference file supplies initial defaults. Changes in one browser do not change another browser’s settings.
 - **Reset defaults** restores standard factory shortcuts.
 
 ### Error Handling and Session Recovery
@@ -137,3 +137,12 @@ export function EmbeddedCircuitView({ backend, files, preferences, source, tools
 - `preferences`: Persists and caches shortcut mappings and visual settings.
 - `source`: Synchronizes source-bound projections with external specification authorities.
 - `tools`: Injects external tools, such as the AI Assistant.
+
+### Shared hosted Specs
+
+Source-bound Circuit identity includes the exact Spec file binding and its edit
+context. Copied files with matching internal IDs do not share a Circuit. A
+read-only Spec opens a read-only projection. Save to Spec requires both a valid
+Circuit edit lease and valid Spec edit access. A linked open view renews Spec
+participation after Spec Editor closes. Independent `.circuit.json` files keep
+their existing save and shared-record behavior.

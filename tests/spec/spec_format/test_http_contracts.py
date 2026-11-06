@@ -10,13 +10,13 @@ from fastapi.testclient import TestClient
 from spec2gds.spec.spec_format.assistant import SpecChangeProposal
 from spec2gds.spec.spec_format.actions import ActivityExecutionRecord
 from spec2gds.spec.spec_format.assistant_integration import ASSISTANT_ACTIONS
-from spec2gds.spec.spec_format.testing import write_test_package
+from spec2gds.spec.spec_format.testing import write_test_package, bound_http_client
 from spec2gds.spec.spec_format.v1_api import create_app
 
 
 @pytest.fixture
 def client():
-    with TestClient(create_app()) as client:
+    with bound_http_client(create_app()) as client:
         yield client
 
 
@@ -58,7 +58,7 @@ def test_http_document_selection_canonical_alias_wins_and_unknown_key_is_rejecte
     invalid = client.get("/documents/snapshot", params={"service_document_key": "missing"})
     assert invalid.status_code == 404
     assert "detail" in invalid.json()
-    assert client.get("/documents/snapshot").json()["document_id"] == "second"
+    assert TestClient.request(client, "GET", "/documents/snapshot").status_code == 400
 
 
 @pytest.mark.parametrize("invalid", [

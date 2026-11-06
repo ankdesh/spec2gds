@@ -44,6 +44,7 @@ export function workspaceDescriptor(
     title,
     path: resolve(scratchRoot, "design-sources", key),
     domain,
+    ...(serviceDocumentKey ? { serviceDocumentKey } : {}),
     serviceUrl: workspaceServiceUrl,
     documentId,
   };

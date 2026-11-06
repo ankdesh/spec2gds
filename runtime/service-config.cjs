@@ -59,7 +59,7 @@ function resolveConfig(path = defaultConfigPath(), overrides = {}) {
     if (["scheme", "host", "port"].some(key => value[name].service[key] !== value[name].ui[key])) throw new Error(`${name}.service and ui must use the same listener.`);
   }
   endpoint(value.logging?.viewer, "logging.viewer");
-  for (const [section, field] of [["logging", "file"], ["activities", "scratch_root"], ["circuit_designer", "preferences_file"], ["spec_catalog", "catalog_root"], ["spec_catalog", "state_dir"]]) {
+  for (const [section, field] of [["spec_editor", "spec_root"], ["logging", "file"], ["activities", "scratch_root"], ["circuit_designer", "preferences_file"], ["spec_catalog", "catalog_root"], ["spec_catalog", "state_dir"]]) {
     const file = value[section]?.[field];
     if (typeof file !== "string" || !file.trim()) throw new Error(`${section}.${field} must be a non-empty string.`);
     value[section][field] = resolve(dirname(path), file.replace(/^~(?=\/)/, homedir()));

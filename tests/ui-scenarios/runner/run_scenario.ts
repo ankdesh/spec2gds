@@ -83,10 +83,16 @@ async function stop(child: ChildProcess): Promise<void> {
 for (const signal of ["SIGINT", "SIGTERM"] as const) process.once(signal, () => {
   stopping = true; void Promise.all([...children].map(stop)).finally(() => { process.exitCode = 1; });
 });
+const editGrants = new Map<string, any>();
 async function json(url: string, body?: unknown): Promise<any> {
-  const response = await fetch(url, body === undefined ? undefined : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const parsed = new URL(url);
+  const key = parsed.searchParams.get("owner_document_key") || parsed.searchParams.get("service_document_key");
+  const grant = key && editGrants.get(key);
+  const headers = { "Content-Type": "application/json", ...(grant?.context_id ? { "X-Spec-Edit-Context": grant.context_id, "X-Spec-Participant": grant.participant_id } : {}) };
+  const response = await fetch(url, { headers, ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }) });
   const value = await response.json();
   if (!response.ok) throw new Error(`${response.status} ${url}: ${JSON.stringify(value)}`);
+  if (value.owner_document_key && value.edit_access) editGrants.set(value.owner_document_key, { ...value.edit_access, path: value.source_path });
   return value;
 }
 async function healthy(url: string, child: ChildProcess): Promise<void> {
@@ -96,7 +102,11 @@ async function healthy(url: string, child: ChildProcess): Promise<void> {
   }, { timeout: 120_000 }).toBe(true);
 }
 async function openEditor(page: Page, owner: string, path: string): Promise<void> {
-  if (page.url() === "about:blank") await page.goto(`${owner}/editor`);
+  const selected = [...editGrants].find(([, grant]) => grant.path === path && grant.context_id);
+  if (selected || page.url() === "about:blank") {
+    await page.goto(selected ? `${owner}/editor?owner_document_key=${encodeURIComponent(selected[0])}&edit_context_id=${encodeURIComponent(selected[1].context_id || "")}` : `${owner}/editor`);
+    if (selected) { await expect(page.locator(".spec-paper")).toBeVisible(); return; }
+  }
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();
   await page.getByLabel("Server-local package path").fill(path);
@@ -171,6 +181,14 @@ async function savedCreationReceipt(): Promise<any> {
   return receipt;
 }
 
+async function createdSnapshot(service: string): Promise<any> {
+  const receipt = await savedCreationReceipt();
+  const binding = receipt.reservation?.session;
+  assert.ok(binding?.editContextId, "Wait for the completed file binding before opening a linked editor.");
+  editGrants.set(receipt.serviceDocumentKey, { context_id: binding.editContextId, participant_id: binding.editParticipantId, path: receipt.destination });
+  return json(`${service}/documents/snapshot?owner_document_key=${encodeURIComponent(receipt.serviceDocumentKey)}`);
+}
+
 async function run(): Promise<void> {
   // Allocate sequentially so ephemeral ports are distinct within this run.
   const ports = new Set<number>();
@@ -179,6 +197,7 @@ async function run(): Promise<void> {
   const owner = `http://127.0.0.1:${ownerPort}`, assistant = `http://127.0.0.1:${assistantPort}`;
   const config = JSON.parse(readFileSync(join(root, "config/services.json"), "utf8"));
   config.public_host = "127.0.0.1";
+  config.spec_editor.spec_root = dirname(packagePath);
   for (const [name, port, uiPort] of [["spec_editor", ownerPort, ownerPort], ["ai_assistant", assistantPort, assistantPort], ["circuit_designer", circuitPort, circuitUiPort]] as const) {
     config[name].service.host = config[name].ui.host = "127.0.0.1";
     config[name].service.port = port; config[name].ui.port = uiPort;
@@ -290,10 +309,10 @@ async function run(): Promise<void> {
         await prompt(conversation, request);
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => {
-          try { return (await json(`${owner}/documents/snapshot`)).components.length; }
+          try { return (await createdSnapshot(owner)).components.length; }
           catch { return 0; }
         }).toBe(1);
-        const created = await json(`${owner}/documents/snapshot`);
+        const created = await createdSnapshot(owner);
         const creation = await savedCreationReceipt(); packagePath = creation.destination; documentId = creation.documentId;
         assert.equal(packagePath, created.source_path);
         assert.equal(created.document_id, documentId);
@@ -362,6 +381,18 @@ async function run(): Promise<void> {
           return generated.components.length;
         }, { timeout: 120_000 }).toBeGreaterThan(0);
         await expect(conversation.locator('[data-s2g-flow-status="succeeded"]')).toHaveCount(1);
+        // The first receipt can precede conversation reservation. Read the
+        // completed binding after the flow succeeds instead of reusing it.
+        {
+          const database = new DatabaseSync(join(isolated, "assistant-state/assistant.sqlite3"), { readOnly: true });
+          try {
+            creation = generatedSpecReceipt(database.prepare("SELECT request_json FROM source_creation_requests").all()
+              .map((row: any) => JSON.parse(row.request_json)), generatedPackage, architectureReview.reviewId);
+          } finally { database.close(); }
+          const binding = creation?.reservation?.session;
+          assert.ok(binding?.editContextId, "The completed creation must retain its edit context.");
+          editGrants.set(generatedKey, { context_id: binding.editContextId, participant_id: binding.editParticipantId, path: generatedPackage });
+        }
         await expect.poll(async () => {
           const snap = await generatedSnapshot();
           return snap.components.every((item: any) => snap.entity_sections.some((section: any) => section.parent.entity_id === item.ref.entity_id)
@@ -394,7 +425,7 @@ async function run(): Promise<void> {
         }).toBe("succeeded");
         generated = await generatedSnapshot();
         assert.equal(execution.source_revision_hash, generated.source_revision_hash);
-        const activityReport = await json(`${owner}/artifacts/${execution.artifact_ids[0]}/content`);
+        const activityReport = await json(`${owner}/artifacts/${execution.artifact_ids[0]}/content?owner_document_key=${encodeURIComponent(generatedKey)}`);
         assert.equal(activityReport.source_revision_hash, generated.source_revision_hash);
         assert.equal(activityReport.target.entity_id, targetId);
         const evalArgs = ["run", "--no-sync", "python", "scripts/rtl_evaluation.py", "--project", execution.workspace_output_path,
@@ -459,12 +490,12 @@ async function run(): Promise<void> {
       await architectureCapture("01_ai_assistant_architecture.png", "Review the Components, Design, concrete widths, and signal connection before creating the Spec.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
         await expect.poll(async () => {
-          try { initial = await json(`${owner}/documents/snapshot`); return true; }
+          try { initial = await createdSnapshot(owner); return true; }
           catch { return false; }
         }).toBe(true);
       } else {
         initial = await json(`${owner}/documents/create`, { path: packagePath, document_id: documentId, title: "Iterative scenario" });
-        const query = new URLSearchParams({ service_base_url: owner, document_id: documentId, owner_document_key: initial.owner_document_key });
+        const query = new URLSearchParams({ service_base_url: owner, document_id: documentId, owner_document_key: initial.owner_document_key, edit_context_id: initial.edit_access?.context_id || "" });
         await conversation.goto(`${assistant}/launch/spec-document?${query}`);
         await prompt(conversation, "Create timer_core with scalar clk and rst_n inputs and an 8-bit irq output that replicates clk & rst_n combinationally.");
         await conversation.getByRole("button", { name: "Approve architecture", exact: true }).last().click();
@@ -538,7 +569,8 @@ async function run(): Promise<void> {
         await expect.poll(async () => (await history()).items.length).toBe(3);
         const stale = (await history()).items[0];
         await json(scoped("/transactions"), { expected_source_revision_hash: current.source_revision_hash, operations: [{ type: "set_document_title", title: "Human revision" }] });
-        const response = await fetch(scoped(`/assistant/proposals/${stale.proposal_id}/approve`), { method: "POST" });
+        const grant = editGrants.get(key);
+        const response = await fetch(scoped(`/assistant/proposals/${stale.proposal_id}/approve`), { method: "POST", headers: { "X-Spec-Edit-Context": grant.context_id, "X-Spec-Participant": grant.participant_id } });
         assert.equal(response.status, 409);
       } else {
         if (scenario === "live") {
@@ -637,14 +669,14 @@ async function run(): Promise<void> {
       await component.getByRole("menuitem", { name: /Generate RTL/ }).click();
       let launched: any;
       await expect.poll(async () => {
-        const executions = (await json(`${owner}/executions`)).executions;
+        const executions = (await json(scoped("/executions"))).executions;
         launched = executions.filter((item: any) => item.activity_id === "rtl.generate").at(-1);
         return launched?.status;
       }).toBe("succeeded");
       current = await snapshot();
       assert.equal(launched.source_revision_hash, current.source_revision_hash);
       assert.ok(launched.artifact_ids.length);
-      const report = await json(`${owner}/artifacts/${launched.artifact_ids[0]}/content`);
+      const report = await json(scoped(`/artifacts/${launched.artifact_ids[0]}/content`));
       assert.equal(report.source_revision_hash, current.source_revision_hash);
       assert.equal(report.target.entity_id, componentId);
       assert.equal(report.activity_version, "1.3.0");

@@ -331,6 +331,11 @@ export class CircuitDesignerService {
           return this.jsonResponse(response, 200, body.binding);
         }
       }
+      if (method === "POST" && tail[0] === "source" && tail[1] === "renew") {
+        const stored = this.sourceBindings.get(documentId);
+        if (!stored) return this.jsonResponse(response, 200, { mode: "read_only" });
+        return this.jsonResponse(response, 200, await stored.provider.renew());
+      }
       if (method === "POST" && tail[0] === "source" && tail[1] === "preview") {
         return await this.sourcePreview(response, documentId, await this.json(request) as SourceCommitBody);
       }

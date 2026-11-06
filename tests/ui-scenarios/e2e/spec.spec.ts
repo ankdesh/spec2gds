@@ -235,12 +235,14 @@ test("failed opens and an existing destination preserve the active Spec", async 
   expect(stack.archive(stack.path())).toEqual(source);
 });
 
-test("two writers preserve a stale draft until an explicit reviewed retry", async ({ page, context, stack }) => {
+test("linked views preserve a stale draft until an explicit reviewed retry", async ({ page, context, stack }) => {
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
   await editText(component, "Private draft from first writer");
   const second = await context.newPage();
-  await openSpec(second, stack);
+  const selected = await page.evaluate(() => JSON.parse(sessionStorage.getItem("spec2gds.spec.selection")!));
+  await second.goto(`${stack.spec}/editor?owner_document_key=${encodeURIComponent(selected.key)}&edit_context_id=${encodeURIComponent(selected.access.context_id)}`);
+  await expect(second.locator(".spec-paper")).toBeVisible();
   const other = second.locator(`#${await component.getAttribute("id")}`);
   await editText(other, "Saved by second writer");
   await other.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -470,7 +472,7 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     expect(execution.source_revision_hash).toBe(before.source_revision_hash);
     if (status === "succeeded") {
       expect(execution.artifact_ids.length).toBe(1);
-      const artifact = await fetch(`${stack.spec}/artifacts/${execution.artifact_ids.at(-1)}/content`);
+      const artifact = await fetch(`${stack.spec}/artifacts/${execution.artifact_ids.at(-1)}/content?owner_document_key=${encodeURIComponent(before.owner_document_key)}`);
       expect(artifact.ok).toBe(true);
       expect(await artifact.text()).toBe(before.source_revision_hash);
     }
@@ -601,4 +603,70 @@ test("catalog: browse, import, rename a copy, reopen, and generate RTL without p
     await page.keyboard.press("Escape");
     await expect(component.getByRole("button", { name: "Options", exact: true })).toBeFocused();
   }
+});
+
+test("@smoke hosted designers keep independent tabs and saved files", async ({ page, browser, stack }) => {
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(stack.path("alice")); mkdirSync(stack.path("bob"));
+  const otherContext = await browser.newContext();
+  const other = await otherContext.newPage();
+  const createAt = async (target: Page, path: string) => {
+    await target.goto(`${stack.spec}/editor`);
+    await target.getByRole("menuitem", { name: "File", exact: true }).click();
+    await target.getByRole("menuitem", { name: /New Spec/ }).click();
+    await target.getByLabel("Spec name", { exact: true }).fill("Counter");
+    await target.getByLabel("Server-local package path").fill(path);
+    await target.getByRole("button", { name: "Create", exact: true }).click();
+    await expect(target.getByRole("heading", { name: "Counter", exact: true })).toBeVisible();
+  };
+  try {
+    await Promise.all([createAt(page, stack.path("alice/work.spec")), createAt(other, stack.path("bob/work.spec"))]);
+    const before = readFileSync(stack.path("alice/work.spec"));
+    await other.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
+    await other.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
+    await other.getByLabel("Spec name", { exact: true }).fill("Bob counter");
+    await other.getByRole("button", { name: "Save to Spec", exact: true }).click();
+    await expect(other.getByRole("heading", { name: "Bob counter", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Counter", exact: true })).toBeVisible();
+    expect(readFileSync(stack.path("alice/work.spec"))).toEqual(before);
+    const oldParticipant = await page.evaluate(() => JSON.parse(sessionStorage.getItem("spec2gds.spec.selection")!).access.participant_id);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Counter", exact: true })).toBeVisible();
+    await expect(page.getByText("This Spec is read-only.", { exact: false })).toHaveCount(0);
+    const newParticipant = await page.evaluate(() => JSON.parse(sessionStorage.getItem("spec2gds.spec.selection")!).access.participant_id);
+    expect(newParticipant).not.toBe(oldParticipant);
+  } finally { await otherContext.close(); }
+});
+
+test("a duplicated tab opens read-only and Create Copy starts independent editing", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const before = readFileSync(stack.path());
+  const popupPromise = page.waitForEvent("popup");
+  await page.evaluate(() => { window.open(window.location.href, "_blank"); });
+  const duplicate = await popupPromise;
+  await expect(duplicate.getByText("This Spec is read-only.", { exact: false })).toBeVisible();
+  await duplicate.getByRole("button", { name: "Create Copy…", exact: true }).click();
+  await duplicate.getByLabel("Spec name", { exact: true }).fill("Separate copy");
+  await duplicate.getByLabel("Server-local package path").fill(stack.path("separate.spec"));
+  await duplicate.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(duplicate.getByRole("heading", { name: "Separate copy", exact: true })).toBeVisible();
+  await expect(duplicate.getByText("This Spec is read-only.", { exact: false })).toHaveCount(0);
+  expect(readFileSync(stack.path())).toEqual(before);
+  expect(existsSync(stack.path("separate.spec"))).toBe(true);
+  await duplicate.close();
+});
+
+test("the hosted picker stops at Spec root and rejects a typed escape", async ({ page, stack }) => {
+  await page.goto(`${stack.spec}/editor`);
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /New Spec/ }).click();
+  await page.getByLabel("Spec name", { exact: true }).fill("Bounded design");
+  await page.getByRole("button", { name: "Browse…", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Up", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
+  await expect(page.locator(".directory-browser header code")).toHaveText(stack.directory);
+  await page.getByLabel("Server-local package path").fill(`${stack.directory}/../escape.spec`);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Spec root");
+  expect(existsSync(`${stack.directory}/../escape.spec`)).toBe(false);
 });

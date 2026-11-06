@@ -2,7 +2,7 @@ export interface Endpoint { scheme: "http" | "https"; host: string; port: number
 export interface HostedService { service: Endpoint; ui: Endpoint }
 export interface ServiceConfig {
   schema_version: 2; public_host: string;
-  spec_editor: HostedService & { dev_ui: Endpoint };
+  spec_editor: HostedService & { dev_ui: Endpoint; spec_root: string };
   circuit_designer: HostedService & { preferences_file: string; provider_allowlist?: string[] };
   spec_catalog: HostedService & { catalog_root: string; state_dir: string };
   ai_assistant: HostedService; verification_planner: HostedService;

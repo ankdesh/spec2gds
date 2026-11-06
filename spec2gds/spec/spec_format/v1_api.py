@@ -20,7 +20,8 @@ import os
 import threading
 import time
 import typing
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
+from contextvars import ContextVar
 from hashlib import sha256
 from pathlib import Path
 from urllib.parse import urlencode
@@ -140,11 +141,19 @@ from spec2gds.spec.spec_format.transactions import (
 )
 
 
+from spec2gds.spec.spec_format.hosted_files import SpecFilesystem
+from spec2gds.spec.spec_format.edit_access import SpecEditAccess, EditAccessError
+
+_request_context: ContextVar[dict] = ContextVar("spec_request", default={})
+
+
 class OpenDocumentRequest(pydantic.BaseModel):
     """Select one existing V1 package and its optional artifact sidecar."""
 
     path: str
     sidecar_root: str | None = None
+    context_id: str | None = None
+    participant_id: str | None = None
 
 
 class CreateDocumentRequest(pydantic.BaseModel):
@@ -156,6 +165,19 @@ class CreateDocumentRequest(pydantic.BaseModel):
     sidecar_root: str | None = None
     request_id: str | None = None
     derive_named_path: bool = False
+
+
+class CopyDocumentRequest(pydantic.BaseModel):
+    source_key: str
+    expected_source_revision_hash: str
+    path: str
+    title: str
+    request_id: str
+
+
+class EditAccessRequest(pydantic.BaseModel):
+    context_id: str | None = None
+    participant_id: str | None = None
 
 
 class CreateDirectoryRequest(pydantic.BaseModel):
@@ -246,17 +268,44 @@ class SpecDiskConflict(ValueError):
     """The open editor snapshot no longer matches the package on disk."""
 
 
+class HostedArtifactSidecar(ArtifactSidecar):
+    """Keep generated artifact reads and writes below the hosted root."""
+    def __init__(self, root: str, filesystem: SpecFilesystem) -> None:
+        super().__init__(root)
+        self.filesystem = filesystem
+
+    def ingest(self, data: bytes) -> tuple[str, str]:
+        digest = "sha256:" + sha256(data).hexdigest()
+        locator = self.locator(digest)
+        target = self.path_for_locator(locator)
+        self.filesystem.ensure_directory(target.parent)
+        try:
+            self.filesystem.publish(target, data, spec=False)
+        except FileExistsError:
+            if self.filesystem.read(target, spec=False) != data:
+                raise ValueError("Content-addressed sidecar collision.")
+        return digest, locator
+
+    def read(self, artifact: ArtifactRef) -> bytes:
+        data = self.filesystem.read(self.path_for_locator(artifact.storage_locator), spec=False)
+        if "sha256:" + sha256(data).hexdigest() != artifact.sha256:
+            raise ValueError("Artifact sidecar hash mismatch.")
+        return data
+
+
 class V1Session:
     """One local document session that keeps source and activity concerns separate."""
 
-    def __init__(self, path: str, sidecar_root: str | None = None) -> None:
+    def __init__(self, path: str, sidecar_root: str | None = None, *, filesystem: SpecFilesystem | None = None) -> None:
         """Load and validate source before exposing the session to any route."""
-        self.path = str(Path(path).expanduser().resolve())
+        self.filesystem = filesystem
+        self.edit_access: SpecEditAccess | None = None
+        self.path = str(filesystem.path(path, spec=True) if filesystem else Path(path).expanduser().resolve())
         self.lock = _path_lock(self.path)
-        data = Path(self.path).read_bytes()
+        data = self._read()
         self.package = SpecPackage.from_bytes(data)
         self.revision = SpecRevision.from_package(self.package)
-        self.sidecar = ArtifactSidecar(sidecar_root or f"{self.path}.artifacts")
+        self.sidecar = HostedArtifactSidecar(sidecar_root or f"{self.path}.artifacts", filesystem) if filesystem else ArtifactSidecar(sidecar_root or f"{self.path}.artifacts")
         self.activity = ActivityStore(self.package, self.sidecar)
         self.actions = ActionService(ActionRegistry(), self.sidecar)
         self._disk_digest = sha256(data).hexdigest()
@@ -266,16 +315,30 @@ class V1Session:
         self.name_catalog: SpecServiceBindings | None = None
         self.verifications: dict[str, dict[str, typing.Any]] = {}
 
+    def _read(self) -> bytes:
+        return self.filesystem.read(self.path) if self.filesystem else Path(self.path).read_bytes()
+
+    def _publish(self, package: SpecPackage) -> None:
+        if self.filesystem:
+            self.filesystem.publish(self.path, package.to_bytes(), replace=True)
+        else:
+            package.save(self.path)
+
     @property
     def journal(self) -> SpecServiceJournal:
         if self._journal is None:
+            if self.filesystem:
+                from .workspace_target import assistant_state_root
+                state_root = self.filesystem.ensure_directory(assistant_state_root(Path(self.path)))
+                for name in ("spec_service.sqlite3", "owner.sqlite3"):
+                    self.filesystem.path(state_root / name)
             self._journal = SpecServiceJournal(self.path)
         return self._journal
 
     def refresh_from_disk(self) -> bool:
         """Reload authoritative disk state without changing a browser's draft."""
         with self.lock:
-            data = Path(self.path).read_bytes()
+            data = self._read()
             digest = sha256(data).hexdigest()
             if digest == self._disk_digest:
                 return False
@@ -311,23 +374,27 @@ class V1Session:
     @contextmanager
     def _guarded_save(self) -> typing.Iterator[None]:
         """Serialize cross-process writers and reject an externally changed package."""
-        with self.lock:
-            fd = os.open(f"{self.path}.lock", os.O_CREAT | os.O_RDWR, 0o600)
+        context = _request_context.get()
+        access = self.edit_access.guard(self.service_document_key, context.get("context_id"), context.get("participant_id")) if self.edit_access else nullcontext()
+        parent_context = self.filesystem.directory(Path(self.path).parent.relative_to(self.filesystem.root)) if self.filesystem else nullcontext(None)
+        with self.lock, access, parent_context as parent:
+            lock_path = Path(self.path).name + ".lock" if parent is not None else self.path + ".lock"
+            fd = os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=parent)
             with os.fdopen(fd, "rb") as lock_file:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
                 try:
-                    current = sha256(Path(self.path).read_bytes()).hexdigest()
+                    current = sha256(self._read()).hexdigest()
                     if current != self._disk_digest:
                         raise SpecDiskConflict("Specification changed on disk; refresh from disk before saving.")
                     yield
-                    self._disk_digest = sha256(Path(self.path).read_bytes()).hexdigest()
+                    self._disk_digest = sha256(self._read()).hexdigest()
                 finally:
                     fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
     def save(self) -> None:
         """Persist source and activity using the package's deterministic writer."""
         with self._guarded_save():
-            self.package.save(self.path)
+            self._publish(self.package)
 
     def commit_revision(self, revision: SpecRevision) -> None:
         """Adopt validated source while retaining activity, which is not source state."""
@@ -337,7 +404,7 @@ class V1Session:
             next_package = revision.to_package()
             if "activity/v1/actions.json" in self.package.files:
                 next_package.files["activity/v1/actions.json"] = self.package.files["activity/v1/actions.json"]
-            next_package.save(self.path)
+            self._publish(next_package)
             self.package = next_package
             self.revision = SpecRevision.from_package(self.package)
             self.activity = ActivityStore(self.package, self.sidecar)
@@ -358,7 +425,7 @@ class V1Session:
                 ]
             next_activity = ActivityStore(next_package, self.sidecar)
             next_activity.record_assistant_change(decision)
-            next_package.save(self.path)
+            self._publish(next_package)
             self.package = next_package
             self.revision = SpecRevision.from_package(next_package)
             self.activity = ActivityStore(next_package, self.sidecar)
@@ -383,7 +450,7 @@ def _product_activity_registry(extension_modules: tuple[str, ...]) -> SpecExtens
     return load_extension_modules(extension_modules, registry)
 
 
-def create_app(require_designer_approval: bool | None = None, *, require_human_approval: bool | None = None, service_config: Path | None = None, service_registry: typing.Any = None) -> typing.Any:
+def create_app(require_designer_approval: bool | None = None, *, require_human_approval: bool | None = None, service_config: Path | None = None, service_registry: typing.Any = None, spec_root: str | Path | None = None) -> typing.Any:
     """Create the production local V1 API; only the deterministic source format is accepted."""
     try:
         import fastapi
@@ -400,10 +467,22 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     ) else "automatic"
     bindings = SpecServiceBindings()
 
+    @app.exception_handler(EditAccessError)
+    async def edit_access_error(_request: typing.Any, exc: EditAccessError) -> typing.Any:
+        return fastapi.responses.JSONResponse(status_code=423, content={"detail": {"code": "EDIT_ACCESS_REQUIRED", "message": str(exc)}})
+
     @app.exception_handler(SpecDiskConflict)
     async def disk_conflict_handler(_request: typing.Any, exc: SpecDiskConflict) -> typing.Any:
         return fastapi.responses.JSONResponse(status_code=409, content={"detail": str(exc)})
     registry = service_registry or load_service_registry(service_config)
+    root_path = Path(spec_root or registry.config["spec_editor"]["spec_root"])
+    if spec_root is None and root_path.name == "specs":
+        root_path.mkdir(parents=True, exist_ok=True)
+    filesystem = SpecFilesystem(root_path)
+    bindings.filesystem = filesystem
+    access = SpecEditAccess(bindings.path.with_name("edit-access.sqlite3"))
+    app.state.filesystem = filesystem
+    app.state.edit_access = access
     activity_registry = _product_activity_registry(registry.activities.extension_modules)
     logger = StructuredLogger("spec-editor", registry.logging)
     app.state.structured_logger = logger
@@ -442,11 +521,17 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             query = [(key, value) for key, value in query if key not in {"service_document_key", "owner_document_key"}]
             query.append(("owner_document_key", canonical[-1]))
             request.scope["query_string"] = urlencode(query).encode()
+        values = dict(query)
+        token = _request_context.set({"key": values.get("owner_document_key"),
+            "context_id": request.headers.get("x-spec-edit-context") or values.get("edit_context_id"),
+            "participant_id": request.headers.get("x-spec-participant") or values.get("edit_participant_id"),
+            "write": request.method not in {"GET", "HEAD", "OPTIONS"} and not request.url.path.endswith(("/preview", "/preconditions", "/verify", "/launch", "/launch/document", "/resolve")) and not request.url.path.startswith("/documents/edit-access")})
         correlation_id = request.headers.get("x-request-id") or uuid4().hex
         started = time.perf_counter()
         try:
             response = await call_next(request)
         except Exception as reason:
+            _request_context.reset(token)
             logger.event(
                 "http",
                 "request_failed",
@@ -458,6 +543,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 details={"method": request.method, "url": str(request.url)},
             )
             raise
+        _request_context.reset(token)
         response.headers["X-Request-ID"] = correlation_id
         logger.event(
             "http",
@@ -471,7 +557,6 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         )
         return response
     state: dict[str, typing.Any] = {
-        "active": None,
         "sessions": {},
         "source_event_sequence": 0,
         "source_event": None,
@@ -486,11 +571,10 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         """Persist a terminal Activity record and validated result into its owning package."""
         lock = _path_lock(envelope.package_path)
         with lock:
-            current = state.get("active")
-            if isinstance(current, V1Session) and current.path == envelope.package_path:
-                session = current
-            else:
-                session = V1Session(envelope.package_path, envelope.sidecar_root)
+            _request_context.set({"context_id": envelope.edit_context_id, "participant_id": envelope.record.execution_id})
+            filesystem.path(envelope.package_path, spec=True)
+            session = V1Session(envelope.package_path, envelope.sidecar_root, filesystem=filesystem)
+            session.edit_access = access
             session.refresh_from_disk()
             if session.revision.document_id != envelope.record.target.document_id:
                 raise ValueError("Activity result package identity no longer matches its snapshot.")
@@ -548,7 +632,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     activity_jobs = ActivityJobManager(
         activity_registry,
         registry.activities.workspace_root,
-        finalize_activity,
+        finalize_activity, edit_access=access, filesystem=filesystem,
     )
     app.state.activity_jobs = activity_jobs
 
@@ -568,30 +652,45 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         name="editor-assets",
     )
     def active() -> V1Session:
-        """Return the active single-user session or an actionable HTTP error."""
-        session = state["active"]
-        if session is None:
-            raise fastapi.HTTPException(status_code=400, detail="No V1 .spec package is open.")
-        return session
+        """Resolve this request's exact file, without a shared active Spec."""
+        key = _request_context.get().get("key")
+        if not key:
+            raise fastapi.HTTPException(status_code=400, detail="Select an exact Spec binding.")
+        return bound_session(key)
 
     def register_session(session: V1Session, sidecar_root: str | None = None, *, origin: str = "editor") -> V1Session:
-        from spec2gds.spec.spec_format.naming import normalize_package_names, readable_name
-        title = session.revision.narrative.title or readable_name(Path(session.path).stem)
-        session.name_catalog = None
-        with bindings.reserve_name(session.path, session.revision.document_id, title, normalize=True) as name:
-            package = session.revision.to_package()
-            if normalize_package_names(package, name):
-                session.commit_revision(SpecRevision.from_package(package))
         bindings.register(session.path, session.revision.document_id, sidecar_root)
         session.name_catalog = bindings
+        session.edit_access = access
         state["sessions"][session.service_document_key] = session
         session.journal.observe(_source_event(session, origin, []), seed=True)
         reconcile_session(session)
         return session
 
+    def load_file(path: str, sidecar_root: str | None = None) -> V1Session:
+        canonical = filesystem.path(path, spec=True)
+        expected = str(canonical) + ".artifacts"
+        if sidecar_root is not None and str(filesystem.path(sidecar_root)) != expected:
+            raise ValueError("Artifacts must use this Spec's own artifact directory.")
+        filesystem.path(expected)
+        return V1Session(str(canonical), expected, filesystem=filesystem)
+
+    def in_root(path: str) -> bool:
+        try:
+            filesystem.path(path, spec=True)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    def access_snapshot(session: V1Session) -> dict:
+        context = _request_context.get()
+        return {**_snapshot(session), "relative_path": str(Path(session.path).relative_to(filesystem.root)),
+                "edit_access": access.status(session.service_document_key, context.get("context_id"), context.get("participant_id"))}
+
     def bound_session(owner_document_key: str | None = None, document_id: str | None = None) -> V1Session:
+        owner_document_key = owner_document_key or _request_context.get().get("key")
         if owner_document_key is None and document_id is not None:
-            matches = bindings.matching(document_id)
+            matches = [record for record in bindings.matching(document_id) if in_root(record["path"])]
             if len(matches) != 1:
                 raise fastapi.HTTPException(status_code=409, detail={
                     "error_code": "BINDING_REQUIRED", "document_id": document_id,
@@ -602,18 +701,22 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             session = active()
         else:
             record = bindings.get(owner_document_key)
-            if record is None:
+            if record is None or not in_root(record["path"]):
                 raise fastapi.HTTPException(status_code=404, detail="Unknown package binding.")
             session = state["sessions"].get(owner_document_key)
             if session is None:
                 try:
-                    session = register_session(V1Session(record["path"], record["sidecar_root"]), record["sidecar_root"])
+                    session = register_session(load_file(record["path"], record["sidecar_root"]), record["sidecar_root"])
                 except (OSError, ValueError) as exc:
                     raise fastapi.HTTPException(status_code=409, detail={"error_code": "BINDING_UNAVAILABLE", "message": str(exc)}) from exc
                 if session.service_document_key != owner_document_key:
                     raise fastapi.HTTPException(status_code=409, detail="Bound package identity changed.")
                 state["sessions"][owner_document_key] = session
+        request_context = _request_context.get()
+        if request_context.get("write") and access.status(session.service_document_key, request_context.get("context_id"), request_context.get("participant_id"))["mode"] != "edit":
+            raise EditAccessError("This Spec is read-only. Resume editing or create a copy.")
         try:
+            filesystem.path(session.path, spec=True)
             changed = session.refresh_from_disk()
         except (OSError, ValueError) as exc:
             raise fastapi.HTTPException(status_code=409, detail={"error_code": "BINDING_UNAVAILABLE", "message": str(exc)}) from exc
@@ -678,7 +781,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     def assistant_capabilities() -> dict[str, typing.Any]:
         return {"schema_version": 1, "approval_policy": approval_policy,
                 "stable_package_bindings": True, "document_refinement": True,
-                "submission_endpoint": "/assistant/proposals/submit", "creation_receipts": True}
+                "submission_endpoint": "/assistant/proposals/submit", "creation_receipts": True,
+                "edit_contexts": True, "spec_root": str(filesystem.root)}
 
     @app.get("/services")
     def services() -> dict[str, typing.Any]:
@@ -686,64 +790,17 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         return {
             "schema_version": 2,
             "services": service_urls(),
+            "spec_root": str(filesystem.root),
             "logging": {"enabled": registry.logging.enabled, "level": registry.logging.level},
         }
 
     @app.get("/filesystem/directories")
     def filesystem_directories(path: str | None = None) -> dict[str, typing.Any]:
         """List server-local directories for the editor's portable folder picker."""
-        candidate = Path(path).expanduser() if path else Path.home()
         try:
-            directory = candidate.resolve(strict=True)
-        except (OSError, RuntimeError) as exc:
-            raise fastapi.HTTPException(
-                status_code=422,
-                detail=f"Directory is not accessible: {candidate}",
-            ) from exc
-        if not directory.is_dir():
-            raise fastapi.HTTPException(
-                status_code=422,
-                detail=f"Path is not a directory: {directory}",
-            )
-
-        children: list[dict[str, str]] = []
-        specifications: list[dict[str, str]] = []
-        try:
-            entries = sorted(directory.iterdir(), key=lambda entry: entry.name.casefold())
-            for entry in entries:
-                try:
-                    if entry.name.casefold().endswith(".spec") and (entry.is_dir() or entry.is_file()):
-                        specifications.append({"name": entry.name, "path": str(entry.resolve())})
-                    if entry.is_dir():
-                        children.append({"name": entry.name, "path": str(entry.resolve())})
-                except OSError:
-                    # An unreadable or concurrently removed child should not make its
-                    # parent unusable in the picker.
-                    continue
-        except OSError as exc:
-            raise fastapi.HTTPException(
-                status_code=422,
-                detail=f"Directory cannot be read: {directory}",
-            ) from exc
-
-        if os.name == "nt":
-            roots = [
-                f"{letter}:\\"
-                for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-                if Path(f"{letter}:\\").is_dir()
-            ]
-        else:
-            roots = [str(Path(directory.anchor or os.sep))]
-        parent = None if directory.parent == directory else str(directory.parent)
-        return {
-            "path": str(directory),
-            "parent": parent,
-            "home": str(Path.home().resolve()),
-            "separator": os.sep,
-            "roots": roots,
-            "directories": children,
-            "specifications": specifications,
-        }
+            return filesystem.listing(path)
+        except (OSError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail="Select an accessible directory within the Spec root.") from exc
 
     @app.post("/filesystem/directories")
     def create_directory(request: CreateDirectoryRequest) -> dict[str, typing.Any]:
@@ -768,22 +825,17 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 detail="Enter a valid folder name without path separators or reserved characters.",
             )
         try:
-            parent = Path(request.parent).expanduser().resolve(strict=True)
-            if not parent.is_dir():
-                raise NotADirectoryError(parent)
-            directory = parent / name
-            directory.mkdir()
+            return filesystem.mkdir(request.parent, name)
         except FileExistsError as exc:
             raise fastapi.HTTPException(
                 status_code=409,
                 detail=f"A file or folder named '{name}' already exists.",
             ) from exc
-        except (OSError, RuntimeError) as exc:
+        except (OSError, RuntimeError, ValueError) as exc:
             raise fastapi.HTTPException(
                 status_code=422,
                 detail=f"Could not create folder '{name}' in {request.parent}.",
             ) from exc
-        return filesystem_directories(str(directory))
 
     @app.post("/logs/events", status_code=204)
     def browser_log_events(payload: dict[str, typing.Any]) -> None:
@@ -796,51 +848,160 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             raise fastapi.HTTPException(status_code=422, detail="Browser log events must be a list of at most 100 items.")
         logger.browser_events(str(payload.get("session_id", "unknown")), [item for item in events if isinstance(item, dict)])
 
+    @app.post("/documents/edit-access/{action}")
+    def document_edit_access(action: str, request: EditAccessRequest, owner_document_key: str) -> dict:
+        session = bound_session(owner_document_key)
+        if action == "acquire":
+            return access.acquire(session.service_document_key, request.context_id, request.participant_id)
+        if not request.context_id or not request.participant_id:
+            raise EditAccessError("An edit context and participant are required.")
+        if action == "renew":
+            return access.renew(session.service_document_key, request.context_id, request.participant_id)
+        if action == "release":
+            access.release(session.service_document_key, request.context_id, request.participant_id)
+            return {"mode": "read_only"}
+        raise fastapi.HTTPException(status_code=404, detail="Unknown edit-access action.")
+
+    def created_snapshot(session: V1Session, request_id: str | None) -> dict:
+        receipt = bindings.creation_receipt(request_id) if request_id else None
+        previous = json.loads(receipt["edit_access_json"]) if receipt and receipt.get("edit_access_json") else {}
+        grant = access.acquire(session.service_document_key, previous.get("context_id"), previous.get("participant_id"))
+        if request_id and grant["mode"] == "edit":
+            bindings.remember_creation_access(request_id, grant)
+        return {**access_snapshot(session), "edit_access": grant}
+
     @app.post(ASSISTANT_ACTIONS["create_document"]["path"])
     def create_document(request: CreateDocumentRequest) -> dict[str, typing.Any]:
-        """Create, validate, activate, and return a new package snapshot."""
         try:
-            logger.event("documents", "create_requested", "Creating specification", details=request)
+            destination = str(filesystem.path(request.path, spec=True))
+            if request.sidecar_root is not None and str(filesystem.path(request.sidecar_root)) != destination + ".artifacts":
+                raise ValueError("Artifacts must use this Spec's own artifact directory.")
+            if request.sidecar_root is not None and request.derive_named_path:
+                raise ValueError("A named destination must use its default artifact directory.")
+            values = {**request.model_dump(mode="json"), "path": destination}
             identity = request.document_id or new_entity_id("spec")
-            destination = request.path
             reserved = False
             if request.request_id:
-                destination, identity, reserved = bindings.reserve_creation(request.request_id, request.model_dump(mode="json"))
-            if reserved and Path(destination).expanduser().resolve().exists():
-                session = V1Session(destination, request.sidecar_root)
+                destination, identity, reserved = bindings.reserve_creation(request.request_id, values)
+            filesystem.path(destination, spec=True)
+            if reserved and Path(destination).exists():
+                session = load_file(destination, request.sidecar_root)
                 if session.revision.document_id != identity:
                     raise ValueError("Creation receipt does not match the saved package.")
-                state["active"] = register_session(session, request.sidecar_root)
-                return _snapshot(session)
-            from spec2gds.spec.spec_format.naming import readable_name
-            title = request.title if request.title is not None else readable_name(Path(request.path).stem)
-            with bindings.reserve_name(destination, identity, title) as name:
-                session = V1Session.create(destination, identity, request.sidecar_root, name)
-            state["active"] = register_session(session, request.sidecar_root)
-            return _snapshot(session)
+            else:
+                from spec2gds.spec.spec_format.naming import readable_name
+                title = request.title if request.title is not None else readable_name(Path(destination).stem)
+                with bindings.reserve_name(destination, identity, title) as name:
+                    filesystem.publish(destination, SpecPackage.create(identity, title=name).to_bytes())
+                session = load_file(destination, request.sidecar_root)
+            register_session(session, request.sidecar_root)
+            return created_snapshot(session, request.request_id)
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/documents/open")
     def open_document(request: OpenDocumentRequest) -> dict[str, typing.Any]:
-        """Validate and activate an existing deterministic package."""
         try:
-            logger.event("documents", "open_requested", "Opening specification", details=request)
-            session = V1Session(request.path, request.sidecar_root)
-            original_title = session.revision.narrative.title
-            original_revision = session.revision.source_revision_hash
-            state["active"] = register_session(session, request.sidecar_root)
-            snapshot = _snapshot(active())
-            if session.revision.source_revision_hash != original_revision:
-                snapshot["open_notice"] = (
-                    f'Opened Spec. Its saved name changed from "{original_title}" to "{session.revision.narrative.title}" '
-                    "to keep names unique. Hardware identities are unchanged."
-                    if session.revision.narrative.title != original_title else
-                    "Opened Spec. Saved names were normalized; hardware identities are unchanged."
-                )
-            return snapshot
+            session = load_file(request.path, request.sidecar_root)
+            grant = access.acquire(session.service_document_key, request.context_id or _request_context.get().get("context_id"), request.participant_id or _request_context.get().get("participant_id"))
+            session.edit_access = access
+            if grant["mode"] == "edit":
+                from .naming import normalize_package_names, readable_name
+                token = _request_context.set({**_request_context.get(), "context_id": grant["context_id"], "participant_id": grant["participant_id"]})
+                original_title = session.revision.narrative.title
+                normalized = False
+                try:
+                    with session._guarded_save(), bindings.reserve_name(session.path, session.revision.document_id, original_title or readable_name(Path(session.path).stem), normalize=True) as title:
+                        package = session.revision.to_package()
+                        normalized = normalize_package_names(package, title)
+                        if normalized:
+                            # Normalize only with exclusive edit access. Preserve
+                            # completed history when adopting normalized source.
+                            if "activity/v1/actions.json" in session.package.files:
+                                package.files["activity/v1/actions.json"] = session.package.files["activity/v1/actions.json"]
+                            session._publish(package)
+                            session.package = package
+                            session.revision = SpecRevision.from_package(package)
+                            session.activity = ActivityStore(package, session.sidecar)
+                finally:
+                    _request_context.reset(token)
+            register_session(session, request.sidecar_root)
+            result = {**access_snapshot(session), "edit_access": grant}
+            if grant["mode"] == "edit" and normalized:
+                result["open_notice"] = f'Opened Spec. Its saved name changed from "{original_title}" to "{session.revision.narrative.title}" to keep names unique.' if original_title != session.revision.narrative.title else "Opened Spec. Saved names were normalized; hardware identities are unchanged."
+            return result
         except (OSError, ValueError, SpecValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/documents/copy-suggestion")
+    def copy_suggestion(owner_document_key: str) -> dict:
+        from .naming import unique_name, readable_name
+        source = bound_session(owner_document_key)
+        path = Path(source.path)
+        names = []
+        for item in filesystem.listing(str(path.parent))["specifications"]:
+            try:
+                names.append(SpecPackage.from_bytes(filesystem.read(item["path"])).narrative.title)
+            except (OSError, ValueError):
+                continue
+        stem = path.stem.encode("utf-8")[:180].decode("utf-8", errors="ignore") + "-copy"
+        destination = path.with_name(stem + ".spec")
+        number = 2
+        while destination.exists():
+            destination = path.with_name(f"{stem}-{number}.spec")
+            number += 1
+        title = unique_name((source.revision.narrative.title or readable_name(path.stem))[:190] + " copy", names)
+        return {"path": str(destination), "title": title}
+
+    @app.post("/documents/copy")
+    def copy_document(request: CopyDocumentRequest) -> dict:
+        # Copy reads saved source; it does not need the source's edit context.
+        token = _request_context.set({**_request_context.get(), "write": False})
+        try:
+            canonical_input = {**request.model_dump(mode="json"), "path": str(filesystem.path(request.path, spec=True))}
+            receipt = bindings.creation_receipt(request.request_id)
+            if receipt:
+                recorded = json.loads(receipt["input_json"])
+                if any(recorded.get(key) != value for key, value in canonical_input.items()):
+                    raise ValueError("Copy request ID was reused with different values.")
+                if Path(receipt["destination"]).exists():
+                    copied = register_session(load_file(receipt["destination"]))
+                    if copied.revision.document_id != receipt["document_id"]:
+                        raise ValueError("Copy receipt does not match the saved package.")
+                    return created_snapshot(copied, request.request_id)
+            source = bound_session(request.source_key)
+            with source.lock:
+                source.refresh_from_disk()
+                revision = source.revision
+                if revision.source_revision_hash != request.expected_source_revision_hash:
+                    raise fastapi.HTTPException(status_code=409, detail="Saved source changed. Refresh before copying.")
+            destination = str(filesystem.path(request.path, spec=True))
+            if destination == source.path:
+                raise ValueError("Select a different destination for the copy.")
+            values = canonical_input
+            # Reuse durable creation reservations, including source/revision, so
+            # an uncertain retry cannot create a second file or change inputs.
+            values.update(document_id=revision.document_id)
+            try:
+                destination, identity, replay = bindings.reserve_creation(request.request_id, values)
+            except ValueError as exc:
+                if Path(destination).exists():
+                    raise fastapi.HTTPException(status_code=409, detail="Copy destination already exists.") from exc
+                raise
+            if not (replay and Path(destination).exists()):
+                package = revision.to_package()
+                package.files = {name: value for name, value in package.files.items() if not name.startswith("activity/")}
+                with bindings.reserve_name(destination, identity, request.title) as title:
+                    package.narrative = package.narrative.model_copy(update={"title": title})
+                    filesystem.publish(destination, package.to_bytes())
+            copied = register_session(load_file(destination))
+            return created_snapshot(copied, request.request_id)
+        except FileExistsError as exc:
+            raise fastapi.HTTPException(status_code=409, detail="Copy destination already exists.") from exc
+        except (OSError, ValueError) as exc:
+            raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
+        finally:
+            _request_context.reset(token)
 
     @app.get(ASSISTANT_ACTIONS["list_documents"]["path"])
     def named_documents() -> dict[str, typing.Any]:
@@ -854,6 +1015,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             documents.append({"document_id": session.revision.document_id, "title": document_name(session.revision),
                 "service_document_key": session.service_document_key,
                 "owner_document_key": session.service_document_key,
+                "relative_path": str(Path(session.path).relative_to(filesystem.root)),
                 "entities": [{**item.ref.model_dump(mode="json"), "title": entity_name(item)}
                     for item in (*session.revision.components, *session.revision.designs,
                                  *session.revision.bus_definitions, *session.revision.abstraction_definitions)]})
@@ -893,7 +1055,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     @app.get(ASSISTANT_ACTIONS["snapshot"]["path"])
     def document_snapshot(owner_document_key: str | None = None) -> dict[str, typing.Any]:
         """Return the complete editor-facing immutable source projection."""
-        return _snapshot(bound_session(owner_document_key))
+        return access_snapshot(bound_session(owner_document_key))
 
     @app.get(ASSISTANT_ACTIONS["names"]["path"])
     def document_names(owner_document_key: str | None = None, document_id: str | None = None,
@@ -925,7 +1087,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         with session.lock:
             cursor = session.journal.observe(_source_event(session, "external", []))
             activity = session.activity.state
-            return {"snapshot": _snapshot(session),
+            return {"snapshot": access_snapshot(session),
                     "a2ui": build_a2ui_batch(build_document_projection(session.revision)).model_dump(mode="json"),
                     "activity": {"executions": document_executions(session),
                                  "artifacts": [_jsonable(item) for item in activity.artifacts],
@@ -952,6 +1114,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "document_id": session.revision.document_id,
                 "service_document_key": session.service_document_key,
                 "owner_document_key": session.service_document_key,
+                "edit_context_id": _request_context.get().get("context_id") or "",
                 "entity_kind": target.entity_kind,
                 "entity_id": target.entity_id,
             }
@@ -968,7 +1131,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     ) -> dict[str, typing.Any]:
         """Launch the Assistant, binding it when a specification is active."""
         urls = service_urls()
-        session = bound_session(owner_document_key) if owner_document_key else typing.cast(V1Session | None, state["active"])
+        session = bound_session(owner_document_key) if owner_document_key or _request_context.get().get("key") else None
         if session is None or (
             request is not None and not request.attach_active_document
         ):
@@ -984,6 +1147,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "document_id": session.revision.document_id,
                 "service_document_key": session.service_document_key,
                 "owner_document_key": session.service_document_key,
+                "edit_context_id": _request_context.get().get("context_id") or "",
             }
         )
         return {
@@ -1005,9 +1169,13 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 request.entity_kind,
                 request.entity_id,
             )
+            request_access = _request_context.get()
+            source_access = access.status(session.service_document_key, request_access.get("context_id"), request_access.get("participant_id"))
+            projection_context = request_access.get("context_id") if source_access["mode"] == "edit" else uuid4().hex
             session_id = source_session_document_id(
                 session.revision,
                 initial_projection.editable_design_id or initial_projection.source_entity_id,
+                service_document_key=session.service_document_key + ":" + projection_context,
             )
             projection = project_source_to_circuit(
                 session.revision,
@@ -1016,6 +1184,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 session_document_id=session_id,
                 include_catalog=initial_projection.editable_design_id is not None,
             )
+            projection.document["label"] = f"{Path(session.path).relative_to(filesystem.root)} › {projection.document['label']}"
             launched = publish_circuit_document(
                 projection.document,
                 service_url=service_urls()["circuit_designer"]["service_url"],
@@ -1024,7 +1193,10 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             )
             token = uuid4().hex
             binding_id = f"source_{uuid4().hex}"
-            writable = projection.editable_design_id is not None
+            current_context = _request_context.get()
+            permitted = access.status(session.service_document_key, current_context.get("context_id"), current_context.get("participant_id"))["mode"] == "edit"
+            participation = access.acquire(session.service_document_key, current_context.get("context_id"), "circuit:" + launched.document_id) if permitted else {"mode": "read_only"}
+            writable = projection.editable_design_id is not None and permitted
             binding = {
                 "schema_version": 1,
                 "binding_id": binding_id,
@@ -1055,6 +1227,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "entity_kind": request.entity_kind,
                 "entity_id": request.entity_id,
                 "session_document_id": launched.document_id,
+                "edit_access": participation,
+                "projection_label": projection.document["label"],
             }
             recovered = register_circuit_source_binding(
                 launched.document_id,
@@ -1088,6 +1262,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
 
     def circuit_source_session(record: dict[str, typing.Any]) -> V1Session:
         """Keep a Circuit binding attached to its exact package, across other opens."""
+        context = record.get("edit_access", {})
+        _request_context.set({**_request_context.get(), "key": record["binding"].get("source_owner_document_key"), "context_id": context.get("context_id"), "participant_id": context.get("participant_id")})
         return bound_session(record["binding"].get("source_owner_document_key"))
 
     def circuit_source_record(authorization: str | None) -> dict[str, typing.Any]:
@@ -1102,13 +1278,22 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         return typing.cast(dict[str, typing.Any], record)
 
     def circuit_source_projection(record: dict[str, typing.Any], revision: SpecRevision | None = None) -> typing.Any:
-        return project_source_to_circuit(
-            revision or circuit_source_session(record).revision,
-            record["entity_kind"],
-            record["entity_id"],
-            session_document_id=record["session_document_id"],
-            include_catalog=True,
+        session = circuit_source_session(record)
+        projection = project_source_to_circuit(
+            revision or session.revision, record["entity_kind"], record["entity_id"],
+            session_document_id=record["session_document_id"], include_catalog=True,
         )
+        projection.document["label"] = record["projection_label"]
+        return projection
+
+    @app.post("/circuit-designer/source/renew")
+    def renew_circuit_source(authorization: str | None = fastapi.Header(default=None)) -> dict:
+        record = circuit_source_record(authorization)
+        session = circuit_source_session(record)
+        participant = record.get("edit_access", {})
+        if participant.get("mode") != "edit":
+            return {"mode": "read_only"}
+        return access.renew(session.service_document_key, participant["context_id"], participant["participant_id"])
 
     def sync_failure(code: str, message: str, revision_hash: str | None = None) -> dict[str, typing.Any]:
         return {
@@ -1470,12 +1655,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     @app.get("/activities")
     def activities() -> dict[str, typing.Any]:
         """List product Activities and isolated extension-load diagnostics."""
-        session = state["active"]
-        workspace_root = (
-            Path(session.path).parent
-            if isinstance(session, V1Session)
-            else registry.activities.workspace_root
-        )
+        key = _request_context.get().get("key")
+        workspace_root = Path(bound_session(key).path + ".artifacts") / "generated" if key else registry.activities.workspace_root
         return {
             "activities": [_jsonable(item) for item in activity_registry.activities()],
             "diagnostics": [_jsonable(item) for item in activity_registry.diagnostics],
@@ -1552,7 +1733,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                     snapshot=snapshot,
                     package_path=session.path,
                     sidecar_root=str(session.sidecar.root),
-                    workspace_root=Path(session.path).parent,
+                    workspace_root=Path(session.path + ".artifacts") / "generated",
+                    edit_context_id=_request_context.get().get("context_id"),
                 )
                 return _jsonable(record)
             except KeyError as exc:
@@ -1954,7 +2136,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     # Invalid/unavailable bindings remain catalogued for explicit recovery.
     for record in bindings.catalog():
         try:
-            register_session(V1Session(record["path"], record["sidecar_root"]), record["sidecar_root"])
+            register_session(load_file(record["path"], record["sidecar_root"]), record["sidecar_root"])
         except (OSError, ValueError, SpecValidationError):
             continue
     @app.get("/components/{component_id}/activities")

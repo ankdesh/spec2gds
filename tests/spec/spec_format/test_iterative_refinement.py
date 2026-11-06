@@ -1,4 +1,6 @@
 """Deterministic Spec service correctness; no model, UI, or API key required."""
+
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier
@@ -24,7 +26,7 @@ from spec2gds.spec.spec_format.v1_api import (
 
 
 def endpoints(review=False):
-    return {route.name: route.endpoint for route in create_app(review).routes if hasattr(route, "endpoint")}
+    return direct_api_endpoints(create_app(review))
 
 
 def proposal(snapshot, id="p1", operations=None, **values):
@@ -66,7 +68,7 @@ def test_default_policy_applies_once_and_returns_saved_revision(tmp_path):
 
 def test_restricted_policy_stores_exact_artifact_and_revalidates(tmp_path, monkeypatch):
     monkeypatch.setenv("SPEC2GDS_REQUIRE_HUMAN_APPROVAL", "1")
-    e = {r.name: r.endpoint for r in create_app().routes if hasattr(r, "endpoint")}
+    e = direct_api_endpoints(create_app())
     s = create(e, tmp_path / "review.spec")
     key = s["owner_document_key"]
     before = (tmp_path / "review.spec").read_bytes()
@@ -76,7 +78,8 @@ def test_restricted_policy_stores_exact_artifact_and_revalidates(tmp_path, monke
     with pytest.raises(fastapi.HTTPException) as bypass:
         e["assistant_proposal_apply"](p, key)
     assert bypass.value.status_code == 403
-    restarted = {r.name: r.endpoint for r in create_app().routes if hasattr(r, "endpoint")}
+    restarted = direct_api_endpoints(create_app())
+    restarted["open_document"](OpenDocumentRequest(path=str(tmp_path / "review.spec"), context_id=s["edit_access"]["context_id"], participant_id=s["edit_access"]["participant_id"]))
     assert restarted["assistant_capabilities"]()["approval_policy"] == "review"
     assert restarted["assistant_submission"]("p1", key)["state"] == "ready"
     assert endpoints()["assistant_proposal_submit"](p, key)["status"] == "approval_required"  # Upgrade cannot authorize an old review.
@@ -143,7 +146,7 @@ def test_mixed_local_writers_accept_exactly_one_authored_revision(tmp_path):
     from spec2gds.spec.spec_format.actions import ActivityExecutionRecord
     from spec2gds.spec.spec_format.activity_jobs import JobEnvelope
     app = create_app(False)
-    e = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    e = direct_api_endpoints(app)
     path = tmp_path / "race.spec"
     s = create(e, path)
     e["assistant_proposal_submit"](proposal(s), s["owner_document_key"])
@@ -151,7 +154,9 @@ def test_mixed_local_writers_accept_exactly_one_authored_revision(tmp_path):
     record = ActivityExecutionRecord(execution_id="activity-race", activity_id="rtl.generate", activity_version="1.0.0",
         snapshot_id="race-snapshot", source_revision_hash=s["source_revision_hash"], target=s["components"][0]["ref"],
         status="succeeded", created_at="2026-01-01T00:00:00Z")
-    envelope = JobEnvelope(record, str(path), f"{path}.artifacts", str(tmp_path / "snapshot"), str(tmp_path / "generated"))
+    grant = s["edit_access"]
+    app.state.edit_access.acquire(s["owner_document_key"], grant["context_id"], record.execution_id)
+    envelope = JobEnvelope(record, str(path), f"{path}.artifacts", str(tmp_path / "snapshot"), str(tmp_path / "generated"), grant["context_id"])
     barrier = Barrier(11)
     def write(index):
         offline = V1Session(str(path))

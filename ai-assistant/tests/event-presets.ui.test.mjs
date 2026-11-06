@@ -40,7 +40,7 @@ async function fixture() {
   const owner=createServer((request,response)=>{
     if (serveIntegrationMetadata(request, response)) return;
     const path=new URL(request.url,'http://localhost').pathname;
-    const send=value=>{response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify(value));};
+    const send=value=>{if(path==='/documents/snapshot'||path==='/assistant/context/document')value={...value,owner_document_key:'fixture-spec'};response.writeHead(200,{'Content-Type':'application/json'});response.end(JSON.stringify(value));};
     if(path==='/health')return send({status:'ok'});
     if(path==='/assistant/capabilities')return send({approval_policy:'review'});
     if(path==='/documents/snapshot')return send({document_id:'doc-test',narrative:{title:'UI test specification'},components:[]});

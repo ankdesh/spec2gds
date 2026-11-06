@@ -56,6 +56,7 @@ export class Stack {
     this.sentinels = new Map(paths.map(path => [path, existsSync(path) ? readFileSync(path) : undefined]));
     const config = JSON.parse(readFileSync(paths[0], "utf8"));
     config.public_host = "127.0.0.1";
+    config.spec_editor.spec_root = this.directory;
     Object.assign(config.spec_editor.service, { host: "127.0.0.1", port: spec });
     Object.assign(config.spec_editor.ui, { host: "127.0.0.1", port: spec });
     Object.assign(config.circuit_designer.service, { host: "127.0.0.1", port: circuit });
@@ -120,12 +121,24 @@ export class Stack {
     }
   }
   path(name = "coverage-authoring.spec"): string { return join(this.directory, name); }
+  private selection: any = null;
+  private readonly selections = new Map<string, any>();
+  selectSnapshot(snapshot: any): void {
+    if (snapshot?.owner_document_key) {
+      this.selection = snapshot;
+      this.selections.set(snapshot.owner_document_key, snapshot);
+    }
+  }
   async json(path: string, body?: unknown): Promise<any> {
-    const response = await fetch(`${this.spec}${path}`, body === undefined ? undefined : {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-    });
+    if (this.selection && !path.includes("owner_document_key=") && !path.includes("service_document_key=")) path += `${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(this.selection.owner_document_key)}`;
+    const query = new URL(`${this.spec}${path}`).searchParams;
+    const key = query.get("service_document_key") || query.get("owner_document_key");
+    const edit = key ? this.selections.get(key)?.edit_access : undefined;
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...(edit?.context_id ? { "X-Spec-Edit-Context": edit.context_id, "X-Spec-Participant": edit.participant_id } : {}) };
+    const response = await fetch(`${this.spec}${path}`, { headers, ...(body === undefined ? {} : { method: "POST", body: JSON.stringify(body) }) });
     const data = await response.json();
     expect(response.ok, JSON.stringify(data)).toBe(true);
+    if (data.owner_document_key && data.edit_access) this.selectSnapshot(data);
     return data;
   }
   async snapshot(): Promise<any> { return this.json("/documents/snapshot"); }
@@ -150,8 +163,11 @@ export class Stack {
 }
 
 export const test = base.extend<{ stack: Stack }>({
-  stack: async ({}, use, info) => {
+  stack: async ({ page }, use, info) => {
     const stack = await Stack.create(info);
+    page.on("response", response => {
+      if (response.url().startsWith(stack.spec) && /\/documents\/(open|create|copy)(\?|$)/.test(response.url()) && response.ok()) void response.json().then(snapshot => stack.selectSnapshot(snapshot)).catch(() => undefined);
+    });
     try {
       if (info.project.name === "verification") await stack.start("verification");
       else {
@@ -167,7 +183,8 @@ export const test = base.extend<{ stack: Stack }>({
 export { expect };
 
 export async function openSpec(page: Page, stack: Stack, path = stack.path()): Promise<void> {
-  await page.goto(`${stack.spec}/editor`);
+  if (!page.url().startsWith(`${stack.spec}/`)) await page.goto(`${stack.spec}/editor`);
+  else if (new URL(page.url()).searchParams.has("owner_document_key")) await expect(page.locator(".spec-paper")).toBeAttached();
   if (await page.getByRole("button", { name: "Menu", exact: true }).isVisible()) await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();

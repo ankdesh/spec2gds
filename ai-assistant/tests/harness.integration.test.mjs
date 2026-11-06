@@ -50,6 +50,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       if (url.searchParams.get("paged") === "true") return send(response, { schema_version: "spec2gds.assistant-context-page.v1", document_id: "doc-test", source_revision_hash: "sha256:test", scope: "document", target: null, records: [{ path: ["entities"], value: [] }], incomplete: false, next_cursor: null });
       return send(response, {
         schema_version: "spec2gds.assistant-context.v1",
+        owner_document_key: "fixture-spec",
         scope: "document",
         document_id: "doc-test",
         source_revision_hash: "sha256:test",

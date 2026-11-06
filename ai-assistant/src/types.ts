@@ -10,6 +10,9 @@ export interface SessionBinding {
   serviceUrl: string;
   documentId: string;
   serviceDocumentKey?: string | null;
+  editContextId?: string | null;
+  editParticipantId?: string | null;
+  workspaceServiceDocumentKey?: string | null;
   scope: BindingScope;
   entityKind: string | null;
   entityId: string | null;
@@ -128,6 +131,9 @@ export interface BindingInput {
   serviceBaseUrl: string;
   documentId: string;
   serviceDocumentKey?: string;
+  editContextId?: string;
+  editParticipantId?: string;
+  workspaceServiceDocumentKey?: string;
   scope?: BindingScope;
   entityKind?: string;
   entityId?: string;
@@ -150,6 +156,7 @@ export interface ServiceConfig {
 }
 
 export interface WorkspaceDescriptor {
+  serviceDocumentKey?: string;
   key: string;
   title: string;
   path: string;
@@ -159,6 +166,8 @@ export interface WorkspaceDescriptor {
 }
 
 export interface SourceCreationRequest {
+  destinationDirectory?: string;
+  editContextId?: string;
   flowExecutionId: string;
   architectureReviewId?: string;
   acceptedArchitecture?: Record<string, unknown>;

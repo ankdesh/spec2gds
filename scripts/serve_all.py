@@ -96,7 +96,15 @@ def start(args: argparse.Namespace, previous: list[dict]) -> None:
     overrides["circuit_designer"]["ui"] = ui
     if args.public_host is not None:
         overrides["public_host"] = args.public_host
+    if getattr(args, "spec_root", None) is not None:
+        overrides.setdefault("spec_editor", {})["spec_root"] = str(args.spec_root.expanduser().resolve())
     config = resolve_config(args.service_config, overrides=overrides)
+    root = Path(config["spec_editor"]["spec_root"])
+    if getattr(args, "spec_root", None) is None and root.name == "specs":
+        root.mkdir(parents=True, exist_ok=True)
+    if not root.is_dir():
+        raise ValueError("Spec root must be an existing directory.")
+    print(f"Spec root: {root}")
     endpoints = [config["spec_editor"]["service"], config["circuit_designer"]["service"], config["circuit_designer"]["ui"], config["ai_assistant"]["service"], config["spec_catalog"]["service"]]
     seen = set()
     for endpoint in endpoints:
@@ -170,6 +178,7 @@ def main() -> None:
     parser.add_argument("command", choices=("start", "stop", "restart"))
     parser.add_argument("--service-config", type=Path)
     parser.add_argument("--host")
+    parser.add_argument("--spec-root", type=Path)
     parser.add_argument("--public-host")
     for name in ("spec", "circuit", "circuit-ui", "assistant", "catalog"):
         parser.add_argument(f"--{name}-port", type=int)

@@ -1,4 +1,6 @@
 """Manual authoring must remain atomic and must not invoke lint on reads or saves."""
+
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
 from unittest.mock import patch
 
 import fastapi
@@ -13,7 +15,7 @@ from spec2gds.spec.spec_format.v1_api import ActivityExecutionRequest, CreateDoc
 
 def endpoints(tmp_path, monkeypatch):
     monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
-    return {route.name: route.endpoint for route in create_app().routes if hasattr(route, "endpoint")}
+    return direct_api_endpoints(create_app())
 
 
 def test_authoring_saves_invalid_body_without_compiler_and_reads_stay_cached(tmp_path, monkeypatch):

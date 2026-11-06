@@ -156,6 +156,18 @@ export const assistantActions = {
       ]
     },
     "response_kind": "svg"
+  },
+  "source_renew": {
+    "method": "POST",
+    "path": "/documents/{document_id}/source/renew",
+    "parameters": {
+      "path": [
+        "document_id"
+      ],
+      "query": [],
+      "body": []
+    },
+    "response_kind": "object"
   }
 } as const;
 export function integrationMetadata() {

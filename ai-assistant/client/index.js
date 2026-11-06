@@ -76,10 +76,12 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       const document = payload.document;
       return [{ domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
         serviceDocumentKey: document.owner_document_key,
-        title: String(document.title || "Spec"), scope: "document" },
+        sourcePath: document.relative_path,
+        title: `${document.title || "Spec"}${document.relative_path ? " · " + document.relative_path : ""}`, scope: "document" },
       ...(Array.isArray(payload.entities) ? payload.entities : []).map(entity => ({
         domain: "spec", serviceBaseUrl: payload.serviceBaseUrl, documentId: String(document.document_id),
         serviceDocumentKey: document.owner_document_key,
+        sourcePath: document.relative_path,
         title: `${entity.title || (entity.entity_kind === "design" ? "Design" : "Component")} · ${entity.entity_kind || "entity"}`,
         scope: "entity", entityKind: String(entity.entity_kind || "entity"), entityId: String(entity.entity_id),
       }))];
@@ -93,11 +95,11 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
 
   function belongsToWorkspace(target, workspace) {
     if (!workspace) return true;
-    if (workspace.domain === target.domain && workspace.serviceUrl === target.serviceBaseUrl && workspace.documentId === target.documentId) return true;
+    if (workspace.domain === target.domain && workspace.serviceUrl === target.serviceBaseUrl && workspace.documentId === target.documentId && (!workspace.serviceDocumentKey || workspace.serviceDocumentKey === target.serviceDocumentKey)) return true;
     const source = target.sourceBinding;
     return target.domain === "circuit" && workspace.domain === "spec" && source
       && String(source.source_service_url || "").replace(/\/$/, "") === workspace.serviceUrl
-      && source.source_document_id === workspace.documentId;
+      && source.source_document_id === workspace.documentId && (!workspace.serviceDocumentKey || source.source_owner_document_key === workspace.serviceDocumentKey);
   }
 
   async function discoverTargets(services, workspace) {
@@ -843,7 +845,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       return () => { disposed = true; clearInterval(timer); };
     }, [sessionId]);
     if (!source) return null;
-    return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}`));
+    return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}`), source.domain === "spec" ? h("button", { onClick: () => void api(`/bindings/${encodeURIComponent(sessionId)}/edit-access`, {}).then(result => { if (result.edit_access.mode !== "edit") window.alert("This Spec is in use. Open Spec Editor and create a copy to edit independently."); }).catch(() => undefined) }, "Resume editing") : null);
   }
 
   function FlowPresentationView({ sessionId, executionId, dock = false }) {

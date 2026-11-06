@@ -1,5 +1,7 @@
 """V1.4 API/editor acceptance checks for the current deterministic format."""
 
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
+
 import inspect
 import json
 import os
@@ -32,7 +34,7 @@ from spec2gds.spec.spec_format.v1_api import (
 
 def _endpoints() -> dict[str, object]:
     app = create_app()
-    return {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    return direct_api_endpoints(app)
 
 
 def test_open_reports_saved_name_normalization_and_reopen_does_not_write(tmp_path, monkeypatch) -> None:
@@ -41,8 +43,8 @@ def test_open_reports_saved_name_normalization_and_reopen_does_not_write(tmp_pat
     endpoints = _endpoints()
     source, copied = tmp_path / "source.spec", tmp_path / "copied.spec"
     SpecPackage.create(title="Copied counter").save(str(source))
-    copied.write_bytes(source.read_bytes())
     first = endpoints["open_document"](OpenDocumentRequest(path=str(source)))
+    copied.write_bytes(source.read_bytes())
     second = endpoints["open_document"](OpenDocumentRequest(path=str(copied)))
     assert second["document_id"] == first["document_id"]
     assert second["narrative"]["title"] != first["narrative"]["title"]
@@ -172,7 +174,7 @@ def test_v1_api_browses_server_local_directories(tmp_path: Path) -> None:
     assert listing["roots"]
     assert [item["name"] for item in listing["directories"]] == ["Alpha", "beta", "design.spec"]
     assert all(Path(item["path"]).is_absolute() for item in listing["directories"])
-    assert [item["name"] for item in listing["specifications"]] == ["design.spec", "portable.spec"]
+    assert [item["name"] for item in listing["specifications"]] == ["portable.spec"]
 
     created = endpoints["create_directory"](
         CreateDirectoryRequest(parent=str(tmp_path), name="New project")
@@ -199,8 +201,8 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
     config["activities"]["scratch_root"] = str(tmp_path / "generated")
     local_config = tmp_path / "services.json"
     local_config.write_text(json.dumps(config), encoding="utf-8")
-    app = create_app(service_config=local_config)
-    endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    app = create_app(service_config=local_config, spec_root=tmp_path)
+    endpoints = direct_api_endpoints(app)
     path = tmp_path / "activity.spec"
     created = endpoints["create_document"](CreateDocumentRequest(
         path=str(path),
@@ -254,10 +256,10 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
     assert execution["status"] == "succeeded", execution
     output_path = Path(execution["workspace_output_path"])
     assert output_path.is_dir()
-    assert output_path == tmp_path / "rtl" / "activity-api" / "top"
+    assert output_path == Path(str(path) + ".artifacts") / "generated" / "rtl" / "activity-api" / "top"
     assert not (tmp_path / "generated" / "rtl").exists()
     assert execution["artifact_ids"]
-    assert endpoints["activities"]()["workspace_root"] == str(tmp_path)
+    assert endpoints["activities"]()["workspace_root"] == str(Path(str(path) + ".artifacts") / "generated")
     assert endpoints["artifacts"]()["artifacts"][0]["producer_action_id"] == "rtl.generate"
 
     systemc_execution = endpoints["launch_activity"](
@@ -273,7 +275,7 @@ def test_v1_api_enqueues_and_persists_rtl_activity(tmp_path: Path, monkeypatch) 
         time.sleep(0.02)
     assert systemc_execution["status"] == "succeeded", systemc_execution
     assert Path(systemc_execution["workspace_output_path"]) == (
-        tmp_path / "systemc-at" / "activity-api" / "top"
+        Path(str(path) + ".artifacts") / "generated" / "systemc-at" / "activity-api" / "top"
     )
 
     endpoints["open_document"](OpenDocumentRequest(path=str(path)))
@@ -289,10 +291,8 @@ def test_v1_api_reports_extension_load_diagnostics(tmp_path: Path, monkeypatch) 
     config["activities"]["extension_modules"] = ["missing_activity_plugin:register"]
     local_config = tmp_path / "services.json"
     local_config.write_text(json.dumps(config), encoding="utf-8")
-    app = create_app(service_config=local_config)
-    endpoints = {
-        route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")
-    }
+    app = create_app(service_config=local_config, spec_root=tmp_path)
+    endpoints = direct_api_endpoints(app)
     catalog = endpoints["activities"]()
     assert {item["activity_id"] for item in catalog["activities"]} == {
         "reference.spec_summary",
@@ -583,7 +583,7 @@ def test_editor_launches_ai_assistant_with_configured_url_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from spec2gds.service_registry import load_service_registry
-    config = load_service_registry(overrides={"ai_assistant": {surface: {"host": "127.0.0.1", "port": 4400} for surface in ("service", "ui")}})
+    config = load_service_registry(overrides={"spec_editor": {"spec_root": str(tmp_path)}, "ai_assistant": {surface: {"host": "127.0.0.1", "port": 4400} for surface in ("service", "ui")}})
     monkeypatch.setattr("spec2gds.spec.spec_format.v1_api.load_service_registry", lambda _: config)
     endpoints = _endpoints()
     unbound_launch = endpoints["launch_document_assistant"](
@@ -1201,7 +1201,7 @@ def test_assistant_operation_schema_is_binding_specific_and_owner_validated(tmp_
 def test_diagnostic_activity_and_download_stay_bound_to_the_selected_spec(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
     app = create_app()
-    endpoints = {route.name: route.endpoint for route in app.routes if hasattr(route, "endpoint")}
+    endpoints = direct_api_endpoints(app)
     first_path = tmp_path / "first.spec"
     second_path = tmp_path / "second.spec"
     write_test_package(first_path)

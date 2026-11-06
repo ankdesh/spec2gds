@@ -134,6 +134,35 @@ scripts/serve-all.sh restart
 `start` checks the effective addresses and ports. It reports untracked conflicts
 with their PIDs and leaves those listeners running.
 
+### Shared hosting
+
+One hosted environment supports independent work in multiple browsers and tabs.
+The default Spec root is `specs/` in this repository. To use another existing
+directory, start with:
+
+```bash
+scripts/serve-all.sh start --spec-root /srv/specs
+```
+
+Each designer creates a directory below that root. The picker and Spec API can
+open and create `.spec` files only in the root and its subdirectories. Spec names
+must be unique within one directory. Lists and directories remain shared.
+
+An in-use file opens read-only in an independent tab. Select **Create Copy** to
+copy its saved design content to another path. The copy starts with empty
+Activity and Assistant history. Linked Circuit Designer and AI Assistant views
+retain edit access after Spec Editor closes. Access expires five minutes after
+all linked views disconnect or stop running. Select **Resume editing** to try
+again after expiry; an active view is not displaced.
+
+Generated output is stored under `<file>.spec.artifacts/generated/`. Circuit
+Designer preferences are saved in the browser. Existing standalone Circuits,
+Test Plans, and Assistant conversations remain shared when deliberately opened.
+This environment has no designer accounts or authentication.
+
+Verification Planner still starts separately. Use `--host 0.0.0.0` with its
+command when it must accept LAN connections.
+
 The commands above use the tracked defaults in `config/services.json`. See
 the [Development Guide](docs/development.md#2-shared-service-configuration) before using different
 addresses or ports.

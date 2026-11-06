@@ -86,7 +86,7 @@ configuration and can run without a repository checkout. See the
 | `ASSISTANT_STATE` | `ai-assistant/.dev` in development. Back up the complete root. |
 | `ASSISTANT_PROFILE` | `spec2gds-web`; `spec2gds-headless` omits the web UI. |
 | `SPEC2GDS_SCRATCH_ROOT` | `<state>/workspaces`; private logical-source grouping paths. |
-| `SPEC_DOCUMENT_ROOT` | `<state>/spec-documents`; service-reserved named `.spec` destinations. |
+| `spec_editor.spec_root` | Shared Spec root from the service configuration; `--spec-root` overrides it. Hosted launchers override the legacy `SPEC_DOCUMENT_ROOT` setting. |
 | `SPEC2GDS_CATALOG_ROOT` | Product `profile/catalog`, set by launch scripts. |
 | `OPENAI_MODEL` | `gpt-4o-mini`; configured default model. |
 | `OPENAI_API` | Optional protocol override: `openai-responses` or `openai-completions`. Luna defaults to Responses when selected with `OPENAI_MODEL`; other models retain Chat Completions. |
@@ -122,8 +122,15 @@ that protocol. Deterministic fixtures explicitly select their own model and
 Chat Completions protocol.
 
 Service allowlists are rechecked on service calls. Product browser routes use same-origin
-checks. This is a trusted single-user deployment, not an authenticated public
-multi-user service. Run one Assistant process per state root.
+checks. Multiple designers can use the shared environment without accounts.
+Lists and conversations remain shared. Exact file bindings and edit contexts keep
+separate `.spec` files independent. Run one Assistant process per state root.
+
+A new Spec uses the bound Spec’s directory, or the configured Spec root for an
+unbound conversation. Linked conversations carry the Spec edit context. Open
+views and running model work renew participation. An idle stored conversation
+does not reserve a file indefinitely. After expiry, select **Resume editing**;
+if the file is in use, open Spec Editor and select **Create Copy**.
 
 Aggregate allocations below come from the shared profile. Trusted deployment
 configuration can change them within `execution-policy.ts` ceilings. Reviewed

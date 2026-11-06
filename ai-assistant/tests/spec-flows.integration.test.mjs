@@ -22,9 +22,17 @@ function saved(path) {
     "import sys,json,zipfile; from spec2gds.spec.spec_format.ir import SpecRevision; r=SpecRevision.load(sys.argv[1]); z=zipfile.ZipFile(sys.argv[1]); print(json.dumps({'revision':r.source_revision_hash,'components':[{'id':c.ref.entity_id,'name':c.display_name,'ports':[(p.name,p.direction,p.width) for p in c.ports]} for c in r.components],'source':'\\n'.join(z.read(p).decode() for p in z.namelist() if p.endswith(('.xml','.json')))}))", path], { cwd: root, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr); return JSON.parse(result.stdout);
 }
+function editHeaders(runtime, sessionId) {
+  const state = new ProductState(join(runtime.directory, 'assistant.sqlite3'));
+  try {
+    const binding = state.getBinding(sessionId);
+    return { 'X-Spec-Edit-Context': binding.editContextId, 'X-Spec-Participant': binding.editParticipantId };
+  } finally { state.close(); }
+}
 async function service(directory, policy) {
   const server = createServer(); server.listen(0, '127.0.0.1'); await once(server, 'listening'); const port = server.address().port; await new Promise(done => server.close(done));
   const config = JSON.parse(await readFile(join(root, 'config/services.json'), 'utf8'));
+  config.spec_editor.spec_root = directory;
   config.public_host = '127.0.0.1'; config.logging.enabled = false; config.logging.file = join(directory, 'events.jsonl');
   config.activities.scratch_root = join(directory, 'generated'); config.circuit_designer.preferences_file = join(directory, 'preferences.json');
   const configPath = join(directory, 'services.json'); await writeFile(configPath, JSON.stringify(config));
@@ -87,7 +95,7 @@ async function approve(runtime, flow, policy) {
     assert.equal(current.status, 'waiting', current.error); assert.equal(current.pending.request.kind, 'spec-receipt');
     const state = new ProductState(join(runtime.directory, 'assistant.sqlite3')); let binding;
     try { binding = state.getBinding(current.pending.request.session_id); } finally { state.close(); }
-    const response = await fetch(binding.serviceUrl + '/assistant/proposals/' + current.pending.request.proposal_id + '/approve?owner_document_key=' + encodeURIComponent(binding.serviceDocumentKey), { method: 'POST' });
+    const response = await fetch(binding.serviceUrl + '/assistant/proposals/' + current.pending.request.proposal_id + '/approve?owner_document_key=' + encodeURIComponent(binding.serviceDocumentKey), { method: 'POST', headers: { 'X-Spec-Edit-Context': binding.editContextId, 'X-Spec-Participant': binding.editParticipantId } });
     assert.equal(response.ok, true, JSON.stringify(await response.json()));
   }
   await waitFor(() => ['succeeded', 'failed', 'needs-reconcile'].includes(runtime.ctx.flows.get(flow.id, { kind: 'host', sessionId: flow.sourceSessionId }).status));
@@ -430,7 +438,7 @@ for (const policy of ['automatic', 'review']) test(`flow-only Spec edits and rem
     if (policy === 'review') {
       assert.equal(edit.status, 'waiting', edit.error); assert.equal(edit.pending.request.kind, 'spec-receipt');
       assert.deepEqual(await readFile(creation.destination), before);
-      assert.equal((await fetch(owner.url + '/assistant/proposals/' + edit.pending.request.proposal_id + '/approve?owner_document_key=' + encodeURIComponent(creation.serviceDocumentKey), { method: 'POST' })).ok, true);
+      assert.equal((await fetch(owner.url + '/assistant/proposals/' + edit.pending.request.proposal_id + '/approve?owner_document_key=' + encodeURIComponent(creation.serviceDocumentKey), { method: 'POST', headers: editHeaders(runtime, creation.destinationSessionId) })).ok, true);
       await waitFor(() => runtime.ctx.flows.get(edit.id, { kind: 'host', sessionId: destination.id }).status === 'succeeded');
       edit = runtime.ctx.flows.get(edit.id, { kind: 'host', sessionId: destination.id });
     }

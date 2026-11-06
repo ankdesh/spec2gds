@@ -80,7 +80,7 @@ def test_focused_cli_returns_correlated_flow_wait(tmp_path, monkeypatch, restric
     path = tmp_path / "timer.spec"
     assert spec_main(["create", "--output", str(path), "--name", "Timer"]) == 0
     before = path.read_bytes()
-    with _private_spec_service(restricted) as service_url, model_fixture() as (endpoint, requests):
+    with _private_spec_service(restricted, spec_root=tmp_path) as service_url, model_fixture() as (endpoint, requests):
         monkeypatch.setenv("OPENAI_API_KEY", "fixture-key")
         monkeypatch.setenv("OPENAI_BASE_URL", endpoint)
         # This server scripts Chat Completions, independent of the live route.
@@ -159,11 +159,13 @@ def test_editor_http_save_conflict_requires_refresh(tmp_path):
     from scripts.spec2gds_assistant import _private_spec_service, _request
     path = tmp_path / "editor.spec"
     SpecPackage.create().save(str(path))
-    with _private_spec_service() as url:
+    with _private_spec_service(spec_root=tmp_path) as url:
         opened = _request(url, "/documents/open", {"path": str(path)})
         other = V1Session(str(path))
         other.package.narrative = other.package.narrative.model_copy(update={"title": "Updated outside editor"})
         other.save()
         with pytest.raises(HTTPError) as conflict:
-            _request(url, "/transactions", {"expected_source_revision_hash": opened["source_revision_hash"], "operations": []})
+            from urllib.parse import urlencode
+            query = urlencode({"owner_document_key": opened["owner_document_key"], "edit_context_id": opened["edit_access"]["context_id"], "edit_participant_id": opened["edit_access"]["participant_id"]})
+            _request(url, "/transactions?" + query, {"expected_source_revision_hash": opened["source_revision_hash"], "operations": []})
         assert conflict.value.code == 409

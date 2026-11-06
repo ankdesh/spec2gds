@@ -104,6 +104,9 @@ export class ProductState {
       .map(row => String(row.name)));
     if (!bindingColumns.has("preset")) this.database.exec("ALTER TABLE bindings ADD COLUMN preset TEXT NOT NULL DEFAULT 'focused'");
     if (!bindingColumns.has("owner_document_key")) this.database.exec("ALTER TABLE bindings ADD COLUMN owner_document_key TEXT");
+    for (const column of ["edit_context_id", "edit_participant_id", "workspace_service_document_key"]) {
+      if (!bindingColumns.has(column)) this.database.exec(`ALTER TABLE bindings ADD COLUMN ${column} TEXT`);
+    }
     if (!bindingColumns.has("source_name")) this.database.exec("ALTER TABLE bindings ADD COLUMN source_name TEXT");
     // Earlier host digests depended on JSON key order. Service receipt JSON can
     // reorder keys. Convert only rows whose stored digest still matches their
@@ -295,7 +298,13 @@ export class ProductState {
       input.workspaceKey, input.workspaceTitle, input.workspacePath,
       input.workspaceDomain, input.workspaceServiceUrl, input.workspaceDocumentId,
       timestamp, timestamp, input.serviceDocumentKey ?? null);
+    this.database.prepare("UPDATE bindings SET edit_context_id=?,edit_participant_id=?,workspace_service_document_key=? WHERE session_id=?").run(input.editContextId ?? null, input.editParticipantId ?? null, input.workspaceServiceDocumentKey ?? input.serviceDocumentKey ?? null, sessionId);
     if (input.sourceName) this.refreshSourceName(sessionId, input.sourceName);
+    return this.getBinding(sessionId)!;
+  }
+
+  setEditAccess(sessionId: string, contextId?: string, participantId?: string): SessionBinding {
+    this.database.prepare("UPDATE bindings SET edit_context_id=?,edit_participant_id=? WHERE session_id=?").run(contextId ?? null, participantId ?? null, sessionId);
     return this.getBinding(sessionId)!;
   }
 
@@ -451,6 +460,9 @@ export class ProductState {
       preset: (row.preset ?? "focused") as SessionBinding["preset"],
       domain: row.domain as SessionBinding["domain"], serviceUrl: String(row.owner_url),
       serviceDocumentKey: typeof row.owner_document_key === "string" ? row.owner_document_key : null,
+      editContextId: typeof row.edit_context_id === "string" ? row.edit_context_id : null,
+      editParticipantId: typeof row.edit_participant_id === "string" ? row.edit_participant_id : null,
+      workspaceServiceDocumentKey: typeof row.workspace_service_document_key === "string" ? row.workspace_service_document_key : null,
       documentId: String(row.document_id), scope: row.scope as SessionBinding["scope"],
       entityKind: row.entity_kind === null ? null : String(row.entity_kind),
       entityId: row.entity_id === null ? null : String(row.entity_id), title: String(row.title),

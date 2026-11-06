@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -341,7 +342,7 @@ class ArtifactSidecar:
 
     def path_for_locator(self, locator: str) -> Path:
         """Validate a locator before resolving it beneath the sidecar root."""
-        if not locator.startswith("sha256/") or len(locator.split("/", 1)[1]) != 64:
+        if not re.fullmatch(r"sha256/[0-9a-f]{64}", locator):
             raise ValueError("Unsupported artifact sidecar locator.")
         return self.root / locator
 

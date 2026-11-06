@@ -151,6 +151,11 @@ test.beforeAll(async () => {
     const chunks: Buffer[] = [];
     request.on("data", (chunk) => chunks.push(chunk));
     request.on("end", () => {
+      if (request.url === "/source/renew") {
+        response.setHeader("Content-Type", "application/json");
+        response.end(JSON.stringify({ mode: "edit" }));
+        return;
+      }
       sourceProviderCalls.push(request.url ?? "");
       const body = JSON.parse(Buffer.concat(chunks).toString()) as {
         candidate_document: ReturnType<typeof simpleDocumentFixture>;
@@ -630,7 +635,8 @@ test("cancelling an unchanged draft preserves saved routes and source", async ({
   expect(after).toEqual(before);
 });
 
-test("saves shared shortcuts and Inspector visibility through the preference endpoint", async ({ page, request }) => {
+test("saves shortcuts and Inspector visibility in the browser", async ({ page, request }) => {
+  const defaults = await (await request.get(`${circuitApiUrl}/preferences`)).json();
   await page.goto("/");
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await page.getByRole("menuitem", { name: "Preferences", exact: true }).click();
@@ -639,13 +645,12 @@ test("saves shared shortcuts and Inspector visibility through the preference end
   await expect(page.getByLabel("Select all keyboard shortcut")).toHaveText("Ctrl/⌘ A");
   await expect(page.getByLabel("Drag canvas mouse shortcut")).toHaveValue("primary-drag");
 
-  const saved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
   await page.getByLabel("Fit circuit keyboard shortcut").focus();
   await page.keyboard.press("f");
   await page.getByLabel("New connection keyboard shortcut").focus();
   await page.keyboard.press("c");
   await page.getByRole("checkbox", { name: /Show Inspector/ }).check();
-  await saved;
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("spec2gds.circuit.preferences.v1") || "null")?.ui.inspector_open)).toBe(true);
   await expect(page.getByRole("status")).toContainText("Saved");
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.locator(".inspector")).toBeVisible();
@@ -657,11 +662,11 @@ test("saves shared shortcuts and Inspector visibility through the preference end
   await page.keyboard.press("c");
   await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
 
-  const response = await request.get(`${circuitApiUrl}/preferences`);
-  const profile = await response.json() as { preferences: { ui: { inspector_open: boolean }; action_bindings: Record<string, { keyboard: string }> } };
-  expect(profile.preferences.ui.inspector_open).toBe(true);
-  expect(profile.preferences.action_bindings["fit-circuit"].keyboard).toBe("F");
-  expect(profile.preferences.action_bindings["open-connect"].keyboard).toBe("C");
+  const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem("spec2gds.circuit.preferences.v1")!));
+  expect(preferences.ui.inspector_open).toBe(true);
+  expect(preferences.action_bindings["fit-circuit"].keyboard).toBe("F");
+  expect(preferences.action_bindings["open-connect"].keyboard).toBe("C");
+  expect(await (await request.get(`${circuitApiUrl}/preferences`)).json()).toEqual(defaults);
 });
 
 test("pans with left drag while Shift+left-drag remains selection gesture", async ({ page }) => {
@@ -974,9 +979,7 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
   // Click topbar quick toggle
   const toggle = page.locator(".topbar .theme-quick-toggle");
   await expect(toggle).toBeVisible();
-  const toggleSaved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
   await toggle.click();
-  await toggleSaved;
 
   // Switched to obsidian
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
@@ -990,9 +993,7 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
   await page.screenshot({ path: test.info().outputPath("circuit_designer_preferences.png") });
 
   // Switch back to Blueprint Slate in preferences
-  const saved = page.waitForResponse((response) => response.url().endsWith("/preferences") && response.request().method() === "PUT");
   await page.locator(".action-settings__theme-card").filter({ hasText: "Blueprint Slate" }).click();
-  await saved;
   await expect(page.getByRole("status")).toContainText("Saved");
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
 

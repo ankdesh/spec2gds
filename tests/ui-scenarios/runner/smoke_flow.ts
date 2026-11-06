@@ -52,7 +52,7 @@ export async function runSmoke(context: SmokeContext): Promise<void> {
   // edits against that authoritative revision, not the pre-open seed revision.
   const baseline = await readSnapshot();
   const query = new URLSearchParams({ service_base_url: serviceUrl, document_id: documentId,
-    owner_document_key: key });
+    owner_document_key: key, edit_context_id: created.edit_access?.context_id || "" });
   await conversation.goto(`${assistantUrl}/launch/spec-document?${query}`);
   const request = caseId === "wire-range"
     ? "Change only smoke_core's existing irq output range to 15:0. Preserve its name, direction, description, display names, and all other content. Do not add RTL or new Components or Designs."

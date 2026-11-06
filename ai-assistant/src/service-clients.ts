@@ -55,7 +55,23 @@ export class ServiceClients {
   private specUrl(binding: SessionBinding, path: string, values: Record<string, string> = {}): string {
     const query = new URLSearchParams(values);
     if (binding.serviceDocumentKey) query.set("owner_document_key", binding.serviceDocumentKey);
+    if (binding.editContextId) query.set("edit_context_id", binding.editContextId);
+    if (binding.editParticipantId) query.set("edit_participant_id", binding.editParticipantId);
     return `${binding.serviceUrl}${path}${query.size ? `?${query}` : ""}`;
+  }
+
+  async editAccess(binding: SessionBinding, action: "acquire" | "renew" = "renew"): Promise<Record<string, unknown>> {
+    if (binding.domain === "circuit") {
+      return this.request("POST", `${binding.serviceUrl}/documents/${encodeURIComponent(binding.documentId)}/source/renew`, {});
+    }
+    if (!binding.serviceDocumentKey) throw new ServiceError(409, "An exact Spec binding is required.");
+    return this.request("POST", this.specUrl(binding, `/documents/edit-access/${action}`), {
+      context_id: binding.editContextId, participant_id: binding.editParticipantId || `assistant:${binding.sessionId}`,
+    });
+  }
+
+  async specSnapshot(binding: SessionBinding): Promise<Record<string, unknown>> {
+    return this.request("GET", this.specUrl(binding, "/documents/snapshot"));
   }
 
   async specPolicy(serviceUrl: string, signal?: AbortSignal): Promise<{ approval_policy: "automatic" | "review"; submissions: boolean; creationReceipts?: boolean }> {
@@ -255,6 +271,8 @@ export class ServiceClients {
     this.assertStoredBinding(binding);
     const query = new URLSearchParams({ document_id: binding.documentId, scope: binding.scope });
     if (binding.serviceDocumentKey) query.set("owner_document_key", binding.serviceDocumentKey);
+    if (binding.editContextId) query.set("edit_context_id", binding.editContextId);
+    if (binding.editParticipantId) query.set("edit_participant_id", binding.editParticipantId);
     if (binding.scope === "entity") {
       query.set("entity_kind", binding.entityKind ?? "");
       query.set("entity_id", binding.entityId ?? "");

@@ -14,6 +14,7 @@ const busRef = { document_id: documentId, entity_id: "bus_control", entity_kind:
 
 const snapshot = {
   owner_document_key: "package-editor-test",
+  edit_access: { mode: "edit", context_id: "fixture-context", participant_id: "fixture-tab", expires_at: 4102444800 },
   schema_version: "spec2gds.snapshot.v2",
   document_id: documentId,
   source_revision_hash: revision,
@@ -448,6 +449,8 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     const path = requestUrl.pathname.replace(/^\/api/, "");
     const json = (value: unknown) => route.fulfill({ json: value, status: 200 });
 
+    if (path.startsWith("/documents/edit-access/")) return json(snapshot.edit_access);
+
     if (path === "/services") {
       return json({
         schema_version: 2,
@@ -469,10 +472,10 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
         : requestUrl.searchParams.get("path") ?? "/home/designer";
       return json({
         path: requestedPath,
-        parent: requestedPath === "/" ? null : requestedPath.split("/").slice(0, -1).join("/") || "/",
+        parent: requestedPath === "/home/designer" ? null : requestedPath.split("/").slice(0, -1).join("/") || "/home/designer",
         home: "/home/designer",
         separator: "/",
-        roots: ["/"],
+        roots: ["/home/designer"],
         directories: requestedPath === "/home/designer"
           ? [{ name: "specifications", path: "/home/designer/specifications" }]
           : [],
@@ -697,7 +700,7 @@ test("creates, opens, refreshes, and exposes truthful File menu state", async ({
   await expect(page.getByLabel("Server-local package path"))
     .toHaveValue("/home/designer/specifications/Project Alpha/new-editor-specification.spec");
   await page.getByRole("button", { name: "Browse…" }).click();
-  await page.getByRole("button", { name: "Home" }).click();
+  await page.getByRole("button", { name: "Spec root" }).click();
   await page.getByRole("button", { name: /specifications/ }).dblclick();
   await page.getByRole("button", { name: /existing\.spec/ }).click();
   await page.getByRole("button", { name: "Select specification" }).click();

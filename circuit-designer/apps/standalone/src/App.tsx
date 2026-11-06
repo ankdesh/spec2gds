@@ -30,6 +30,15 @@ export function App() {
     const documentId = linkedCircuitDocumentId(window.location.search);
     return documentId ? { kind: "document" as const, documentId } : { kind: "new" as const };
   }, []);
+  useEffect(() => {
+    const renew = () => {
+      const id = linkedCircuitDocumentId(window.location.search);
+      if (id) void fetch(`${apiBase}/documents/${encodeURIComponent(id)}/source/renew`, { method: "POST" }).catch(() => undefined);
+    };
+    renew();
+    const timer = window.setInterval(renew, 30_000);
+    return () => window.clearInterval(timer);
+  }, [apiBase]);
   const tools = useMemo<CircuitToolContribution[]>(() => [{
     id: "spec2gds.ai-assistant",
     label: "AI Assistant",

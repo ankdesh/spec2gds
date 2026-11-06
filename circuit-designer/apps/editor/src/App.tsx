@@ -33,7 +33,7 @@ import {
 import { publicFilenameStem } from "@spec2gds/circuit-core";
 
 import { CatalogDialog } from "./CatalogDialog";
-import EditorMenuBar, { type EditorView } from "./EditorMenuBar";
+import EditorMenuBar, { PathDialog, type EditorView } from "./EditorMenuBar";
 import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
 import { browserRandomUuid } from "@spec2gds/circuit-app-react";
 import { BrowserLogger } from "@spec2gds/observability/browser";
@@ -60,6 +60,19 @@ export default function App() {
     [],
   );
   const [path, setPath] = useState("");
+  const [copyDialog, setCopyDialog] = useState(false);
+  const [copiedLink, setCopiedLink] = useState("");
+  const [editAccess, setEditAccess] = useState(client.editAccess);
+  const canEdit = editAccess.mode === "edit";
+  const persistAccess = useCallback((key: string, access: typeof client.editAccess) => {
+    client.setEditAccess(access);
+    setEditAccess(access);
+    window.sessionStorage.setItem("spec2gds.spec.selection", JSON.stringify({ key, access }));
+    const url = new URL(window.location.href);
+    url.searchParams.set("owner_document_key", key);
+    url.searchParams.delete("edit_context_id");
+    window.history.replaceState({}, "", url);
+  }, [client]);
   const [catalogDocument, setCatalogDocument] = useState<{ key: string; revision: string } | null>(null);
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null);
   const [batch, setBatch] = useState<A2UIDocumentBatch | null>(null);
@@ -134,6 +147,7 @@ export default function App() {
     setViewCursor(next.event_cursor);
     setApprovalPolicy(next.approval_policy);
     setActivity(next.activity);
+    if (next.snapshot.edit_access) persistAccess(key, next.snapshot.edit_access);
     if (editing.current) {
       if (next.source_revision_hash !== currentRevision.current) {
         setExternalChange({ sequence: next.event_cursor, owner_document_key: key,
@@ -148,17 +162,64 @@ export default function App() {
     setBatch(next.a2ui);
     setExternalChange(null);
     setSyncState("Up to date");
-  }, [client]);
+  }, [client, persistAccess]);
 
   const initialDocumentKey = useRef(new URLSearchParams(window.location.search).get("owner_document_key"));
   useEffect(() => {
-    const key = initialDocumentKey.current;
-    if (!key) return;
+    let disposed = false;
+    const instance = browserRandomUuid();
+    let saved: { key: string; access: typeof client.editAccess } | null = null;
+    try { saved = JSON.parse(window.sessionStorage.getItem("spec2gds.spec.selection") || "null"); } catch { /* A damaged selection must not stop the editor. */ }
+    const key = initialDocumentKey.current || saved?.key;
     initialDocumentKey.current = null;
-    activeKey.current = key;
-    client.bindDocument(key);
-    void loadView().catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
-  }, [client, loadView]);
+    const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("spec2gds.spec.tabs");
+    let duplicate = false;
+    channel?.addEventListener("message", event => {
+      const message = event.data;
+      if (message.kind === "claim" && message.instance !== instance && message.participant && message.participant === client.editAccess.participant_id) {
+        channel.postMessage({ kind: "occupied", instance: message.instance });
+      }
+      if (message.kind === "occupied" && message.instance === instance) duplicate = true;
+    });
+    channel?.postMessage({ kind: "claim", instance, participant: saved?.access.participant_id });
+    const timer = window.setTimeout(() => {
+      if (disposed || !key) return;
+      activeKey.current = key;
+      client.bindDocument(key);
+      const linkedContext = new URLSearchParams(window.location.search).get("edit_context_id");
+      const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined;
+      const mayResume = navigation?.type === "reload" || navigation?.type === "back_forward";
+      // Each page load has its own participant. A late release from the old
+      // page must not remove the participant that now holds the reloaded view.
+      if (!duplicate && mayResume && saved?.key === key) client.setEditAccess({ ...saved.access, participant_id: undefined });
+      else if (linkedContext) client.setEditAccess({ mode: "read_only", context_id: linkedContext });
+      void client.editAccessAction("acquire").then(access => {
+        if (disposed) return;
+        persistAccess(key, access);
+        return loadView();
+      }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
+    }, 200);
+    return () => { disposed = true; window.clearTimeout(timer); channel?.close(); };
+  }, [client, loadView, persistAccess]);
+
+  useEffect(() => {
+    if (!snapshot || editAccess.mode !== "edit") return;
+    const key = snapshot.owner_document_key;
+    const renew = () => void client.editAccessAction("renew").then(access => {
+      if (activeKey.current === key) persistAccess(key, access);
+    }).catch(() => {
+      if (activeKey.current === key && (client.editAccess.expires_at || 0) * 1000 <= Date.now()) {
+        persistAccess(key, { mode: "read_only" });
+        setError("Edit access expired. Your draft is preserved. Resume editing or create a copy.");
+      }
+    });
+    const timer = window.setInterval(renew, 30_000);
+    const resume = () => { if (document.visibilityState === "visible") renew(); };
+    const release = () => client.releaseEditAccess();
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("pagehide", release);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", resume); window.removeEventListener("pagehide", release); };
+  }, [client, snapshot?.owner_document_key, editAccess.mode, persistAccess]);
   useEffect(() => { if (snapshot?.source_path) setPath(snapshot.source_path); }, [snapshot?.source_path]);
 
   const editingChanged = useCallback((value: boolean) => {
@@ -197,7 +258,9 @@ export default function App() {
     try {
       const nextSnapshot = await client.openDocument(nextPath);
       if (epoch !== documentEpoch.current) return false;
+      if (activeKey.current !== nextSnapshot.owner_document_key) client.releaseEditAccess();
       activeKey.current = nextSnapshot.owner_document_key;
+      persistAccess(nextSnapshot.owner_document_key, nextSnapshot.edit_access || { mode: "read_only" });
       client.bindDocument(nextSnapshot.owner_document_key);
       await loadView();
       if (epoch !== documentEpoch.current) return false;
@@ -272,7 +335,9 @@ export default function App() {
       }
       const nextSnapshot = await client.createDocument(nextPath, name, pendingCreation.current.requestId);
       if (epoch !== documentEpoch.current) return false;
+      if (activeKey.current !== nextSnapshot.owner_document_key) client.releaseEditAccess();
       activeKey.current = nextSnapshot.owner_document_key;
+      persistAccess(nextSnapshot.owner_document_key, nextSnapshot.edit_access || { mode: "read_only" });
       client.bindDocument(nextSnapshot.owner_document_key);
       await loadView();
       if (epoch !== documentEpoch.current) return false;
@@ -715,6 +780,36 @@ export default function App() {
     };
   }, [client, snapshot]);
 
+  const copySuggestion = useCallback(() => client.suggestCopy(), [client]);
+  const copyRequest = useRef<{ path: string; title: string; id: string } | null>(null);
+  const copyDocument = async (destination: string, title: string) => {
+    if (!snapshot) return false;
+    const separateTab = editing.current ? window.open("about:blank", "_blank") : null;
+    if (separateTab) separateTab.opener = null;
+    try {
+      if (!copyRequest.current || copyRequest.current.path !== destination || copyRequest.current.title !== title) copyRequest.current = { path: destination, title, id: browserRandomUuid() };
+      const copied = await client.copyDocument(snapshot, destination, title, copyRequest.current.id);
+      if (editing.current) {
+        const url = `${window.location.pathname}?owner_document_key=${encodeURIComponent(copied.owner_document_key)}&edit_context_id=${encodeURIComponent(copied.edit_access?.context_id || "")}`;
+        if (separateTab) separateTab.location.replace(url);
+        else setCopiedLink(url);
+        setNotice("Copied the saved design. Your original draft is preserved in this tab.");
+        return true;
+      }
+      client.releaseEditAccess();
+      activeKey.current = copied.owner_document_key;
+      client.bindDocument(copied.owner_document_key);
+      persistAccess(copied.owner_document_key, copied.edit_access || { mode: "read_only" });
+      ++documentEpoch.current;
+      editing.current = false;
+      setInlineEditActive(false);
+      await loadView();
+      setPath(copied.source_path || destination);
+      setNotice("Created a separate copy of the saved design content.");
+      return true;
+    } catch (caught) { separateTab?.close(); setError(caught instanceof Error ? caught.message : String(caught)); return false; }
+  };
+
   const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
   const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
   const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
@@ -734,6 +829,8 @@ export default function App() {
         loading={loading}
         onBrowseDirectories={(directory) => client.browseDirectories(directory)}
         onCreate={createDocument}
+        onCopy={copyDocument}
+        onCopySuggestion={copySuggestion}
         onCreateDirectory={(parent, name) => client.createDirectory(parent, name)}
         onError={setError}
         onOpen={openDocument}
@@ -748,6 +845,13 @@ export default function App() {
         view={view}
       />
 
+      {copiedLink && <div className="app-notice"><a href={copiedLink} target="_blank" rel="noopener noreferrer">Open the saved copy</a></div>}
+      {copyDialog && <PathDialog error={error} initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={copySuggestion} onBrowseDirectories={directory => client.browseDirectories(directory)} onCreateDirectory={(parent, name) => client.createDirectory(parent, name)} onClose={() => setCopyDialog(false)} onSubmit={copyDocument} />}
+      {snapshot && !canEdit && <div className="app-refresh-notice" role="status">
+        <span>This Spec is read-only. Create a copy to edit independently.</span>
+        <button type="button" onClick={() => setCopyDialog(true)}>Create Copy…</button>
+        <button type="button" onClick={() => void client.editAccessAction("acquire").then(access => { persistAccess(snapshot.owner_document_key, access); if (access.mode === "read_only") setError("This Spec is still in use. Create a copy to edit it."); else void loadView(); }).catch(caught => setError(String(caught)))}>Resume editing</button>
+      </div>}
       {notice && <div className="app-notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}
       {snapshot && <div className="spec-status-bar" aria-label="Spec status">
         <span role="status">{syncState}</span>
@@ -785,8 +889,8 @@ export default function App() {
         {!loading && batch && <div style={{ display: view === "document" ? undefined : "none" }}>
           <A2UIDocumentSurface
             batch={batch}
-            editController={editController}
-            commandController={commandController}
+            editController={canEdit || inlineEditActive ? editController : undefined}
+            commandController={canEdit ? commandController : undefined}
             onEditingChange={editingChanged}
           />
         </div>}

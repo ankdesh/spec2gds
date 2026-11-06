@@ -1,5 +1,7 @@
 """Catalog imports preserve source, reject conflicts, and remap local references."""
 
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
+
 import dataclasses
 import json
 from pathlib import Path
@@ -143,7 +145,7 @@ def test_import_api_keeps_document_binding_and_rejects_a_stale_preview(tmp_path,
 
     monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
     app = create_app()
-    endpoints = {r.name: r.endpoint for r in app.routes if hasattr(r, "endpoint")}
+    endpoints = direct_api_endpoints(app)
     first = endpoints["create_document"](
         CreateDocumentRequest(path=str(tmp_path / "first.spec"), title="First")
     )
@@ -187,7 +189,7 @@ def test_rtl_launch_verifies_without_receipt_and_records_failed_checks(tmp_path,
     path = tmp_path / "barrel.spec"
     source.to_package().save(str(path))
     app = create_app()
-    endpoints = {r.name: r.endpoint for r in app.routes if hasattr(r, "endpoint")}
+    endpoints = direct_api_endpoints(app)
     opened = endpoints["open_document"](OpenDocumentRequest(path=str(path)))
     ref = opened["components"][0]["ref"]
     args = ("component", ref["entity_id"])

@@ -124,9 +124,61 @@ Example `upsert_entity_section` payload:
 The Spec service enforces strict transactional safety for all modifications.
 
 ### Document Key Tokens
-- Opening or creating a package generates a unique `owner_document_key`.
-- The token securely binds client sessions and AI Assistant threads to one exact document path.
+- Opening or creating a package returns its stable `owner_document_key`.
+- The key binds browser views and AI Assistant conversations to one exact file path. It identifies the file; it is not a designer identity.
 - Opening a different document in Spec Editor never changes the target of an existing bound conversation.
+
+### Shared hosting and edit access
+
+Set `spec_editor.spec_root` in the shared service configuration, or pass
+`--spec-root PATH` to the launcher or standalone Spec service. A flag has higher
+priority than configuration. Configuration paths are relative to the configuration
+file; flag paths are relative to the launch directory. The repository default is
+`../specs` relative to `config/services.json`.
+
+The root is the picker boundary. **Up** stops there, and **Spec root** returns
+there. Typed paths and direct API requests have the same boundary. Symbolic links
+below the root are rejected. Stored bindings outside a newly selected root are
+unavailable. The service never moves files when the root changes.
+
+Each Spec Editor tab selects its own file. Refresh restores that selection. A
+duplicated tab receives a separate edit context. If the file is already in use,
+the duplicate opens read-only. Read-only opening does not change the saved file.
+Opening a writable legacy package can normalize missing or duplicate names within
+its directory, while preserving hardware IDs.
+
+**Create Copy** copies the saved source, embedded assets, annotations, Circuit
+layout, and timing. It preserves internal IDs and creates a different file
+binding. It does not copy Activity history, pending proposals, external artifacts,
+or Assistant history. Existing destinations are never replaced. If an inline
+draft is open, the copy opens separately and the original draft remains in its tab.
+
+Edit participants renew every 30 seconds. Access expires five minutes after the
+last renewal. Spec Editor, linked Circuit Designer views, open Assistant views,
+and queued or running jobs can retain participation. Closing Spec Editor releases
+its participant. Other disconnected participants expire. Old tokens cannot save after expiry. **Resume editing** acquires
+access only if another context does not hold it.
+
+Document HTTP requests must select `service_document_key`; the legacy
+`owner_document_key` alias remains accepted. There is no shared active-file
+fallback. A document ID alone is accepted only when one in-root file matches.
+Writes also send `X-Spec-Edit-Context` and `X-Spec-Participant`. Event stream URLs
+can carry `edit_context_id` and `edit_participant_id` query parameters.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `POST /documents/open` | Returns the snapshot and `edit_access`; accepts context and participant IDs to resume the same work. |
+| `POST /documents/create` | Creates a new file and returns edit access. Stable request IDs recover creation receipts. |
+| `POST /documents/copy` | Takes a source key, expected saved revision, destination, title, and request ID. Retries return the original copy. |
+| `GET /documents/copy-suggestion` | Suggests an available filename and Spec name in the source directory. |
+| `POST /documents/edit-access/acquire` | Returns edit access, or read-only when another context holds the file. |
+| `POST /documents/edit-access/renew` | Renews a valid participant; expired access returns HTTP 423. |
+| `POST /documents/edit-access/release` | Releases only the specified participant. |
+
+Spec names are unique per directory. Shared lists show root-relative paths to
+distinguish matching names. Artifacts and generated output use the file-specific
+`<file>.spec.artifacts/` directory. The configured Activity scratch root retains
+the service job database and immutable input snapshots.
 
 ### Approval Policies
 

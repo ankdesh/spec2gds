@@ -4,7 +4,7 @@ import { defaultInstructions, InstructionSnapshots } from "./instructions.js";
  * native conversation creation are separate side effects; uncertainty needs receipt
  * reconciliation using stable identities rather than a second package request. */
 import { randomUUID } from "node:crypto";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, relative, resolve, sep } from "node:path";
 import { type InstructionBundle } from "./instructions.js";
 import { normalizeSpecUrl, ServiceClients, ServiceError } from "./service-clients.js";
 import { ProductState } from "./state.js";
@@ -75,7 +75,23 @@ export class SourceCreations {
       }
     }
     if (!input.originalRequest.trim()) throw new SourceCreationError(400, "The original designer request is unavailable. Submit the request again in this conversation.");
-    if (input.documentId !== undefined) specDestination(this.root, input.documentId.trim());
+    let destinationDirectory = this.root;
+    let bound = this.state.getBinding(input.sourceSessionId);
+    if (bound?.domain === "circuit") {
+      const source = await this.owners.circuitSourceBinding(bound);
+      if (source && typeof source.source_owner_document_key === "string" && typeof source.source_document_id === "string" && typeof source.source_service_url === "string") {
+        bound = { ...bound, domain: "spec", scope: "document", serviceUrl: source.source_service_url,
+          serviceDocumentKey: source.source_owner_document_key, documentId: source.source_document_id };
+      }
+    }
+    if (bound?.domain === "spec") {
+      const snapshot = await this.owners.specSnapshot(bound);
+      if (typeof snapshot.source_path !== "string") throw new SourceCreationError(502, "The bound Spec path is unavailable.");
+      destinationDirectory = dirname(resolve(snapshot.source_path));
+      const within = relative(this.root, destinationDirectory);
+      if (within === ".." || within.startsWith(`..${sep}`) || resolve(this.root, within) !== destinationDirectory) throw new SourceCreationError(400, "The bound Spec is outside the configured Spec root.");
+    }
+    if (input.documentId !== undefined) specDestination(destinationDirectory, input.documentId.trim());
     const capabilities = await this.owners.capabilities();
     const services = capabilities.spec as Array<{ url: string; available: boolean }>;
     const selected = input.preferredOwner ? services.find(item => item.url === input.preferredOwner) : services.find(item => item.available) ?? services[0];
@@ -90,7 +106,7 @@ export class SourceCreations {
       originalRequest: architecture?.originalRequest || input.originalRequest, preset: input.preset, status: "pending",
       ...(architecture ? { architectureReviewId: architecture.reviewId, acceptedArchitecture: architecture.plan } : {}),
       documentId, title: input.title?.trim() || "Untitled specification", serviceBaseUrl: selected?.url ?? "",
-      destination: specDestination(this.root, documentId, input.title?.trim() || "Untitled specification"), destinationSessionId: randomUUID(),
+      destinationDirectory, destination: specDestination(destinationDirectory, documentId, input.title?.trim() || "Untitled specification"), destinationSessionId: randomUUID(),
       sourceRevisionHash: null, error: null, reservation: null,
       automatic: policy.approval_policy === "automatic",
       creationReceipts: policy.creationReceipts === true,
@@ -144,7 +160,7 @@ export class SourceCreations {
       const documentId = values.documentId.trim();
       const title = values.title.trim();
       if (!title) throw new SourceCreationError(400, "Spec title is required.");
-      const destination = specDestination(this.root, documentId, title);
+      const destination = specDestination(request.destinationDirectory || this.root, documentId, title);
       let serviceBaseUrl: string;
       try { serviceBaseUrl = normalizeSpecUrl(values.serviceBaseUrl, this.owners.specAllowlist); }
       catch (error) { throw new SourceCreationError(400, error instanceof Error ? error.message : String(error)); }
@@ -161,12 +177,13 @@ export class SourceCreations {
         const snapshot = await this.owners.createSpec(serviceBaseUrl, destination, documentId, title, request.requestId, signal);
         if (snapshot.document_id !== documentId || typeof snapshot.source_revision_hash !== "string" || !snapshot.source_revision_hash
           || typeof snapshot.owner_document_key !== "string" || !snapshot.owner_document_key
-          || typeof snapshot.source_path !== "string" || !snapshot.source_path || dirname(resolve(snapshot.source_path)) !== this.root) {
+          || typeof snapshot.source_path !== "string" || !snapshot.source_path || dirname(resolve(snapshot.source_path)) !== (request.destinationDirectory || this.root)) {
           throw new ServiceError(502, "The creation receipt must identify the requested Spec, saved path, service document key and source revision.", true);
         }
         request = { ...request, status: "created", sourceRevisionHash: snapshot.source_revision_hash,
           destination: snapshot.source_path,
-          serviceDocumentKey: snapshot.owner_document_key };
+          serviceDocumentKey: snapshot.owner_document_key,
+          editContextId: typeof (snapshot.edit_access as Record<string, unknown> | undefined)?.context_id === "string" ? (snapshot.edit_access as Record<string, unknown>).context_id as string : undefined };
         this.state.storeSourceCreation(request);
       } catch (error) {
         const uncertain = !(error instanceof ServiceError) || error.uncertain;
@@ -199,7 +216,7 @@ export class SourceCreations {
         } else {
           this.snapshots?.pin(request.destinationSessionId, request.sourceSessionId);
           const result = await this.reserve({ domain: "spec", serviceBaseUrl: request.serviceBaseUrl,
-            documentId: request.documentId, serviceDocumentKey: request.serviceDocumentKey, title: request.title, scope: "document", preset: request.preset }, request.destinationSessionId, request.sourceSessionId);
+            documentId: request.documentId, serviceDocumentKey: request.serviceDocumentKey, editContextId: request.editContextId, title: request.title, scope: "document", preset: request.preset }, request.destinationSessionId, request.sourceSessionId);
           reservation = { session: result.binding, workspace: result.workspace };
         }
         if (request.architectureReviewId) {

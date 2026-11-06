@@ -254,6 +254,7 @@ def isolated_environment(output: Path, *, allocate_ports: bool = True) -> dict[s
     env["SPEC2GDS_TEST_ISOLATED"] = "1"
     config = json.loads((ROOT / "config/services.json").read_text())
     config["public_host"] = "127.0.0.1"
+    config["spec_editor"]["spec_root"] = str(output)
     sockets = []
     try:
         for name in ("spec_editor", "circuit_designer", "ai_assistant", "verification_planner", "spec_catalog"):

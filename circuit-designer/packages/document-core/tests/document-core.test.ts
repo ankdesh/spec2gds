@@ -174,3 +174,21 @@ describe("SpecEditorHttpClient", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("hosted edit participation", () => {
+  it("carries the exact binding and edit context on writes and event streams", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ committed: true }), { headers: { "content-type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+    const client = new SpecEditorHttpClient("/api");
+    client.bindDocument("file-a");
+    client.setEditAccess({ mode: "edit", context_id: "context-a", participant_id: "tab-a", expires_at: 100 });
+    await client.applyTransaction("sha256:base", []);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("owner_document_key=file-a");
+    expect(new Headers(init.headers).get("X-Spec-Edit-Context")).toBe("context-a");
+    expect(new Headers(init.headers).get("X-Spec-Participant")).toBe("tab-a");
+    expect(client.eventsUrl()).toContain("edit_context_id=context-a");
+    expect(client.eventsUrl()).toContain("edit_participant_id=tab-a");
+    vi.unstubAllGlobals();
+  });
+});

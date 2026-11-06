@@ -256,3 +256,6 @@ artifacts/
 **/.spec2gds/
 !docs/TEMP_*
 !docs/**/TEMP_*
+
+# Default hosted designer files
+/specs/

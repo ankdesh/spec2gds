@@ -266,3 +266,82 @@ def build_test_package() -> SpecPackage:
 def write_test_package(path: str | Path) -> None:
     """Write the deterministic checked-in sample package to ``path``."""
     build_test_package().save(str(path))
+
+
+def direct_api_endpoints(app):
+    """Adapt direct route unit checks to an explicit, single in-process client.
+
+    Production HTTP has no active-file fallback. Older domain tests call route
+    functions directly; this adapter supplies their client's binding and access
+    context without changing ASGI routing or process-global application state.
+    """
+    import functools
+    import inspect
+    from .v1_api import _request_context, OpenDocumentRequest
+
+    selected = {"key": None}
+    grants = {}
+    endpoints = {}
+    for route in app.routes:
+        if not hasattr(route, "endpoint"):
+            continue
+        endpoint = route.endpoint
+        def wrap(endpoint=endpoint, route=route):
+            @functools.wraps(endpoint)
+            def call(*args, **kwargs):
+                arguments = inspect.signature(endpoint).bind_partial(*args, **kwargs).arguments
+                key = arguments.get("owner_document_key") or (None if arguments.get("document_id") else selected["key"])
+                grant = grants.get(key, {})
+                token = _request_context.set({"key": key, "context_id": grant.get("context_id"),
+                    "participant_id": grant.get("participant_id"), "write": False})
+                try:
+                    if route.name == "open_document" and args and isinstance(args[0], OpenDocumentRequest):
+                        request = args[0]
+                        # A reopen by this same test client resumes its previous
+                        # participation instead of emulating a second browser.
+                        for previous in grants.values():
+                            if previous.get("path") == request.path:
+                                args = (request.model_copy(update={"context_id": previous.get("context_id"), "participant_id": previous.get("participant_id")}), *args[1:])
+                                break
+                    result = endpoint(*args, **kwargs)
+                    if isinstance(result, dict) and route.name in {"open_document", "create_document", "copy_document"}:
+                        selected["key"] = result["owner_document_key"]
+                        grants[selected["key"]] = {**result.get("edit_access", {}), "path": result.get("source_path")}
+                    return result
+                finally:
+                    _request_context.reset(token)
+            return call
+        endpoints[route.name] = wrap()
+    return endpoints
+
+
+def bound_http_client(app):
+    """HTTP test client that sends its selected binding and edit participation."""
+    from fastapi.testclient import TestClient
+    from urllib.parse import urlsplit, parse_qsl
+
+    class BoundClient(TestClient):
+        def __init__(self):
+            super().__init__(app)
+            self.selected_key = None
+            self.edit_grants = {}
+
+        def request(self, method, url, **kwargs):
+            query = dict(parse_qsl(urlsplit(str(url)).query))
+            query.update(dict(kwargs.get("params") or {}))
+            key = query.get("service_document_key") or query.get("owner_document_key") or self.selected_key
+            if key and not query.get("service_document_key") and not query.get("owner_document_key"):
+                query["owner_document_key"] = key
+            grant = self.edit_grants.get(key, {})
+            headers = dict(kwargs.get("headers") or {})
+            if grant.get("context_id"):
+                headers.update({"X-Spec-Edit-Context": grant["context_id"], "X-Spec-Participant": grant["participant_id"]})
+            kwargs.update(params=query, headers=headers)
+            response = super().request(method, url, **kwargs)
+            if response.is_success and str(url).split("?")[0] in {"/documents/create", "/documents/open", "/documents/copy"}:
+                snapshot = response.json()
+                self.selected_key = snapshot["owner_document_key"]
+                self.edit_grants[self.selected_key] = snapshot.get("edit_access", {})
+            return response
+
+    return BoundClient()

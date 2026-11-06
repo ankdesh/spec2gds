@@ -143,7 +143,7 @@ export class SpecFlows {
     return { path: creation.destination, conversation_id: creation.destinationSessionId,
       binding_confirmed: creation.status === "bound" && this.options.state.getBinding(creation.destinationSessionId)?.status === "active",
       content_required: flow.definition.id !== "spec2gds.create_empty_spec",
-      editor_url: `${creation.serviceBaseUrl}/editor?owner_document_key=${encodeURIComponent(creation.serviceDocumentKey)}` };
+      editor_url: `${creation.serviceBaseUrl}/editor?owner_document_key=${encodeURIComponent(creation.serviceDocumentKey)}&edit_context_id=${encodeURIComponent(creation.editContextId || "")}` };
   }
   private binding(sessionId: string): SessionBinding {
     const binding = this.options.state.getBinding(sessionId);
@@ -339,7 +339,7 @@ export class SpecFlows {
       const command = submitSpecChangeCommand(binding, state, owners, contract, this.options.instructionsFor(binding.sessionId));
       const output = record(json(await command.execute(args as never, this.commandContext(context, binding.sessionId, args))));
       if (!output.success) throw new FlowOperationError(JSON.stringify(output.error ?? output), output.state === "reconcile");
-      return { proposal_id: output.proposal_id, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&view=activity` };
+      return { proposal_id: output.proposal_id, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&edit_context_id=${encodeURIComponent(binding.editContextId || "")}&view=activity` };
     };
     add("submit_edit", object, shape({ proposal_id: string, editor_url: string }), "write", submitEdit, async (input, context) => {
       const binding = this.binding(input.session_id), review = state.reviewForCall(input.session_id, context.operationId);
@@ -347,7 +347,7 @@ export class SpecFlows {
       if (requiresSpecArchitecture(input.draft.operations)) state.requireArchitecture(binding.sessionId, input.review_id, input.context.source_revision_hash);
       const receipt = await recoverSpecSubmission(binding, state, owners, review, context.signal);
       if (!receipt || !isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) return undefined;
-      return { proposal_id: review.proposalId, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&view=activity` };
+      return { proposal_id: review.proposalId, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&edit_context_id=${encodeURIComponent(binding.editContextId || "")}&view=activity` };
     });
     add("authoring_context", object, { ...object, properties: { model_context: object }, required: ["model_context"] }, "read", async (input, context) => {
       const binding = this.binding(input.session_id), source = await this.contextPages(binding, context);
@@ -368,7 +368,7 @@ export class SpecFlows {
       const output = record(json(await command.execute(args as never, this.commandContext(context, binding.sessionId, args))));
       if (!output.success) throw new FlowOperationError(JSON.stringify(output.error ?? output), output.state === "reconcile");
       if (!binding.serviceDocumentKey) throw new Error("The Spec binding has no service document identity.");
-      return { proposal_id: output.proposal_id, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey)}&view=activity` };
+      return { proposal_id: output.proposal_id, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey)}&edit_context_id=${encodeURIComponent(binding.editContextId || "")}&view=activity` };
     };
     add("submit_component", object, shape({ proposal_id: string, editor_url: string }), "write", submit, async (input, context) => {
       const review = state.reviewForCall(input.session_id, context.operationId);
@@ -380,7 +380,7 @@ export class SpecFlows {
       catch (error) { throw new FlowOperationError(error instanceof Error ? error.message : String(error), error instanceof ServiceError); }
       if (!receipt) return undefined;
       if (!isRecord(receipt.artifact) || artifactDigest(receipt.artifact) !== review.artifactDigest) return undefined;
-      if (["applied", "pending", "approval_required", "discarded", "rejected", "stale"].includes(String(receipt.state))) return { proposal_id: review.proposalId, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&view=activity` };
+      if (["applied", "pending", "approval_required", "discarded", "rejected", "stale"].includes(String(receipt.state))) return { proposal_id: review.proposalId, editor_url: `${binding.serviceUrl}/editor?owner_document_key=${encodeURIComponent(binding.serviceDocumentKey ?? "")}&edit_context_id=${encodeURIComponent(binding.editContextId || "")}&view=activity` };
       return undefined;
     });
     add("require_saved", receiptSchema, shape({ proposal_id: string, state: { type: "string", const: "applied" }, source_revision_hash: string }), "read", async (input, context) => {

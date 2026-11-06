@@ -9,7 +9,7 @@ import type { SpecEditorThemeId } from "./preferences";
 export type EditorView = "document" | "activity" | "diagnostics";
 
 type MenuId = "file" | "edit" | "circuit" | "help";
-type DialogId = "new" | "open" | "getting-started" | "shortcuts" | "about" | "preferences" | null;
+type DialogId = "new" | "copy" | "open" | "getting-started" | "shortcuts" | "about" | "preferences" | null;
 
 interface EditorMenuBarProps {
   dialogError?: string;
@@ -22,6 +22,8 @@ interface EditorMenuBarProps {
   snapshot: DocumentSnapshot | null;
   themeId: SpecEditorThemeId;
   view: EditorView;
+  onCopySuggestion?: () => Promise<{ path: string; title: string }>;
+  onCopy?: (path: string, title: string) => Promise<boolean>;
   onCreate: (path: string, title: string) => Promise<boolean>;
   onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
   onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
@@ -277,7 +279,7 @@ function Modal({
   );
 }
 
-function PathDialog({
+export function PathDialog({
   error,
   initialPath,
   loading,
@@ -286,17 +288,27 @@ function PathDialog({
   onClose,
   onCreateDirectory,
   onSubmit,
+  onSuggest,
 }: {
+  onSuggest?: () => Promise<{ path: string; title: string }>;
   error?: string;
   initialPath: string;
   loading: boolean;
-  mode: "new" | "open";
+  mode: "new" | "open" | "copy";
   onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
   onClose: () => void;
   onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
   onSubmit: (path: string, title: string) => Promise<boolean>;
 }) {
   const [value, setValue] = useState(initialPath);
+  const edited = useRef(false);
+  useEffect(() => {
+    let active = true;
+    if (mode === "copy" && onSuggest) void onSuggest().then(suggestion => {
+      if (active && !edited.current) { setValue(suggestion.path); setTitle(suggestion.title); }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [mode, onSuggest]);
   const [title, setTitle] = useState("");
   const [browserOpen, setBrowserOpen] = useState(false);
   const [browserLoading, setBrowserLoading] = useState(false);
@@ -305,7 +317,7 @@ function PathDialog({
   const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
-  const action = mode === "new" ? "Create" : "Open";
+  const action = mode !== "open" ? "Create" : "Open";
   const browse = async (path?: string) => {
     setBrowserLoading(true);
     setBrowserError("");
@@ -339,7 +351,7 @@ function PathDialog({
     <Modal
       onClose={onClose}
       restoreFocusId="editor-file-menu-trigger"
-      title={`${mode === "new" ? "New" : "Open"} specification`}
+      title={`${mode === "copy" ? "Create Copy of" : mode === "new" ? "New" : "Open"} specification`}
       wide={browserOpen}
     >
       <form
@@ -350,14 +362,14 @@ function PathDialog({
           if (nextPath && (mode === "open" || nextTitle) && await onSubmit(nextPath, nextTitle)) onClose();
         }}
       >
-        {mode === "new" && (
+        {mode !== "open" && (
           <>
             <label htmlFor="specification-name">Spec name</label>
             <input
               autoFocus
               id="specification-name"
               maxLength={200}
-              onChange={(event) => setTitle(event.target.value)}
+              onChange={(event) => { edited.current = true; setTitle(event.target.value); }}
               placeholder="My hardware specification"
               value={title}
             />
@@ -368,7 +380,7 @@ function PathDialog({
           <input
             autoFocus={mode === "open"}
             id="specification-path"
-            onChange={(event) => setValue(event.target.value)}
+            onChange={(event) => { edited.current = true; setValue(event.target.value); }}
             placeholder="/path/to/design.spec"
             value={value}
           />
@@ -389,13 +401,13 @@ function PathDialog({
         </div>
         <p className="editor-dialog__hint">
           Enter a <code>.spec</code> path visible to the server running spec2gds.
-          {mode === "new" && " Generated output folders will be created beside this package."}
+          {mode !== "open" && " Generated output will be stored in this package’s artifact directory."}
         </p>
         {error && <p className="spec-edit-error" role="alert">{error}</p>}
         {browserOpen && (
           <section aria-label="Server directory browser" className="directory-browser">
             <header>
-              <strong>{mode === "new" ? "Choose a folder on the server" : "Choose a specification on the server"}</strong>
+              <strong>{mode !== "open" ? "Choose a folder on the server" : "Choose a specification on the server"}</strong>
               {listing && <code title={listing.path}>{listing.path}</code>}
             </header>
             <div className="directory-browser__toolbar">
@@ -411,7 +423,7 @@ function PathDialog({
                 onClick={() => { if (listing) void browse(listing.home); }}
                 type="button"
               >
-                Home
+                Spec root
               </button>
               {listing?.roots.map((root) => (
                 <button
@@ -467,12 +479,12 @@ function PathDialog({
             {browserLoading && <p className="directory-browser__status" role="status">Loading folders…</p>}
             {!browserLoading && listing && (
               <div
-                aria-label={mode === "new" ? "Folders" : "Folders and specifications"}
+                aria-label={mode !== "open" ? "Folders" : "Folders and specifications"}
                 className="directory-browser__folders"
                 role="list"
               >
                 {listing.directories
-                  .filter((directory) => mode === "new" || !directory.name.toLowerCase().endsWith(".spec"))
+                  .filter((directory) => mode !== "open" || !directory.name.toLowerCase().endsWith(".spec"))
                   .map((directory) => (
                     <div key={directory.path} role="listitem">
                       <button
@@ -494,6 +506,7 @@ function PathDialog({
                       className={selectedDirectory === specification.path ? "selected" : ""}
                       onClick={() => setSelectedDirectory(specification.path)}
                       onDoubleClick={() => {
+                        edited.current = true;
                         setValue(specification.path);
                         setBrowserOpen(false);
                       }}
@@ -504,8 +517,8 @@ function PathDialog({
                     </button>
                   </div>
                 ))}
-                {!listing.directories.length && (mode === "new" || !(listing.specifications ?? []).length) && (
-                  <p>{mode === "new" ? "No subfolders" : "No folders or specifications"}</p>
+                {!listing.directories.length && (mode !== "open" || !(listing.specifications ?? []).length) && (
+                  <p>{mode !== "open" ? "No subfolders" : "No folders or specifications"}</p>
                 )}
               </div>
             )}
@@ -514,7 +527,8 @@ function PathDialog({
                 disabled={browserLoading || !listing || (mode === "open" && !selectedDirectory?.toLowerCase().endsWith(".spec"))}
                 onClick={() => {
                   if (!listing) return;
-                  setValue(mode === "new"
+                  edited.current = true;
+                  setValue(mode !== "open"
                     ? packagePathInDirectory(
                       selectedDirectory ?? listing.path,
                       value,
@@ -526,14 +540,14 @@ function PathDialog({
                 }}
                 type="button"
               >
-                {mode === "new" ? "Select folder" : "Select specification"}
+                {mode !== "open" ? "Select folder" : "Select specification"}
               </button>
             </div>
           </section>
         )}
         <div className="editor-dialog__actions">
           <button className="secondary" onClick={onClose} type="button">Cancel</button>
-          <button disabled={!value.trim() || (mode === "new" && !title.trim()) || loading} type="submit">
+          <button disabled={!value.trim() || (mode !== "open" && !title.trim()) || loading} type="submit">
             {loading ? `${action}ing…` : action}
           </button>
         </div>
@@ -542,7 +556,7 @@ function PathDialog({
   );
 }
 
-function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "open">; onClose: () => void }) {
+function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "copy" | "open">; onClose: () => void }) {
   if (!dialog) return null;
   if (dialog === "getting-started") {
     return (
@@ -592,6 +606,8 @@ export default function EditorMenuBar({
   themeId,
   view,
   onCreate,
+  onCopy,
+  onCopySuggestion,
   onBrowseDirectories,
   onCreateDirectory,
   onError,
@@ -769,6 +785,7 @@ export default function EditorMenuBar({
             <TopMenu id="file" label="File" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Spec…</MenuAction>
               <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Spec…</MenuAction>
+              {snapshot && onCopy && <MenuAction onActivate={activate(() => setDialog("copy"))}>Create Copy…</MenuAction>}
               <MenuAction
                 disabled={!path || loading}
                 onActivate={activate(() => { void onOpen(path); })}
@@ -862,6 +879,7 @@ export default function EditorMenuBar({
         </div>
       </header>
 
+      {dialog === "copy" && onCopy && <PathDialog error={dialogError} initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={onCopySuggestion} onBrowseDirectories={onBrowseDirectories} onClose={() => setDialog(null)} onCreateDirectory={onCreateDirectory} onSubmit={onCopy} />}
       {dialog === "new" && (
         <PathDialog
           error={dialogError}
@@ -894,8 +912,8 @@ export default function EditorMenuBar({
           restoreFocusId="editor-edit-menu-trigger"
         />
       )}
-      {dialog && !["new", "open", "preferences"].includes(dialog) && (
-        <HelpDialog dialog={dialog as Exclude<DialogId, "new" | "open" | "preferences">} onClose={() => setDialog(null)} />
+      {dialog && !["new", "copy", "open", "preferences"].includes(dialog) && (
+        <HelpDialog dialog={dialog as Exclude<DialogId, "new" | "copy" | "open" | "preferences">} onClose={() => setDialog(null)} />
       )}
     </>
   );

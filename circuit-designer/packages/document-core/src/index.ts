@@ -285,7 +285,11 @@ export interface TransactionResult {
   }>;
 }
 
+export interface SpecEditAccess { mode: "edit" | "read_only"; context_id?: string; participant_id?: string; expires_at?: number }
+
 export interface DocumentSnapshot {
+  edit_access?: SpecEditAccess;
+  relative_path?: string;
   catalog_origins?: CatalogOrigin[];
   /** Present on Open when the service saved normalized names. */
   open_notice?: string;
@@ -451,13 +455,19 @@ function errorMessage(detail: unknown): string {
 
 export class SpecEditorHttpClient {
   private serviceDocumentKey: string | null = null;
+  editAccess: SpecEditAccess = { mode: "read_only" };
+
+  setEditAccess(value: SpecEditAccess): void { this.editAccess = value; }
   constructor(private readonly baseUrl = "") {}
 
   bindDocument(key: string): void { this.serviceDocumentKey = key; }
 
   private documentPath(path: string, key = this.serviceDocumentKey): string {
     if (!key) return path;
-    return `${path}${path.includes("?") ? "&" : "?"}owner_document_key=${encodeURIComponent(key)}`;
+    const values = new URLSearchParams({ owner_document_key: key });
+    if (this.editAccess.context_id) values.set("edit_context_id", this.editAccess.context_id);
+    if (this.editAccess.participant_id) values.set("edit_participant_id", this.editAccess.participant_id);
+    return `${path}${path.includes("?") ? "&" : "?"}${values}`;
   }
 
   getDocumentView(key = this.serviceDocumentKey): Promise<DocumentView> {
@@ -477,7 +487,14 @@ export class SpecEditorHttpClient {
   }
 
   private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, init);
+    let options = init;
+    if (this.editAccess.context_id) {
+      const headers = new Headers(init?.headers);
+      headers.set("X-Spec-Edit-Context", this.editAccess.context_id);
+      if (this.editAccess.participant_id) headers.set("X-Spec-Participant", this.editAccess.participant_id);
+      options = { ...init, headers };
+    }
+    const response = await fetch(`${this.baseUrl}${path}`, options);
     const contentType = response.headers.get("content-type") ?? "";
     const payload = contentType.includes("application/json") ? await response.json() : await response.text();
     if (!response.ok) {
@@ -493,7 +510,7 @@ export class SpecEditorHttpClient {
     return this.request("/documents/open", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path }),
+      body: JSON.stringify({ path, context_id: this.editAccess.context_id, participant_id: this.editAccess.participant_id }),
     });
   }
 
@@ -502,6 +519,31 @@ export class SpecEditorHttpClient {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path, title, ...(requestId ? { request_id: requestId } : {}) }),
+    });
+  }
+
+  editAccessAction(action: "acquire" | "renew" | "release"): Promise<SpecEditAccess> {
+    return this.request(this.documentPath(`/documents/edit-access/${action}`), {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ context_id: this.editAccess.context_id, participant_id: this.editAccess.participant_id }),
+    });
+  }
+
+  releaseEditAccess(): void {
+    if (this.editAccess.mode !== "edit" || !this.serviceDocumentKey) return;
+    void fetch(`${this.baseUrl}${this.documentPath("/documents/edit-access/release")}`, {
+      method: "POST", keepalive: true, headers: { "content-type": "application/json" },
+      body: JSON.stringify({ context_id: this.editAccess.context_id, participant_id: this.editAccess.participant_id }),
+    }).catch(() => undefined);
+  }
+
+  suggestCopy(): Promise<{ path: string; title: string }> {
+    return this.request(this.documentPath("/documents/copy-suggestion"));
+  }
+
+  copyDocument(source: DocumentSnapshot, path: string, title: string, requestId: string): Promise<DocumentSnapshot> {
+    return this.request("/documents/copy", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ source_key: source.owner_document_key, expected_source_revision_hash: source.source_revision_hash, path, title, request_id: requestId }),
     });
   }
 
@@ -652,7 +694,7 @@ export class SpecEditorHttpClient {
     decision: "accept" | "reject",
     sourceRevisionHash: string,
   ): Promise<Record<string, unknown>> {
-    return this.request(`/proposals/${encodeURIComponent(proposalId)}/${decision}`, {
+    return this.request(this.documentPath(`/proposals/${encodeURIComponent(proposalId)}/${decision}`), {
       method: "POST",
       headers: decision === "accept" ? { "content-type": "application/json" } : undefined,
       body: decision === "accept"

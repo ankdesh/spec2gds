@@ -63,6 +63,7 @@ async function fixture() {
   const address = server.address(); assert.ok(address && typeof address === "object");
   const url = `http://127.0.0.1:${address.port}`;
   const owners = new ServiceClients([url], [], 1_000);
+  owners.specSnapshot = async () => ({ source_path: join(root, "source.spec") });
   const reserve = async (input: BindingInput, sessionId = "unused") => {
     if (reservationFailure) throw new Error("Simulated chat setup failure");
     const workspace = { key: input.documentId, title: input.title!, path: join(root, "workspace", input.documentId), domain: "spec" as const, serviceUrl: url, documentId: input.documentId };
@@ -174,6 +175,26 @@ test("a source revision change while a creation operation is pending requires re
       preset: "focused", title: "Comparator", documentId: "comparator_3bit", architectureReviewId: reviewId });
     revision = "sha256:new";
     await assert.rejects(f.creations.create(String(request.requestId), { documentId: String(request.documentId), title: String(request.title), serviceBaseUrl: String(request.serviceBaseUrl) }), /stale/);
+    assert.equal(f.creates, 0);
+  } finally { await f.close(); }
+});
+
+test("new files use the bound Spec directory, including source-bound Circuits", async () => {
+  const f = await fixture();
+  try {
+    const directory = join(f.root, "designer");
+    f.owners.specSnapshot = async () => ({ source_path: join(directory, "source.spec") });
+    f.owners.circuitSourceBinding = async () => ({ source_owner_document_key: "source-package", source_document_id: "source-doc", source_service_url: f.url }) as any;
+    for (const domain of ["spec", "circuit"] as const) {
+      const sessionId = `bound-${domain}`;
+      f.state.createBinding(sessionId, { domain, serviceBaseUrl: f.url, serviceUrl: f.url, documentId: "source-doc", scope: "document",
+        serviceDocumentKey: "source-package", workspaceKey: sessionId, workspaceTitle: "Source", workspacePath: f.root,
+        workspaceDomain: domain, workspaceServiceUrl: f.url, workspaceDocumentId: "source-doc" });
+      const prepared = await f.creations.prepare({ sourceSessionId: sessionId, flowExecutionId: `flow-${domain}`, callId: `create-${domain}`,
+        originalRequest: "Create an empty Spec", empty: true, preset: "focused", title: "New Spec" });
+      assert.equal(prepared.destinationDirectory, directory);
+      assert.equal(prepared.destination, join(directory, "new-spec.spec"));
+    }
     assert.equal(f.creates, 0);
   } finally { await f.close(); }
 });

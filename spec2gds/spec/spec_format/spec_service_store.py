@@ -60,26 +60,30 @@ class _Database:
 class SpecServiceBindings(_Database):
     """Service-local catalog used to reopen exact packages after a restart."""
 
-    def __init__(self, root: str | Path | None = None) -> None:
+    def __init__(self, root: str | Path | None = None, *, filesystem=None) -> None:
+        self.filesystem = filesystem
         super().__init__(Path(root or os.environ.get("SPEC_SERVICE_STATE_ROOT", os.environ.get("SPEC_EDITOR_STATE_ROOT", ".spec2gds/editor"))) / "bindings.sqlite3")
         with self.connection() as db:
             db.execute("CREATE TABLE IF NOT EXISTS bindings (key TEXT PRIMARY KEY, path TEXT NOT NULL, document_id TEXT NOT NULL, sidecar_root TEXT)")
             db.execute("CREATE TABLE IF NOT EXISTS creations (request_id TEXT PRIMARY KEY, input_json TEXT NOT NULL)")
             creation_columns = {row["name"] for row in db.execute("PRAGMA table_info(creations)")}
-            for column in ("destination", "document_id"):
+            for column in ("destination", "document_id", "edit_access_json"):
                 if column not in creation_columns:
                     db.execute(f"ALTER TABLE creations ADD COLUMN {column} TEXT")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(bindings)")}
-            for column in ("display_name", "name_key"):
+            for column in ("display_name", "name_key", "directory"):
                 if column not in columns:
                     db.execute(f"ALTER TABLE bindings ADD COLUMN {column} TEXT")
-            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS binding_name ON bindings(name_key)")
+            db.execute("DROP INDEX IF EXISTS binding_name")
+            for row in db.execute("SELECT key,path FROM bindings WHERE directory IS NULL").fetchall():
+                db.execute("UPDATE bindings SET directory=? WHERE key=?", (str(Path(row["path"]).parent), row["key"]))
+            db.execute("CREATE UNIQUE INDEX IF NOT EXISTS binding_directory_name ON bindings(directory,name_key)")
 
     def register(self, path: str, document_id: str, sidecar_root: str | None = None) -> str:
         path = str(Path(path).expanduser().resolve())
         key = document_key(path, document_id)
         with self.connection() as db:
-            db.execute("INSERT INTO bindings(key,path,document_id,sidecar_root) VALUES (?,?,?,?) ON CONFLICT(key) DO UPDATE SET sidecar_root=COALESCE(excluded.sidecar_root,bindings.sidecar_root)", (key, path, document_id, sidecar_root))
+            db.execute("INSERT INTO bindings(key,path,document_id,sidecar_root,directory) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET sidecar_root=COALESCE(excluded.sidecar_root,bindings.sidecar_root),directory=excluded.directory", (key, path, document_id, sidecar_root,str(Path(path).parent)))
         return key
 
     @contextmanager
@@ -94,15 +98,30 @@ class SpecServiceBindings(_Database):
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             names = []
-            for row in db.execute("SELECT key,path,display_name FROM bindings WHERE name_key IS NOT NULL").fetchall():
+            if self.filesystem:
+                from .archive import SpecPackage
+                for item in self.filesystem.listing(str(Path(path).parent))["specifications"]:
+                    if item["path"] == path:
+                        continue
+                    try:
+                        names.append(SpecPackage.from_bytes(self.filesystem.read(item["path"])).narrative.title)
+                    except (OSError, ValueError):
+                        continue
+            for row in db.execute("SELECT key,path,display_name FROM bindings WHERE directory=?", (str(Path(path).parent),)).fetchall():
                 if row["key"] == key:
                     continue
                 if Path(row["path"]).is_file():
-                    names.append(row["display_name"])
+                    from .archive import SpecPackage
+                    try:
+                        title_on_disk = (SpecPackage.from_bytes(self.filesystem.read(row["path"])) if self.filesystem else SpecPackage.load(row["path"])).narrative.title
+                    except (OSError, ValueError):
+                        title_on_disk = row["display_name"]
+                    if title_on_disk:
+                        names.append(title_on_disk)
                 else:
                     db.execute("UPDATE bindings SET display_name=NULL,name_key=NULL WHERE key=?", (row["key"],))
             name = unique_name(title, names) if normalize else require_unique_name(title, names)
-            db.execute("INSERT INTO bindings(key,path,document_id,display_name,name_key) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET display_name=excluded.display_name,name_key=excluded.name_key", (key, path, document_id, name, name_key(name)))
+            db.execute("INSERT INTO bindings(key,path,document_id,display_name,name_key,directory) VALUES (?,?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET display_name=excluded.display_name,name_key=excluded.name_key,directory=excluded.directory", (key, path, document_id, name, name_key(name),str(Path(path).parent)))
             yield name
 
     def catalog(self) -> list[dict[str, Any]]:
@@ -119,6 +138,15 @@ class SpecServiceBindings(_Database):
         with self.connection() as db:
             rows = db.execute("SELECT * FROM bindings WHERE document_id=? ORDER BY key", (document_id,)).fetchall()
         return [dict(row) for row in rows if Path(row["path"]).is_file()]
+
+    def creation_receipt(self, request_id: str) -> dict[str, Any] | None:
+        with self.connection() as db:
+            row = db.execute("SELECT * FROM creations WHERE request_id=?", (request_id,)).fetchone()
+        return dict(row) if row else None
+
+    def remember_creation_access(self, request_id: str, grant: dict) -> None:
+        with self.connection() as db:
+            db.execute("UPDATE creations SET edit_access_json=? WHERE request_id=?", (_json(grant), request_id))
 
     def creation(self, request_id: str, values: dict[str, Any]) -> bool:
         """Reserve the exact creation input before writing the package."""

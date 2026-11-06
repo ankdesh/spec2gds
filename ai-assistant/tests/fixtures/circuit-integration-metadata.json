@@ -158,9 +158,21 @@
         ]
       },
       "response_kind": "svg"
+    },
+    "source_renew": {
+      "method": "POST",
+      "path": "/documents/{document_id}/source/renew",
+      "parameters": {
+        "path": [
+          "document_id"
+        ],
+        "query": [],
+        "body": []
+      },
+      "response_kind": "object"
     }
   },
   "operation_schema_action": "operation_schema",
   "capabilities_action": "capabilities",
-  "digest": "sha256:ba7cc1f7821da29e4db853c532989759150f128a763569c7fa26bcdd25ccfab3"
+  "digest": "sha256:fef36d88ae2343ecd1aebdc3094c776aff5d4ab33f98dd2a0f4e60126ce81ba0"
 }

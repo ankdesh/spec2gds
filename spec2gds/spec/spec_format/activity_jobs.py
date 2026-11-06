@@ -44,6 +44,7 @@ class JobEnvelope:
     sidecar_root: str
     snapshot_path: str
     workspace_root: str
+    edit_context_id: str | None = None
 
 
 FinalizeCallback = typing.Callable[
@@ -85,10 +86,14 @@ class ActivityJobManager:
         registry: SpecExtensionRegistry,
         workspace_root: str | Path,
         finalize: FinalizeCallback,
+        *, edit_access: typing.Any = None, filesystem: typing.Any = None,
     ) -> None:
         self.registry = registry
         self.workspace = LocalActivityScratchDirectory(workspace_root)
         self.finalize = finalize
+        self.edit_access = edit_access
+        self.filesystem = filesystem
+        self._heartbeat_stop = threading.Event()
         self.runtime_root = self.workspace.root / ".spec2gds"
         self.snapshot_root = self.runtime_root / "snapshots"
         self.snapshot_root.mkdir(parents=True, exist_ok=True)
@@ -100,8 +105,11 @@ class ActivityJobManager:
         self._thread: threading.Thread | None = None
         self._initialize_database()
         self._recover_running_jobs()
+        self._heartbeat_thread = threading.Thread(target=self._maintain_access, name="spec-activity-access", daemon=True)
+        self._heartbeat_thread.start()
 
     def close(self) -> None:
+        self._heartbeat_stop.set()
         with self._condition:
             self._stopping = True
             self._condition.notify_all()
@@ -116,6 +124,7 @@ class ActivityJobManager:
         package_path: str,
         sidecar_root: str,
         workspace_root: str | Path | None = None,
+        edit_context_id: str | None = None,
     ) -> ActivityExecutionRecord:
         """Persist the immutable run input before making a queued job visible to the worker.
 
@@ -145,13 +154,20 @@ class ActivityJobManager:
             if workspace_root
             else self.workspace.root
         )
+        if self.edit_access:
+            from .spec_service_store import document_key
+            grant = self.edit_access.acquire(document_key(package_path, record.target.document_id), edit_context_id, execution_id)
+            if grant.get("context_id") != edit_context_id:
+                if grant.get("mode") == "edit":
+                    self.edit_access.release(document_key(package_path, record.target.document_id), grant["context_id"], execution_id)
+                raise ValueError("Activity edit access expired. Resume editing before launching the Activity.")
         with self._connect() as connection:
             connection.execute(
                 """
                 INSERT INTO jobs(
                     execution_id, package_path, sidecar_root,
-                    snapshot_path, workspace_root, record_json
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    snapshot_path, workspace_root, record_json, edit_context_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     execution_id,
@@ -160,6 +176,7 @@ class ActivityJobManager:
                     str(snapshot_path),
                     str(resolved_workspace),
                     self._json(record),
+                    edit_context_id,
                 ),
             )
         self._publish(record)
@@ -178,7 +195,7 @@ class ActivityJobManager:
         with self._connect() as connection:
             row = connection.execute(
                 """
-                SELECT package_path, sidecar_root, snapshot_path, workspace_root, record_json
+                SELECT package_path, sidecar_root, snapshot_path, workspace_root, record_json, edit_context_id
                 FROM jobs WHERE execution_id = ?
                 """,
                 (execution_id,),
@@ -191,6 +208,7 @@ class ActivityJobManager:
             sidecar_root=row[1],
             snapshot_path=row[2],
             workspace_root=row[3] or str(self.workspace.root),
+            edit_context_id=row[5],
         )
 
     def cancel(self, execution_id: str) -> ActivityExecutionRecord:
@@ -209,6 +227,9 @@ class ActivityJobManager:
                 envelope = replace(envelope, record=updated)
                 self._store(envelope)
             finally:
+                if self.edit_access and envelope.edit_context_id:
+                    from .spec_service_store import document_key
+                    self.edit_access.release(document_key(envelope.package_path, envelope.record.target.document_id), envelope.edit_context_id, envelope.record.execution_id)
                 self._publish(envelope.record)
             return envelope.record
         updated = record.model_copy(update={"cancel_requested": True})
@@ -248,6 +269,8 @@ class ActivityJobManager:
                 str(row[1])
                 for row in connection.execute("PRAGMA table_info(jobs)").fetchall()
             }
+            if "edit_context_id" not in columns:
+                connection.execute("ALTER TABLE jobs ADD COLUMN edit_context_id TEXT")
             if "workspace_root" not in columns:
                 connection.execute("ALTER TABLE jobs ADD COLUMN workspace_root TEXT")
             legacy_jobs = connection.execute(
@@ -290,6 +313,24 @@ class ActivityJobManager:
                 self._thread = threading.Thread(target=self._worker, name="spec2gds-activity-worker", daemon=True)
                 self._thread.start()
             self._condition.notify_all()
+
+    def _maintain_access(self) -> None:
+        from .spec_service_store import document_key
+        while not self._heartbeat_stop.wait(30):
+            if self.edit_access is None:
+                continue
+            with self._connect() as db:
+                ids = [row[0] for row in db.execute("SELECT execution_id FROM jobs")]
+            for execution_id in ids:
+                envelope = self.get(execution_id)
+                if envelope is None or envelope.record.status not in {"queued", "running"} or not envelope.edit_context_id:
+                    continue
+                try:
+                    if self.filesystem:
+                        self.filesystem.path(envelope.package_path, spec=True)
+                    self.edit_access.renew(document_key(envelope.package_path, envelope.record.target.document_id), envelope.edit_context_id, execution_id)
+                except (OSError, ValueError, RuntimeError):
+                    self.cancel(execution_id)
 
     def _worker(self) -> None:
         while True:
@@ -342,15 +383,23 @@ class ActivityJobManager:
                 raise ValueError(
                     f"Activity version changed from {running.activity_version} to {definition.version}."
                 )
+            if self.edit_access:
+                from .spec_service_store import document_key
+                self.edit_access.renew(document_key(envelope.package_path, running.target.document_id), envelope.edit_context_id, running.execution_id)
             package_path = Path(envelope.package_path)
             if not package_path.is_file():
                 raise FileNotFoundError(f"Activity source package no longer exists: {package_path}")
-            revision = SpecRevision.from_package(SpecPackage.load(package_path))
+            if self.filesystem:
+                revision = SpecRevision.from_package(SpecPackage.from_bytes(self.filesystem.read(package_path)))
+            else:
+                revision = SpecRevision.from_package(SpecPackage.load(package_path))
             if revision.document_id != running.target.document_id:
                 raise ValueError("Activity source package identity changed after enqueue.")
             snapshot = ActivitySnapshot.read(envelope.snapshot_path)
             token = _JobCancellation(self, running.execution_id)
             token.raise_if_cancelled()
+            if self.filesystem:
+                self.filesystem.ensure_directory(envelope.workspace_root)
             output_workspace = LocalActivityScratchDirectory(envelope.workspace_root)
             workspace = _CancellationWorkspace(output_workspace, token)
             result = invoke_activity(
@@ -395,6 +444,9 @@ class ActivityJobManager:
             except Exception:
                 pass
         self._store(terminal)
+        if self.edit_access and envelope.edit_context_id:
+            from .spec_service_store import document_key
+            self.edit_access.release(document_key(envelope.package_path, envelope.record.target.document_id), envelope.edit_context_id, envelope.record.execution_id)
         self._publish(terminal.record)
 
     def _terminal(

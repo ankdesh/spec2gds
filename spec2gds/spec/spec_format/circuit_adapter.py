@@ -608,9 +608,9 @@ def project_source_to_circuit(
     )
 
 
-def source_session_document_id(revision: SpecRevision, design_id: str) -> str:
+def source_session_document_id(revision: SpecRevision, design_id: str, *, service_document_key: str = "") -> str:
     """Return the stable ephemeral session ID for one source-owned design."""
-    return _Ids().get(f"{revision.document_id}_{design_id}_source_{_PROJECTION_VERSION}", "circuit")
+    return _Ids().get(f"{service_document_key}_{revision.document_id}_{design_id}_source_{_PROJECTION_VERSION}", "circuit")
 
 
 def _wire_range(width: typing.Any) -> str | None:
@@ -974,6 +974,8 @@ def publish_circuit_document(
         ) from exc
 
     if reused:
+        if not refresh_existing and existing_snapshot is not None:
+            document["label"] = existing_snapshot.get("document", {}).get("label", document["label"])
         if refresh_existing and existing_snapshot is not None and existing_snapshot.get("document") != document:
             replacement = urllib.request.Request(
                 document_url,
@@ -1003,18 +1005,29 @@ def publish_circuit_document(
             reused_session=True,
         )
 
-    payload = json.dumps({"request_id": request_id, "document": document}).encode("utf-8")
-    request = urllib.request.Request(
-        f"{base}/documents",
-        data=payload,
-        headers={"Accept": "application/json", "Content-Type": "application/json"},
-        method="POST",
-    )
+    original_label = document["label"]
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            result = json.loads(response.read())
-        if result.get("status") != "accepted":
-            raise CircuitDesignerConnectionError(f"Circuit Designer rejected the projection: {result}")
+        for number in range(1, 101):
+            if number > 1:
+                document["label"] = f"{original_label} {number}"
+            payload = json.dumps({"request_id": request_id, "document": document}).encode("utf-8")
+            request = urllib.request.Request(f"{base}/documents", data=payload,
+                headers={"Accept": "application/json", "Content-Type": "application/json"}, method="POST")
+            try:
+                with urllib.request.urlopen(request, timeout=timeout) as response:
+                    result = json.loads(response.read())
+            except urllib.error.HTTPError as rejected:
+                if rejected.code != 400:
+                    raise
+                result = json.loads(rejected.read())
+                if not any(item.get("code") == "duplicate_name" for item in result.get("diagnostics", [])):
+                    raise CircuitDesignerConnectionError(f"Circuit Designer rejected the projection: {result}") from rejected
+            if result.get("status") == "accepted":
+                break
+            if not any(item.get("code") == "duplicate_name" for item in result.get("diagnostics", [])):
+                raise CircuitDesignerConnectionError(f"Circuit Designer rejected the projection: {result}")
+        else:
+            raise CircuitDesignerConnectionError("Could not reserve an available Circuit name.")
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")
         if exc.code != 409:

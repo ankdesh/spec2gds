@@ -48,13 +48,13 @@ def _request(url: str, path: str, payload: dict[str, Any] | None = None) -> dict
 
 
 @contextmanager
-def _private_spec_service(require_designer_approval: bool = False) -> Iterator[str]:
+def _private_spec_service(require_designer_approval: bool = False, *, spec_root: Path | None = None) -> Iterator[str]:
     sock = socket.socket()
     sock.bind(("127.0.0.1", 0))
     sock.listen()
     port = sock.getsockname()[1]
     registry = load_service_registry(overrides=listener_overrides("spec_editor", host="127.0.0.1", port=port))
-    config = uvicorn.Config(create_app(require_designer_approval, service_registry=registry), host="127.0.0.1", port=port, log_level="error", access_log=False)
+    config = uvicorn.Config(create_app(require_designer_approval, service_registry=registry, spec_root=spec_root), host="127.0.0.1", port=port, log_level="error", access_log=False)
     server = uvicorn.Server(config)
     worker = threading.Thread(target=lambda: asyncio.run(server.serve(sockets=[sock])), daemon=True)
     worker.start()
@@ -118,7 +118,8 @@ def main(argv: list[str] | None = None) -> int:
         if not args.service_url:
             raise ValueError("A running Spec service is required. Pass --service-url; flow waits must retain their service authority.")
         owner_url = args.service_url.rstrip("/")
-        policy = _request(owner_url, "/assistant/capabilities")["approval_policy"]
+        capabilities = _request(owner_url, "/assistant/capabilities")
+        policy = capabilities["approval_policy"]
         if policy not in {"automatic", "review"}:
             raise ValueError("The Spec service did not publish a valid approval policy.")
         state_root = assistant_state_root(spec_path)
@@ -144,6 +145,7 @@ def main(argv: list[str] | None = None) -> int:
                 "domain": "spec", "preset": "focused", "serviceBaseUrl": owner_url,
                 "documentId": document_id, "scope": "document",
                 "serviceDocumentKey": snapshot["owner_document_key"],
+                "editContextId": snapshot.get("edit_access", {}).get("context_id"),
             }),
             "DSH_PRODUCT_RUN_CWD": str(cwd),
         }
@@ -151,7 +153,9 @@ def main(argv: list[str] | None = None) -> int:
         selected = urlsplit(owner_url)
         endpoint = {"scheme": selected.scheme, "host": selected.hostname,
                     "port": selected.port or (443 if selected.scheme == "https" else 80)}
-        config = resolve_config(args.service_config, overrides={"spec_editor": {surface: endpoint for surface in ("service", "ui")}})
+        spec_overrides = {surface: endpoint for surface in ("service", "ui")}
+        spec_overrides["spec_root"] = capabilities.get("spec_root", str(spec_path.parent))
+        config = resolve_config(args.service_config, overrides={"spec_editor": spec_overrides})
         run = _REPO_ROOT / "temp" / "TEMP_serve-all" / ("request_" + uuid4().hex)
         run.mkdir(parents=True)
         snapshot = run / "services.json"

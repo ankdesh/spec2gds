@@ -174,6 +174,12 @@ ASSISTANT_ACTIONS["resolve_interface"] = {
 }
 
 
+ASSISTANT_ACTIONS["edit_access"] = {
+    "method": "POST", "path": "/documents/edit-access/{action}",
+    "parameters": {"path": ["action"], "query": ["owner_document_key"], "body": ["context_id", "participant_id"]},
+    "response_kind": "object",
+}
+
 def integration_metadata():
     value = {"format_version": 1, "service_kind": "spec", "interface_version": "1.0.0",
              "actions": ASSISTANT_ACTIONS, "operation_schema_action": "operation_schema",

@@ -1,5 +1,7 @@
 """Acceptance coverage for presentation names and stable source authority."""
 
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
+
 from pathlib import Path
 
 import pytest
@@ -180,7 +182,7 @@ def test_service_resolves_names_in_exact_package_and_never_falls_back(tmp_path: 
     from spec2gds.spec.spec_format.v1_api import OpenDocumentRequest, create_app
 
     monkeypatch.setenv("SPEC_EDITOR_STATE_ROOT", str(tmp_path / "state"))
-    endpoints = {route.name: route.endpoint for route in create_app().routes if hasattr(route, "endpoint")}
+    endpoints = direct_api_endpoints(create_app())
     package = SpecPackage.create(title="Timer controller")
     package.narrative = package.narrative.model_copy(update={"blocks": [
         NarrativeBlock(block_id="timing-section", type="section", text="Cycle timing"),

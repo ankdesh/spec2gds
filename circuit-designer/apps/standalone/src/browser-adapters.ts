@@ -5,13 +5,11 @@
 import { HttpCircuitDesignerBackend } from "@spec2gds/circuit-client-http";
 import {
   validateContractDefinition,
+  validateCircuitDesignerPreferences,
   type CircuitDesignerPreferencesV1,
   type CircuitDocument,
 } from "@spec2gds/circuit-core";
 import {
-  cachePreferences,
-  clearCachedPreferences,
-  loadCachedPreferences,
   type CircuitFileAdapter,
   type CircuitPreferencesAdapter,
   type CircuitSourceAdapter,
@@ -51,12 +49,24 @@ export function createBrowserFileAdapter(): CircuitFileAdapter {
 }
 
 export function createBrowserPreferencesAdapter(backend: HttpCircuitDesignerBackend): CircuitPreferencesAdapter {
+  const key = "spec2gds.circuit.preferences.v1";
   return {
-    load: () => backend.getPreferences(),
-    save: (preferences: CircuitDesignerPreferencesV1) => backend.putPreferences(preferences),
-    readCached: () => loadCachedPreferences(window.localStorage),
-    cacheFailedSave: (preferences) => cachePreferences(window.localStorage, preferences),
-    clearCache: () => clearCachedPreferences(window.localStorage),
+    async load() {
+      try {
+        const stored = window.localStorage.getItem(key);
+        if (stored) {
+          const checked = validateCircuitDesignerPreferences(JSON.parse(stored));
+          if (checked.valid) return { preferences: checked.preferences, persisted: true };
+        }
+      } catch { /* Use deployment defaults when local preferences are unavailable. */ }
+      return backend.getPreferences();
+    },
+    async save(preferences: CircuitDesignerPreferencesV1) {
+      const checked = validateCircuitDesignerPreferences(preferences);
+      if (!checked.valid) throw new Error(checked.message);
+      window.localStorage.setItem(key, JSON.stringify(checked.preferences));
+      return { preferences: checked.preferences, persisted: true };
+    },
   };
 }
 

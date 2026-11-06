@@ -29,6 +29,7 @@ def _parser(command: str) -> argparse.ArgumentParser:
     )
     parser.add_argument("--service-config", type=Path,
                         help="service configuration file (CLI > file > defaults)")
+    parser.add_argument("--spec-root", type=Path, help="allowed Spec directory")
     parser.add_argument("--public-host", help="host advertised for wildcard listeners; accepts auto")
     parser.add_argument("--host", help="listener bind address")
     parser.add_argument("--port", type=_port, help="listener port")
@@ -52,7 +53,12 @@ def _run(command: str, argv: Sequence[str] | None = None) -> None:
     overrides = listener_overrides("spec_editor", host=args.host, port=args.port)
     if args.public_host is not None:
         overrides["public_host"] = args.public_host
+    if args.spec_root is not None and not args.spec_root.expanduser().is_dir():
+        raise ValueError("Spec root must be an existing directory.")
+    if args.spec_root is not None:
+        overrides.setdefault("spec_editor", {})["spec_root"] = str(args.spec_root.expanduser().resolve())
     registry = load_service_registry(args.service_config, overrides=overrides)
+    print(f"Spec root: {registry.config['spec_editor']['spec_root']}")
     args.host, args.port = registry.spec_editor.service.host, registry.spec_editor.service.port
     logger = StructuredLogger("spec-editor", registry.logging)
     logger.event(

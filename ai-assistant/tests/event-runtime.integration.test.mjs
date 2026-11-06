@@ -27,7 +27,7 @@ for (const preset of ['goal','orchestrated']) test(`${preset} keeps Spec analysi
   let runtime; const oldBinding=process.env.SPEC2GDS_BINDING_JSON;
   try {
     runtime=await boot(directory,serviceUrl);
-    process.env.SPEC2GDS_BINDING_JSON=JSON.stringify({domain:'spec',serviceBaseUrl:serviceUrl,documentId:'doc-test',scope:'document',preset});
+    process.env.SPEC2GDS_BINDING_JSON=JSON.stringify({domain:'spec',serviceBaseUrl:serviceUrl,documentId:'doc-test',serviceDocumentKey:'fixture-spec',scope:'document',preset});
     const primary=(await runtime.ctx.agents.create({sessionId:SessionId('source'),agentOptions:{provider:'mock',model:'mock'},meta:{agentPreset:preset}})).agent;
     primary.followup(createUserMessage({source:{kind:'user'},content:[{type:'text',text:'Inspect the bound specification.'}]})); await primary.whenIdle();
     if(preset==='orchestrated')await waitFor(()=>runtime.ctx.eventSystems.get(primary.id).events.some(event=>event.type==='review.ready'));

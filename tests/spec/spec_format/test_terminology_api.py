@@ -1,3 +1,4 @@
+from spec2gds.spec.spec_format.testing import bound_http_client
 """Check canonical API fields against existing V1 transport aliases."""
 
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ def test_service_query_alias_keeps_the_bound_spec_and_explicit_target_routes(tmp
     routes = {route.name: route.path for route in app.routes if hasattr(route, "endpoint")}
     path = tmp_path / "source.spec"
     build_test_package().save(str(path))
-    with TestClient(app) as client:
+    with bound_http_client(app) as client:
         opened = client.post("/documents/open", json={"path": str(path)}).json()
         key = opened["service_document_key"]
         assert key == opened["owner_document_key"]
