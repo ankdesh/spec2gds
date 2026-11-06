@@ -302,6 +302,16 @@ def verify_component(
                 w = param_ints.get("W", 32)
                 d = param_ints.get("DEPTH", 16)
                 preset_g_flags.append(f"-G{k}={(w*d)}'d{v}")
+            elif k == "COEFFS" and comp_def.id == "fir_filter":
+                taps = param_ints.get("TAPS", 4)
+                cw = param_ints.get("CW", 16)
+                preset_g_flags.append(f"-G{k}={(taps*cw)}'d{v}")
+            elif k in {"POLY", "INIT", "XOROUT"} and comp_def.id in {"crc_serial", "crc_parallel"}:
+                width = param_ints.get("WIDTH", 32)
+                preset_g_flags.append(f"-G{k}={width}'d{v}")
+            elif k in {"TAPS", "SEED"} and comp_def.id == "lfsr":
+                w = param_ints.get("W", 16)
+                preset_g_flags.append(f"-G{k}={w}'d{v}")
             else:
                 preset_g_flags.append(f"-G{k}={v}")
 

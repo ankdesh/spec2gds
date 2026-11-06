@@ -107,14 +107,14 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
             ),
         )
     )
-    for param in comp_def.parameters:
-        if param.name == "W":
-            ops.append(
-                UpdateParameter(
-                    mux_ref,
-                    {"name": param.name, "rtl_type": param.rtl_type, "value": param.default_value, "description": param.description},
-                )
-            )
+    w_param = next((p for p in comp_def.parameters if p.name in {"W", "IW", "WIDTH", "DATA_W"}), None)
+    w_val = w_param.default_value if w_param else "32"
+    ops.append(
+        UpdateParameter(
+            mux_ref,
+            {"name": "W", "rtl_type": "int unsigned", "value": w_val, "description": "Data width in bits"},
+        )
+    )
     ops.append(
         UpsertSection(
             parent=mux_ref,

@@ -337,6 +337,13 @@ class SpecPackage:
         except (ValueError, pydantic.ValidationError) as exc:
             diagnostics.append(f"Invalid catalog origins: {exc}")
 
+        try:
+            from spec2gds.spec.spec_format.channels import validate_channel_annotations
+
+            validate_channel_annotations(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid channel annotations: {exc}")
+
         diagnostics.extend(_reference_diagnostics(self.manifest, self.files))
         return sorted(set(diagnostics))
 

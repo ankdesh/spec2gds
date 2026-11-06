@@ -657,8 +657,18 @@ class _Analyzer:
             if len(self.errors) == start_errors and widths:
                 width = widths[0]
                 first_shape = self.shapes.get((endpoints[0].component_id, endpoints[0].port.name)) or _port_shape(endpoints[0].port)
-                text = first_shape.text if first_shape and first_shape.text else (f"[{width-1}:0]" if width > 1 else "")
-                shape = _PortShape(text, (width-1, 0) if width > 1 else None)
+                if (
+                    endpoints[0].slice is not None
+                    or not first_shape
+                    or not first_shape.text
+                    or (first_shape.key and abs(first_shape.key[0] - first_shape.key[1]) + 1 != width)
+                ):
+                    text = f"[{width-1}:0]" if width > 1 else ""
+                    key = (width - 1, 0) if width > 1 else None
+                else:
+                    text = first_shape.text
+                    key = first_shape.key
+                shape = _PortShape(text, key)
                 connections.append(_Connection(connection, tuple(endpoints), shape))
         for instance in design.instances:
             component = self.components_by_vlnv[instance.component_vlnv]

@@ -120,7 +120,9 @@ class LibraryChecker:
 
         # 4. Check each entry up to the selected phase
         target_entries = [e for e in active_inv.entries if e.phase <= self.phase]
-        report["entries_checked"] = len(target_entries)
+        report["entries_target"] = len(target_entries)
+        report["entries_checked"] = 0
+        report["planned_entries_skipped"] = 0
 
         for entry in target_entries:
             self._check_entry(entry, report)
@@ -140,10 +142,12 @@ class LibraryChecker:
         spec_file = base_dir / entry.path
         if not spec_file.is_file():
             if entry.status == "planned":
+                report["planned_entries_skipped"] += 1
                 return
             report["errors"].append(f"Spec package missing for {entry.id}: {spec_file}")
             return
 
+        report["entries_checked"] += 1
         usage_file = spec_file.parent / "usage.md"
         if not usage_file.is_file():
             report["errors"].append(f"usage.md missing for {entry.id}: {usage_file}")
@@ -165,12 +169,12 @@ class LibraryChecker:
             )
             return
 
-        if entry.phase < 3 and len(rev.components) != 1:
+        has_internal = rev.internal_design(root_comp.ref) is not None
+        if not has_internal and len(rev.components) != 1:
             report["errors"].append(f"Expected 1 component in package for {entry.id}, found {len(rev.components)}")
             return
 
         # Required implementation check (either direct SV section or internal design composition)
-        has_internal = rev.internal_design(root_comp.ref) is not None
         sections = rev.entity_sections_for(root_comp.ref)
         has_sv = any(s.section_type == "sv" and s.content.strip() for s in sections)
         if not (has_sv or has_internal):

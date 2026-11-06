@@ -25,7 +25,7 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
     doc_id = pkg.manifest.document_id
     comp_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}", entity_kind="component")
 
-    is_hierarchical = comp_def.phase == 3
+    is_hierarchical = comp_def.implementation == "composite"
 
     cat_meta = CatalogueAssetV1(
         schema_version=1,

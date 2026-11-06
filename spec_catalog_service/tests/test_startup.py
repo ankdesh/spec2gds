@@ -24,7 +24,7 @@ def test_fresh_service_indexes_all_published_releases_without_changing_bytes(tmp
         ).json()["total"]
         assert total_body_sv + total_composite == len(before)
         assert total_body_sv == 64
-        assert total_composite == 12
+        assert total_composite == 32
         assert client.get("/api/spec-library/v1/health").status_code == 404
     assert before == {str(p): compute_sha256(p.read_bytes()) for p in root.rglob("*.spec")}
 

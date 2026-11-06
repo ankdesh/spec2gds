@@ -1453,8 +1453,16 @@
       "path": "arithmetic_dsp/fixed_round/1.0.0/fixed_round.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#fixed_round",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/fixed_round/1.0.0/fixed_round.spec",
+          "package_sha256": "sha256:a0b7b2f199d1d8fa6f76d8367316962ae7d5afd8cd0d150e2baec4394919128e",
+          "evidence_path": "arithmetic_dsp/fixed_round/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:cee73410fdf412b87fbb3fa206a2c302c7bb28ddc133544344f5fa03de0c813f"
+        }
+      ]
     },
     {
       "id": "fixed_saturate",
@@ -1464,8 +1472,16 @@
       "path": "arithmetic_dsp/fixed_saturate/1.0.0/fixed_saturate.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#fixed_saturate",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/fixed_saturate/1.0.0/fixed_saturate.spec",
+          "package_sha256": "sha256:eadf0bb6ea18cbbb519e7b0f2f3e58d32d1e6ff2c7c4a0072a99961dc690304f",
+          "evidence_path": "arithmetic_dsp/fixed_saturate/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:eed78ffb83e83fcf53fa83e5d13b33089a6dea3f76ef19aa249b344b43af133f"
+        }
+      ]
     },
     {
       "id": "fixed_scale",
@@ -1475,8 +1491,16 @@
       "path": "arithmetic_dsp/fixed_scale/1.0.0/fixed_scale.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#fixed_scale",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/fixed_scale/1.0.0/fixed_scale.spec",
+          "package_sha256": "sha256:51dafc5a8d7be417f79c4204cb4c43d207d0b669973be9f53e5ec6fb2899bf6c",
+          "evidence_path": "arithmetic_dsp/fixed_scale/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:c6a10bdd7b9f359e1c5a0f8a7a9337d2b6e5d994b7f9fb1a1238e829ed1ef197"
+        }
+      ]
     },
     {
       "id": "dot_product",
@@ -1486,8 +1510,16 @@
       "path": "arithmetic_dsp/dot_product/1.0.0/dot_product.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#dot_product",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/dot_product/1.0.0/dot_product.spec",
+          "package_sha256": "sha256:8fac4f7c696f86a0d460b61546626ece16d263cbf22a5df748c93336ea1c5d3f",
+          "evidence_path": "arithmetic_dsp/dot_product/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:1c7ce2985ea990ed569b172e53abe27379e20202b5bc34c978e52c6a0ea5cca1"
+        }
+      ]
     },
     {
       "id": "fir_filter",
@@ -1497,8 +1529,16 @@
       "path": "arithmetic_dsp/fir_filter/1.0.0/fir_filter.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#fir_filter",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/fir_filter/1.0.0/fir_filter.spec",
+          "package_sha256": "sha256:3ccb17767ecaffaaa6d37e2b2e1a9b392a3ea21b332cd47346b03c73fda85634",
+          "evidence_path": "arithmetic_dsp/fir_filter/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:9e343e1588e0716e78f7781f4edb92d7ede1c5024b58e254ac2280e915660c49"
+        }
+      ]
     },
     {
       "id": "cic_decimator",
@@ -1508,8 +1548,16 @@
       "path": "arithmetic_dsp/cic_decimator/1.0.0/cic_decimator.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#cic_decimator",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/cic_decimator/1.0.0/cic_decimator.spec",
+          "package_sha256": "sha256:21671acf640d49da8529b42391b8cd38c39eccc606c91a10f4e68f38fde1900f",
+          "evidence_path": "arithmetic_dsp/cic_decimator/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:0ec703fbb763b7efc2013a900be3c37412dfb0f6d075703b123876d56967bf67"
+        }
+      ]
     },
     {
       "id": "cic_interpolator",
@@ -1519,8 +1567,16 @@
       "path": "arithmetic_dsp/cic_interpolator/1.0.0/cic_interpolator.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#cic_interpolator",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/cic_interpolator/1.0.0/cic_interpolator.spec",
+          "package_sha256": "sha256:f10cab146a037c50a024359824d2bc4894b847bf1e029a4dac1f57418a3bfe09",
+          "evidence_path": "arithmetic_dsp/cic_interpolator/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:9b20dc92a489b3a94ae38b74c3dc671a45f6040920695e7b72534b3c305633ae"
+        }
+      ]
     },
     {
       "id": "cordic_rotate",
@@ -1530,8 +1586,16 @@
       "path": "arithmetic_dsp/cordic_rotate/1.0.0/cordic_rotate.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#cordic_rotate",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/cordic_rotate/1.0.0/cordic_rotate.spec",
+          "package_sha256": "sha256:f170b08a9653dfaa4d59f3e8eb58361c04ab02b9e778b38b75622a09d77f14f2",
+          "evidence_path": "arithmetic_dsp/cordic_rotate/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:c7fe8df197e032487c40160c3fad0f76c7863cf73342f2ccb460f58e6e1d2d52"
+        }
+      ]
     },
     {
       "id": "cordic_vector",
@@ -1541,8 +1605,16 @@
       "path": "arithmetic_dsp/cordic_vector/1.0.0/cordic_vector.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#cordic_vector",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "arithmetic_dsp/cordic_vector/1.0.0/cordic_vector.spec",
+          "package_sha256": "sha256:108a00fe499da251a4c126504be565a0cd56d40a45531519fa7c4e0f04827fb0",
+          "evidence_path": "arithmetic_dsp/cordic_vector/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:b55bb295d155d4ebe2bd4e6c88960f29e7f4955298604dfb08be4b37ea289577"
+        }
+      ]
     },
     {
       "id": "parity",
@@ -1552,8 +1624,16 @@
       "path": "integrity_control/parity/1.0.0/parity.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#parity",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/parity/1.0.0/parity.spec",
+          "package_sha256": "sha256:1c7e0da3df798ec81a46403c29b3f1879fad501c6f78191136a2316faf1704da",
+          "evidence_path": "integrity_control/parity/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:cbf8f2e3ec5022cac67a147a0a355995250c2de4e284712b3ac9c85613452a88"
+        }
+      ]
     },
     {
       "id": "crc_serial",
@@ -1563,8 +1643,16 @@
       "path": "integrity_control/crc_serial/1.0.0/crc_serial.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#crc_serial",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/crc_serial/1.0.0/crc_serial.spec",
+          "package_sha256": "sha256:16b2c2afbf25513594238200c02fc680c51d7af3af5062bd73fdf99ff857fa71",
+          "evidence_path": "integrity_control/crc_serial/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:e0a78e48c07619e6fa4b49a9183d7b755537b6e7dd2747dba59069a8ab0d77dd"
+        }
+      ]
     },
     {
       "id": "crc_parallel",
@@ -1574,8 +1662,16 @@
       "path": "integrity_control/crc_parallel/1.0.0/crc_parallel.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#crc_parallel",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/crc_parallel/1.0.0/crc_parallel.spec",
+          "package_sha256": "sha256:f86bcf6255c46efcc4513fd4034388506ef1e5e6a95dfc15789e551feb15c296",
+          "evidence_path": "integrity_control/crc_parallel/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:063b43f4c5b983f2045b5648037a53865bb4cad4791b5904e132eba3deb13bf5"
+        }
+      ]
     },
     {
       "id": "lfsr",
@@ -1585,8 +1681,16 @@
       "path": "integrity_control/lfsr/1.0.0/lfsr.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#lfsr",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/lfsr/1.0.0/lfsr.spec",
+          "package_sha256": "sha256:f93846e8ec76152b89f418f774fd22adf95750b5c4c2451dbe1365c5530fdfb6",
+          "evidence_path": "integrity_control/lfsr/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:cf437371f6499b02424a5adc0f8772aa85d689de3907947bb89717d10566c019"
+        }
+      ]
     },
     {
       "id": "secded_encode",
@@ -1596,8 +1700,16 @@
       "path": "integrity_control/secded_encode/1.0.0/secded_encode.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#secded_encode",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/secded_encode/1.0.0/secded_encode.spec",
+          "package_sha256": "sha256:5209d3f41e494dec29673a5a2ffb0f982dabfb3c48e1fe536a5a50b10262bdab",
+          "evidence_path": "integrity_control/secded_encode/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:ba0400c986334511c61f8de8ffb1780d530f2b88e924c5fe60fbf5c82789a0bd"
+        }
+      ]
     },
     {
       "id": "secded_decode",
@@ -1607,8 +1719,16 @@
       "path": "integrity_control/secded_decode/1.0.0/secded_decode.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#secded_decode",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/secded_decode/1.0.0/secded_decode.spec",
+          "package_sha256": "sha256:c5726286f1c83fb3a46f8a4a7407ee8d02a4c25641e6d2ff194bc522c94c0122",
+          "evidence_path": "integrity_control/secded_decode/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:f6aecda99f813ca93bc95edbbe16a242ba46bffbcb7dd8f69c562b5ff2e9c2e4"
+        }
+      ]
     },
     {
       "id": "watchdog",
@@ -1618,8 +1738,16 @@
       "path": "integrity_control/watchdog/1.0.0/watchdog.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#watchdog",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/watchdog/1.0.0/watchdog.spec",
+          "package_sha256": "sha256:0895f7b812c66feebc569d3c07559f7261897bd65f3f7803d69e8e95154ed46c",
+          "evidence_path": "integrity_control/watchdog/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:e2a4d53adc032cf1f448e072108d7983b1a9972caa0ee724819af63e810ef679"
+        }
+      ]
     },
     {
       "id": "timeout_monitor",
@@ -1629,8 +1757,16 @@
       "path": "integrity_control/timeout_monitor/1.0.0/timeout_monitor.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#timeout_monitor",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/timeout_monitor/1.0.0/timeout_monitor.spec",
+          "package_sha256": "sha256:7f70ea988b1ccedbf601fbfae453f8cb66c1f79e4f8b6374fdfc97d29ba08ccc",
+          "evidence_path": "integrity_control/timeout_monitor/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:cd4c7674fa37285769b0e3f0e99edf9906a3f7c46b2d93c0ee25747c3c59b13d"
+        }
+      ]
     },
     {
       "id": "interrupt_controller",
@@ -1640,8 +1776,16 @@
       "path": "integrity_control/interrupt_controller/1.0.0/interrupt_controller.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#interrupt_controller",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/interrupt_controller/1.0.0/interrupt_controller.spec",
+          "package_sha256": "sha256:7f765f651b696fced9e3cee3b0bda42d338b6aba31b0f603c1eda0ac7d53a3f5",
+          "evidence_path": "integrity_control/interrupt_controller/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:cf6b3316678e37754fdf1c2ffd5e0dfbe04280548a91ffde1b41ecf49ee8cf46"
+        }
+      ]
     },
     {
       "id": "fault_collector",
@@ -1651,8 +1795,16 @@
       "path": "integrity_control/fault_collector/1.0.0/fault_collector.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#fault_collector",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/fault_collector/1.0.0/fault_collector.spec",
+          "package_sha256": "sha256:9b4eb99d674e5233e7762a087aca219603b6bc8dc615188bc0f3e10d676f2205",
+          "evidence_path": "integrity_control/fault_collector/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:444fa723c8e57afb1dc582421d293a85941da8d578cb8612ddb05329d2522c51"
+        }
+      ]
     },
     {
       "id": "lockstep_compare",
@@ -1662,8 +1814,16 @@
       "path": "integrity_control/lockstep_compare/1.0.0/lockstep_compare.spec",
       "contract": "docs/TEMP_spec_library_plan/plans/phase-3.md#lockstep_compare",
       "dependencies": [],
-      "status": "planned",
-      "releases": []
+      "status": "delivered",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "path": "integrity_control/lockstep_compare/1.0.0/lockstep_compare.spec",
+          "package_sha256": "sha256:40f42694b26c90e855faf39aaf8c4d4f8dc96fe04b4921eed757230cb19d6f96",
+          "evidence_path": "integrity_control/lockstep_compare/1.0.0/evidence.json",
+          "evidence_sha256": "sha256:836e1448943fa9959c40419c071e552d03bed3b4782696719c0cec3e2eedb1e9"
+        }
+      ]
     },
     {
       "id": "arbiter_fixed",

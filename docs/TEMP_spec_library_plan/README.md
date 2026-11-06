@@ -1,8 +1,8 @@
 # Spec Catalog: phased Component implementation contract
 
-Status: Phase 1 releases are published; Phases 2–4 remain planned.
-Location and integration update: 4 November 2026, baseline commit `6e94fd8`.
-The runtime inventory records 32 delivered Components and 88 planned entries.
+Status: Phases 1 and 2 are fully published (64 components); Phase 3 Part 1 is published (12 components); 44 components remain planned.
+Location and integration update: 5 November 2026, baseline commit `0585633`.
+The runtime inventory records 76 delivered Components and 44 planned entries.
 Read the current inventory before work; this status does not replace verification.
 
 ## Current baseline for coding agents

@@ -13,6 +13,7 @@ import pydantic
 from lxml import etree
 
 from spec2gds.spec.spec_format.archive import SpecPackage
+from spec2gds.spec.spec_format.channels import load_component_channels, upsert_component_channels
 from spec2gds.spec.spec_format.circuit_layouts import load_design_layout, upsert_design_layout
 from spec2gds.spec.spec_format.circuit_timings import load_design_timing, upsert_design_timing
 from spec2gds.spec.spec_format.ir import SpecRevision
@@ -306,7 +307,7 @@ def prepare_import(
                     "conflicts": [],
                 }, destination
     source_pkg, target = source.to_package(), destination.to_package()
-    supported = {"spec2gds.entity-sections", "spec2gds.circuit-layout", "spec2gds.circuit-timing"}
+    supported = {"spec2gds.entity-sections", "spec2gds.circuit-layout", "spec2gds.circuit-timing", "spec2gds.channels"}
     for schema in source_pkg.manifest.annotation_schemas:
         if schema.namespace not in supported:
             raise ValueError(f"Import does not support annotation namespace {schema.namespace}.")
@@ -481,6 +482,12 @@ def prepare_import(
                     writer(
                         target, annotation.model_copy(update={"design": refs[entity.ref.entity_id]})
                     )
+        elif entity.ref.entity_kind == "component" and entity.ref.entity_id not in reused_ids:
+            chan_annot = load_component_channels(source, entity.ref)
+            if chan_annot:
+                upsert_component_channels(
+                    target, chan_annot.model_copy(update={"component": refs[entity.ref.entity_id]})
+                )
     asset_ids, asset_fingerprints = {}, {}
     for asset in source.assets:
         same = next((a for a in target.manifest.assets if a.path == asset.path), None)

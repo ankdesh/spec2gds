@@ -562,4 +562,4 @@ name-based commands, and technical details.
 
 ## Spec Catalog
 
-The [Spec Catalog service](spec_catalog_service/README.md) starts with `scripts/serve-all.sh start` on port 6017. In Spec Editor, select **Components → Options → Import from catalog…** to copy a published Component into the loaded Spec. **Options → Generate RTL** verifies the saved target before starting the Activity.
+The [Spec Catalog service](spec_catalog_service/README.md) starts with `scripts/serve-all.sh start` on port 6017. It contains 96 published, verified, bit-exact library components across Phases 1, 2, and 3 covering basic logic, registers & counters, storage, streaming protocols, clock & CDC synchronizers, arithmetic & saturation units, multipliers/dividers, fixed-point DSP/CORDIC, data integrity (CRC/LFSR/SECDED), and hardware monitoring/control. In Spec Editor, select **Components → Options → Import from catalog…** to copy a published Component into the loaded Spec. **Options → Generate RTL** verifies the saved target before starting the Activity.
