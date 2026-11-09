@@ -1,6 +1,6 @@
 """Golden independent Python reference models for Phase 3 arithmetic components.
 
-These models evaluate the exact numeric rules defined in docs/TEMP_spec_library_plan/plans/phase-3.md
+These models evaluate the exact numeric rules defined in docs/spec-catalog/contracts/phase-3.md
 independently of SystemVerilog lines.
 """
 

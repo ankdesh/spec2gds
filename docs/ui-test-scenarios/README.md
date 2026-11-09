@@ -37,7 +37,7 @@ navigation at 560×760. Both implemented themes are required: Spec Editor
 `obsidian` and `clean`; Circuit Designer `blueprint-slate` and `obsidian`.
 These are desktop-window checks, not a claim of mobile or touch coverage.
 
-Set the run root to `/tmp/spec2gds-acceptance/RUN-ID/`. Create a child directory
+Set the run root to `temp/TEMP_spec2gds_acceptance/RUN-ID/`. Create a child directory
 for each case ID. Save `.spec` files, Circuit files, screenshots, recordings,
 downloads, Activity outputs, logs, and completed result Markdown there.
 Configure the Activity scratch directory in a temporary copy of the documented
@@ -107,7 +107,7 @@ Run the published project's command from its own directory. For example, after
 obtaining the actual project at this path:
 
 ```bash
-make -C /tmp/spec2gds-acceptance/run-001/SE-E2E-01/rtl-project lint
+make -C temp/TEMP_spec2gds_acceptance/run-001/SE-E2E-01/rtl-project lint
 ```
 
 Retain the exact command, working directory, exit status, tool version, and full

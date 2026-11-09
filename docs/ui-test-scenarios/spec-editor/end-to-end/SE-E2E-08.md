@@ -23,7 +23,7 @@ The priority pointer advances only on accept AND valid. No request yields zero g
 
 | Step | Designer action | Expected visible result | Evidence to retain |
 | ---: | --- | --- | --- |
-| 1 | Prepare a fresh case directory under /tmp/spec2gds-acceptance/RUN-ID/SE-E2E-08 and start the documented local services. Use Chromium at 1440×900. | A clean environment and empty evidence directory are ready. Activity outputs are configured beneath the same temporary run root. | Environment/version record; no reused scored output. |
+| 1 | Prepare a fresh case directory under temp/TEMP_spec2gds_acceptance/RUN-ID/SE-E2E-08 and start the documented local services. Use Chromium at 1440×900. | A clean environment and empty evidence directory are ready. Activity outputs are configured beneath the same temporary run root. | Environment/version record; no reused scored output. |
 | 2 | Open Spec Editor. Use File → New Spec with title Four-request round-robin arbiter 0.1 and server-local path CASE-DIR/rr4.spec. | A new empty Spec opens with the requested title/path and a recorded stable document identity. | New Spec view and actual path/identity. |
 | 3 | Create the Component named Four-request round-robin arbiter using Components → Options → Add component…; record its stable ID. | Exactly one new Component appears under the active Spec; its readable name is distinguishable from its technical ID. | Component header and ID record. |
 | 4 | Use the Component Options → Edit text… action and copy the entire explanation from the input pack. | Purpose, requirements, interface, timing/reset, corner cases, and verification boundary are visible and readable. | Complete explanation, including lower paragraphs. |

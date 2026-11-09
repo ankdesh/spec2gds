@@ -6,7 +6,7 @@ This document defines repository organization, build commands, service configura
 
 ```text
 spec2gds/spec/spec_format/    .spec package model, SpecIR, transactions, Spec API
-spec2gds/spec/activities/     Activity SDK, snapshots, generators, contracts
+spec2gds/spec/activities/     Activity SDK, snapshots, Activities, contracts
 spec2gds/spec/importers/      PDF, Word, and ODT document importers
 circuit-designer/schema/      Canonical Circuit Designer JSON Schema
 circuit-designer/packages/    Core models, layout engine, React canvas, and app shell
@@ -33,7 +33,7 @@ The platform defines default bind addresses and ports in [`config/services.json`
 | **Circuit Designer** | `6011` | `6012` | Schematic layout, routing, and canvas interaction |
 | **AI Assistant** | `6013` | `6013` | DeepSeek Harness conversation shell and flows |
 | **Log Viewer** | `6014` | `6014` | Real-time structured log viewer |
-| **Verification Planner** | `6016` | `6016` | Standalone verification planning and reference generator |
+| **Verification Planner** | `6016` | `6016` | Standalone verification planning and reference generation |
 
 ### Address precedence and launch options
 

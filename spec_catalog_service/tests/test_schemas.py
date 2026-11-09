@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import re
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 from spec_catalog_service.catalog.schemas import (
@@ -28,7 +32,7 @@ def test_catalogue_asset_valid() -> None:
         tags=["combinational", "logic", "mux"],
         licence="Apache-2.0",
         implementation="body_sv",
-        contracts="docs/TEMP_spec_library_plan/plans/phase-1.md#mux",
+        contracts="docs/spec-catalog/contracts/phase-1.md#mux",
         presets={"default": {"W": "32", "N": "2"}},
         timing=TimingInfo(latency="0", throughput="1", reset="none"),
         dependencies=[],
@@ -51,7 +55,7 @@ def test_catalogue_asset_unknown_field_rejected() -> None:
             tags=["combinational", "logic", "mux"],
             licence="Apache-2.0",
             implementation="body_sv",
-            contracts="docs/TEMP_spec_library_plan/plans/phase-1.md#mux",
+            contracts="docs/spec-catalog/contracts/phase-1.md#mux",
             presets={"default": {"W": "32", "N": "2"}},
             timing=TimingInfo(latency="0", throughput="1", reset="none"),
             dependencies=[],
@@ -72,7 +76,7 @@ def test_catalogue_asset_invalid_id() -> None:
             tags=[],
             licence="Apache-2.0",
             implementation="body_sv",
-            contracts="docs/TEMP_spec_library_plan/plans/phase-1.md#mux",
+            contracts="docs/spec-catalog/contracts/phase-1.md#mux",
             presets={"default": {}},
             timing=TimingInfo(latency="0", throughput="1", reset="none"),
             dependencies=[],
@@ -92,7 +96,7 @@ def test_catalogue_asset_invalid_category() -> None:
             tags=[],
             licence="Apache-2.0",
             implementation="body_sv",
-            contracts="docs/TEMP_spec_library_plan/plans/phase-1.md#mux",
+            contracts="docs/spec-catalog/contracts/phase-1.md#mux",
             presets={"default": {}},
             timing=TimingInfo(latency="0", throughput="1", reset="none"),
             dependencies=[],
@@ -131,3 +135,14 @@ def test_identity_key_computation() -> None:
     assert key1 == key2
     assert len(key1) == 64
     assert not key1.startswith("sha256:")
+
+
+def test_inventory_contract_references_resolve() -> None:
+    """Keep current catalog contract paths and Component anchors usable."""
+    root = Path(__file__).resolve().parents[2]
+    inventory = json.loads((root / "spec_catalog_service/catalog/inventory.json").read_text())
+    for entry in inventory["entries"]:
+        path, separator, anchor = entry["contract"].partition("#")
+        assert separator and anchor, entry["id"]
+        text = (root / path).read_text()
+        assert re.search(r"^#{1,6}\s+" + re.escape(anchor) + r"\s*$", text, re.MULTILINE), entry["id"]

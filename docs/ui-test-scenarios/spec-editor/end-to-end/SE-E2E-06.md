@@ -23,7 +23,7 @@ Idle tx is high, data is LSB first, all ten frame bits last 16 clocks, and a sta
 
 | Step | Designer action | Expected visible result | Evidence to retain |
 | ---: | --- | --- | --- |
-| 1 | Prepare a fresh case directory under /tmp/spec2gds-acceptance/RUN-ID/SE-E2E-06 and start the documented local services. Use Chromium at 1440×900. | A clean environment and empty evidence directory are ready. Activity outputs are configured beneath the same temporary run root. | Environment/version record; no reused scored output. |
+| 1 | Prepare a fresh case directory under temp/TEMP_spec2gds_acceptance/RUN-ID/SE-E2E-06 and start the documented local services. Use Chromium at 1440×900. | A clean environment and empty evidence directory are ready. Activity outputs are configured beneath the same temporary run root. | Environment/version record; no reused scored output. |
 | 2 | Open Spec Editor. Use File → New Spec with title Eight-bit UART transmitter 0.1 and server-local path CASE-DIR/uart_tx.spec. | A new empty Spec opens with the requested title/path and a recorded stable document identity. | New Spec view and actual path/identity. |
 | 3 | Create the Component named Eight-bit UART transmitter using Components → Options → Add component…; record its stable ID. | Exactly one new Component appears under the active Spec; its readable name is distinguishable from its technical ID. | Component header and ID record. |
 | 4 | Use the Component Options → Edit text… action and copy the entire explanation from the input pack. | Purpose, requirements, interface, timing/reset, corner cases, and verification boundary are visible and readable. | Complete explanation, including lower paragraphs. |

@@ -1,6 +1,6 @@
 # Acceptance run record — copy to temporary storage
 
-Copy this template under `/tmp/spec2gds-acceptance/RUN-ID/results.md`.
+Copy this template under `temp/TEMP_spec2gds_acceptance/RUN-ID/results.md`.
 Keep this source template blank. This is not an executed result.
 
 ## Environment and selection

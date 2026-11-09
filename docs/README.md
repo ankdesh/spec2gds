@@ -1,7 +1,7 @@
 # Documentation Index
 
 This directory contains the living technical documentation for `spec2gds`.
-All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TERMINOLOGY.md) and Simplified Technical English (ASD-STE100).
+Use the [canonical terminology](TERMINOLOGY.md). Write in clear, concise language based on ASD-STE100.
 
 ## Start here: short tutorials
 
@@ -13,7 +13,7 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 ## 1. System Overview and Architecture
 
 - [System Architecture](architecture.md): Subsystems, authoritative service boundaries, state containers, and dependency direction.
-- [End-to-End Flows](flows.md): System workflows for specification authoring, circuit projection, independent circuit editing, and document import.
+- [End-to-End Flows](flows.md): System flows for specification authoring, circuit projection, independent circuit editing, and document import.
 - [Names and Identifiers](naming-and-identifiers.md): Hardware identifier rules, display name resolution, and normalization policies.
 - [Canonical Terminology](TERMINOLOGY.md): Mandatory terminology rules across code, UI, and documentation.
 
@@ -21,7 +21,7 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 
 - [Spec Editor and Spec Service](spec-editor.md): User interface, section registry (text, ports, SystemVerilog), package layout, transactions, and approval modes.
 
-- [Spec Component library implementation](TEMP_spec_library_plan/README.md): Shared contract, 120-entry inventory, and four independent phase handoffs with hardware and software verification gates.
+- [Spec Catalog Component reference](spec-catalog/README.md): Component contracts, delivery status, and remaining work.
 
 ## 3. Circuit Designer
 
@@ -42,9 +42,9 @@ All documents adhere to the canonical terminology defined in [TERMINOLOGY.md](TE
 ## 6. Activities, RTL, and SystemC
 
 - [Activity SDK](activity-sdk.md): Extension SDK, Activity Snapshot v1 format, high/low read APIs, and plugin registration.
-- [RTL Generation](rtl-generation.md): Deterministic SystemVerilog generator (`rtl.generate`), supported source profiles, body-only SystemVerilog contract, and Verilator linting.
+- [RTL Generation](rtl-generation.md): Deterministic SystemVerilog Activity (`rtl.generate`), supported source profiles, body-only SystemVerilog contract, and Verilator linting.
 - [RTL Language Examples](rtl-language-examples.md): Verified SystemVerilog examples for combinational logic, registers, state machines, and arithmetic modules.
-- [SystemC Activities](systemc-activities.md): Approximately-Timed TLM 2.0 skeleton generator and cycle-accurate native SystemC generator using CIRCT.
+- [SystemC Activities](systemc-activities.md): Approximately-Timed TLM 2.0 and cycle-accurate native SystemC Activities.
 
 ## 7. Development and Testing
 

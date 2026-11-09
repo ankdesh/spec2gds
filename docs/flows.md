@@ -78,7 +78,7 @@ sequenceDiagram
 ### Operational Steps
 
 1. The designer selects a Component or Design in Spec Editor.
-2. The designer clicks **Circuit** menu or **Options → Open circuit**.
+2. The designer selects **Options → Open in Circuit Designer**.
 3. The Spec API projects the active `SpecRevision` through the circuit adapter.
 4. The adapter converts direct ports and nets into schematic items.
 5. The Spec API creates a session in the Circuit service.
@@ -166,7 +166,7 @@ sequenceDiagram
 
 The AI Assistant uses deterministic flows for hardware generation:
 
-| Flow Tool | Workflow Sequence | Completion Evidence |
+| Flow tool | Flow sequence | Completion evidence |
 | --- | --- | --- |
 | `flow_create_empty_spec` | Resolve path, create package, bind conversation | Creation receipt and confirmed binding |
 | `flow_create_spec_with_component` | Prepare architecture, obtain approval, create package, author Component, submit batch | Exact applied receipt and saved revision |

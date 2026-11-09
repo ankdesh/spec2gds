@@ -1,7 +1,7 @@
 # AI Assistant Operations and Verification
 
 Use the [system contract](ai-assistant.md) for required system behavior.
-This guide defines run commands, configuration settings, diagnostic workflows, and verification matrices.
+This guide defines run commands, configuration settings, diagnostic procedures, and verification matrices.
 It does not redefine product behavior.
 
 ## Setup and package release
@@ -328,15 +328,16 @@ Follow the failed request in this order:
    count, and last confirmed phase. A token cap can stop the answer after a context
    read while the document remains empty.
 
-Service output is under `TEMP_serve-all/` for the combined launcher. Durable conversations
+Service output is under `temp/TEMP_serve-all/` for the combined launcher. Durable conversations
 are under the configured Assistant runtime state; development snapshots commonly
 use `session.v3.jsonl.zstd`. Locate them with:
 
 ```bash
 rg --files --hidden ai-assistant/.dev | rg 'session\.v3\.jsonl(\.zstd)?$'
 # Substitute the exact file found above.
-zstd -dc /absolute/path/to/session.v3.jsonl.zstd > /tmp/assistant-session.jsonl
-rg -n 'tool/call|tool/result|turn/end|assistant/message|max-tokens' /tmp/assistant-session.jsonl
+mkdir -p temp/TEMP_assistant_diagnostics
+zstd -dc /absolute/path/to/session.v3.jsonl.zstd > temp/TEMP_assistant_diagnostics/assistant-session.jsonl
+rg -n 'tool/call|tool/result|turn/end|assistant/message|max-tokens' temp/TEMP_assistant_diagnostics/assistant-session.jsonl
 ```
 
 For an uncompressed snapshot, read it directly. Keep exports local to the project;
@@ -420,12 +421,12 @@ npm ci --prefix tests/ui-scenarios
 cd circuit-designer
 PLAYWRIGHT_BROWSERS_PATH="$PWD/.playwright-browsers" npm exec -- playwright install chromium
 cd ..
-bash tests/ui-scenarios/run-test.sh --scenario architecture --output /tmp/assistant-ui-architecture
-bash tests/ui-scenarios/run-test.sh --scenario automatic --output /tmp/assistant-ui-automatic
-bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review --output /tmp/assistant-ui-restricted
-bash tests/ui-scenarios/run-test.sh --scenario live --output /tmp/assistant-ui-draft
-bash tests/ui-scenarios/run-test.sh --scenario binding --output /tmp/assistant-ui-binding
-bash tests/ui-scenarios/run-test.sh --scenario repeated --output /tmp/assistant-ui-repeated
+bash tests/ui-scenarios/run-test.sh --scenario architecture --output temp/TEMP_assistant_ui/architecture
+bash tests/ui-scenarios/run-test.sh --scenario automatic --output temp/TEMP_assistant_ui/automatic
+bash tests/ui-scenarios/run-test.sh --scenario restricted --approval-mode review --output temp/TEMP_assistant_ui/restricted
+bash tests/ui-scenarios/run-test.sh --scenario live --output temp/TEMP_assistant_ui/draft
+bash tests/ui-scenarios/run-test.sh --scenario binding --output temp/TEMP_assistant_ui/binding
+bash tests/ui-scenarios/run-test.sh --scenario repeated --output temp/TEMP_assistant_ui/repeated
 npm --prefix circuit-designer run test:e2e:editor
 ```
 
@@ -457,7 +458,7 @@ service/editor browser scenarios and native headless transport tests.
 
 ```bash
 cd ai-assistant
-npm run eval -- --output /tmp/spec2gds-assistant-eval
+npm run eval -- --output ../temp/TEMP_assistant_eval
 ```
 
 This command validates the versioned `evals` catalogue and fixture existence.
@@ -478,7 +479,7 @@ repository root:
 
 ```bash
 uv run --no-sync python -m pytest tests/spec/activities/rtl -q
-uv run --no-sync python scripts/rtl_evaluation.py --project /absolute/published/project --case adder_8 --source-revision sha256:SOURCE_REVISION --output /tmp/adder-check
+uv run --no-sync python scripts/rtl_evaluation.py --project /absolute/published/project --case adder_8 --source-revision sha256:SOURCE_REVISION --output temp/TEMP_adder_check
 ```
 
 The project check verifies inventory/revision before separate generation, lint,
@@ -491,10 +492,10 @@ simulation. Full original parameterized RTLLM compatibility remains unverified.
 Live-model smoke is separate. Run from the repository root:
 
 ```bash
-bash tests/ui-scenarios/run-test.sh --scenario automatic --live-model --output /tmp/assistant-live-smoke
+bash tests/ui-scenarios/run-test.sh --scenario automatic --live-model --output temp/TEMP_assistant_live_smoke
 cd tests/ui-scenarios
-node --import tsx runner/run_generalization.ts --output /tmp/assistant-generalization
-node --import tsx runner/run_generalization.ts --case registered_pipeline --repeats 3 --output /tmp/assistant-pipeline-live --benchmark-root /path/to/RTLLM
+node --import tsx runner/run_generalization.ts --output ../../temp/TEMP_assistant_generalization
+node --import tsx runner/run_generalization.ts --case registered_pipeline --repeats 3 --output ../../temp/TEMP_assistant_pipeline_live --benchmark-root /path/to/RTLLM
 ```
 
 These commands need `OPENAI_API_KEY`. The generalization runner defaults to three
@@ -543,7 +544,7 @@ in TEMP. New acceptance tests must fail if they violate a required result.
 | [AS-25](ai-assistant.md#as-25) | Close/archive do not approve/discard/stop; cancellation/Stop do not undo saved content. | Card, control, and browser lifecycle tests. |
 | [AS-26](ai-assistant.md#as-26) | Source-bound Circuit accept stages only; failed save keeps draft; source save requires Spec receipt. | Circuit service and client source-save tests. |
 | [AS-27](ai-assistant.md#as-27) | Completion matches requested stage; empty/continued/sent never imply saved content; functional claims need tests. | Receipt fixtures, service browser, and RTL verification suites. |
-| [AS-28](ai-assistant.md#as-28) | Source checkout matches pin; build inputs are clean; setup repairs links without erasing settings. | Setup fixtures, manual pin checks, and release packaging tests. |
+| [AS-28](ai-assistant.md#as-28) | Installed packages match the pinned release; build and packaging use those packages. | Setup fixtures, package checks, and release packaging tests. |
 | [AS-29](ai-assistant.md#as-29) | Scope, pending decisions, failures, and exact diff stay visible after collapse/reload. | Source-creation client and architecture browser tests. |
 | [AS-30](ai-assistant.md#as-30) | Results distinguish catalogue, fixtures, replay, live inference, lint, simulation, and unverified checks. | Evaluation fixtures and RTL test runner. |
 | [AS-31](ai-assistant.md#as-31) | JSON contracts, generated arguments, native admission, and one instruction source. | `instruction-snapshots.test.ts`, contract/domain tests, `check:tools`, native integration. |

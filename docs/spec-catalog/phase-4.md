@@ -1,8 +1,7 @@
 # Phase 4: protocols, peripherals, and complete IP starters
 
 Status: planned; the runtime inventory records 24 Phase 4 entries as planned.
-Requires completed Phases 1, 2, and 3. Read the shared guide's
-[current baseline](../README.md#current-baseline-for-coding-agents) before work.
+Requires completed Phases 1, 2, and 3. Read the [Component reference](README.md) and [common rules](common-rules.md) before work.
 Extend `spec_catalog_service/` and its maintained tests. Use predecessor handoffs
 under `spec_catalog_service/catalog/handoffs/` and the runtime inventory there.
 Hosting, launcher startup, and Spec Editor import already exist; validate and
@@ -10,7 +9,7 @@ extend them for composites without recreating the removed library packages.
 
 ## 1. Inputs, outputs, and ordered implementation
 
-Read [the shared contract](../README.md), all predecessor handoffs, and verify
+Read the [common rules](common-rules.md), all predecessor handoffs, and verify
 96 accepted releases. Deliver 24 new entries, 120 total, including the two
 self-contained composite starters in section 4. Preserve accepted release bytes.
 

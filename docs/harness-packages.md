@@ -5,6 +5,14 @@ checks, and application startup do not require a DeepSeek Harness checkout.
 
 ## Current release
 
+```mermaid
+flowchart LR
+    R[Published package release] --> L[Locked dependencies]
+    L --> I[Install packages]
+    I --> C[Check release identity]
+    C --> B[Build and run spec2gds]
+```
+
 The application uses `0.1.6-ankdesh.2`. Its registry inventory contains 175
 packages. Harness packages use that version. Supporting packages, such as
 `@ankdesh/cordis`, keep their own base version and the `ankdesh.2` suffix.
@@ -77,9 +85,9 @@ application files. It does not require a source checkout.
 With a promoted release, install and assemble one production profile:
 
 ```sh
-npm --prefix ai-assistant run install:profile -- spec2gds-headless TEMP_headless_install
-ASSISTANT_INSTALL_ROOT="$PWD/TEMP_headless_install" \
-  npm --prefix ai-assistant run package -- "$PWD/TEMP_headless_release" spec2gds-headless
+npm --prefix ai-assistant run install:profile -- spec2gds-headless temp/TEMP_headless_install
+ASSISTANT_INSTALL_ROOT="$PWD/temp/TEMP_headless_install" \
+  npm --prefix ai-assistant run package -- "$PWD/temp/TEMP_headless_release" spec2gds-headless
 ```
 
 Use a new output directory each time. Release assembly checks the inventory
@@ -90,8 +98,8 @@ The assembled release includes the service resolver and default configuration.
 Launch it with an explicit file when addresses differ from the defaults:
 
 ```sh
-node TEMP_web_release/deployment/launch.mjs --service-config config/services.json --port 6423 --public-host design-host.example --no-open
-node TEMP_headless_release/deployment/request.mjs --service-config config/services.json --domain spec --service-url http://127.0.0.1:6010 --document-id example -- "Explain this Spec."
+node temp/TEMP_web_release/deployment/launch.mjs --service-config config/services.json --port 6423 --public-host design-host.example --no-open
+node temp/TEMP_headless_release/deployment/request.mjs --service-config config/services.json --domain spec --service-url http://127.0.0.1:6010 --document-id example -- "Explain this Spec."
 ```
 
 Addresses use command line → file → defaults. Network environment settings have

@@ -32,8 +32,6 @@ uv run --package spec-catalog-service spec2gds-catalog index --catalog-root spec
 
 The old library commands, Python modules, and HTTP routes have been removed. Published package bytes and their embedded metadata identifiers remain unchanged. Stop an older environment before updating, then start it with the updated launcher.
 
-The [phased Component plan](../docs/TEMP_spec_library_plan/README.md) records the
-remaining hardware scope and the current code locations. Phases 1–3 have 96 published
-Components; Phase 4 contains 24 planned entries. Use `catalog/inventory.json` for
-delivery status and release pins. The planning inventory is the initial scope,
-and historical handoffs retain their original commands and paths.
+The [Component reference](../docs/spec-catalog/README.md) contains the hardware
+contracts and remaining Phase 4 plan. Use `catalog/inventory.json` for delivery
+status and release pins. Historical handoffs retain their original paths.

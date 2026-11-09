@@ -1,8 +1,8 @@
 # Spec Catalog interoperability and phase unification plan
 
-Date: 5 November 2026. Status: reviewed proposal; implementation has not started.
+Reviewed on 5 November 2026. This is a proposal, not a delivery record. Check the current implementation and inventory before using it.
 
-This plan reviews [the recommendations](phase_unification_recommendations.md)
+This plan reviews [the recommendations](interoperability-recommendations.md)
 against the catalog at commit `0585633`. The recommendations are input to this
 review, not instructions to apply every proposed change. The objective is reliable
 composition across phases while preserving published interfaces, reproducible
@@ -392,7 +392,7 @@ updates and conditional saved-port support are separate follow-up designs.
 
 ### 9.1 Expected code and document changes
 
-Proposed new files are names for implementation planning, not current APIs:
+The following were proposed at review time. Check the current code before implementation; some files now exist:
 
 - `spec2gds/spec/spec_format/channels.py`: typed annotation access, validation and
   reference transforms, with a schema under the established annotation mechanism.
@@ -408,9 +408,9 @@ Proposed new files are names for implementation planning, not current APIs:
   types belong in the existing typed packages; presentation code does not infer RTL.
 - Existing archive, transactions, import, RTL and verification files listed in
   section 1, with consumers selected through `scripts/test_profiles.py`.
-- `docs/TEMP_spec_library_plan/{README.md,plans/phase-*.md}`: current delivery
-  status, explicit interoperability requirements and links to this plan. Preserve
-  Component contract anchors and historical handoffs.
+- `docs/spec-catalog/`: Component contracts and links to this proposal. Use the
+  runtime inventory for delivery status. Preserve contract anchors and historical
+  handoffs.
 - `spec_catalog_service/README.md`, `docs/spec-editor.md`, `docs/rtl-generation.md`
   and format documentation: new schema versions, reviewed controls and examples
   only when those capabilities exist.

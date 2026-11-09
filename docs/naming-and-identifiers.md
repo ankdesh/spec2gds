@@ -51,7 +51,7 @@ names; exact machine contracts retain their existing fields.
 | Assistant creation and retries | One Name input, owner-derived filename, reserved destination and identity | `ai-assistant/src/source-creation.ts`, `spec_service_store.py`, `v1_api.py` |
 | Assistant source labels and workspaces | Owner names; numbered workspace collisions | `ai-assistant/src/naming.ts`, `state.ts`, `workspaces.ts`, `index.ts` |
 | Assistant proposals/history/replies | Named changes, state, review numbers | `spec_format/assistant.py`, `spec_service_store.py`, `ai-assistant/src/proposal-presentation.ts`, client |
-| Architecture reviews and CLI decisions | Document-scoped review numbers; exact IDs accepted in technical workflows | `ai-assistant/src/state.ts`, `scripts/spec2gds_spec.py` |
+| Architecture reviews and CLI decisions | Document-scoped review numbers; exact IDs accepted in technical flows | `ai-assistant/src/state.ts`, `scripts/spec2gds_spec.py` |
 | Circuit selectors/inspectors | Readable owner context and exact signal/instance names | `packages/core/src/naming.ts`, `packages/app-react/src/CircuitDialogs.tsx` |
 | Circuit JSON, SVG, PNG and topology previews | Safe readable filename stems | `packages/service/src/session-backend.ts`, `packages/app-react/src/circuit-files.ts`, topology live view |
 | RTL and SystemC projects/reports | Named public directories, named targets; hardware code unchanged | `activities/view.py`, `activities/{rtl,systemc_at,systemc_rtl}`, `activities/scratch_directory.py` |

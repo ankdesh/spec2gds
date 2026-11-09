@@ -37,7 +37,9 @@ def build_component_spec(comp_def: ComponentDef) -> SpecPackage:
         tags=sorted(set(comp_def.tags)),
         licence=comp_def.licence,
         implementation="composite" if is_hierarchical else "body_sv",
-        contracts=f"docs/TEMP_spec_library_plan/plans/phase-{comp_def.phase}.md#{comp_def.contract_anchor or comp_def.id}",
+        contracts=(f"docs/spec-catalog/phase-4.md#{comp_def.contract_anchor or comp_def.id}"
+                   if comp_def.phase == 4 else
+                   f"docs/spec-catalog/contracts/phase-{comp_def.phase}.md#{comp_def.contract_anchor or comp_def.id}"),
         presets=comp_def.presets,
         timing=comp_def.timing,
         limitations=comp_def.limitations,

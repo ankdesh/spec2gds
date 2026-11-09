@@ -52,4 +52,4 @@ scripts/test-all.sh integration --scope spec,circuit,activities,shared
 scripts/test-all.sh regression
 ```
 
-Retain the three fast live model checks. Report missing required prerequisites as incomplete. Optional SystemC/CIRCT skips do not provide SystemC coverage. Use the [acceptance catalogue](../ui-test-scenarios/README.md) for manual review and retain screenshots, source, generated projects, lint logs, and scored records under `/tmp/spec2gds-acceptance/<run-id>/`. The catalogue and this contract are independent of any earlier case result.
+Retain the three fast live model checks. Report missing required prerequisites as incomplete. Optional SystemC/CIRCT skips do not provide SystemC coverage. Use the [acceptance catalogue](../ui-test-scenarios/README.md) for manual review and retain screenshots, source, generated projects, lint logs, and scored records under `temp/TEMP_spec2gds_acceptance/<run-id>/`. The catalogue and this contract are independent of any earlier case result.

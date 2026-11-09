@@ -37,7 +37,7 @@ flowchart LR
 - Valid Spec assistant proposals save automatically by default. Launch with `--require-designer-approval` to require manual review.
 - On a source-bound circuit, accepting a proposal stages a private draft; **Save to Spec** commits to the `.spec` file.
 
-See the [Documentation Index](docs/README.md) for architecture and workflow references.
+See the [Documentation Index](docs/README.md) for architecture and flow references.
 
 ### Core Documentation Guides
 - **Architecture**: [System Architecture](docs/architecture.md) and [End-to-End Flows](docs/flows.md).
@@ -95,7 +95,7 @@ Harness packages; a local Harness checkout is not required.
 See [Harness package releases](docs/harness-packages.md) for package publication and adoption details.
 
 The focused Python CLIs use the root uv environment and the built internal Harness
-product. See [CLI workflows](docs/ai-assistant-operations.md#cli-flows) for architecture
+product. See [CLI flows](docs/ai-assistant-operations.md#cli-flows) for architecture
 approval, restricted content decisions, exact-file targets, conflicts, and run records.
 
 To enable model-backed Assistant replies, export an API key before launch.
@@ -397,7 +397,7 @@ interfaces, non-wire ports, symbolic ranges, and
 unsupported net shapes are rejected during preflight. See the
 [Deterministic RTL Generation guide](docs/rtl-generation.md) for the exact
 source profile, report contract, invocation, semantics, and required Verilator 5.x lint
-workflow. Generate examples under the configured Activity scratch directory with:
+flow. Generate examples under the configured Activity scratch directory with:
 
 ```bash
 uv run python scripts/generate_rtl_examples.py --check
@@ -521,7 +521,7 @@ hardware simulations. Extensive requires Verilator 5.x and GNU Make; optional
 SystemC/CIRCT tests retain their configuration-based skips. Browser dependencies
 come from Circuit Designer setup, including the Assistant's browser checks.
 Both tiers use deterministic model fixtures and require no model API key.
-See [the test-tier guide](docs/development.md#test-tiers) for selection rules,
+See [the test-tier guide](docs/development.md#5-testing-and-validation-strategy) for selection rules,
 prerequisites, and separately invoked Spec service/Spec Editor scenarios and evaluations.
 
 The existing focused and full-suite commands remain available:
@@ -544,7 +544,7 @@ npm run build
 npm run test:harness
 # Browser dependency setup: docs/ai-assistant-operations.md#browser-checks
 npm run test:ui
-npm run eval -- --output ../TEMP_assistant_eval
+npm run eval -- --output ../temp/TEMP_assistant_eval
 
 # Separately invoked Spec service and editor UI scenarios
 cd ..

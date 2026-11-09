@@ -7,7 +7,9 @@ import { checkHarnessPackages } from "../scripts/check-harness-packages.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 function fixture(t: TestContext) {
-  const directory = mkdtempSync(resolve(root, "../TEMP_harness-packages-test-"));
+  const tempRoot = resolve(root, "../temp/TEMP_harness-packages-tests");
+  mkdirSync(tempRoot, { recursive: true });
+  const directory = mkdtempSync(join(tempRoot, "fixture-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const product = join(directory, "product");
   const name = "@ankdesh/dsh", version = "0.1.6-ankdesh.2";

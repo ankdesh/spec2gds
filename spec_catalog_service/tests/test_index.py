@@ -40,6 +40,7 @@ def test_generation_counter_and_recording(index_env: tuple[CatalogueIndex, Path]
     cat_bytes = get_package_asset(pkg, "library_catalogue_v1")
     assert cat_bytes is not None
     cat_asset = CatalogueAssetV1.model_validate_json(cat_bytes.decode("utf-8"))
+    assert cat_asset.contracts == "docs/spec-catalog/contracts/phase-1.md#mux"
     rev = SpecRevision.from_package(pkg)
 
     # Write dummy spec file

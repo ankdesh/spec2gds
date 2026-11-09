@@ -147,5 +147,5 @@ UI packages never mutate model objects directly.
 - **Bus Interface Modeling**: The Spec Editor preserves bus interfaces in the `.spec` source, but hides them from direct UI edits.
 - **Port Projection**: The circuit adapter projects physical wire ports and ad-hoc connections. Bus interfaces stay in the specification source.
 - **Document Import**: Imported PDF, Word, and ODT documents become narrative text. Model-based extraction requires explicit API key configuration.
-- **AI Assistant Writes**: The AI Assistant cannot write directly to disk. Writes must follow the document approval policy and pass service validation.
+- **AI Assistant Spec Writes**: Changes to a Spec follow its approval policy and pass Spec service validation.
 - **Verification Execution**: Verification Planner generates reference artifacts and synthetic templates. External simulators run executable tests outside the service.
