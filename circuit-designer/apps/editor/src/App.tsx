@@ -27,6 +27,7 @@ import {
   type EntityAction,
   type EntityActivity,
   type EntityRef,
+  type NarrativeBlock,
   type SourceChangeEvent,
 } from "@spec2gds/document-core";
 
@@ -701,6 +702,43 @@ export default function App() {
         const block = find(snapshot.narrative.blocks);
         if (!block || block.type !== "section") throw new Error("The section is no longer available. Refresh the source.");
         await commitEditorOperations([{ type: "upsert_narrative_block", block: { ...block, text: name } }], `Section renamed to ${name}.`);
+      },
+      async upsertOverviewNarrative(text: string) {
+        const findOverviewBlock = (blocks: DocumentSnapshot["narrative"]["blocks"]): DocumentSnapshot["narrative"]["blocks"][number] | undefined => {
+          for (const block of blocks) {
+            if (!block.entity_refs?.length && (block.type === "paragraph" || !block.type)) return block;
+          }
+          return undefined;
+        };
+        const existing = findOverviewBlock(snapshot.narrative.blocks);
+        const blockId = existing?.block_id || "overview_text";
+        const trimmed = text.trim();
+        if (!trimmed && existing) {
+          await commitEditorOperations(
+            [{ type: "delete_narrative_block", block_id: existing.block_id }],
+            "Overview text removed and saved automatically.",
+          );
+        } else if (trimmed) {
+          const block: NarrativeBlock = {
+            block_id: blockId,
+            type: "paragraph",
+            text: trimmed,
+            inlines: [],
+            children: [],
+            ordered: false,
+            rows: [],
+            asset_id: "",
+            alt_text: "",
+            caption: "",
+            entity_refs: [],
+            renderer_id: "",
+            options: {},
+          };
+          await commitEditorOperations(
+            [{ type: "upsert_narrative_block", block }],
+            "Overview text saved to Spec.",
+          );
+        }
       },
       async addComponentPort(ref: EntityRef, value: ComponentPortInput) {
         await commitEditorOperations(

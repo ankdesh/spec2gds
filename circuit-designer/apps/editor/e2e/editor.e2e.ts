@@ -976,7 +976,15 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(overview.getByRole("menuitem", { name: /Launch activity/ })).toHaveCount(0);
   await expect(overview.getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
   await expect(overview.getByRole("menuitem", { name: /More actions/ })).toHaveCount(0);
-  await expect(overview.getByRole("menuitem", { name: "No options available" })).toBeDisabled();
+  await expect(overview.getByRole("menuitem", { name: "Edit overview text…" })).toBeVisible();
+  await overview.getByRole("menuitem", { name: "Edit overview text…" }).click();
+  await expect(overview.getByLabel("Overview text")).toBeVisible();
+  await overview.getByLabel("Overview text").fill("Top-level processor architecture overview.");
+  await overview.getByRole("button", { name: "Save to Spec" }).click();
+  await expect.poll(() => state.transactions.length).toBe(1);
+  expect(state.transactions[0].operations).toEqual([
+    expect.objectContaining({ type: "upsert_narrative_block" }),
+  ]);
   await expect(page.locator(".spec-paper summary").filter({ hasText: "Technical details" })).toHaveCount(0);
 
   const design = page.locator("#design-design_top");

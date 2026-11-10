@@ -301,7 +301,7 @@ validation, and extension instructions.
 
 The **Circuit** menu lists available designs and components. Eligible document
 sections also expose **Options → Open in Circuit Designer** beside their headings, while
-**Options** lists AI Assistant exploration, registered actions, and compatible Activities directly. Empty menus show **No options available**. The server exposes
+**Options** lists AI Assistant exploration, registered actions, and compatible Activities directly. The Overview section provides **Options → Edit overview text…** for authoring specification notes directly into the document. Empty menus show **No options available**. The server exposes
 interactive API docs at `http://SERVER_IP:6010/docs`.
 
 Launching a leaf component shows one read-only component preview with its wire

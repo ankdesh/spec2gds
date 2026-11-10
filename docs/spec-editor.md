@@ -255,7 +255,7 @@ incomplete.
 
 ## Content actions and catalog import
 
-Use the right-side **Options** menu for saved-content actions. Collection menus add Components and Designs. Component and Design menus provide Verify, Activities, and Delete. Parameter, port, and instance rows use the same menu pattern. Save, Cancel, input fields, and top toolbar shortcuts remain visible.
+Use the right-side **Options** menu for saved-content actions. The Overview section provides **Edit overview text…** to author and update specification architecture and overview notes. Collection menus add Components and Designs. Component and Design menus provide Verify, Activities, and Delete. Parameter, port, and instance rows use the same menu pattern. Save, Cancel, input fields, and top toolbar shortcuts remain visible.
 
 Select **Components → Options → Import from catalog…** to browse published Component releases. Search or filter the catalog, select a version, and review its interface, defaults, usage, and evidence. Select **Review import**, resolve conflicts with **Import as a renamed copy**, then select **Import into Spec**. Import adds an editable local definition. Add instances through a Design's Options menu. Catalog origin records remain separate from verification of the current Spec.
 

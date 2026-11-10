@@ -84,6 +84,7 @@ export interface SpecDocumentEditController {
   upsertEntitySection(ref: EntityRef, content: string, sectionId?: string): Promise<void>;
   deleteEntitySection(ref: EntityRef, sectionId?: string): Promise<void>;
   portEditingAvailability(ref: EntityRef): { enabled: boolean; reason: string };
+  upsertOverviewNarrative?(text: string): Promise<void>;
 }
 
 export interface SpecDocumentCommandController {
@@ -525,7 +526,7 @@ function SectionOptionsMenu({
               role="menuitem"
               type="button"
             >
-              Edit text…
+              {section.section_id === "overview" ? "Edit overview text…" : "Edit text…"}
             </button>
           )}
           {onAddInstance && (
@@ -675,7 +676,8 @@ type SectionEditMode = ""
   | "rename"
   | "metadata"
   | "add-wire-port"
-  | "add-sv";
+  | "add-sv"
+  | "overview-narrative";
 
 interface SectionEditState {
   section: DocumentSectionData;
@@ -892,6 +894,92 @@ function HardwareMetadataForm({ state }: { state: SectionEditState }) {
   );
 }
 
+function OverviewNarrativeForm({ state }: { state: SectionEditState }) {
+  const getInitialText = () => {
+    const blocks = state.controller?.source?.narrative?.blocks ?? [];
+    const overviewBlocks = blocks.filter(b => !b.entity_refs?.length && (b.type === "paragraph" || !b.type));
+    if (overviewBlocks.length) {
+      return overviewBlocks.map(b => b.text).join("\n\n");
+    }
+    if (state.section.narrative?.length) {
+      return state.section.narrative.filter(b => !b.entity_refs?.length).map(b => b.text).join("\n\n");
+    }
+    return "";
+  };
+
+  const [text, setText] = useState(getInitialText);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => inputRef.current?.focus(), []);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!state.controller) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (state.controller.upsertOverviewNarrative) {
+        await state.controller.upsertOverviewNarrative(text);
+      } else if (state.controller.applyOperations) {
+        const blocks = state.controller.source?.narrative?.blocks ?? [];
+        const existing = blocks.find(b => !b.entity_refs?.length && (b.type === "paragraph" || !b.type));
+        const blockId = existing?.block_id || "overview_text";
+        const trimmed = text.trim();
+        if (!trimmed && existing) {
+          await state.controller.applyOperations([{ type: "delete_narrative_block", block_id: existing.block_id }]);
+        } else if (trimmed) {
+          await state.controller.applyOperations([{
+            type: "upsert_narrative_block",
+            block: {
+              block_id: blockId,
+              type: "paragraph",
+              text: trimmed,
+              inlines: [],
+              children: [],
+              ordered: false,
+              rows: [],
+              asset_id: "",
+              alt_text: "",
+              caption: "",
+              entity_refs: [],
+              renderer_id: "",
+              options: {},
+            },
+          }]);
+        }
+      }
+      state.cancel();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="spec-inline-editor spec-metadata-editor" onSubmit={submit}>
+      <div className="spec-edit-field-wide">
+        <label htmlFor={`${state.editorId}-text`}>Overview text</label>
+        <textarea
+          id={`${state.editorId}-text`}
+          onChange={(event) => setText(event.target.value)}
+          ref={inputRef}
+          rows={5}
+          value={text}
+          placeholder="Explain architecture, key goals, and high-level requirements for this specification…"
+        />
+        <small>Overview text appears at the top of the specification. Save to Spec commits this text to the document.</small>
+      </div>
+      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+      <div className="spec-edit-actions spec-edit-field-wide">
+        <button disabled={busy} type="submit">{busy ? "Saving…" : "Save to Spec"}</button>
+        <button disabled={busy} onClick={state.cancel} type="button">Cancel</button>
+      </div>
+    </form>
+  );
+}
+
 function SystemVerilogCodeEditor({
   value,
   onChange,
@@ -1072,16 +1160,21 @@ const SpecSection = createComponentImplementation(
       cancel,
       begin,
     };
+    const isOverview = section.section_id === "overview";
     const entityIsEditable = coordinator.controller
       && section.entity_ref
       && ["component", "design"].includes(section.entity_ref.entity_kind);
     const sectionText = factValue(section, "Description");
     const missingLeafRtl = section.implementation_kind === "missing";
+    const hasOverviewText = isOverview && (
+      (coordinator.controller?.source?.narrative?.blocks ?? []).some(b => !b.entity_refs?.length && (b.type === "paragraph" || !b.type) && b.text.trim())
+      || section.narrative.length > 0
+    );
 
     return (
       <SectionEditContext.Provider value={editState}>
         <section
-          className={`spec-section spec-section--level-${section.level}${!section.entity_ref && !sectionText && !section.narrative.length ? " spec-section--compact" : ""}`}
+          className={`spec-section spec-section--level-${section.level}${!section.entity_ref && !sectionText && !section.narrative.length && !hasOverviewText ? " spec-section--compact" : ""}`}
           id={section.section_id}
         >
           <header className="spec-section__header">
@@ -1104,7 +1197,11 @@ const SpecSection = createComponentImplementation(
               onCreate={coordinator.controller && ["components", "designs"].includes(section.section_id)
                 ? (kind) => begin(kind === "component" ? "create-component" : "create-design")
                 : undefined}
-              onEditDetails={entityIsEditable ? () => begin("metadata") : undefined}
+              onEditDetails={entityIsEditable
+                ? () => begin("metadata")
+                : isOverview && coordinator.controller
+                  ? () => begin("overview-narrative")
+                  : undefined}
               onRename={entityIsEditable ? () => begin("rename") : undefined}
               portAvailability={portAvailability}
               section={section}
@@ -1128,6 +1225,7 @@ const SpecSection = createComponentImplementation(
           {mode === "create-design" && <HardwareCreationForm kind="design" state={editState} />}
           {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
           {mode === "add-sv" && <NewSystemVerilogForm state={editState} />}
+          {mode === "overview-narrative" && <OverviewNarrativeForm state={editState} />}
           {mode === "metadata"
             ? <HardwareMetadataForm state={editState} />
             : sectionText && <p className="spec-section-text" style={{ whiteSpace: "pre-wrap" }}>{sectionText}</p>}
@@ -1137,7 +1235,7 @@ const SpecSection = createComponentImplementation(
               : []}
             section={section}
           />
-          {renderChildren(props.children, buildChild)}
+          {(!isOverview || mode !== "overview-narrative") && renderChildren(props.children, buildChild)}
         </section>
       </SectionEditContext.Provider>
     );

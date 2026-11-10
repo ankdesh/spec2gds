@@ -250,6 +250,7 @@ export type EditorTransactionOperation =
   | { type: "clear_internal_design"; component: EntityRef }
   | { type: "set_document_title"; title: string }
   | { type: "upsert_narrative_block"; block: NarrativeBlock }
+  | { type: "delete_narrative_block"; block_id: string }
   | ({ type: "set_entity_metadata"; entity: EntityRef } & EntityMetadataInput)
   | { type: "delete_instance"; design: EntityRef; instance_name: string }
   | { type: "upsert_instance"; design: EntityRef; instance: ComponentInstanceInput }

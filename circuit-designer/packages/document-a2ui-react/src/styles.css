@@ -615,6 +615,10 @@
   max-width: 74ch;
 }
 
+.spec-narrative p {
+  white-space: pre-wrap;
+}
+
 .spec-narrative-action {
   display: inline-flex;
   align-items: center;
