@@ -1,6 +1,6 @@
 # Software Testing and Verification Strategy
 
-This document defines the software test pyramid, local execution profiles, and coverage matrix across `spec2gds`.
+This document defines the software test pyramid, local execution profiles, and coverage matrix across spec2hw.
 
 ## 1. Test Organization and Pyramid
 

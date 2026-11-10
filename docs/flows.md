@@ -1,6 +1,6 @@
 # End-to-End System Flows
 
-This document specifies the primary operational flows across `spec2gds`.
+This document specifies the primary operational flows across spec2hw.
 
 ## 1. Create and Edit a Specification
 

@@ -1,6 +1,6 @@
 # Harness package releases
 
-spec2gds uses published `@ankdesh` packages from GitHub Packages. Setup, builds,
+spec2hw uses published `@ankdesh` packages from GitHub Packages. Setup, builds,
 checks, and application startup do not require a DeepSeek Harness checkout.
 
 ## Current release
@@ -10,7 +10,7 @@ flowchart LR
     R[Published package release] --> L[Locked dependencies]
     L --> I[Install packages]
     I --> C[Check release identity]
-    C --> B[Build and run spec2gds]
+    C --> B[Build and run spec2hw]
 ```
 
 The application uses `0.1.6-ankdesh.2`. Its registry inventory contains 175
@@ -60,7 +60,7 @@ clean dependency graph when package names change. Do not force incompatible peer
 Run `npm ci`, the package check, builds, and the required application profiles.
 The package check also runs before the Assistant build, typecheck, tests, and
 normal startup. A published registry archive establishes package provenance;
-application tests establish whether spec2gds works with that release.
+application tests establish whether spec2hw works with that release.
 
 ## Production profiles
 

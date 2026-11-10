@@ -884,10 +884,10 @@ export default function App() {
       />
 
       {copiedLink && <div className="app-notice"><a href={copiedLink} target="_blank" rel="noopener noreferrer">Open the saved copy</a></div>}
-      {copyDialog && <PathDialog error={error} initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={copySuggestion} onBrowseDirectories={directory => client.browseDirectories(directory)} onCreateDirectory={(parent, name) => client.createDirectory(parent, name)} onClose={() => setCopyDialog(false)} onSubmit={copyDocument} />}
+      {copyDialog && <PathDialog error={error} onClearError={() => setError("")} initialTitle={`${snapshot?.narrative.title || "Spec"} copy`} restoreFocusId="spec-create-copy-trigger" initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={copySuggestion} onBrowseDirectories={directory => client.browseDirectories(directory)} onCreateDirectory={(parent, name) => client.createDirectory(parent, name)} onClose={() => { setError(""); setCopyDialog(false); }} onSubmit={copyDocument} />}
       {snapshot && !canEdit && <div className="app-refresh-notice" role="status">
         <span>This Spec is read-only. Create a copy to edit independently.</span>
-        <button type="button" onClick={() => setCopyDialog(true)}>Create Copy…</button>
+        <button id="spec-create-copy-trigger" type="button" onClick={() => { setError(""); setCopyDialog(true); }}>Create Copy…</button>
         <button type="button" onClick={() => void client.editAccessAction("acquire").then(access => { persistAccess(snapshot.owner_document_key, access); if (access.mode === "read_only") setError("This Spec is still in use. Create a copy to edit it."); else void loadView(); }).catch(caught => setError(String(caught)))}>Resume editing</button>
       </div>}
       {notice && <div className="app-notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}

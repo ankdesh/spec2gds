@@ -184,7 +184,7 @@ def render_report(report: dict, output: Path) -> str:
     details = render_details(report, suites)
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{escape(profile)} test results · spec2gds</title>
+<title>{escape(profile)} test results · spec2hw</title>
 <style>
 :root {{ color-scheme: light; font-family: system-ui, sans-serif; color: #182636; background: #f3f6f9; }}
 body {{ margin: 0; padding: 28px 16px; }}
@@ -204,7 +204,7 @@ footer {{ margin-top: 28px; color: #53677b; font-size: 14px; }}
 @media(max-width: 600px) {{ body {{ padding: 12px 8px; }} main {{ padding: 20px 12px; }} h1 {{ font-size: 24px; }} }}
 @media print {{ body {{ background: white; padding: 0; }} main {{ border: 0; padding: 0; }} .table-scroll {{ overflow: visible; }} }}
 </style></head><body><main>
-<p class="brand">spec2gds</p><h1>{escape(profile)} test results</h1>
+<p class="brand">spec2hw</p><h1>{escape(profile)} test results</h1>
 <p><span class="status {status if status in STATUS_NAMES else "unverified"}">{escape(status_name)}</span></p>
 <section aria-labelledby="summary-heading"><h2 id="summary-heading">Run summary</h2>
 <table class="summary" aria-label="Run summary"><tbody>{summary_rows}</tbody></table>{note}</section>

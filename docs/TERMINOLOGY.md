@@ -1,6 +1,13 @@
-# Spec2GDS Canonical Terminology
+# spec2hw Canonical Terminology
 
-This document defines the canonical terminology that must be used consistently across the spec2gds codebase, documentation, UI, and AI Assistant interactions.
+This document defines the canonical terminology that must be used consistently across spec2hw documentation, UI, and AI Assistant interactions.
+
+## Product and repository names
+
+- **spec2hw**: The product and environment name. Use this spelling in UI and prose.
+- **spec2gds**: The repository name and existing technical identifiers. Retain it in
+  imports, package names, commands, environment variables, service paths, schemas,
+  saved data, and release profiles. Do not rewrite historical evidence.
 
 ## 1. The AI Component
 - **AI Assistant**: Formal name for the AI system (used in titles, UI buttons, first mentions).
@@ -23,7 +30,7 @@ This document defines the canonical terminology that must be used consistently a
 - *(Never use "owner" for human users).*
 
 ## 5. Disambiguating "Workspace"
-- **environment**: The entire spec2gds system/platform.
+- **environment**: The entire spec2hw system/platform.
 - **workspace**: The bound design data / logical design source.
 - **npm package** (or equivalent): Code repository components in the monorepo.
 - **scratch directory**: Temporary build/generation directories.

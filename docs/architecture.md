@@ -2,11 +2,9 @@
 
 ## Product Objective
 
-The `spec2gds` platform converts structured hardware specifications into validated hardware design state.
+The spec2hw platform converts structured hardware specifications into validated hardware design state.
 Each layer has a strict service boundary.
 Every mutation must cross a validated boundary.
-
-![spec2gds System Architecture](images/system-architecture.png)
 
 ```mermaid
 flowchart TB

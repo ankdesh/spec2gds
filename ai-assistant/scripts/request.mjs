@@ -1,4 +1,4 @@
-/** Submit one non-interactive spec2gds request through the DSH headless profile. */
+/** Submit one non-interactive spec2hw request through the DSH headless profile. */
 import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";

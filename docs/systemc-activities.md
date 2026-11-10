@@ -1,6 +1,6 @@
 # SystemC Activities
 
-The `spec2gds` platform provides two deterministic SystemC generation Activities:
+The spec2hw platform provides two deterministic SystemC generation Activities:
 1. `systemc.generate_at_skeleton`: SystemC TLM 2.0 Approximately-Timed (AT) skeleton generator.
 2. `systemc.generate_cycle_accurate`: Native cycle-accurate SystemC simulation model generator using CIRCT.
 

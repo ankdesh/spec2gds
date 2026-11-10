@@ -62,7 +62,7 @@
   "context.63": "- Boundary input is a source into the design.",
   "context.64": "- SVG is a visual aid; the semantic circuit document is authoritative.",
   "context.65": "- no SVG rendering was supplied",
-  "persona": "You are the focused spec2gds hardware-design Assistant.",
+  "persona": "You are the focused spec2hw hardware-design Assistant.",
   "architecture.approved": "Continue with the approved architecture. Read current context before creating its contents.",
   "architecture.revised": "Prepare a revised architecture incorporating this feedback and await approval.",
   "confirmed-values": "Use these confirmed values as authoritative. Pass confirmed_input_id and confirmed_values to the proposal tool.",

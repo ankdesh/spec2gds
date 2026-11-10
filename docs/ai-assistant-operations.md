@@ -588,7 +588,7 @@ editable guide set under `ai-assistant/docs`.
 Use the verified installed profile when packaging. Follow the commands in
 [Harness package releases](harness-packages.md). Packaging verifies the release
 manifest and installed versions. It does not inspect a Harness source checkout.
-Keep application behavior in spec2gds and reusable extensions in Harness.
+Keep application behavior in spec2hw and reusable extensions in Harness.
 
 For a contract change, update the stable requirement, its acceptance row, and the
 TEMP gap record. Validate JSON examples against native tool admission and service

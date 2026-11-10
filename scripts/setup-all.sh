@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# spec2gds Unified Development Setup Script
+# spec2hw Unified Development Setup Script
 #
-# Sets up the complete spec2gds development environment:
+# Sets up the complete spec2hw development environment:
 # 1. Root Python workspace (Spec Editor server & runtime via uv)
 # 2. Circuit Designer workspace (npm dependencies, build & Playwright browsers)
 # 3. AI Assistant packages from GitHub Packages
@@ -14,7 +14,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 
-echo "Setting up spec2gds from locked application and Harness packages."
+echo "Setting up spec2hw from locked application and Harness packages."
 
 # --- Step 0: Ensure Node.js and Package Manager Prerequisites ---
 echo ""
@@ -73,7 +73,7 @@ echo "AI Assistant setup completed."
 
 echo ""
 echo "================================================================="
-echo " spec2gds setup completed successfully!"
+echo " spec2hw setup completed successfully!"
 echo ""
 echo " To start all services, run:"
 echo "   scripts/serve-all.sh start"

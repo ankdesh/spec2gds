@@ -1,5 +1,5 @@
 [Unit]
-Description=spec2gds Harness assistant
+Description=spec2hw AI Assistant
 After=network.target
 
 [Service]

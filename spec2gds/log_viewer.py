@@ -1,4 +1,4 @@
-"""Read-only browser viewer for the combined spec2gds JSONL log."""
+"""Read-only browser viewer for the combined spec2hw JSONL log."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ def create_app(service_config: Path | None = None, *, registry: Any = None) -> A
 
     settings = (registry or load_service_registry(service_config)).logging
     assets = Path(__file__).with_name("log_viewer_static")
-    app = FastAPI(title="spec2gds Log Viewer", docs_url=None, redoc_url=None)
+    app = FastAPI(title="spec2hw Log Viewer", docs_url=None, redoc_url=None)
     app.mount("/assets", StaticFiles(directory=assets), name="log-viewer-assets")
 
     @app.get("/health")
@@ -135,7 +135,7 @@ async def _tail(path: Path) -> AsyncIterator[str]:
 
 def main() -> None:
     """Start the configured viewer and open it in the user's default browser."""
-    parser = argparse.ArgumentParser(description="View combined spec2gds logs.")
+    parser = argparse.ArgumentParser(description="View combined spec2hw logs.")
     parser.add_argument("--service-config", type=Path)
     parser.add_argument("--host")
     parser.add_argument("--port", type=int)
@@ -152,10 +152,10 @@ def main() -> None:
     url = endpoint_url(registry.config["logging"]["viewer"], registry.public_host)
     logger = StructuredLogger("log-viewer", settings)
     logger.event(
-        "process", "starting", "Starting spec2gds Log Viewer",
+        "process", "starting", "Starting spec2hw Log Viewer",
         details={"host": settings.viewer_host, "port": settings.viewer_port},
     )
-    print(f"spec2gds log viewer: {url}")
+    print(f"spec2hw log viewer: {url}")
     if not args.no_open:
         # Give uvicorn a moment to bind before the browser performs its first request.
         timer = Timer(0.5, webbrowser.open, args=(url,))
@@ -164,4 +164,4 @@ def main() -> None:
     import uvicorn
 
     uvicorn.run(create_app(registry=registry), host=settings.viewer_host, port=settings.viewer_port, access_log=False)
-    logger.event("process", "stopped", "Stopped spec2gds Log Viewer")
+    logger.event("process", "stopped", "Stopped spec2hw Log Viewer")

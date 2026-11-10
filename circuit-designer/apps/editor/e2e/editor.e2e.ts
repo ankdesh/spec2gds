@@ -418,6 +418,7 @@ type ApiState = {
   circuits: Array<{ entity_kind: string; entity_id: string }>;
   createdPaths: string[];
   createdTitles: string[];
+  copiedPaths: string[];
   openedPaths: string[];
   generatedTargets: Array<{ entity_kind: string; entity_id: string }>;
   transactions: Array<{ expected_source_revision_hash: string; operations: object[] }>;
@@ -436,6 +437,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
     artifacts: [] as Array<Record<string, unknown>>,
     proposals: [] as Array<Record<string, unknown>>,
     createdTitles: [],
+    copiedPaths: [],
     openedPaths: [],
     transactions: [],
     currentRevision: revision,
@@ -485,16 +487,18 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
       });
     }
 
-    if (path === "/documents/create" || path === "/documents/open") {
+    if (path === "/documents/copy-suggestion") return json({ path: "/home/designer/specifications/existing-copy.spec", title: `${state.currentTitle} copy` });
+
+    if (path === "/documents/create" || path === "/documents/open" || path === "/documents/copy") {
       const body = request.postDataJSON() as { path: string; title?: string };
-      (path.endsWith("create") ? state.createdPaths : state.openedPaths).push(body.path);
+      (path.endsWith("copy") ? state.copiedPaths : path.endsWith("create") ? state.createdPaths : state.openedPaths).push(body.path);
       if (path.endsWith("create")) state.createdTitles.push(body.title ?? "");
       if (body.path === "/tmp/missing.spec") {
         return route.fulfill({ json: { detail: "Specification package was not found." }, status: 422 });
       }
       state.currentRevision = revision;
-      state.currentTitle = path.endsWith("create") ? body.title ?? "" : snapshot.narrative.title;
-      return json(path.endsWith("create")
+      state.currentTitle = !path.endsWith("open") ? body.title ?? "" : snapshot.narrative.title;
+      return json(!path.endsWith("open")
         ? { ...snapshot, narrative: { ...snapshot.narrative, title: body.title ?? "" } }
         : snapshot);
     }
@@ -657,59 +661,130 @@ async function openSample(page: Page): Promise<void> {
   if (await menu.isVisible()) await menu.click();
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();
-  await page.getByLabel("Server-local package path").fill("/tmp/editor-test.spec");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill("/home/designer/specifications/existing.spec");
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
   await expect(page.locator(".spec-paper")).toBeVisible();
 }
 
-test("creates, opens, refreshes, and exposes truthful File menu state", async ({ page }) => {
+test("creates a Spec from its name in Spec root and refreshes the saved file", async ({ page }) => {
   const state = await mockEditorApi(page);
   await page.goto("/");
-  await expect(page).toHaveTitle("spec2gds · Spec Editor");
-
-  await page.getByRole("menuitem", { name: "File", exact: true }).click();
-  await page.getByRole("menuitem", { name: /New Spec/ }).click();
-  await expect(page.getByText("visible to the server running spec2gds")).toBeVisible();
-  await page.getByLabel("Spec name").fill("New editor specification");
-  await page.getByRole("button", { name: "Browse…" }).click();
-  const specificationsFolder = page.getByRole("button", { name: /specifications/ });
-  await specificationsFolder.dblclick();
-  await expect(page.getByText("/home/designer/specifications", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: /New folder/ }).click();
-  await page.getByLabel("New folder name").fill("Project Alpha");
-  await page.getByLabel("Server directory browser").getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("/home/designer/specifications/Project Alpha", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Select folder" }).click();
-  await expect(page.getByLabel("Server-local package path"))
-    .toHaveValue("/home/designer/specifications/Project Alpha/new-editor-specification.spec");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "New editor specification", exact: true })).toBeVisible();
-  expect(state.createdPaths).toEqual([
-    "/home/designer/specifications/Project Alpha/new-editor-specification.spec",
-  ]);
-  expect(state.createdTitles).toEqual(["New editor specification"]);
-
+  await expect(page).toHaveTitle("spec2hw · Spec Editor");
+  await page.keyboard.press("Control+n");
+  const dialog = page.getByRole("dialog", { name: "New Spec", exact: true });
+  await expect(dialog.getByLabel("Spec name")).toBeFocused();
+  await expect(dialog.getByLabel("File path", { exact: true })).toBeHidden();
+  await expect(dialog.getByRole("button", { name: "Create Spec", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Spec name").fill("Single cycle.spec");
+  await expect(dialog.locator(".spec-filename")).toHaveText("File: single-cycle.spec");
+  await dialog.getByLabel("Spec name").fill("Single cycle");
+  await expect(dialog.locator(".spec-filename")).toHaveText("File: single-cycle.spec");
+  await expect(dialog.locator(".spec-location strong")).toHaveText("Spec root");
+  await dialog.getByLabel("Spec name").press("Enter");
+  await expect(page.getByRole("heading", { name: "Single cycle", exact: true })).toBeVisible();
+  expect(state.createdPaths).toEqual(["/home/designer/single-cycle.spec"]);
+  expect(state.createdTitles).toEqual(["Single cycle"]);
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: /Save Automatic/ })).toHaveCount(0);
   await page.getByRole("menuitem", { name: "Refresh From Disk" }).click();
-  await expect.poll(() => state.openedPaths).toEqual([
-    "/home/designer/specifications/Project Alpha/new-editor-specification.spec",
-  ]);
+  await expect.poll(() => state.openedPaths).toEqual(["/home/designer/single-cycle.spec"]);
+});
 
-  await page.keyboard.press("Control+O");
-  await expect(page.getByLabel("Server-local package path"))
-    .toHaveValue("/home/designer/specifications/Project Alpha/new-editor-specification.spec");
-  await page.getByRole("button", { name: "Browse…" }).click();
-  await page.getByRole("button", { name: "Spec root" }).click();
-  await page.getByRole("button", { name: /specifications/ }).dblclick();
-  await page.getByRole("button", { name: /existing\.spec/ }).click();
-  await page.getByRole("button", { name: "Select specification" }).click();
-  await expect(page.getByLabel("Server-local package path"))
-    .toHaveValue("/home/designer/specifications/existing.spec");
-  await page.getByLabel("Server-local package path").fill("/tmp/missing.spec");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+test("chooses a folder with one click, cancels location changes, and adds a folder", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await page.goto("/");
+  await page.keyboard.press("Control+n");
+  await page.getByLabel("Spec name").fill("New editor specification");
+  await page.getByRole("button", { name: "Change location" }).click();
+  await expect(page.getByLabel("Spec name")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: /^specifications$/ }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.locator(".spec-location strong")).toHaveText("Spec root");
+  await expect(page.getByLabel("Spec name")).toHaveValue("New editor specification");
+  await expect(page.getByLabel("Spec name")).toBeFocused();
+  await page.getByRole("button", { name: "Change location" }).click();
+  await page.getByRole("button", { name: /^specifications$/ }).click();
+  await page.getByRole("button", { name: /New folder/ }).click();
+  await page.getByLabel("New folder name").fill("Project Alpha");
+  await page.getByLabel("New folder name").press("Enter");
+  await expect(page.getByRole("button", { name: "Project Alpha", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  await expect(page.locator(".spec-location strong")).toHaveText("Spec root / specifications / Project Alpha");
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "New editor specification", exact: true })).toBeVisible();
+  expect(state.createdPaths).toEqual(["/home/designer/specifications/Project Alpha/new-editor-specification.spec"]);
+});
+
+test("Open Spec starts at Spec root, filters names, and opens a file by double-click", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  await page.keyboard.press("Control+o");
+  const dialog = page.getByRole("dialog", { name: "Open Spec", exact: true });
+  await expect(dialog.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
+  await expect(dialog.getByLabel("File path", { exact: true })).toBeHidden();
+  await dialog.getByLabel("Filter folders and Specs").fill("does-not-exist");
+  await expect(dialog.getByText("No matching names")).toBeVisible();
+  await dialog.getByLabel("Filter folders and Specs").fill("SPECIF");
+  await dialog.getByRole("button", { name: /^specifications$/ }).click();
+  await expect(dialog.getByLabel("Filter folders and Specs")).toHaveValue("");
+  await dialog.getByRole("button", { name: /^existing\.spec$/ }).click();
+  await expect(dialog.getByRole("button", { name: "Open Spec", exact: true })).toBeEnabled();
+  await dialog.getByLabel("Filter folders and Specs").fill("missing");
+  await expect(dialog.getByRole("button", { name: "Open Spec", exact: true })).toBeDisabled();
+  await dialog.getByLabel("Filter folders and Specs").fill("");
+  await dialog.getByRole("button", { name: /^existing\.spec$/ }).dblclick();
+  await expect(dialog).toHaveCount(0);
+  expect(state.openedPaths.at(-1)).toBe("/home/designer/specifications/existing.spec");
+  await page.keyboard.press("Control+o");
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill("/tmp/missing.spec");
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("Specification package was not found");
-  await expect(page.getByRole("dialog", { name: "Open specification" })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await expect(page.getByLabel("File path", { exact: true })).toHaveValue("/tmp/missing.spec");
+});
+
+test("manual paths survive name and folder changes until reset to automatic", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await page.goto("/");
+  await page.keyboard.press("Control+n");
+  await page.getByLabel("Spec name").fill("First name");
+  await page.getByText("More options", { exact: true }).click();
+  const path = page.getByLabel("File path", { exact: true });
+  await path.fill("/home/designer/exact.spec");
+  await page.getByLabel("Spec name").fill("Renamed Spec");
+  await expect(path).toHaveValue("/home/designer/exact.spec");
+  await page.getByRole("button", { name: "Change location" }).click();
+  await page.getByRole("button", { name: /^specifications$/ }).click();
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  await expect(page.locator(".spec-filename")).toHaveText("File: exact.spec");
+  await page.getByText("More options", { exact: true }).click();
+  await expect(path).toHaveValue("/home/designer/specifications/exact.spec");
+  await page.getByRole("button", { name: "Reset to automatic" }).click();
+  await expect(path).toHaveValue("/home/designer/specifications/renamed-spec.spec");
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
+  await expect.poll(() => state.createdPaths).toEqual(["/home/designer/specifications/renamed-spec.spec"]);
+});
+
+test("retries a failed location load without losing the entered name", async ({ page }) => {
+  await mockEditorApi(page);
+  let failListing = true;
+  await page.route("**/api/filesystem/directories*", async route => {
+    if (failListing) return route.fulfill({ status: 503, json: { detail: "Folders are unavailable. Try again." } });
+    return route.fallback();
+  });
+  await page.goto("/");
+  await page.keyboard.press("Control+n");
+  await page.getByLabel("Spec name").fill("Keep this name");
+  await expect(page.getByRole("alert")).toHaveText("Folders are unavailable. Try again.");
+  await expect(page.getByRole("button", { name: "Create Spec", exact: true })).toBeDisabled();
+  failListing = false;
+  await page.getByRole("button", { name: "Retry loading folders" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  await expect(page.getByLabel("Spec name")).toHaveValue("Keep this name");
+  await expect(page.getByRole("button", { name: "Create Spec", exact: true })).toBeEnabled();
 });
 
 test("opens the configured AI Assistant from the top bar", async ({ page }) => {
@@ -1322,8 +1397,9 @@ test("keeps a long Spec name and its edit action reachable at narrow widths", as
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Spec/ }).click();
   await page.getByLabel("Spec name").fill(name);
-  await page.getByLabel("Server-local package path").fill("/tmp/long-name.spec");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill("/tmp/long-name.spec");
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
   await expect(page.locator(".spec-cover h1")).toHaveText(name);
   for (const width of [390, 720, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -1655,10 +1731,11 @@ test("TS-UI-001 and TS-UI-002: renders canonical Spec Editor branding and inflec
   state.currentSummary = "1 components · 0 designs";
 
   await page.goto("/");
-  await expect(page).toHaveTitle("spec2gds · Spec Editor");
+  await expect(page).toHaveTitle("spec2hw · Spec Editor");
+  await expect(page.locator(".brand strong")).toHaveText("spec2hw");
 
   await openSample(page);
-  await expect(page).toHaveTitle("spec2gds · Spec Editor");
+  await expect(page).toHaveTitle("spec2hw · Spec Editor");
 
   const summary = page.locator(".spec-cover p");
   await expect(summary).toBeVisible();
@@ -1669,11 +1746,11 @@ test("TS-UI-004: dialogs enforce ARIA modal focus trapping, Escape dismissal, an
   await mockEditorApi(page);
   await openSample(page);
 
-  // Test Help -> About spec2gds dialog
+  // Test Help -> About spec2hw dialog
   await page.getByRole("menuitem", { name: "Help", exact: true }).click();
-  await page.getByRole("menuitem", { name: "About spec2gds", exact: true }).click();
+  await page.getByRole("menuitem", { name: "About spec2hw", exact: true }).click();
 
-  const aboutDialog = page.getByRole("dialog", { name: "About spec2gds" });
+  const aboutDialog = page.getByRole("dialog", { name: "About spec2hw" });
   await expect(aboutDialog).toBeVisible();
   await expect(aboutDialog).toHaveAttribute("aria-modal", "true");
 
@@ -1753,7 +1830,7 @@ test("TS-UI-007: validates WCAG AA contrast ratio for table headers and menus ac
 });
 
 test("captures Spec Editor visual baselines across themes, viewports, and dialogs", async ({ page }) => {
-  const outputDir = process.env.UI_BASELINE_DIR || join(process.cwd(), "tmp/visual-baselines");
+  const outputDir = process.env.UI_BASELINE_DIR || test.info().outputPath("visual-baselines");
   mkdirSync(outputDir, { recursive: true });
   const saveBaseline = async (filename: string) => {
     await page.screenshot({ path: join(outputDir, filename) });
@@ -1797,8 +1874,8 @@ test("captures Spec Editor visual baselines across themes, viewports, and dialog
 
   // 6. About Dialog
   await page.getByRole("menuitem", { name: "Help", exact: true }).click();
-  await page.getByRole("menuitem", { name: "About spec2gds", exact: true }).click();
-  const aboutDialog = page.getByRole("dialog", { name: "About spec2gds" });
+  await page.getByRole("menuitem", { name: "About spec2hw", exact: true }).click();
+  const aboutDialog = page.getByRole("dialog", { name: "About spec2hw" });
   await expect(aboutDialog).toBeVisible();
   await saveBaseline("spec_editor_about_dialog.png");
   await page.keyboard.press("Escape");
@@ -1816,4 +1893,328 @@ test("captures Spec Editor visual baselines across themes, viewports, and dialog
   await saveBaseline("spec_editor_topology_dialog.png");
   await page.keyboard.press("Escape");
   await expect(topologyDialog).not.toBeVisible();
+});
+
+
+test("Copy uses the service suggestion beside the source", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Create Copy/ }).click();
+  await expect(page.getByLabel("Spec name", { exact: true })).toHaveValue("Editor Test copy");
+  await expect(page.locator(".spec-filename")).toHaveText("File: existing-copy.spec");
+  await expect(page.locator(".spec-location strong")).toHaveText("Spec root / specifications");
+  await page.getByRole("button", { name: "Create Copy", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(state.copiedPaths).toEqual(["/home/designer/specifications/existing-copy.spec"]);
+  expect(state.createdPaths).toEqual([]);
+});
+
+test("late copy suggestions preserve edits and a pending copy submits once", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  let releaseSuggestion!: () => void;
+  const suggestionGate = new Promise<void>(resolve => { releaseSuggestion = resolve; });
+  await page.route("**/api/documents/copy-suggestion*", async route => {
+    await suggestionGate;
+    return route.fulfill({ json: { path: "/home/designer/specifications/late.spec", title: "Late suggestion" } });
+  });
+  let releaseCopy!: () => void;
+  const copyGate = new Promise<void>(resolve => { releaseCopy = resolve; });
+  let requests = 0;
+  await page.route("**/api/documents/copy", async route => { ++requests; await copyGate; return route.fallback(); });
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Create Copy/ }).click();
+  await page.getByLabel("Spec name", { exact: true }).fill("Chosen copy");
+  await page.getByRole("button", { name: "Change location" }).click();
+  await page.getByRole("button", { name: "Spec root", exact: true }).click();
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  releaseSuggestion();
+  await expect(page.getByLabel("Spec name", { exact: true })).toHaveValue("Chosen copy");
+  await expect(page.locator(".spec-location strong")).toHaveText("Spec root");
+  await expect(page.locator(".spec-filename")).toHaveText("File: chosen-copy.spec");
+  await page.getByRole("button", { name: "Create Copy", exact: true }).click();
+  await expect.poll(() => requests).toBe(1);
+  await expect(page.getByRole("button", { name: "Creating…" })).toBeDisabled();
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Control+n");
+  await page.keyboard.press("Control+o");
+  await expect(page.getByRole("dialog", { name: "Create Copy", exact: true })).toBeVisible();
+  releaseCopy();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(requests).toBe(1);
+  expect(state.copiedPaths).toEqual(["/home/designer/chosen-copy.spec"]);
+});
+
+test("file dialogs fit narrow screens in both themes and retain keyboard focus", async ({ page }, info) => {
+  await mockEditorApi(page);
+  for (const theme of ["obsidian", "clean"]) {
+    await page.goto("/");
+    await page.evaluate(themeId => localStorage.setItem("spec2gds:spec-editor:preferences", JSON.stringify({ schema_version: 1, theme_id: themeId })), theme);
+    await page.reload();
+    for (const width of [390, 1440]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.keyboard.press("Control+n");
+      const dialog = page.getByRole("dialog", { name: "New Spec", exact: true });
+      await page.getByLabel("Spec name", { exact: true }).fill("My registered adder");
+      await expect(dialog.getByRole("button", { name: "Create Spec", exact: true })).toBeEnabled();
+      const box = (await dialog.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width);
+      await dialog.screenshot({ path: info.outputPath(`new-spec-${theme}-${width}.png`) });
+      if (theme === "obsidian" && width === 1440) await dialog.screenshot({ path: info.outputPath("spec-new.jpg"), type: "jpeg", quality: 90 });
+      await page.getByText("More options", { exact: true }).click();
+      await expect(page.getByLabel("File path", { exact: true })).toHaveValue("/home/designer/my-registered-adder.spec");
+      await page.getByText("More options", { exact: true }).click();
+      await page.getByRole("button", { name: "Change location" }).click();
+      await expect(page.getByLabel("Filter folders")).toBeFocused();
+      await page.getByRole("dialog").screenshot({ path: info.outputPath(`choose-location-${theme}-${width}.png`) });
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(page.getByLabel("Spec name", { exact: true })).toBeFocused();
+      await page.getByRole("button", { name: "Create Spec", exact: true }).focus();
+      await page.keyboard.press("Tab");
+      await expect(page.getByRole("button", { name: "Close", exact: true })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+    }
+  }
+});
+
+
+test("a late folder response cannot replace a later location choice", async ({ page }) => {
+  await mockEditorApi(page);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  await page.route("**/api/filesystem/directories?*", async route => {
+    if (new URL(route.request().url()).searchParams.get("path") === "/home/designer/specifications") await gate;
+    return route.fallback();
+  });
+  await page.goto("/");
+  await page.keyboard.press("Control+n");
+  await page.getByLabel("Spec name", { exact: true }).fill("Keep the root");
+  await page.getByRole("button", { name: "Change location" }).click();
+  const response = page.waitForResponse(response => new URL(response.url()).searchParams.get("path") === "/home/designer/specifications");
+  await page.getByRole("button", { name: "specifications", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "Change location" }).click();
+  await expect(page.getByRole("button", { name: "Use this folder" })).toBeEnabled();
+  release();
+  await response;
+  await expect(page.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  await expect(page.locator(".spec-location strong")).toHaveText("Spec root");
+});
+
+async function openCatalogFixture(page: Page, options: { failResults?: boolean; failDetails?: boolean; conflict?: boolean } = {}) {
+  await mockEditorApi(page);
+  const components = Array.from({ length: 50 }, (_, index) => ({
+    key: index === 0 ? "barrel-shift" : `component-${index}`,
+    id: index === 0 ? "barrel_shift" : index === 1 ? "very_long_component_identifier_".repeat(4) : `component_${String(index).padStart(2, "0")}`,
+    summary: index === 0 ? "Universal barrel shifter with direction and arithmetic mode controls." : "Reusable Component with a long description that must stay inside the result row without overlapping the selected Component details. ".repeat(3),
+    version: "1.0.0", category: index % 2 ? "arithmetic" : "logic", package_sha256: `package-${index}`, functional_status: "reported_pass",
+  }));
+  const calls = { reviews: [] as any[], imports: [] as any[], lists: [] as URLSearchParams[] };
+  await page.route("**/api/catalog/**", async route => {
+    const url = new URL(route.request().url());
+    const path = url.pathname.replace(/^\/api/, "");
+    if (path === "/catalog/capabilities") return route.fulfill({ json: { categories: ["logic", "arithmetic"] } });
+    if (path === "/catalog/components") {
+      calls.lists.push(url.searchParams);
+      if (options.failResults) return route.fulfill({ status: 503, json: { detail: "Component library is unavailable." } });
+      const query = url.searchParams.get("q")?.toLowerCase() ?? "";
+      const category = url.searchParams.get("category");
+      const items = components.filter(item => `${item.id} ${item.summary}`.toLowerCase().includes(query) && (!category || item.category === category));
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      return route.fulfill({ json: { items: items.slice(offset, offset + 25), total: items.length } });
+    }
+    if (path === "/catalog/imports/preview") {
+      const body = route.request().postDataJSON(); calls.reviews.push(body);
+      const conflict = options.conflict && !body.renamed_copy;
+      return route.fulfill({ json: { can_import: !conflict, reused: false, root: componentRef,
+        definitions: [{ source_id: "source-shifter", name: body.renames["source-shifter"] || "Barrel shifter", vlnv: "acme:logic:barrel_shift:1.0", reused: false }],
+        conflicts: conflict ? [{ source_id: "source-shifter", name: "Barrel shifter", reason: "A local definition has this name.", suggested_name: "Barrel shifter copy" }] : [],
+      } });
+    }
+    if (path === "/catalog/imports") { calls.imports.push(route.request().postDataJSON()); return route.fulfill({ json: { root: componentRef, reused: false } }); }
+    const match = path.match(/^\/catalog\/components\/([^/]+)(?:\/versions\/([^/]+))?$/);
+    if (match) {
+      if (options.failDetails) return route.fulfill({ status: 503, json: { detail: "Component details are unavailable." } });
+      const item = components.find(item => item.key === match[1])!;
+      if (!match[2]) return route.fulfill({ json: { versions: [{ ...item, version: "1.0.0" }, { ...item, version: "0.9.0" }] } });
+      return route.fulfill({ json: { ...item, version: match[2],
+        ports: Array.from({ length: 18 }, (_, index) => ({ name: index === 0 ? "clk_i" : `data_${index}`, direction: index % 2 ? "out" : "in", width: index ? "[(W*ORDER*$clog2(R))-1:0]".repeat(3) : "1" })),
+        parameters: [{ name: "W", rtl_type: "int", value: "32", description: "Data width in bits." }, { name: "ORDER", rtl_type: "int", value: "4", description: "Pipeline stage count." }],
+        metadata: { summary: "Parameterized shifter", presets: { default: { W: "32" } }, timing: { latency: "1 cycle" }, licence: "Apache-2.0", limitations: ["Use a positive data width."] },
+        usage_markdown: "# Usage\nSet W to the required data width.\n".repeat(20),
+        evidence: [{ received_at: "2026-11-10", report: { checks: [{ kind: "lint", status: "passed", summary: "Published source passed its recorded lint check." }], tools: { verilator: "5" } } }],
+      } });
+    }
+    return route.fallback();
+  });
+  await openSample(page);
+  await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Import from catalog…", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Component library", exact: true });
+  await expect(dialog).toBeVisible();
+  return { dialog, calls, options };
+}
+
+test("Component library contains long content and keeps its header and action visible", async ({ page }, info) => {
+  const { dialog } = await openCatalogFixture(page);
+  for (const theme of ["obsidian", "clean"]) {
+    await page.evaluate(themeId => {
+      localStorage.setItem("spec2gds:spec-editor:preferences", JSON.stringify({ schema_version: 1, theme_id: themeId }));
+      document.documentElement.dataset.theme = themeId;
+      document.querySelector<HTMLElement>(".app-shell")!.dataset.theme = themeId;
+    }, theme);
+    for (const width of [390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 470 : 844 });
+      if (width < 900 && await dialog.getByRole("button", { name: "Back to results", exact: false }).isVisible()) await dialog.getByRole("button", { name: "Back to results", exact: false }).click();
+      const result = dialog.locator(".spec-catalog-result").first();
+      await expect(result).toBeEnabled();
+      const resultBox = (await result.boundingBox())!;
+      const descriptionBox = (await result.locator(".spec-catalog-result-summary").boundingBox())!;
+      expect(descriptionBox.x + descriptionBox.width).toBeLessThanOrEqual(resultBox.x + resultBox.width);
+      await result.click();
+      await expect(dialog.getByRole("heading", { name: "barrel_shift", exact: true })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "Review import", exact: true })).toBeEnabled();
+      const contrast = await dialog.evaluate(element => {
+        const luminance = (color: string) => {
+          const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map(value => value / 255)
+            .map(value => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4);
+          return .2126 * rgb[0] + .7152 * rgb[1] + .0722 * rgb[2];
+        };
+        const text = luminance(getComputedStyle(element.querySelector(".spec-catalog-notice")!).color);
+        const background = luminance(getComputedStyle(element).backgroundColor);
+        const primary = getComputedStyle(element.querySelector(".spec-catalog-primary")!);
+        const buttonText = luminance(primary.color), buttonBackground = luminance(primary.backgroundColor);
+        return Math.min((Math.max(text, background) + .05) / (Math.min(text, background) + .05),
+          (Math.max(buttonText, buttonBackground) + .05) / (Math.min(buttonText, buttonBackground) + .05));
+      });
+      expect(contrast).toBeGreaterThanOrEqual(4.5);
+      const footerBefore = (await dialog.locator(".spec-catalog-footer").boundingBox())!;
+      await dialog.locator(".spec-catalog-detail-scroll").evaluate(element => { element.scrollTop = element.scrollHeight; });
+      await expect(dialog.getByRole("heading", { name: "Component library", exact: true })).toBeInViewport();
+      await expect(dialog.getByRole("button", { name: "Review import", exact: true })).toBeInViewport();
+      expect((await dialog.locator(".spec-catalog-footer").boundingBox())!.y).toBe(footerBefore.y);
+      const box = (await dialog.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(0); expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.x + box.width).toBeLessThanOrEqual(width); expect(box.y + box.height).toBeLessThanOrEqual(width === 1440 ? 470 : 844);
+      expect(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+      await dialog.locator(".spec-catalog-detail-scroll").evaluate(element => { element.scrollTop = 0; });
+      await dialog.screenshot({ path: info.outputPath(`component-library-${theme}-${width}.png`) });
+    }
+  }
+});
+
+test("Component library filters, paginates, and preserves results on narrow screens", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const { dialog, calls } = await openCatalogFixture(page);
+  await expect(dialog.getByLabel("Search Components")).toBeFocused();
+  await dialog.getByLabel("Search Components").fill("no-such-component");
+  await expect(dialog.getByText("No matching Components", { exact: true })).toBeVisible();
+  await dialog.getByLabel("Search Components").fill("");
+  await expect(dialog.getByRole("navigation", { name: "Catalog pages" })).toContainText("1–25 of 50");
+  await dialog.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(dialog.getByRole("navigation", { name: "Catalog pages" })).toContainText("26–50 of 50");
+  await dialog.locator(".spec-catalog-results-scroll").evaluate(element => { element.scrollTop = 250; });
+  const before = await dialog.locator(".spec-catalog-results-scroll").evaluate(element => element.scrollTop);
+  const chosen = dialog.locator(".spec-catalog-result").nth(3);
+  await expect(chosen).toBeEnabled();
+  await expect(chosen.locator("strong")).toHaveText("component_28");
+  await chosen.focus();
+  const position = await dialog.locator(".spec-catalog-results-scroll").evaluate(element => element.scrollTop);
+  await chosen.press("Enter");
+  await expect(dialog.getByRole("heading", { name: "component_28", exact: true })).toBeFocused();
+  await dialog.getByRole("button", { name: "Back to results", exact: false }).click();
+  await expect(chosen).toBeFocused();
+  expect(await dialog.locator(".spec-catalog-results-scroll").evaluate(element => element.scrollTop)).toBe(position);
+  expect(before).toBeGreaterThanOrEqual(0);
+  await dialog.getByRole("button", { name: "Previous", exact: true }).click();
+  const longResult = dialog.locator(".spec-catalog-result").nth(1);
+  await expect(longResult).toBeEnabled();
+  await expect(longResult.locator("strong")).toContainText("very_long_component_identifier_");
+  await longResult.click();
+  await expect(dialog.getByRole("button", { name: "Review import", exact: true })).toBeEnabled();
+  expect((await dialog.locator(".spec-catalog-detail-scroll").boundingBox())!.height).toBeGreaterThan(100);
+  await dialog.getByRole("button", { name: "Back to results", exact: false }).click();
+  await dialog.getByRole("button", { name: "Filters", exact: true }).click();
+  await dialog.getByRole("combobox", { name: "Category", exact: true }).selectOption("logic");
+  await expect(dialog.getByRole("button", { name: "Filters (1)", exact: true })).toBeVisible();
+  await expect.poll(() => calls.lists.at(-1)?.get("category")).toBe("logic");
+  await dialog.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Filters", exact: true })).toBeVisible();
+});
+
+test("Component library reviews conflicts and invalidates import after edits or a version change", async ({ page }) => {
+  const { dialog, calls } = await openCatalogFixture(page, { conflict: true });
+  await dialog.locator(".spec-catalog-result").first().click();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(dialog.getByRole("heading", { name: "Import preview", exact: true })).toBeFocused();
+  await expect(dialog.getByText(/A local definition has this name/)).toBeVisible();
+  await dialog.getByLabel("Import as a renamed copy").check();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toBeEnabled();
+  await dialog.getByLabel("Local name for source-shifter").fill("Local shifter");
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toHaveCount(0);
+  await dialog.getByLabel("Local name for source-shifter").fill("Barrel shifter");
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toHaveCount(0);
+  await dialog.getByLabel("Local name for source-shifter").fill("Local shifter");
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await dialog.getByRole("combobox", { name: "Version", exact: true }).selectOption("0.9.0");
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toHaveCount(0);
+  await expect(dialog.getByRole("region", { name: "Import preview", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await dialog.getByLabel("Import as a renamed copy").check();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await dialog.getByRole("button", { name: "Import into Spec", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(calls.imports).toHaveLength(1);
+  expect(calls.imports[0]).toMatchObject({ version: "0.9.0", renamed_copy: true, expected_source_revision_hash: revision });
+});
+
+test("Component library recovers list and detail failures and restores focus on close", async ({ page }) => {
+  const { dialog, options } = await openCatalogFixture(page, { failResults: true });
+  await expect(dialog.getByRole("alert")).toContainText("Component library is unavailable.");
+  options.failResults = false;
+  await dialog.getByRole("button", { name: "Retry catalog request", exact: true }).click();
+  await expect(dialog.locator(".spec-catalog-result").first()).toBeEnabled();
+  options.failDetails = true;
+  await dialog.locator(".spec-catalog-result").first().click();
+  await expect(dialog.getByRole("alert")).toContainText("Component details are unavailable.");
+  options.failDetails = false;
+  await dialog.getByRole("button", { name: "Retry Component details", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Review import", exact: true })).toBeEnabled();
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).focus();
+  await page.keyboard.press("Tab"); await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Close Component library", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator("#components").getByRole("button", { name: "Options", exact: true })).toBeFocused();
+});
+
+test("Component library keeps an import pending and prevents duplicate actions", async ({ page }) => {
+  const { dialog, calls } = await openCatalogFixture(page);
+  await dialog.locator(".spec-catalog-result").first().click();
+  await dialog.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toBeEnabled();
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let requests = 0;
+  await page.route("**/api/catalog/imports**", async route => {
+    if (new URL(route.request().url()).pathname === "/api/catalog/imports") { ++requests; await gate; }
+    return route.fallback();
+  });
+  try {
+    await dialog.getByRole("button", { name: "Import into Spec", exact: true }).click();
+    await expect(dialog.getByRole("button", { name: "Importing…", exact: true })).toBeDisabled();
+    await expect(dialog.getByRole("button", { name: "Close Component library", exact: true })).toBeDisabled();
+    await expect(dialog.getByLabel("Import as a renamed copy")).toBeDisabled();
+    await page.keyboard.press("Enter"); await page.keyboard.press("Escape"); await page.keyboard.press("Control+n");
+    await expect(dialog).toBeVisible();
+    expect(requests).toBe(1);
+  } finally { release(); }
+  await expect(dialog).toHaveCount(0);
+  expect(calls.imports).toHaveLength(1);
 });

@@ -83,6 +83,23 @@ test("unbound snapshots survive restart and new releases without instruction rep
   } finally { state.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
+test("the spec2hw release preserves a pinned spec2gds persona", () => {
+  const state = new ProductState(":memory:");
+  try {
+    const previous = modified("3.0.0", files => {
+      const texts = JSON.parse(files["instructions.json"]!);
+      texts.persona = texts.persona.replace("spec2hw", "spec2gds");
+      files["instructions.json"] = JSON.stringify(texts);
+    });
+    new InstructionSnapshots(state.database, previous).pin("old");
+    const current = new InstructionSnapshots(state.database, defaultInstructions);
+    assert.equal(defaultInstructions.snapshot.version, "3.0.1");
+    assert.match(current.get("old")!.text("persona"), /spec2gds/);
+    assert.match(current.pin("new").text("persona"), /spec2hw/);
+    assert.equal(current.pin("continued", "old").snapshot.hash, previous.snapshot.hash);
+  } finally { state.close(); }
+});
+
 test("changed or incompatible stored snapshots block execution without deleting design records", () => {
   const state = new ProductState(":memory:");
   try {

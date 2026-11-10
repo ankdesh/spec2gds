@@ -188,8 +188,9 @@ export async function openSpec(page: Page, stack: Stack, path = stack.path()): P
   if (await page.getByRole("button", { name: "Menu", exact: true }).isVisible()) await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();
-  await page.getByLabel("Server-local package path").fill(path);
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill(path);
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
   await expect(page.locator(".spec-paper")).toBeVisible();
 }
 
@@ -199,7 +200,6 @@ export async function newSpec(page: Page, stack: Stack): Promise<void> {
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Spec/ }).click();
   await page.getByLabel("Spec name").fill("Coverage authoring");
-  await page.getByLabel("Server-local package path").fill(stack.path());
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Coverage authoring", exact: true })).toBeVisible();
 }

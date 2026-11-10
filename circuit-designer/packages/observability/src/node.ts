@@ -101,7 +101,7 @@ export class StructuredLogger {
     catch (reason) {
       if (!this.reportedFailure) {
         this.reportedFailure = true;
-        console.error(`spec2gds logging disabled after write failure: ${String(reason)}`);
+        console.error(`spec2hw logging disabled after write failure: ${String(reason)}`);
       }
     }
   }

@@ -2,7 +2,7 @@
 
 A flow definition declares inputs, operations, conditions, decisions, and outputs.
 A flow execution records one run. DeepSeek Harness owns both generic contracts
-and execution. Spec2gds registers its domain commands and six definitions: four
+and execution. spec2hw registers its domain commands and six definitions: four
 published flows and two shared subflows.
 
 The model selects a named flow tool and supplies the complete request. The tool
@@ -92,7 +92,7 @@ compatibility version 2. Old incompatible releases stop explicitly.
 
 Generic flows are opt-in for other Harness deployments. The bundled text-analysis
 example uses deterministic counting, a branch, a subflow, and an optional typed
-summary without any Spec2gds dependency.
+summary without any spec2hw dependency.
 
 Native phases retain the caller preset and selected model route after the source
 conversation closes. Their charges stay in the source allowance. A pending Goal

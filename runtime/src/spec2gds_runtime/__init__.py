@@ -1,4 +1,4 @@
-"""Shared runtime contracts used by all Python spec2gds applications."""
+"""Shared runtime contracts used by all Python spec2hw applications."""
 
 from .observability import (
     LogSettings,

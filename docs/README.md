@@ -1,6 +1,6 @@
 # Documentation Index
 
-This directory contains the living technical documentation for `spec2gds`.
+This directory contains the living technical documentation for spec2hw.
 Use the [canonical terminology](TERMINOLOGY.md). Write in clear, concise language based on ASD-STE100.
 
 ## Start here: short tutorials

@@ -459,7 +459,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     except Exception as exc:  # pragma: no cover - import environment guard.
         raise RuntimeError("FastAPI is required for the V1 local editor API.") from exc
 
-    app = fastapi.FastAPI(title="spec2gds V1 Hardware Specification API")
+    app = fastapi.FastAPI(title="spec2hw V1 Hardware Specification API")
     approval_policy = "review" if (
         require_designer_approval if require_designer_approval is not None
         else require_human_approval if require_human_approval is not None

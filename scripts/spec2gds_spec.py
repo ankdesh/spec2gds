@@ -25,7 +25,7 @@ from spec2gds.spec.spec_format.workspace_target import (
 
 def _parser() -> argparse.ArgumentParser:
     """Build the V1 source-package command line parser."""
-    parser = argparse.ArgumentParser(prog="spec2gds-spec", description="IP-XACT-centered spec2gds V1 package tool")
+    parser = argparse.ArgumentParser(prog="spec2gds-spec", description="IP-XACT-centered spec2hw V1 package tool")
     commands = parser.add_subparsers(dest="command", required=True)
 
     create = commands.add_parser("create", help="Create an empty V1 .spec package.")

@@ -334,7 +334,7 @@
     # key coming from the credential store below. Thinking defaults are a deployment
     # choice.
 
-# Shared spec2gds layer for both browser and one-shot profiles.
+# Shared spec2hw layer for both browser and one-shot profiles.
 - id: agent-default-model
   config:
     provider: openai
@@ -386,7 +386,7 @@
 - id: session-title-llm
   disabled: true
 
-# spec2gds domain tools replace general-purpose coding and delegation tools.
+# spec2hw domain tools replace general-purpose coding and delegation tools.
 - id: compaction-basic
   config:
     maxTokens: !!js Number(process.env.ASSISTANT_MAX_OUTPUT_TOKENS || 16384)

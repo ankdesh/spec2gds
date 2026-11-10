@@ -10,13 +10,13 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   const React = require("react");
   const h = React.createElement;
   let openNativeSession = () => {};
-  document.title = "spec2gds Assistant";
+  document.title = "spec2hw Assistant";
 
   const style = document.createElement("style");
   style.dataset.plugin = "@spec2gds/harness-assistant";
   style.textContent = `
     .s2g-editor{width:min(920px,100%);max-height:90vh;overflow:auto}.s2g-editor>label{display:grid;gap:4px;margin:8px 0}.s2g-editor textarea{width:100%;box-sizing:border-box;font:12px/1.4 monospace}.s2g-editor fieldset{border:1px solid #9aa5a2;border-radius:7px}.s2g-editor .s2g-inline{display:inline-flex;align-items:center;gap:4px;font-weight:400}.s2g-editor .s2g-inline input{width:auto}.s2g-editor svg{width:100%;max-height:350px}.s2g-editor pre,.s2g-inspector pre{max-height:300px;overflow:auto;white-space:pre-wrap}.s2g-inspector article{padding:8px;border:1px solid #9aa5a2}.s2g-inspector table{width:100%;text-align:left;font-size:11px}
-    .s2g-brand{display:flex;align-items:center;gap:8px;font-weight:700;color:var(--text-primary,#171717)}
+    .s2g-brand{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;letter-spacing:normal;white-space:nowrap;color:var(--text-primary,#171717)}
     .s2g-mark{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:#176b5b;color:white;font:700 12px/1 system-ui}
     .s2g-review{margin:6px 0;padding:12px;border:1px solid color-mix(in srgb,#176b5b 28%,transparent);border-radius:10px;background:color-mix(in srgb,#176b5b 5%,transparent);font:13px/1.45 system-ui}
     .s2g-review header{display:flex;justify-content:space-between;gap:12px}.s2g-review h4{margin:0;font-size:14px}.s2g-state{text-transform:uppercase;font-size:10px;letter-spacing:.08em;color:#176b5b}
@@ -946,14 +946,14 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     return h("p", { className: "s2g-tool-progress", role: failed ? "alert" : "status" }, failed ? "The current action needs attention." : actions[settled ? 1 : 0]);
   }
 
-  function BrandMark() { return h("span", { className: "s2g-mark" }, "S2G"); }
-  function BrandName() { return h("span", { className: "s2g-brand" }, "spec2gds AI Assistant"); }
+  function BrandMark() { return h("span", { className: "s2g-mark" }, "S2H"); }
+  function BrandName() { return h("span", { className: "s2g-brand" }, "spec2hw AI Assistant"); }
 
   module.exports.inject = ["slots", "uiConversation", "uiSession", "sessions", "workspaces"];
   module.exports.apply = function apply(ctx) {
     if (document.documentElement) document.documentElement.dataset.spec2gdsUi = "true";
     const setProductTitle = () => {
-      if (document.title !== "spec2gds Assistant") document.title = "spec2gds Assistant";
+      if (document.title !== "spec2hw Assistant") document.title = "spec2hw Assistant";
     };
     setProductTitle();
     if (typeof MutationObserver === "function") {
@@ -967,7 +967,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         const local = ctx.workspaces.list.getSnapshot().items.find(item => item.workspaceId === intent.workspaceId);
         if (!local) throw new Error("The selected design workspace is no longer available.");
         const product = (await api("/workspaces")).workspaces.find(item => item.path === local.path);
-        if (!product) throw new Error("This workspace is not connected to a spec2gds design source.");
+        if (!product) throw new Error("This workspace is not connected to a spec2hw design source.");
         workspace = product;
       }
       await createBoundSession(ctx, undefined, workspace);
@@ -988,7 +988,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
       try {
         const stored = await api("/workspaces");
         for (const descriptor of stored.workspaces || []) await ensureWorkspace(ctx, descriptor);
-      } catch (error) { console.warn("spec2gds workspace synchronization failed", error); }
+      } catch (error) { console.warn("spec2hw workspace synchronization failed", error); }
     });
     const params = new URLSearchParams(location.search);
     const launch = new URLSearchParams(location.hash.replace(/^#/, ""));

@@ -49,8 +49,8 @@ flowchart LR
 
 ### Menu Operations
 - **File Menu**:
-  - **New Spec (`Ctrl+N` / `Cmd+N`)**: Prompts for a human-readable title and server path, then initializes an empty `.spec` file.
-  - **Open Spec (`Ctrl+O` / `Cmd+O`)**: Opens an existing `.spec` package from the host filesystem.
+  - **New Spec (`Ctrl+N` / `Cmd+N`)**: Asks for a readable name, sets the filename automatically, and creates an empty `.spec` file in Spec root. **Change location** selects another folder. **More options** allows an exact file path.
+  - **Open Spec (`Ctrl+O` / `Cmd+O`)**: Shows folders and `.spec` files in Spec root. Filter names in the current folder, then select a file and **Open Spec**, or double-click it. **More options** allows an exact file path.
   - **Refresh From Disk**: Reloads the active package from disk, discarding unsaved UI state.
   - Use **Save to Spec** in each draft to validate and save the change. File has no separate Save command.
 - **Edit Menu**:
@@ -147,7 +147,7 @@ the duplicate opens read-only. Read-only opening does not change the saved file.
 Opening a writable legacy package can normalize missing or duplicate names within
 its directory, while preserving hardware IDs.
 
-**Create Copy** copies the saved source, embedded assets, annotations, Circuit
+**Create Copy** suggests a copy name and filename beside the source. Use **Change location** to select another folder, or **More options** to enter an exact file path. It copies the saved source, embedded assets, annotations, Circuit
 layout, and timing. It preserves internal IDs and creates a different file
 binding. It does not copy Activity history, pending proposals, external artifacts,
 or Assistant history. Existing destinations are never replaced. If an inline
@@ -257,7 +257,7 @@ incomplete.
 
 Use the right-side **Options** menu for saved-content actions. The Overview section provides **Edit overview text…** to author and update specification architecture and overview notes. Collection menus add Components and Designs. Component and Design menus provide Verify, Activities, and Delete. Parameter, port, and instance rows use the same menu pattern. Save, Cancel, input fields, and top toolbar shortcuts remain visible.
 
-Select **Components → Options → Import from catalog…** to browse published Component releases. Search or filter the catalog, select a version, and review its interface, defaults, usage, and evidence. Select **Review import**, resolve conflicts with **Import as a renamed copy**, then select **Import into Spec**. Import adds an editable local definition. Add instances through a Design's Options menu. Catalog origin records remain separate from verification of the current Spec.
+Select **Components → Options → Import from catalog…** to open the **Component library**. Search published Components, or expand **Filters** to select a category, implementation, or recorded verification result. Select a Component and version to inspect its interface, defaults, usage, and evidence. On narrow screens, **Back to results** returns to the list without clearing your search. The import action stays in the dialog footer. Select **Review import**, resolve conflicts with **Import as a renamed copy**, then select **Import into Spec**. Import adds an editable local definition. Add instances through a Design's Options menu. Catalog origin records remain separate from verification of the current Spec.
 
 **Options → Generate RTL** checks the saved revision and runs Verilator verification before starting the Activity. A separate Verify action is available. Source changes and unsaved draft text do not start lint. Generation uses saved source and preserves private drafts. Failed checks show target diagnostics and do not start a job.
 

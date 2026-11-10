@@ -1,6 +1,6 @@
 # Python Code Architecture and Standards
 
-This document specifies the structure, reading order, and engineering standards for Python code in `spec2gds`.
+This document specifies the structure, reading order, and engineering standards for Python code in spec2hw.
 
 ## 1. Codebase Boundaries
 

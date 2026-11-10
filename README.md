@@ -1,6 +1,6 @@
-# spec2gds
+# spec2hw
 
-`spec2gds` is a specification-first hardware design platform.
+spec2hw is a specification-first hardware design platform.
 It combines a structured Spec Editor, an independent Circuit Designer, an integrated Verification Planner, and an AI Assistant with service-validated transactions.
 
 ## Learn the system
@@ -13,7 +13,14 @@ See [environment setup and checkpoints](docs/tutorials/setup.html) before starti
 
 ## System at a Glance
 
-![spec2gds System Architecture](docs/images/system-architecture.png)
+```mermaid
+flowchart LR
+    SE[Spec Editor] --> S[Spec service]
+    S -->|projection and Save to Spec| C[Circuit Designer]
+    S -->|Activity Snapshot| V[Verification Planner]
+    A[AI Assistant] -->|validated changes| S
+    A -->|reviewed proposals| C
+```
 
 ```mermaid
 flowchart LR
@@ -169,7 +176,7 @@ addresses or ports.
 
 ## Configure service addresses
 
-The combined spec2gds launcher, its applications, and the Spec Catalog service read
+The combined spec2hw launcher, its applications, and the Spec Catalog service read
 [`config/services.json`](config/services.json).
 It contains the bind host, port, and base path for each service and UI,
 including `spec_editor.dev_ui`, `spec_catalog`, `verification_planner`, and `logging.viewer`.
@@ -310,7 +317,7 @@ boundary objects. Components that own an internal design continue to open that
 internal design instead.
 
 The current editor intentionally accepts the narrow IP-XACT profile authored
-by spec2gds. To keep the document focused, it does not display bus interfaces,
+by spec2hw. To keep the document focused, it does not display bus interfaces,
 port maps, channels, interface connections, or bus/abstraction protocol
 definitions; existing values remain preserved in the `.spec` source. Circuit
 Designer remains wire-only: unused transactional and structured ports are

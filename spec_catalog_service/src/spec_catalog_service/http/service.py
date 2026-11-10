@@ -1,4 +1,4 @@
-"""FastAPI application for the Spec2GDS Component Library standalone service."""
+"""FastAPI application for the spec2hw Spec Catalog standalone service."""
 
 from __future__ import annotations
 

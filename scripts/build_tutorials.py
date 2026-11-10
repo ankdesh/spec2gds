@@ -51,16 +51,16 @@ from scripts.prepare_tutorials import register_prompt
 
 CORE = [
     lesson("01-first-spec", "Create your first Spec", 5,
-           "Create a Spec and reopen the same saved file.", "01", "Spec Editor and a writable server-local directory. No model key or compiler is required.", [
+           "Create a Spec and reopen the same saved file.", "01", "Spec Editor and a writable folder within Spec root. No model key or compiler is required.", [
         'Open the Spec Editor URL supplied with your environment. Use <strong>Contents</strong> to move between Sections. On a small screen, open <strong>Menu</strong> for the application menus.',
-        'Select <strong>File → New Spec</strong>. Enter <strong>My registered adder</strong> as the Spec name. Enter a new absolute server-local path below your tutorial run directory, ending in <code>my-adder.spec</code>. Select <strong>Create</strong>. Do not select an existing start file as the new destination.',
+        'Select <strong>File → New Spec</strong>. Enter <strong>My registered adder</strong> as the Spec name. The filename is set automatically. Use <strong>Change location</strong> to choose your tutorial run folder within Spec root, then select <strong>Use this folder</strong> and <strong>Create Spec</strong>. To use the lesson filename <code>my-adder.spec</code>, expand <strong>More options</strong> and set a fresh file path before creating it. Do not select an existing start file as the new destination.',
         'Inspect the document cover, Components group, and Designs group. Hover over the active document name to inspect the path. A Spec is the logical document; its <code>.spec</code> file is the saved archive.',
-        'Close this browser tab. Open Spec Editor again. Select <strong>File → Open Spec</strong>, enter the same absolute path, and select <strong>Open</strong>. This command opens a file on the service host, not a file on your browser computer.',
+        'Close this browser tab. Open Spec Editor again. Select <strong>File → Open Spec</strong>. Browse from Spec root to the same folder, select the saved file, and select <strong>Open Spec</strong>. Use the filter to find a name in the current folder. Files are stored on the service host.',
         'Confirm the name and path. Accepted source changes save automatically. Use the save control inside an open draft; the File menu has no separate Save command.',
     ], 'The reopened Spec has the same name and path. Its Components and Designs groups are empty.',
            'Use <strong>Edit name</strong> on the cover to change the readable name. Save and reopen it. The path stays the same.',
            'If New Spec reports an existing destination, choose a fresh filename. Use Open Spec to inspect an existing file. Do not delete or replace it.',
-           [("spec-new", "New Spec asks for a readable name and a server-local path."), ("spec-cover", "The saved document cover and Contents panel.")], "spec-editor.md"),
+           [("spec-new", "New Spec sets the filename and save location from one readable name."), ("spec-cover", "The saved document cover and Contents panel.")], "spec-editor.md"),
     lesson("02-component-ports", "Define a Component and its ports", 7,
            "Save a complete interface for a 16-bit adder.", "02", "Spec Editor. Continue with your empty Spec or open the prepared start.", [
         'In Components, select <strong>Add Component</strong>. Enter <strong>16-bit modulo adder</strong> as the Component name. Select <strong>Create component</strong>. A Component is a reusable definition; an instance is one use of that definition.',
@@ -93,7 +93,7 @@ CORE = [
     ], 'The same Spec contains the unchanged adder and the enabled register. The saved register implements reset, capture, and hold exactly as requested.',
            'Ask the bound Assistant to explain why reset has priority over enable. Compare its explanation with the saved body.',
            'If no model key is configured, stop this exercise and open <code>05-start.spec</code> to continue. The checkpoint supplies the register. If an operation is rejected, inspect the diagnostic and saved source before submitting a fresh request.',
-           [("assistant-architecture", "Review the complete register architecture before approving it."), ("spec-register", "Check the saved register interface and implementation in Spec Editor.")], "ai-assistant.md"),
+           [("assistant-architecture", "Example: review a timer architecture before approving it. Your register review has five ports."), ("spec-register", "Check the saved register interface and implementation in Spec Editor.")], "ai-assistant.md"),
     lesson("05-compose-design", "Compose a Design from Components", 8,
            "Create a containing Design with two reusable Component instances.", "05", "Spec Editor. The prepared start supplies the adder, register, and containing Component interface. It has no internal Design yet.", [
         'Open <code>05-start.spec</code>. If continuing your own Spec, first create a Component named <strong>Registered 16-bit adder</strong>, add the following six boundary ports while it is still a leaf, and paste the supplied explanation. The checkpoint avoids this repeated port entry.' + ports("registered_adder") + code(wrapper["description"]),
@@ -195,7 +195,7 @@ EXTRAS = [
     ], 'You can identify pending, approved, or rejected content and verify the corresponding saved source.',
            'Prepare a second text-only proposal and reject it. Confirm its text does not appear after reopening.',
            'If valid content saves immediately, your environment uses automatic mode. Use an isolated restricted environment from the setup guide. Do not pretend that an automatic save was a pending review.',
-           [("assistant-history", "Submission history identifies the proposal and its stored result."), ("assistant-review", "Review the exact diff before approving restricted content.")], "ai-assistant.md", "AI Assistant"),
+           [("assistant-history", "Example: submission history shows a pending timer Component proposal."), ("assistant-review", "Example: inspect pending timer proposal details before approval.")], "ai-assistant.md", "AI Assistant"),
     lesson("assistant-circuit", "Review a Circuit proposal", 7,
            "Accept a Circuit proposal into a private draft, then choose whether to save it.", "complete", "Circuit Designer, AI Assistant, and model credentials. Open a source-bound Design with no existing private draft.", [
         'Open the Design in Circuit Designer. Select <strong>Tools → AI Assistant</strong>. Check that this conversation is bound to this circuit.',
@@ -278,12 +278,12 @@ def sidebar(current):
 def shell(title, body, current="", description="Short, practical tutorials for Spec Editor, Circuit Designer, AI Assistant, and Verification Planner."):
     return f'''<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{html.escape(title)} · spec2gds tutorials</title><meta name="description" content="{html.escape(description)}">
+<title>{html.escape(title)} · spec2hw tutorials</title><meta name="description" content="{html.escape(description)}">
 <link rel="stylesheet" href="assets/tutorials.css"><script src="assets/tutorials.js" defer></script></head>
 <body><a class="skip-link" href="#main">Skip to content</a>
-<header class="site-header"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">s²</span>spec2gds <span class="brand-divider">/</span> <span class="brand-section">Learn</span></a><a href="setup.html" class="header-link">Environment setup <span aria-hidden="true">↗</span></a><button class="nav-toggle" aria-expanded="false" aria-controls="sidebar">Lessons</button></header>
+<header class="site-header"><a class="brand" href="index.html"><span class="brand-mark" aria-hidden="true">s²</span>spec2hw <span class="brand-divider">/</span> <span class="brand-section">Learn</span></a><a href="setup.html" class="header-link">Environment setup <span aria-hidden="true">↗</span></a><button class="nav-toggle" aria-expanded="false" aria-controls="sidebar">Lessons</button></header>
 <div class="page-grid"><aside id="sidebar" class="sidebar">{sidebar(current)}<p class="sidebar-note">Learn one action.<br>Check the saved result.</p></aside>
-<main id="main" tabindex="-1">{body}<footer class="page-footer"><span>spec2gds · Designer tutorials</span><a href="../TERMINOLOGY.md">Terms</a><a href="validation.html">Validation status</a></footer></main></div></body></html>'''
+<main id="main" tabindex="-1">{body}<footer class="page-footer"><span>spec2hw · Designer tutorials</span><a href="../TERMINOLOGY.md">Terms</a><a href="validation.html">Validation status</a></footer></main></div></body></html>'''
 
 
 def lesson_page(item, index):
@@ -313,7 +313,7 @@ def lesson_page(item, index):
 def index_page():
     duration = sum(x["minutes"] for x in CORE)
     body = f'''<section class="course-hero"><p class="eyebrow">THE DESIGNER’S STARTING POINT</p><h1>From your first Spec<br>to a saved circuit.</h1><p class="lead">Build a small registered adder. Learn the controls, make a change, and check what was saved.</p><div class="hero-meta"><span>9 core guides</span><span>5–8 minutes each</span><span>About {duration} minutes total</span></div><a class="button" href="01-first-spec.html">Start with your first Spec <span aria-hidden="true">→</span></a><a class="hero-secondary" href="setup.html#checkpoints">Jump in with a prepared checkpoint</a></section>
-<div class="course-intro"><p>For designers who know basic digital hardware and are new to spec2gds. Start with the running environment supplied to you. No model key is needed for manual authoring; the Assistant lesson has a prepared fallback.</p><p>Use one example throughout: a 16-bit modulo adder, followed by an enabled register. Every guide has a fresh starting point and a visible result check.</p></div>
+<div class="course-intro"><p>For designers who know basic digital hardware and are new to spec2hw. Start with the running environment supplied to you. No model key is needed for manual authoring; the Assistant lesson has a prepared fallback.</p><p>Use one example throughout: a 16-bit modulo adder, followed by an enabled register. Every guide has a fresh starting point and a visible result check.</p></div>
 <section id="core"><div class="section-heading"><div><p class="eyebrow">LEARN THE BASICS</p><h2>Your core path</h2></div><span>Read · Do · Check</span></div><ol class="lesson-list">'''
     for i, item in enumerate(CORE, 1):
         body += f'<li><a href="{item["slug"]}.html"><span class="lesson-number">{i:02}</span><span><strong>{item["title"]}</strong><span class="lesson-summary">{item["goal"]}</span></span><span class="lesson-time">{item["minutes"]} min <span aria-hidden="true">↗</span></span></a></li>'

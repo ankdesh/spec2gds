@@ -109,8 +109,9 @@ async function openEditor(page: Page, owner: string, path: string): Promise<void
   }
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /Open Spec/ }).click();
-  await page.getByLabel("Server-local package path").fill(path);
-  await page.getByRole("button", { name: "Open", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill(path);
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
   await expect(page.locator(".spec-paper")).toBeVisible();
 }
 async function prompt(page: Page, message: string): Promise<void> {
@@ -122,6 +123,19 @@ async function prompt(page: Page, message: string): Promise<void> {
 
 /** Check the shipped product slots in the real Harness shell, including replay. */
 async function checkAssistantPresentation(page: Page, output: string): Promise<void> {
+  const brand = page.locator('.s2g-brand');
+  await expect(brand).toHaveText('spec2hw AI Assistant');
+  const brandBounds = await brand.evaluate(element => {
+    const text = document.createRange();
+    text.selectNodeContents(element);
+    const label = text.getBoundingClientRect();
+    const button = element.closest('button')!.getBoundingClientRect();
+    return { height: label.height, top: label.top, bottom: label.bottom, left: label.left, right: label.right,
+      buttonTop: button.top, buttonBottom: button.bottom, buttonLeft: button.left, buttonRight: button.right };
+  });
+  assert.ok(brandBounds.height <= 24 && brandBounds.top >= brandBounds.buttonTop && brandBounds.bottom <= brandBounds.buttonBottom
+    && brandBounds.left >= brandBounds.buttonLeft && brandBounds.right <= brandBounds.buttonRight,
+    'The Assistant brand must fit on one line within the sidebar header.');
   const reviews = page.locator('[data-s2g-flow-review]');
   await expect(reviews.last()).toBeVisible();
   await expect(reviews.last().getByRole("region", { name: "Flow actions", exact: true })).toBeVisible();

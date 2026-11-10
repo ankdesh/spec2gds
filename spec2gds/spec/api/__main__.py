@@ -64,13 +64,13 @@ def _run(command: str, argv: Sequence[str] | None = None) -> None:
     logger.event(
         "process",
         "starting",
-        f"Starting spec2gds {command}",
+        f"Starting spec2hw {command}",
         details={"host": args.host, "port": args.port, "reload": args.reload},
     )
     if command == "editor":
-        print(f"spec2gds Spec Editor: {registry.spec_editor.ui.url}")
+        print(f"spec2hw Spec Editor: {registry.spec_editor.ui.url}")
     else:
-        print(f"spec2gds Spec service: {registry.spec_editor.service.url}")
+        print(f"spec2hw Spec service: {registry.spec_editor.service.url}")
 
     import uvicorn
 
@@ -89,7 +89,7 @@ def _run(command: str, argv: Sequence[str] | None = None) -> None:
         reload=args.reload,
         access_log=False,
     )
-    logger.event("process", "stopped", f"Stopped spec2gds {command}")
+    logger.event("process", "stopped", f"Stopped spec2hw {command}")
 
 
 def server_main(argv: Sequence[str] | None = None) -> None:

@@ -164,7 +164,7 @@ test("headless profile reads, waits for a flow decision, and replays recorded re
       `Expected every agent request to use the product output cap: ${agentRequests.map(request => request.max_tokens ?? request.max_completion_tokens).join(", ")}`);
     const systemMessage = agentRequests[0].messages.find(message => message.role === "system");
     const system = String(systemMessage?.content);
-    assert.match(system, /You are the focused spec2gds hardware-design Assistant\./);
+    assert.match(system, /You are the focused spec2hw hardware-design Assistant\./);
     assert.match(system, /Document ID: doc-test/);
     assert.match(system, /MUST call get_bound_context before answering/);
     assert.match(system, /Never ask the user which document or design they mean/);

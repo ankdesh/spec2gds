@@ -40,6 +40,7 @@ def test_report_explains_failed_live_check_and_omits_raw_metadata(tmp_path):
     parsed = report_content(html)
     text = " ".join(parsed.text)
     assert parsed.tags.count("table") == 2
+    assert '<p class="brand">spec2hw</p>' in html
     assert "Live model: change a wire range" in text
     assert "Timed out after 1 min 30 sec" in text
     assert "Build AI Assistant" in text

@@ -60,7 +60,7 @@ function packageDirectory(path: string): string | undefined {
 function portablePackageFilename(path: string, title: string): string {
   const existing = path.trim().split(/[\\/]/).at(-1) ?? "";
   if (existing.toLowerCase().endsWith(".spec")) return existing;
-  return `${publicFilenameStem(title, "specification")}.spec`;
+  return `${publicFilenameStem(title.replace(/\.spec$/i, ""), "specification")}.spec`;
 }
 
 function packagePathInDirectory(
@@ -210,12 +210,14 @@ function Modal({
   restoreFocusId,
   title,
   wide = false,
+  dismissDisabled = false,
 }: {
   children: React.ReactNode;
   onClose: () => void;
   restoreFocusId: string;
   title: string;
   wide?: boolean;
+  dismissDisabled?: boolean;
 }) {
   const dialogRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
@@ -231,8 +233,8 @@ function Modal({
       }
       if (event.key !== "Tab") return;
       const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-        "button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex='-1'])",
-      ) ?? []);
+        "button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled), summary, [href], [tabindex]:not([tabindex='-1'])",
+      ) ?? []).filter(element => element.getClientRects().length > 0);
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable.at(-1);
@@ -246,7 +248,7 @@ function Modal({
     };
     document.addEventListener("keydown", onKeyDown);
     requestAnimationFrame(() => {
-      const preferred = dialogRef.current?.querySelector<HTMLElement>("[autofocus]");
+      const preferred = dialogRef.current?.querySelector<HTMLElement>("[data-dialog-autofocus], [autofocus]");
       (preferred ?? dialogRef.current?.querySelector<HTMLElement>("button, input"))?.focus();
     });
     return () => {
@@ -271,7 +273,7 @@ function Modal({
       >
         <header>
           <h2 id="editor-dialog-title">{title}</h2>
-          <button aria-label="Close" className="icon-button" onClick={onClose} type="button">×</button>
+          <button aria-label="Close" className="icon-button" disabled={dismissDisabled} onClick={onClose} type="button">×</button>
         </header>
         {children}
       </section>
@@ -282,273 +284,276 @@ function Modal({
 export function PathDialog({
   error,
   initialPath,
+  initialTitle = "",
   loading,
   mode,
   onBrowseDirectories,
+  onClearError,
   onClose,
   onCreateDirectory,
   onSubmit,
   onSuggest,
+  restoreFocusId = "editor-file-menu-trigger",
 }: {
   onSuggest?: () => Promise<{ path: string; title: string }>;
   error?: string;
   initialPath: string;
+  initialTitle?: string;
   loading: boolean;
   mode: "new" | "open" | "copy";
   onBrowseDirectories: (path?: string) => Promise<FilesystemDirectoryListing>;
+  onClearError?: () => void;
   onClose: () => void;
   onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
   onSubmit: (path: string, title: string) => Promise<boolean>;
+  restoreFocusId?: string;
 }) {
-  const [value, setValue] = useState(initialPath);
-  const edited = useRef(false);
-  useEffect(() => {
-    let active = true;
-    if (mode === "copy" && onSuggest) void onSuggest().then(suggestion => {
-      if (active && !edited.current) { setValue(suggestion.path); setTitle(suggestion.title); }
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, [mode, onSuggest]);
-  const [title, setTitle] = useState("");
-  const [browserOpen, setBrowserOpen] = useState(false);
-  const [browserLoading, setBrowserLoading] = useState(false);
-  const [browserError, setBrowserError] = useState("");
+  const [title, setTitle] = useState(initialTitle);
+  const [directory, setDirectory] = useState(mode === "copy" ? packageDirectory(initialPath) ?? "" : "");
+  const [suggestedFilename, setSuggestedFilename] = useState(mode === "copy" ? initialPath : "");
+  const [manualPath, setManualPath] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState("");
+  const [locationView, setLocationView] = useState(false);
   const [listing, setListing] = useState<FilesystemDirectoryListing | null>(null);
-  const [selectedDirectory, setSelectedDirectory] = useState<string | null>(null);
+  const [root, setRoot] = useState("");
+  const [separator, setSeparator] = useState("/");
+  const [browserLoading, setBrowserLoading] = useState(true);
+  const [browserError, setBrowserError] = useState("");
+  const [suggestionError, setSuggestionError] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [filter, setFilter] = useState("");
   const [creatingFolder, setCreatingFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
-  const action = mode !== "open" ? "Create" : "Open";
+  const [submitting, setSubmitting] = useState(false);
+  const mounted = useRef(false);
+  const browseSequence = useRef(0);
+  const suggestionSequence = useRef(0);
+  const lastBrowse = useRef<string | undefined>(undefined);
+  const titleEdited = useRef(false);
+  const destinationEdited = useRef(false);
+  const submitPending = useRef(false);
+  const callbacks = useRef({ onBrowseDirectories, onCreateDirectory, onSuggest });
+  callbacks.current = { onBrowseDirectories, onCreateDirectory, onSuggest };
+  const busy = loading || submitting;
+  const browserVisible = mode === "open" || locationView;
+  const generatedPath = directory ? packagePathInDirectory(directory, suggestedFilename, title, separator) : "";
+  const value = manualPath ?? (mode === "open" ? selectedFile : generatedPath);
+  const message = localError || browserError || suggestionError || error;
+  const action = mode === "new" ? "Create Spec" : mode === "copy" ? "Create Copy" : "Open Spec";
+
+  const clearError = () => { setLocalError(""); onClearError?.(); };
   const browse = async (path?: string) => {
+    const sequence = ++browseSequence.current;
+    lastBrowse.current = path;
     setBrowserLoading(true);
     setBrowserError("");
-    setSelectedDirectory(null);
+    setSelectedFile("");
+    setFilter("");
     setCreatingFolder(false);
     try {
-      setListing(await onBrowseDirectories(path));
+      const result = await callbacks.current.onBrowseDirectories(path);
+      if (!mounted.current || sequence !== browseSequence.current) return;
+      setListing(result);
+      setRoot(result.home);
+      setSeparator(result.separator);
+      setDirectory(current => current || result.home);
     } catch (caught) {
-      setBrowserError(caught instanceof Error ? caught.message : String(caught));
+      if (mounted.current && sequence === browseSequence.current) {
+        setBrowserError(caught instanceof Error ? caught.message : String(caught));
+      }
     } finally {
-      setBrowserLoading(false);
+      if (mounted.current && sequence === browseSequence.current) setBrowserLoading(false);
     }
+  };
+  const suggest = async () => {
+    const sequence = ++suggestionSequence.current;
+    setSuggestionError("");
+    try {
+      const suggestion = await callbacks.current.onSuggest?.();
+      if (!mounted.current || sequence !== suggestionSequence.current || !suggestion) return;
+      if (!titleEdited.current) {
+        setTitle(suggestion.title);
+        setSuggestedFilename(suggestion.path);
+      }
+      if (!destinationEdited.current) setDirectory(packageDirectory(suggestion.path) ?? "");
+    } catch {
+      if (mounted.current && sequence === suggestionSequence.current) {
+        setSuggestionError("Could not suggest a copy name. Enter a name or retry.");
+      }
+    }
+  };
+  useEffect(() => {
+    mounted.current = true;
+    void browse();
+    if (mode === "copy") void suggest();
+    return () => {
+      mounted.current = false;
+      ++browseSequence.current;
+      ++suggestionSequence.current;
+    };
+  }, []);
+
+  const submit = async (path = value) => {
+    if (busy || submitPending.current || !path.trim() || (mode !== "open" && !title.trim())) return;
+    submitPending.current = true;
+    ++suggestionSequence.current;
+    setSubmitting(true);
+    clearError();
+    try {
+      if (await onSubmit(path.trim(), title.trim()) && mounted.current) onClose();
+    } catch (caught) {
+      if (mounted.current) setLocalError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      submitPending.current = false;
+      if (mounted.current) setSubmitting(false);
+    }
+  };
+  const close = () => { if (!busy && !submitPending.current) onClose(); };
+  const commitLocation = () => {
+    if (!listing || browserLoading || browserError) return;
+    destinationEdited.current = true;
+    setDirectory(listing.path);
+    if (manualPath !== null) {
+      setManualPath(packagePathInDirectory(listing.path, manualPath, title, listing.separator));
+    }
+    setLocationView(false);
+    clearError();
   };
   const createFolder = async () => {
-    const name = folderName.trim();
-    if (!listing || !name) return;
+    if (!listing || !folderName.trim() || browserLoading || busy) return;
+    const sequence = ++browseSequence.current;
     setBrowserLoading(true);
-    setBrowserError("");
+    clearError();
     try {
-      setListing(await onCreateDirectory(listing.path, name));
+      const result = await callbacks.current.onCreateDirectory(listing.path, folderName.trim());
+      if (!mounted.current || sequence !== browseSequence.current) return;
+      setListing(result);
+      lastBrowse.current = result.path;
       setFolderName("");
       setCreatingFolder(false);
-      setSelectedDirectory(null);
+      setFilter("");
     } catch (caught) {
-      setBrowserError(caught instanceof Error ? caught.message : String(caught));
+      if (mounted.current && sequence === browseSequence.current) {
+        setLocalError(caught instanceof Error ? caught.message : String(caught));
+      }
     } finally {
-      setBrowserLoading(false);
+      if (mounted.current && sequence === browseSequence.current) setBrowserLoading(false);
     }
   };
+  const relativeLocation = (path: string) => {
+    if (!root || !path) return path || "Loading location…";
+    if (path === root) return "Spec root";
+    const prefix = root.endsWith(separator) ? root : root + separator;
+    return path.startsWith(prefix) ? `Spec root / ${path.slice(prefix.length).split(separator).join(" / ")}` : path;
+  };
+  const rootPrefix = root.endsWith(separator) ? root : root + separator;
+  const parts = listing?.path.startsWith(rootPrefix) ? listing.path.slice(rootPrefix.length).split(separator).filter(Boolean) : [];
+  const breadcrumbs = [{ name: "Spec root", path: root }, ...parts.map((name, index) => ({
+    name, path: rootPrefix + parts.slice(0, index + 1).join(separator),
+  }))];
+  const matches = (name: string) => name.toLocaleLowerCase().includes(filter.trim().toLocaleLowerCase());
+  const folders = listing?.directories.filter(item => matches(item.name)) ?? [];
+  const files = mode === "open" ? listing?.specifications?.filter(item => matches(item.name)) ?? [] : [];
+
   return (
-    <Modal
-      onClose={onClose}
-      restoreFocusId="editor-file-menu-trigger"
-      title={`${mode === "copy" ? "Create Copy of" : mode === "new" ? "New" : "Open"} specification`}
-      wide={browserOpen}
-    >
-      <form
-        onSubmit={async (event) => {
-          event.preventDefault();
-          const nextPath = value.trim();
-          const nextTitle = title.trim();
-          if (nextPath && (mode === "open" || nextTitle) && await onSubmit(nextPath, nextTitle)) onClose();
-        }}
-      >
-        {mode !== "open" && (
-          <>
-            <label htmlFor="specification-name">Spec name</label>
-            <input
-              autoFocus
-              id="specification-name"
-              maxLength={200}
-              onChange={(event) => { edited.current = true; setTitle(event.target.value); }}
-              placeholder="My hardware specification"
-              value={title}
-            />
-          </>
-        )}
-        <label htmlFor="specification-path">Server-local package path</label>
-        <div className="editor-dialog__path-field">
-          <input
-            autoFocus={mode === "open"}
-            id="specification-path"
-            onChange={(event) => { edited.current = true; setValue(event.target.value); }}
-            placeholder="/path/to/design.spec"
-            value={value}
-          />
-          <button
-            className="secondary"
-            onClick={() => {
-              if (browserOpen) {
-                setBrowserOpen(false);
-                return;
-              }
-              setBrowserOpen(true);
-              void browse(packageDirectory(value));
-            }}
-            type="button"
-          >
-            {browserOpen ? "Hide" : "Browse…"}
-          </button>
-        </div>
-        <p className="editor-dialog__hint">
-          Enter a <code>.spec</code> path visible to the server running spec2gds.
-          {mode !== "open" && " Generated output will be stored in this package’s artifact directory."}
-        </p>
-        {error && <p className="spec-edit-error" role="alert">{error}</p>}
-        {browserOpen && (
-          <section aria-label="Server directory browser" className="directory-browser">
-            <header>
-              <strong>{mode !== "open" ? "Choose a folder on the server" : "Choose a specification on the server"}</strong>
-              {listing && <code title={listing.path}>{listing.path}</code>}
-            </header>
-            <div className="directory-browser__toolbar">
-              <button
-                disabled={browserLoading || !listing?.parent}
-                onClick={() => { if (listing?.parent) void browse(listing.parent); }}
-                type="button"
-              >
-                Up
-              </button>
-              <button
-                disabled={browserLoading || !listing || listing.path === listing.home}
-                onClick={() => { if (listing) void browse(listing.home); }}
-                type="button"
-              >
-                Spec root
-              </button>
-              {listing?.roots.map((root) => (
-                <button
-                  disabled={browserLoading || listing.path === root}
-                  key={root}
-                  onClick={() => void browse(root)}
-                  type="button"
-                >
-                  {root}
-                </button>
-              ))}
-              <span className="directory-browser__toolbar-spacer" />
-              <button
-                disabled={browserLoading || !listing || creatingFolder}
-                onClick={() => {
-                  setCreatingFolder(true);
-                  setFolderName("");
-                  setSelectedDirectory(null);
-                }}
-                type="button"
-              >
-                ＋ New folder
-              </button>
-            </div>
-            {creatingFolder && (
-              <div className="directory-browser__new-folder">
-                <input
-                  aria-label="New folder name"
-                  autoFocus
-                  onChange={(event) => setFolderName(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setCreatingFolder(false);
-                    } else if (event.key === "Enter") {
-                      event.preventDefault();
-                      void createFolder();
-                    }
-                  }}
-                  placeholder="Folder name"
-                  value={folderName}
-                />
-                <button disabled={browserLoading || !folderName.trim()} onClick={() => void createFolder()} type="button">
-                  Create
-                </button>
-                <button className="secondary" onClick={() => setCreatingFolder(false)} type="button">
-                  Cancel
-                </button>
-              </div>
-            )}
-            {browserError && <p className="directory-browser__error" role="alert">{browserError}</p>}
-            {browserLoading && <p className="directory-browser__status" role="status">Loading folders…</p>}
-            {!browserLoading && listing && (
-              <div
-                aria-label={mode !== "open" ? "Folders" : "Folders and specifications"}
-                className="directory-browser__folders"
-                role="list"
-              >
-                {listing.directories
-                  .filter((directory) => mode !== "open" || !directory.name.toLowerCase().endsWith(".spec"))
-                  .map((directory) => (
-                    <div key={directory.path} role="listitem">
-                      <button
-                        aria-pressed={selectedDirectory === directory.path}
-                        className={selectedDirectory === directory.path ? "selected" : ""}
-                        onClick={() => setSelectedDirectory(directory.path)}
-                        onDoubleClick={() => void browse(directory.path)}
-                        title={directory.path}
-                        type="button"
-                      >
-                        <span aria-hidden="true">📁</span> {directory.name}
-                      </button>
-                    </div>
-                  ))}
-                {mode === "open" && (listing.specifications ?? []).map((specification) => (
-                  <div key={specification.path} role="listitem">
-                    <button
-                      aria-pressed={selectedDirectory === specification.path}
-                      className={selectedDirectory === specification.path ? "selected" : ""}
-                      onClick={() => setSelectedDirectory(specification.path)}
-                      onDoubleClick={() => {
-                        edited.current = true;
-                        setValue(specification.path);
-                        setBrowserOpen(false);
-                      }}
-                      title={specification.path}
-                      type="button"
-                    >
-                      <span aria-hidden="true">📄</span> {specification.name}
-                    </button>
-                  </div>
-                ))}
-                {!listing.directories.length && (mode !== "open" || !(listing.specifications ?? []).length) && (
-                  <p>{mode !== "open" ? "No subfolders" : "No folders or specifications"}</p>
-                )}
-              </div>
-            )}
-            <div className="directory-browser__actions">
-              <button
-                disabled={browserLoading || !listing || (mode === "open" && !selectedDirectory?.toLowerCase().endsWith(".spec"))}
-                onClick={() => {
-                  if (!listing) return;
-                  edited.current = true;
-                  setValue(mode !== "open"
-                    ? packagePathInDirectory(
-                      selectedDirectory ?? listing.path,
-                      value,
-                      title,
-                      listing.separator,
-                    )
-                    : selectedDirectory ?? value);
-                  setBrowserOpen(false);
-                }}
-                type="button"
-              >
-                {mode !== "open" ? "Select folder" : "Select specification"}
-              </button>
-            </div>
-          </section>
-        )}
+    <Modal onClose={close} restoreFocusId={restoreFocusId} dismissDisabled={busy}
+      title={locationView ? "Choose location" : mode === "new" ? "New Spec" : action} wide={browserVisible}>
+      <form onSubmit={event => {
+        event.preventDefault();
+        if (locationView) commitLocation();
+        else void submit();
+      }}>
+        {!browserVisible && <>
+          <label htmlFor="specification-name">Spec name</label>
+          <input autoFocus data-dialog-autofocus id="specification-name" maxLength={200} disabled={busy}
+            onChange={event => {
+              titleEdited.current = true;
+              setTitle(event.target.value);
+              setSuggestedFilename("");
+              setSuggestionError("");
+              clearError();
+            }} placeholder="My hardware Spec" value={title} />
+          <div className="spec-location">
+            <div><span>Save location</span><strong title={packageDirectory(value) || directory}>{relativeLocation(packageDirectory(value) || directory)}</strong></div>
+            <button className="secondary" type="button" disabled={!root || busy} onClick={() => {
+              clearError();
+              setLocationView(true);
+              void browse(packageDirectory(value) || directory);
+            }}>Change location</button>
+          </div>
+          <p className="editor-dialog__hint spec-filename">File: <code>{title.trim() || manualPath !== null ? displayPathName(value || portablePackageFilename(suggestedFilename, title)) : "Enter a name to set the filename"}</code></p>
+          {browserLoading && <p className="editor-dialog__hint" role="status">Loading location…</p>}
+        </>}
+        {browserVisible && <section aria-label="Server directory browser" className="directory-browser">
+          <nav aria-label="Folder location" className="directory-browser__breadcrumbs">
+            {breadcrumbs.map((crumb, index) => <span key={crumb.path || "root"}>
+              {index > 0 && <span aria-hidden="true"> / </span>}
+              <button type="button" disabled={!root || busy || listing?.path === crumb.path}
+                aria-current={listing?.path === crumb.path ? "location" : undefined}
+                onClick={() => { clearError(); if (mode === "open") setManualPath(null); void browse(crumb.path); }}>{crumb.name}</button>
+            </span>)}
+          </nav>
+          <label className="visually-hidden" htmlFor="specification-filter">{mode === "open" ? "Filter folders and Specs" : "Filter folders"}</label>
+          <input autoFocus data-dialog-autofocus id="specification-filter" type="search" disabled={busy}
+            placeholder={mode === "open" ? "Filter folders and Specs…" : "Filter folders…"} value={filter}
+            onChange={event => {
+              setFilter(event.target.value);
+              setSelectedFile("");
+              if (mode === "open") setManualPath(null);
+            }} />
+          {mode !== "open" && <div className="directory-browser__toolbar">
+            <button type="button" disabled={busy || browserLoading || !listing || creatingFolder || !!browserError}
+              onClick={() => { setCreatingFolder(true); setFolderName(""); clearError(); }}>＋ New folder</button>
+          </div>}
+          {creatingFolder && <div className="directory-browser__new-folder">
+            <input aria-label="New folder name" autoFocus disabled={busy || browserLoading} value={folderName} placeholder="Folder name"
+              onChange={event => { setFolderName(event.target.value); clearError(); }}
+              onKeyDown={event => {
+                if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setCreatingFolder(false); }
+                if (event.key === "Enter") { event.preventDefault(); void createFolder(); }
+              }} />
+            <button disabled={busy || browserLoading || !folderName.trim()} type="button" onClick={() => void createFolder()}>Add folder</button>
+            <button className="secondary" type="button" disabled={busy || browserLoading} onClick={() => setCreatingFolder(false)}>Cancel folder</button>
+          </div>}
+          {browserLoading && <p role="status" className="directory-browser__status">Loading folders…</p>}
+          {!browserLoading && !browserError && listing && <div role="list" aria-label={mode === "open" ? "Folders and Specs" : "Folders"} className="directory-browser__folders">
+            {folders.map(folder => <div role="listitem" key={folder.path}>
+              <button type="button" disabled={busy} title={folder.path} onClick={() => {
+                clearError();
+                if (mode === "open") setManualPath(null);
+                void browse(folder.path);
+              }}><span aria-hidden="true">📁</span> {folder.name}<span aria-hidden="true" className="directory-browser__enter">›</span></button>
+            </div>)}
+            {files.map(file => <div role="listitem" key={file.path}>
+              <button type="button" disabled={busy} title={file.path} aria-pressed={selectedFile === file.path && manualPath === null}
+                className={selectedFile === file.path && manualPath === null ? "selected" : ""}
+                onClick={() => { setSelectedFile(file.path); setManualPath(null); clearError(); }}
+                onDoubleClick={() => void submit(file.path)}><span aria-hidden="true">📄</span> {file.name}</button>
+            </div>)}
+            {!folders.length && !files.length && <p>{filter.trim() ? "No matching names" : mode === "open" ? "No folders or Specs" : "No subfolders"}</p>}
+          </div>}
+          {mode === "open" && selectedFile && manualPath === null && <p className="editor-dialog__hint">Selected: {displayPathName(selectedFile)}</p>}
+        </section>}
+        {!locationView && <details className="spec-path-options">
+          <summary>More options</summary>
+          <label htmlFor="specification-path">File path</label>
+          <input id="specification-path" disabled={busy} value={value} placeholder="Path to a .spec file"
+            onChange={event => { destinationEdited.current = true; setManualPath(event.target.value); clearError(); }} />
+          <p className="editor-dialog__hint">Files are stored on the server and must stay within Spec root{root ? <>: <code>{root}</code></> : "."}</p>
+          {manualPath !== null && <button className="secondary" type="button" disabled={busy} onClick={() => {
+            setManualPath(null); setSuggestedFilename(""); clearError();
+          }}>Reset to automatic</button>}
+        </details>}
+        {message && <p className="spec-edit-error" role="alert">{message}</p>}
+        {browserError && <button className="secondary" type="button" disabled={busy || browserLoading} onClick={() => void browse(lastBrowse.current)}>Retry loading folders</button>}
+        {suggestionError && <button className="secondary" type="button" disabled={busy} onClick={() => void suggest()}>Retry suggestion</button>}
         <div className="editor-dialog__actions">
-          <button className="secondary" onClick={onClose} type="button">Cancel</button>
-          <button disabled={!value.trim() || (mode !== "open" && !title.trim()) || loading} type="submit">
-            {loading ? `${action}ing…` : action}
+          <button className="secondary" disabled={busy} type="button" onClick={() => {
+            if (locationView) { ++browseSequence.current; setBrowserLoading(false); setBrowserError(""); setLocationView(false); clearError(); }
+            else close();
+          }}>{locationView ? "Back" : "Cancel"}</button>
+          <button disabled={busy || !root || browserLoading || (locationView ? !listing || !!browserError : !value.trim() || (mode !== "open" && !title.trim()))} type="submit">
+            {busy ? mode === "open" ? "Opening…" : "Creating…" : locationView ? "Use this folder" : action}
           </button>
         </div>
       </form>
@@ -562,7 +567,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "co
     return (
       <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="Getting started">
         <div className="editor-dialog__copy">
-          <p>Use <strong>File → New Spec</strong> to name and create a server-local package, or <strong>File → Open Spec</strong> to load one.</p>
+          <p>Use <strong>File → New Spec</strong>, enter a name, and select <strong>Create Spec</strong>. The file saves in Spec root. Use <strong>Change location</strong> to choose another folder, or <strong>File → Open Spec</strong> to browse saved Specs.</p>
           <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
           <p>Entry designs can add named instances of available top-level components. Leaf Components support wire-port editing. Existing transaction and structured ports are read-only; wire ranges use <code>left:right</code> syntax.</p>
           <p>Use Save to Spec to validate and save each draft. Options lists compatible Activities; Export target details (JSON) exports the saved target and its dependencies.</p>
@@ -585,9 +590,9 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "co
     );
   }
   return (
-    <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="About spec2gds">
+    <Modal onClose={onClose} restoreFocusId="editor-help-menu-trigger" title="About spec2hw">
       <div className="editor-dialog__copy">
-        <p><strong>spec2gds Spec Editor</strong></p>
+        <p><strong>spec2hw Spec Editor</strong></p>
         <p>A deterministic editor for <code>spec2gds-v1</code> hardware specification packages.</p>
       </div>
     </Modal>
@@ -680,6 +685,7 @@ export default function EditorMenuBar({
       const key = event.key.toLowerCase();
       if (key !== "n" && key !== "o") return;
       event.preventDefault();
+      if (dialog !== null || document.querySelector("[aria-modal='true']")) return;
       openPathDialog(key === "n" ? "new" : "open");
     };
     document.addEventListener("keydown", onShortcut);
@@ -767,7 +773,7 @@ export default function EditorMenuBar({
         <div className="app-header__primary">
           <a className="brand" aria-label="Spec Editor" href="#" onClick={(event) => { event.preventDefault(); onViewChange("document"); }}>
             <span className="brand__mark" aria-hidden="true">S</span>
-            <span><strong>spec2gds</strong><small>Spec Editor</small></span>
+            <span><strong>spec2hw</strong><small>Spec Editor</small></span>
           </a>
           <button
             className="editor-mobile-menu-trigger"
@@ -785,7 +791,7 @@ export default function EditorMenuBar({
             <TopMenu id="file" label="File" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Spec…</MenuAction>
               <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Spec…</MenuAction>
-              {snapshot && onCopy && <MenuAction onActivate={activate(() => setDialog("copy"))}>Create Copy…</MenuAction>}
+              {snapshot && onCopy && <MenuAction onActivate={activate(() => { onError(""); setDialog("copy"); })}>Create Copy…</MenuAction>}
               <MenuAction
                 disabled={!path || loading}
                 onActivate={activate(() => { void onOpen(path); })}
@@ -833,7 +839,7 @@ export default function EditorMenuBar({
               <MenuAction onActivate={activate(() => setDialog("shortcuts"))}>Keyboard Shortcuts</MenuAction>
               <MenuAction onActivate={activate(openApiReference)}>Developer API Reference</MenuAction>
               <div className="editor-menu__separator" role="separator" />
-              <MenuAction onActivate={activate(() => setDialog("about"))}>About spec2gds</MenuAction>
+              <MenuAction onActivate={activate(() => setDialog("about"))}>About spec2hw</MenuAction>
             </TopMenu>
           </nav>
         </div>
@@ -879,15 +885,16 @@ export default function EditorMenuBar({
         </div>
       </header>
 
-      {dialog === "copy" && onCopy && <PathDialog error={dialogError} initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={onCopySuggestion} onBrowseDirectories={onBrowseDirectories} onClose={() => setDialog(null)} onCreateDirectory={onCreateDirectory} onSubmit={onCopy} />}
+      {dialog === "copy" && onCopy && <PathDialog error={dialogError} onClearError={() => onError("")} initialTitle={`${snapshot?.narrative.title || "Spec"} copy`} initialPath={path.replace(/\.spec$/i, "-copy.spec")} loading={loading} mode="copy" onSuggest={onCopySuggestion} onBrowseDirectories={onBrowseDirectories} onClose={() => { onError(""); setDialog(null); }} onCreateDirectory={onCreateDirectory} onSubmit={onCopy} />}
       {dialog === "new" && (
         <PathDialog
           error={dialogError}
+          onClearError={() => onError("")}
           initialPath=""
           loading={loading}
           mode="new"
           onBrowseDirectories={onBrowseDirectories}
-          onClose={() => setDialog(null)}
+          onClose={() => { onError(""); setDialog(null); }}
           onCreateDirectory={onCreateDirectory}
           onSubmit={onCreate}
         />
@@ -895,11 +902,12 @@ export default function EditorMenuBar({
       {dialog === "open" && (
         <PathDialog
           error={dialogError}
+          onClearError={() => onError("")}
           initialPath={path}
           loading={loading}
           mode="open"
           onBrowseDirectories={onBrowseDirectories}
-          onClose={() => setDialog(null)}
+          onClose={() => { onError(""); setDialog(null); }}
           onCreateDirectory={onCreateDirectory}
           onSubmit={(nextPath) => onOpen(nextPath)}
         />

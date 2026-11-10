@@ -107,7 +107,7 @@ def _narrative_proposal(input_dir: Path, output_dir: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     """Dispatch one trusted reference executor command."""
-    parser = argparse.ArgumentParser(description="spec2gds V1.3 reference action executor")
+    parser = argparse.ArgumentParser(description="spec2hw V1.3 reference action executor")
     parser.add_argument("action", choices=["snapshot-summary", "artifact-transform", "narrative-proposal"])
     parser.add_argument("--input", required=True)
     parser.add_argument("--output", required=True)

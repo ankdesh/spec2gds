@@ -666,8 +666,8 @@ def test_server_and_editor_commands_forward_development_options(monkeypatch, cap
         directory = next(route.endpoint for route in app.routes if route.name == "services")()
         assert directory["services"]["spec_editor"]["service_url"] == f"http://design-host.test:{port}"
     output = capsys.readouterr().out
-    assert "spec2gds Spec service: http://design-host.test:8080" in output
-    assert "spec2gds Spec Editor: http://design-host.test:8765/editor" in output
+    assert "spec2hw Spec service: http://design-host.test:8080" in output
+    assert "spec2hw Spec Editor: http://design-host.test:8765/editor" in output
 
 
 def test_spec_assistant_preview_apply_provenance_and_idempotence(tmp_path: Path) -> None:

@@ -220,8 +220,9 @@ test("failed opens and an existing destination preserve the active Spec", async 
   for (const path of [stack.path("missing.spec"), stack.path("malformed.spec")]) {
     await page.getByRole("menuitem", { name: "File", exact: true }).click();
     await page.getByRole("menuitem", { name: /Open Spec/ }).click();
-    await page.getByLabel("Server-local package path").fill(path);
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByText("More options", { exact: true }).click();
+    await page.getByLabel("File path", { exact: true }).fill(path);
+    await page.getByRole("button", { name: "Open Spec", exact: true }).click();
     await expect(page.getByRole("alert").first()).toBeVisible();
     await page.getByRole("button", { name: "Cancel", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Coverage authoring", exact: true })).toBeVisible();
@@ -229,8 +230,9 @@ test("failed opens and an existing destination preserve the active Spec", async 
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Spec/ }).click();
   await page.getByLabel("Spec name").fill("Replacement");
-  await page.getByLabel("Server-local package path").fill(stack.path());
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill(stack.path());
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
   await expect(page.getByRole("alert").first()).toBeVisible();
   expect(stack.archive(stack.path())).toEqual(source);
 });
@@ -393,8 +395,9 @@ test("a delayed response cannot replace a newly selected Spec", async ({ page, s
     await requested;
     await page.getByRole("menuitem", { name: "File", exact: true }).click();
     await page.getByRole("menuitem", { name: /Open Spec/ }).click();
-    await page.getByLabel("Server-local package path").fill(other);
-    await page.getByRole("button", { name: "Open", exact: true }).click();
+    await page.getByText("More options", { exact: true }).click();
+    await page.getByLabel("File path", { exact: true }).fill(other);
+    await page.getByRole("button", { name: "Open Spec", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Second source", exact: true })).toBeVisible();
     const response = page.waitForResponse(response => response.url().includes("/documents/view?") && response.url().includes(encodeURIComponent(first.owner_document_key)));
     release();
@@ -517,13 +520,15 @@ test("catalog: browse, import, rename a copy, reopen, and generate RTL without p
   const browse = async () => {
     await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
     await page.getByRole("menuitem", { name: "Import from catalog…", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "Import from catalog", exact: true });
-    await dialog.getByLabel("Search catalog").fill("barrel_shift");
+    const dialog = page.getByRole("dialog", { name: "Component library", exact: true });
+    await dialog.getByLabel("Search Components").fill("barrel_shift");
     await dialog.getByRole("button", { name: /barrel_shift/ }).click();
     await expect(dialog.getByRole("heading", { name: "barrel_shift", exact: true })).toBeVisible();
     return dialog;
   };
   let dialog = await browse();
+  await expect(dialog.getByRole("button", { name: "Review import", exact: true })).toBeEnabled();
+  await dialog.screenshot({ path: test.info().outputPath("component-library.png") });
   await dialog.getByRole("button", { name: "Review import", exact: true }).click();
   await expect(dialog.getByRole("button", { name: "Import into Spec", exact: true })).toBeEnabled();
   await dialog.getByRole("button", { name: "Import into Spec", exact: true }).click();
@@ -615,8 +620,9 @@ test("@smoke hosted designers keep independent tabs and saved files", async ({ p
     await target.getByRole("menuitem", { name: "File", exact: true }).click();
     await target.getByRole("menuitem", { name: /New Spec/ }).click();
     await target.getByLabel("Spec name", { exact: true }).fill("Counter");
-    await target.getByLabel("Server-local package path").fill(path);
-    await target.getByRole("button", { name: "Create", exact: true }).click();
+    await target.getByText("More options", { exact: true }).click();
+    await target.getByLabel("File path", { exact: true }).fill(path);
+    await target.getByRole("button", { name: "Create Spec", exact: true }).click();
     await expect(target.getByRole("heading", { name: "Counter", exact: true })).toBeVisible();
   };
   try {
@@ -647,12 +653,11 @@ test("a duplicated tab opens read-only and Create Copy starts independent editin
   await expect(duplicate.getByText("This Spec is read-only.", { exact: false })).toBeVisible();
   await duplicate.getByRole("button", { name: "Create Copy…", exact: true }).click();
   await duplicate.getByLabel("Spec name", { exact: true }).fill("Separate copy");
-  await duplicate.getByLabel("Server-local package path").fill(stack.path("separate.spec"));
-  await duplicate.getByRole("button", { name: "Create", exact: true }).click();
+  await duplicate.getByRole("button", { name: "Create Copy", exact: true }).click();
   await expect(duplicate.getByRole("heading", { name: "Separate copy", exact: true })).toBeVisible();
   await expect(duplicate.getByText("This Spec is read-only.", { exact: false })).toHaveCount(0);
   expect(readFileSync(stack.path())).toEqual(before);
-  expect(existsSync(stack.path("separate.spec"))).toBe(true);
+  expect(existsSync(stack.path("separate-copy.spec"))).toBe(true);
   await duplicate.close();
 });
 
@@ -661,12 +666,60 @@ test("the hosted picker stops at Spec root and rejects a typed escape", async ({
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: /New Spec/ }).click();
   await page.getByLabel("Spec name", { exact: true }).fill("Bounded design");
-  await page.getByRole("button", { name: "Browse…", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Up", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Change location", exact: true }).click();
   await expect(page.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
-  await expect(page.locator(".directory-browser header code")).toHaveText(stack.directory);
-  await page.getByLabel("Server-local package path").fill(`${stack.directory}/../escape.spec`);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByRole("navigation", { name: "Folder location" })).toHaveText("Spec root");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill(`${stack.directory}/../escape.spec`);
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText("Spec root");
   expect(existsSync(`${stack.directory}/../escape.spec`)).toBe(false);
+});
+
+
+test("name-only creation, folder selection, Open, and Copy agree with saved archives", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  expect(existsSync(stack.path())).toBe(true);
+  expect((await stack.snapshot()).narrative.title).toBe("Coverage authoring");
+  const original = readFileSync(stack.path());
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Create Copy/ }).click();
+  await expect(page.getByLabel("Spec name", { exact: true })).toHaveValue("Coverage authoring copy");
+  await page.getByRole("button", { name: "Change location" }).click();
+  await page.getByRole("button", { name: /New folder/ }).click();
+  await page.getByLabel("New folder name").fill("Copies");
+  await page.getByRole("button", { name: "Add folder", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Copies", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Use this folder" }).click();
+  await page.getByRole("button", { name: "Create Copy", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Coverage authoring copy", exact: true })).toBeVisible();
+  const copiedPath = stack.path("Copies/coverage-authoring-copy.spec");
+  expect(existsSync(copiedPath)).toBe(true);
+  expect(readFileSync(stack.path())).toEqual(original);
+  expect(Object.values(stack.archive(copiedPath)).join("\n")).toContain("Coverage authoring copy");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Open Spec/ }).click();
+  await expect(page.getByRole("button", { name: "Spec root", exact: true })).toBeDisabled();
+  await page.getByLabel("Filter folders and Specs").fill("COVERAGE-AUTHORING.SPEC");
+  await page.getByRole("button", { name: /^coverage-authoring\.spec$/ }).click();
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Coverage authoring", exact: true })).toBeVisible();
+  expect(readFileSync(stack.path())).toEqual(original);
+});
+
+test("duplicate names keep the form and saved Spec intact", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const before = readFileSync(stack.path());
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /New Spec/ }).click();
+  await page.getByLabel("Spec name", { exact: true }).fill("Coverage authoring");
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill(stack.path("different-filename.spec"));
+  await page.getByRole("button", { name: "Create Spec", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("already exists");
+  await expect(page.getByLabel("Spec name", { exact: true })).toHaveValue("Coverage authoring");
+  await expect(page.getByLabel("File path", { exact: true })).toHaveValue(stack.path("different-filename.spec"));
+  expect(existsSync(stack.path("different-filename.spec"))).toBe(false);
+  expect(readFileSync(stack.path())).toEqual(before);
 });

@@ -312,7 +312,7 @@ test("browser plugin owns New Session and consumes launch data from the fragment
 
   assert.equal(newSessionHandler?.id, "spec2gds");
   assert.equal(newSessionHandler?.priority, -100);
-  assert.equal(context.document.title, "spec2gds Assistant");
+  assert.equal(context.document.title, "spec2hw Assistant");
   assert.equal(proposalDefinition.kind, "spec2gds-proposal-reviews");
   assert.equal(proposalTail?.options.name, "conversation.chat.turnTail");
   assert.equal(replaced, "/");

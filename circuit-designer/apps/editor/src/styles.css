@@ -431,7 +431,7 @@ a:focus-visible {
 }
 
 .editor-dialog label {
-  color: #d4d4d8;
+  color: var(--spec-text);
   font-size: var(--spec-font-small);
   font-weight: 600;
 }
@@ -440,10 +440,10 @@ a:focus-visible {
   min-width: 0;
   width: 100%;
   padding: 0.68rem 0.75rem;
-  border: 1px solid #33353a;
+  border: 1px solid var(--spec-line-strong);
   border-radius: 0.4rem;
-  background: #121214;
-  color: #f4f4f5;
+  background: var(--spec-surface-subtle);
+  color: var(--spec-text);
   font: inherit;
   font-size: 0.84rem;
 }
@@ -462,11 +462,11 @@ a:focus-visible {
 
 .editor-dialog__path-field > button,
 .directory-browser button {
-  border: 1px solid #3f3f46;
+  border: 1px solid var(--spec-line-strong);
   border-radius: 0.35rem;
   padding: 0.48rem 0.7rem;
-  background: #202024;
-  color: #e4e4e7;
+  background: var(--spec-surface-elevated);
+  color: var(--spec-text);
   cursor: pointer;
   font: inherit;
   font-size: var(--spec-font-small);
@@ -484,9 +484,9 @@ a:focus-visible {
   gap: 0.65rem;
   min-width: 0;
   padding: 0.75rem;
-  border: 1px solid #27272a;
+  border: 1px solid var(--spec-line);
   border-radius: 0.5rem;
-  background: #141416;
+  background: var(--spec-surface-subtle);
 }
 
 .directory-browser > header {
@@ -496,12 +496,12 @@ a:focus-visible {
 
 .directory-browser > header strong {
   font-size: var(--spec-font-small);
-  color: #f4f4f5;
+  color: var(--spec-text);
 }
 
 .directory-browser > header code {
   overflow: hidden;
-  color: #a1a1aa;
+  color: var(--spec-muted);
   font-size: var(--spec-font-small);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -529,33 +529,33 @@ a:focus-visible {
   align-content: start;
   max-height: 13rem;
   overflow-y: auto;
-  border: 1px solid #27272a;
+  border: 1px solid var(--spec-line);
   border-radius: 0.35rem;
-  background: #18181b;
+  background: var(--spec-paper);
 }
 
 .directory-browser__folders button {
   width: 100%;
   overflow: hidden;
   border: 0;
-  border-bottom: 1px solid #222226;
+  border-bottom: 1px solid var(--spec-line);
   border-radius: 0;
   text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
   background: transparent;
-  color: #e4e4e7;
+  color: var(--spec-text);
 }
 
 .directory-browser__folders button:hover,
 .directory-browser__folders button:focus-visible,
 .directory-browser__folders button.selected {
-  background: #27272a;
+  background: var(--spec-line);
 }
 
 .directory-browser__folders button.selected {
-  box-shadow: inset 3px 0 #8b5cf6;
-  color: #ffffff;
+  box-shadow: inset 3px 0 var(--spec-accent);
+  color: var(--spec-text);
 }
 
 .directory-browser__folders p,
@@ -563,7 +563,7 @@ a:focus-visible {
 .directory-browser__status {
   margin: 0;
   padding: 0.65rem;
-  color: #a1a1aa;
+  color: var(--spec-muted);
   font-size: var(--spec-font-small);
 }
 
@@ -583,7 +583,7 @@ a:focus-visible {
 
 .editor-dialog__hint {
   margin: 0;
-  color: #a1a1aa;
+  color: var(--spec-muted);
   font-size: var(--spec-font-small);
   line-height: 1.5;
 }
@@ -1522,3 +1522,33 @@ button:disabled {
 .utility-panel > summary h2 { display: inline; margin: 0; font-size: 1rem; font-weight: 600; }
 [data-theme="clean"] .view-nav { background: var(--spec-surface-subtle); }
 .app-shell:has(.editor-dialog) > .app-error { display: none; }
+
+/* File dialogs share the Spec Editor theme and keep one primary action visible. */
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.spec-location { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.85rem; border: 1px solid var(--spec-line); border-radius: 0.5rem; background: var(--spec-surface-subtle); }
+.spec-location > div { display: grid; gap: 0.25rem; min-width: 0; }
+.spec-location span { color: var(--spec-muted); font-size: var(--spec-font-small); }
+.spec-location strong { color: var(--spec-text); font-size: var(--spec-font-small); overflow-wrap: anywhere; }
+.spec-location button { flex: 0 0 auto; }
+.spec-filename { overflow-wrap: anywhere; }
+.spec-path-options { min-width: 0; color: var(--spec-muted); font-size: var(--spec-font-small); }
+.spec-path-options summary { width: fit-content; cursor: pointer; padding: 0.25rem 0; }
+.spec-path-options[open] { display: grid; gap: 0.65rem; }
+.spec-path-options code { overflow-wrap: anywhere; }
+.spec-location button, .spec-path-options button, .editor-dialog form > button.secondary { border: 1px solid var(--spec-line-strong); border-radius: 0.35rem; padding: 0.48rem 0.7rem; background: var(--spec-surface-elevated); color: var(--spec-text); font: inherit; font-size: var(--spec-font-small); cursor: pointer; }
+.editor-dialog button:disabled { cursor: default; opacity: 0.48; }
+.directory-browser__breadcrumbs { display: flex; flex-wrap: wrap; gap: 0.2rem; align-items: center; color: var(--spec-muted); }
+.directory-browser__breadcrumbs > span { min-width: 0; overflow-wrap: anywhere; }
+.directory-browser__breadcrumbs button { border: 0; padding: 0.25rem; background: transparent; overflow-wrap: anywhere; text-align: left; }
+.directory-browser__breadcrumbs button[aria-current] { color: var(--spec-text); opacity: 1; }
+.directory-browser__enter { float: right; color: var(--spec-muted); }
+.editor-dialog__actions button:not(.secondary) { background: var(--spec-accent); border-color: var(--spec-accent); }
+.editor-dialog__actions button:not(.secondary):hover:not(:disabled) { background: var(--spec-accent-hover); }
+.editor-dialog__actions button.secondary { color: var(--spec-text); border-color: var(--spec-line-strong); }
+.editor-dialog__actions button.secondary:hover:not(:disabled) { background: var(--spec-line); color: var(--spec-text); }
+@media (max-width: 480px) {
+  .spec-location { align-items: flex-start; gap: 0.65rem; flex-direction: column; }
+  .directory-browser__new-folder { grid-template-columns: 1fr 1fr; }
+  .directory-browser__new-folder input { grid-column: 1 / -1; }
+  .editor-dialog { padding: 1rem; }
+}

@@ -1,4 +1,4 @@
-# spec2gds AI Assistant
+# spec2hw AI Assistant
 
 This package adds permanent Spec/Circuit bindings, product tools, reviews, and
 execution presets to DeepSeek Harness. Harness owns the chat shell, model loop,

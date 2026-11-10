@@ -205,7 +205,7 @@ class StructuredLogger:
         except Exception as reason:  # Logging must never take down a user workflow.
             if not self._reported_failure:
                 self._reported_failure = True
-                print(f"spec2gds logging disabled after write failure: {reason}", file=os.sys.stderr)
+                print(f"spec2hw logging disabled after write failure: {reason}", file=os.sys.stderr)
 
     def browser_events(self, session_id: str, events: list[dict[str, Any]]) -> None:
         """Accept a validated browser batch and reapply server-side redaction."""

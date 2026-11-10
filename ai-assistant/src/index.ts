@@ -867,7 +867,7 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           await settleReviewedExecution(binding, updated);
           return writeJson(response, 200, { review: publicReview(updated) });
         }
-        throw new HttpError(404, "Unknown spec2gds endpoint.");
+        throw new HttpError(404, "Unknown spec2hw endpoint.");
       } catch (error) {
         if (response.headersSent) return response.destroy();
         if (error instanceof SourceCreationError) return writeJson(response, error.status, { error: error.message });

@@ -1,6 +1,10 @@
 # Development Guide
 
-This document defines repository organization, build commands, service configuration, logging, and test execution for `spec2gds`.
+This document defines repository organization, build commands, service configuration, logging, and test execution for spec2hw.
+
+The product is named **spec2hw**. The repository is named `spec2gds`.
+Existing imports, packages, commands, environment variables, service paths,
+schemas, saved data, and release profiles retain their `spec2gds` identifiers.
 
 ## 1. Repository Organization
 
