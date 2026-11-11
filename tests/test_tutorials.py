@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from html.parser import HTMLParser
 from urllib.parse import unquote, urlsplit
@@ -55,8 +56,44 @@ def test_tutorial_html_is_current_and_local_navigation_resolves():
                 linked.feed(destination.read_text())
                 assert parts.fragment in linked.ids, f"{name}: missing fragment {target}"
         if name not in {"index.html", "setup.html", "example.html", "validation.html"}:
-            assert 2 <= len(page.images) <= 4
+            item = next(item for item in build_tutorials.CORE + build_tutorials.EXTRAS
+                        if name == f'{item["slug"]}.html')
+            assert len(page.images) == len(item["pictures"])
+            assert {f"action-{i}" for i in range(1, len(item["actions"]) + 1)} <= page.ids
+            assert path.read_text().count("Expected result:</strong>") == len(item["actions"])
             assert {"before", "actions", "check", "practice", "recovery", "continue"} <= page.ids
+
+
+def test_action_illustrations_have_current_provenance():
+    from scripts.capture_tutorials import capture_plan, source_digests
+
+    assets = ROOT / "docs/tutorials/assets"
+    manifest = json.loads((assets / "captures.json").read_text())
+    images = {item["name"]: item for item in manifest["captures"]}
+    assert set(images) == set(capture_plan())
+    assert manifest["source_digests"] == source_digests(), "UI source changed: review and recapture affected tutorial images."
+    for name, uses in capture_plan().items():
+        record = images[name]
+        assert record["uses"] == uses
+        assert record["source_commit"] and record["captured_at"] and record["app"]
+        assert record["viewport"] == {"width": 1440, "height": 900}
+        assert record["sha256"] == hashlib.sha256((assets / record["file"]).read_bytes()).hexdigest()
+        if name.startswith("assistant-") and record["app"] == "AI Assistant":
+            assert record["model_provenance"] == "live"
+    for lesson in build_tutorials.CORE + build_tutorials.EXTRAS:
+        for picture in lesson["pictures"]:
+            assert 1 <= picture["after"] <= len(lesson["actions"])
+
+
+def test_lessons_cover_current_panels_and_range_contract():
+    pages = build_tutorials.pages()
+    assert {"diagnostics.html", "activity.html", "catalog-reuse.html"} <= pages.keys()
+    assert "15-0" in pages["02-component-ports.html"] and "15:0" in pages["02-component-ports.html"]
+    assert "Technical details" in pages["03-hardware-behavior.html"]
+    assert "View details" in pages["diagnostics.html"]
+    for page in pages.values():
+        for obsolete in ["Activity view", "Verification details", "timer Component", "5–8 minutes", "{{"]:
+            assert obsolete not in page
 
 
 def test_preparation_refuses_source_directories_and_existing_outputs():
@@ -68,6 +105,8 @@ def test_preparation_refuses_source_directories_and_existing_outputs():
         prepare(existing)
     with pytest.raises(ValueError):
         prepare(ROOT.parent / "TEMP_outside_repo")
+    with pytest.raises(ValueError, match="TEMP_"):
+        prepare(ROOT / "docs/TEMP_not_an_artifact_directory")
 
 
 @pytest.fixture(scope="module")
@@ -97,6 +136,11 @@ def test_prepared_starts_reopen_with_the_required_progression(tutorial_run):
     snapshot = ActivitySnapshot.read(directory / "registered-adder.snapshot")
     assert snapshot.manifest.snapshot_id == manifest["snapshot_id"]
     assert snapshot.target.entity_id == "registered_adder"
+    for key, count in [("diagnostics", 1), ("activity", 3), ("catalog-reuse", 0)]:
+        saved = SpecRevision.from_package(SpecPackage.load(str(directory / f"{key}-start.spec")))
+        assert len(saved.components) == count
+    files = [directory / f"{key}-start.spec" for key in manifest["starts"]]
+    assert len({SpecRevision.from_package(SpecPackage.load(str(path))).document_id for path in files}) == len(files)
 
 
 def test_starts_are_accepted_by_rtl_tlm_and_verification_consumers(tutorial_run):

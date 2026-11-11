@@ -1,0 +1,1279 @@
+{
+  "schema_version": 1,
+  "source_digests": {
+    "ai-assistant/profile/catalog/event-systems/circuit-goal.yaml": "8410774fa21bdaa066b3715bde495feca0f12382007f085910a88e7778e81531",
+    "ai-assistant/profile/catalog/event-systems/circuit-orchestrated.yaml": "7679ffaf7c39fe375a923bce51b3dee9de005c0f9be5bad589055de076697b12",
+    "ai-assistant/profile/catalog/event-systems/prompts/analyst.md": "83ca43946eef689d76593998f2836aedb2995d8eaec95b3b8051511644603b66",
+    "ai-assistant/profile/catalog/event-systems/prompts/goal.md": "6c528c90cb797bbd717b0d25aaf151e60f767d93dee48632c228491b72f9b83c",
+    "ai-assistant/profile/catalog/event-systems/prompts/primary.md": "bc1de809eb1bfdae190c995d7b41e1348ee11b7947fddd19ee5ca3331c4e91e6",
+    "ai-assistant/profile/catalog/event-systems/prompts/reviewer.md": "e0180a5da7721cc4890970f00eca994b411d15759d727794edc9f35ed090aa84",
+    "ai-assistant/profile/catalog/event-systems/spec-goal.yaml": "7d132d5b574cfe77965c647771df3e87b9a347bbc3774fe02b7b5e914165d608",
+    "ai-assistant/profile/catalog/event-systems/spec-orchestrated.yaml": "d5b77b7165aab62efa3ee9f096865e45f0f74591f924c953aa196ba3762ab925",
+    "ai-assistant/profile/catalog/flows/add_component.yaml": "1011cdc751b78bc4109170850e6721d5b41c18fe4bbcdd86f302858d6cb0a78e",
+    "ai-assistant/profile/catalog/flows/architecture.yaml": "e3c0507e737c4a2978b78301e75337716ebec99d29544b611a8b5426537c475c",
+    "ai-assistant/profile/catalog/flows/component_content.yaml": "c25fcb61e961cc02ddaf19a81351b60be5613351d350446793dd1ef923c09590",
+    "ai-assistant/profile/catalog/flows/create_empty_spec.yaml": "88236d48deb47e552654e3c36b4ef0c89aa497140d7080e08711ba1ca92a952e",
+    "ai-assistant/profile/catalog/flows/create_spec_with_component.yaml": "7ecaffe21170318ef4d753d5bff62ca09425259bd0ee1b4c0203b0c4109a059a",
+    "ai-assistant/profile/catalog/flows/edit_spec.yaml": "5fd1777cc701bdefb952a537ad35ce01bb6050757d6e09f72ef63d5beeca6d73",
+    "ai-assistant/profile/catalog/flows/prompts/architecture.md": "5626f5a64cae4da86b1e869d99ea37c5b25822043c15f9456d5e6fd82f775caa",
+    "ai-assistant/profile/catalog/flows/prompts/component.md": "59b003fad6449add3aa11ad5847ff3b9ee51af403a1de0d796defcaa1b0cb187",
+    "ai-assistant/profile/catalog/flows/prompts/edit.md": "3f7e7fa489e7edd8861e7c0ebef5954aeaa85362e06b43e74aea8cdb14eb2fcb",
+    "ai-assistant/profile/catalog/instructions.json": "0c4bf7418d32e61d7108aed92c2ad84b1ad9c16a5ecf1d193e82b2237c08e2c4",
+    "ai-assistant/profile/catalog/prompts/circuit.yaml": "1c7187adf21c9d05de8fd6299700b81b69fa979c7b3dcca4c9ad3978c67c2cbb",
+    "ai-assistant/profile/catalog/prompts/spec.yaml": "b2f21cd795e0ffc473c34a7290ead27f336814819c9ba265cf5a550c6f8d1559",
+    "ai-assistant/profile/catalog/release.json": "90b593e5d6a3029204d990004f58661548b0846e39e28aa73a1b49eb1a09d6d5",
+    "ai-assistant/profile/catalog/tools/get_bound_context.json": "7ee4fc75602b13d45ee62af4ca51d961b2a321bc326aa74e5f376d1db582d8cf",
+    "ai-assistant/profile/catalog/tools/prepare_circuit_proposal.json": "6035877c64d39c92560bb9b4071f2321458669db608b1628b6960f7b68e3a6f2",
+    "ai-assistant/profile/cordis.patch.yml": "69b16d9e51b951daba248f85606a97d85d669ceb25c62666a2b0ef9e22d3c937",
+    "ai-assistant/profile/presets/focused/agent.cordis.yml": "84d2cf5c0ca3b9b4a0c565f1f74b783d07cbae5734b8029a5a3cce9246eba8d4",
+    "ai-assistant/profile/presets/focused/preset.yml": "ccf11c8407ff54fd709fa1372a4381e3c140efd4d0eae8dfae0bc0ccff5b877b",
+    "ai-assistant/profile/presets/goal/agent.cordis.yml": "66778a50087ed6dcafa5b0b7b0fe564d9502797f4f32408fb12ae20f1aaff4c5",
+    "ai-assistant/profile/presets/goal/preset.yml": "f32df3ab3b00f6263e4017feb2d941987e342dcdd741145eac0da992ed2445ce",
+    "ai-assistant/profile/presets/orchestrated/agent.cordis.yml": "8ad45f516a7cc354127ea7192aea9200e8b96ea3c62986e16171290a10a80281",
+    "ai-assistant/profile/presets/orchestrated/preset.yml": "d282b361113bf15f376380248afdad7664769bbcc153669d3d11d055f97ce1f6",
+    "circuit-designer/apps/editor/src/App.tsx": "bb76f12843c309dcc14efa15d55d4486d19a6981a1691623aa4f442c5fbf32af",
+    "circuit-designer/apps/editor/src/CatalogDialog.tsx": "14237faedcc459d07a04943f7e6865b800ab25d9a1fcccc26e580f3451376710",
+    "circuit-designer/apps/editor/src/DiagnosticsPanel.tsx": "4c2fad532e12bd7f13248b6577ee7eb14382e41af044ca8823e18e20a7af0360",
+    "circuit-designer/apps/editor/src/EditorMenuBar.tsx": "6bf071ad3cd053b5e99405c6c30e4ba1ffbeaac93dcb9788fe803b022cc286b3",
+    "circuit-designer/apps/editor/src/NotificationToast.tsx": "40dfeb3c1b2b45b836ffd4aeb0b035bb28e061cb7f1f631ba1ea6d867af4881a",
+    "circuit-designer/apps/editor/src/PreferencesDialog.tsx": "61f1c70884f1260361069e633ea2ce6df8f3b74771018601e37c0e42b046c565",
+    "circuit-designer/apps/editor/src/UtilitySidebar.tsx": "b5fae1919e7463a13a5402a2a3ffa4301c768726bf4f3739c250b59011659be3",
+    "circuit-designer/apps/editor/src/catalog.css": "57aa0c485a692b12eb7d0a83becc0ec7c76eba8a10f6bc5b8bfb52e966a410b6",
+    "circuit-designer/apps/editor/src/diagnostics.ts": "e3a5e406b35e557906fa90728f591b0e9b9feb7386eb15331400aede9bd7aedd",
+    "circuit-designer/apps/editor/src/main.tsx": "a4ada0588d72f73c25e9da86cbae2a6e728be7f299661c013bfc613cc64ef173",
+    "circuit-designer/apps/editor/src/preferences.ts": "0b05f6f31767f98e0203eaa87c6e75ca4122d3f4b78fdc4f9fcf82d1e583677d",
+    "circuit-designer/apps/editor/src/revision-guards.ts": "889cf4a69893d02019feb619abda205dcf7f0e3fd48ef392d5e7a0d1b1c8922a",
+    "circuit-designer/apps/editor/src/styles.css": "51dd22562645160d474db7c3500124182bd1f0f77bc70699b9d8b150ebbf0e58",
+    "circuit-designer/apps/editor/src/vite-env.d.ts": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5",
+    "circuit-designer/packages/app-react/src/ActionSettingsPage.tsx": "73c7ebdc1d7220129089a84b9415c55621018b20851b52683a13216d32117ea5",
+    "circuit-designer/packages/app-react/src/App.tsx": "898a031552d724f5cf9afe669a3dd6a21265447c53b6d4dc53c3fa77ea185f46",
+    "circuit-designer/packages/app-react/src/CircuitActionMenu.tsx": "6111df69b157c4ea5acc1640ed0e5b8a31665ed0d89d579814f0119abaf2d8c7",
+    "circuit-designer/packages/app-react/src/CircuitDialogs.tsx": "2c759884da99e4cf95df44133e259d6e856eca78e6af8a93032cf2a0d61df95d",
+    "circuit-designer/packages/app-react/src/CircuitMenuBar.tsx": "e50e6099fd4f93f3cf85ede73de4e722f7036d4bf7839cf3a49b804eefa979d4",
+    "circuit-designer/packages/app-react/src/action-bindings.test.ts": "7270b909a96a0a5f680c7bd156174a92b903b763b42cfb492a022ff3a461363c",
+    "circuit-designer/packages/app-react/src/action-bindings.ts": "362180f1e7bc8d231768970d55f482a72f30bca808a2e206e092c89a39a7e071",
+    "circuit-designer/packages/app-react/src/adapters.ts": "aa1e321ad4de5c14a09c110defd905b71b58a8d4dc97d79b6111391acc83e80c",
+    "circuit-designer/packages/app-react/src/app-state.test.ts": "f845c90bd4da9eeb9b299abd36116051498fa2db4886ee47b667043b11b9caf2",
+    "circuit-designer/packages/app-react/src/browser-id.test.ts": "efb97d3da62653f0a54da407bb2fe592af8a66ecf26dcbb9af221892fdec02ce",
+    "circuit-designer/packages/app-react/src/browser-id.ts": "8b6e8a866d4a7930e964d8d162560344a48a3762ad067da5b500c7a338e3b27d",
+    "circuit-designer/packages/app-react/src/circuit-files.test.ts": "da54d969ac161486c874f621c8182423e7221c959fb3473459da8fe8e1ec0a65",
+    "circuit-designer/packages/app-react/src/circuit-files.ts": "2c274e958e98b16a8f60f02e97d890c60d0715b449e1d14f83a62da4debd52cf",
+    "circuit-designer/packages/app-react/src/connection-input.test.ts": "3787d36bb01d829e9d1d4522b7beebc4e988943fa1ebb88b9632dea937492676",
+    "circuit-designer/packages/app-react/src/connection-input.ts": "a7fd55054fa053c30cbb12cb65e860329c76533d633baa3312c67e27ac469888",
+    "circuit-designer/packages/app-react/src/context-actions.test.ts": "048645e9c067fb22d97ea05525062593f9cfa2e01ab3337b84d8a7f38bdc5cf9",
+    "circuit-designer/packages/app-react/src/context-actions.ts": "3ff391b9b86a33d793cb4d52968b6e792cea0fce53c33139385de32badc45e2a",
+    "circuit-designer/packages/app-react/src/index.tsx": "b857651c52e60bc1ef7c5eed4a40689d98ae2cfc1c26744a8054816833ba9bba",
+    "circuit-designer/packages/app-react/src/launch-state.ts": "d3b4520abcc21723057cc5143c7755a2e262b73abc4ae493b7c7adcdc1458b33",
+    "circuit-designer/packages/app-react/src/layout-state.ts": "bc691d8ee72b2a2247847b68f1cf76b91507e1da12d51cc732bc2b8e4cd416be",
+    "circuit-designer/packages/app-react/src/styles.css": "ec4d65661f04fb80c991d04894deea804d69f29514827f50f5be806aa822d4fb",
+    "circuit-designer/packages/document-a2ui-react/src/DesignTopologyLiveView.tsx": "580287b9bb5ace3ef1c98830f21bcdf2478afd06e203a1fddc98d2f64fe385d1",
+    "circuit-designer/packages/document-a2ui-react/src/OptionsMenu.tsx": "bf21e395f672e12c0d531b33977044ae2443a3a0053d6cbfb47a4c9e0ecc7177",
+    "circuit-designer/packages/document-a2ui-react/src/index.tsx": "de5da7cfa933f3d09eb8fbebec82458a55c03eae6259bc563b4ed541c13bc335",
+    "circuit-designer/packages/document-a2ui-react/src/port-input.ts": "66b12eccdc38038d949047f2385cc27e9ac282b53a8f22284e1e238fa9386edd",
+    "circuit-designer/packages/document-a2ui-react/src/section-registry.ts": "fef6973909b7240e1791d9db624973f7569628658456dcfb405ebd1776b06373",
+    "circuit-designer/packages/document-a2ui-react/src/styles.css": "018e01807c7560b0f84f7f0e419a298b6ead6f5c01761c0a0f8921067ed90785",
+    "circuit-designer/packages/document-a2ui-react/src/text-editing.ts": "6e724f6b79eae3eef30bd5b0d04b20ba070fb238b00a430f9428649039ff5fd0",
+    "circuit-designer/packages/document-a2ui-react/src/topology-live-view.ts": "51c7e8aaa0c78c8fc38d352cb1ba3879f7a4fa82ea91f04451d0b2da79d175fc",
+    "circuit-designer/packages/react/src/index.tsx": "3eddf8c70859fdcec890a8d6998fafe8d4781dc78ef16cb59bb699884d2a9134",
+    "circuit-designer/packages/react/src/styles.css": "c64efca77195ad4d21a75ffc920cb0673371987e3287c34a5253b5c765a177ea",
+    "testplan-service/src/testplan_service/ui/static/app.js": "db43074208a7cf6b4cd0fa1a7a1abae33a086a6307e62dd9a69d3c26117ac6e3",
+    "testplan-service/src/testplan_service/ui/static/index.html": "f41a12b0a92553004d23cad9084cffa2a13c9c38b1c796e7de00533ae1c3e3d7",
+    "testplan-service/src/testplan_service/ui/static/styles.css": "308ba6e312350aa38647f2da0bf944e835c4ceed4605b3d90a22cf6eefa313fd"
+  },
+  "captures": [
+    {
+      "name": "spec-new",
+      "file": "spec-new.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:00.252Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "sha256": "2b46c686985db5e624605a37961dda7444a737dac5e51ce00a4095446b8248ee",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "01-first-spec",
+          "action": 4,
+          "caption": "New Spec sets the filename and save location from one readable name."
+        }
+      ]
+    },
+    {
+      "name": "spec-cover",
+      "file": "spec-cover.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:01.480Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "spec_835772409a7b46f392f2a32f1bc4a0fd",
+      "source_revision": "sha256:6576928a8fc6efde642c2b63f6beec374c7348344d60a6a895914564f5cb3a33",
+      "sha256": "a9e170efbeb7df537104b5a25de215579144ee3bbde3563d02af03f4b78fc103",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "01-first-spec",
+          "action": 7,
+          "caption": "The saved document cover and Contents panel."
+        }
+      ]
+    },
+    {
+      "name": "spec-open",
+      "file": "spec-open.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:02.749Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "spec_835772409a7b46f392f2a32f1bc4a0fd",
+      "source_revision": "sha256:6576928a8fc6efde642c2b63f6beec374c7348344d60a6a895914564f5cb3a33",
+      "sha256": "6d7ef77e798a58ac69d71f08108372de7e1669abe71880203d465d9e3d67189b",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "01-first-spec",
+          "action": 8,
+          "caption": "Open Spec browses saved files on the service host."
+        }
+      ]
+    },
+    {
+      "name": "spec-ports",
+      "file": "spec-ports.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:15.111Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_02_start",
+      "source_revision": "sha256:6b3194386a8c90d4ebcb76f6722a89b4458b9b39789ce56c4a9787eb777b91ca",
+      "sha256": "62f5f15e3240659e167d420d7cdee65bdddfc03d8b873b7c2aff98d45eea5353",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "02-component-ports",
+          "action": 8,
+          "caption": "The saved adder has inputs a and b and output y."
+        }
+      ]
+    },
+    {
+      "name": "spec-port-draft",
+      "file": "spec-port-draft.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:09.779Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_02_start",
+      "source_revision": "sha256:7a1ad97343983e33310e49709911ebed6000782eef009c246d16fc898e4daf54",
+      "sha256": "caa1a35505e19fbe08bce65924f653e6f14dfb26db0a834efda5fbd1b4ab76a0",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "02-component-ports",
+          "action": 3,
+          "caption": "An inline wire-port draft keeps its own Save to Spec control."
+        }
+      ]
+    },
+    {
+      "name": "spec-range-error",
+      "file": "spec-range-error.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:10.511Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_02_start",
+      "source_revision": "sha256:7a1ad97343983e33310e49709911ebed6000782eef009c246d16fc898e4daf54",
+      "sha256": "93912dc1268555df3dc5d508b491a03df539bd74e876c6bcf9ad18094df16ff0",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "02-component-ports",
+          "action": 5,
+          "caption": "An invalid 15-0 Range keeps the full draft and focuses the error."
+        }
+      ]
+    },
+    {
+      "name": "spec-sv",
+      "file": "spec-sv.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:22.448Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:5163647d2c357d39d66cbd936fa55edc80c9e85ca1ef3e859d81de3f870734ab",
+      "sha256": "d856eb2d5a9cfc5122753c36fd971f50f5d8a2cc875db136d6965d5544098858",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "03-hardware-behavior",
+          "action": 3,
+          "caption": "The saved SystemVerilog section contains a module body."
+        }
+      ]
+    },
+    {
+      "name": "spec-verified",
+      "file": "spec-verified.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:24.086Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:5163647d2c357d39d66cbd936fa55edc80c9e85ca1ef3e859d81de3f870734ab",
+      "sha256": "54eeecb35de66eb72c6f61e52a504f39e0e7334abff6cb0ad9119755a8e1c5c1",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "03-hardware-behavior",
+          "action": 6,
+          "caption": "Diagnostics identifies the checked target; Technical details contains the saved revision and resolved interface."
+        }
+      ]
+    },
+    {
+      "name": "spec-preview",
+      "file": "spec-preview.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:24.326Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:5163647d2c357d39d66cbd936fa55edc80c9e85ca1ef3e859d81de3f870734ab",
+      "sha256": "516d523e3631ebe732ef10a76350f05beed3ad4a103b836b7bd5d862aa7026ba",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "03-hardware-behavior",
+          "action": 7,
+          "caption": "The complete Component interface fits a compact preview without enlargement."
+        }
+      ]
+    },
+    {
+      "name": "spec-preview-expanded",
+      "file": "spec-preview-expanded.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:24.898Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:5163647d2c357d39d66cbd936fa55edc80c9e85ca1ef3e859d81de3f870734ab",
+      "sha256": "977bcecb2538cea45ac76bb339e98b46422e5b70953f250265b3c343f41bccbb",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "03-hardware-behavior",
+          "action": 8,
+          "caption": "Expand provides a larger inspection view without changing saved geometry."
+        }
+      ]
+    },
+    {
+      "name": "assistant-architecture",
+      "file": "assistant-architecture.jpg",
+      "app": "AI Assistant",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:14:30.176Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_04_start",
+      "source_revision": "sha256:d7c440a89fd37c69132fd352f3600a9f0439f7c449d21ff7246aae2fa4bebb73",
+      "sha256": "c20cb0bfe6880388cac7beb679d6ebde1a2a36a3bdf6f008bad76306807d7587",
+      "model_provenance": "live",
+      "uses": [
+        {
+          "lesson": "04-assistant-register",
+          "action": 6,
+          "caption": "Review the enabled-register architecture before approving it."
+        }
+      ]
+    },
+    {
+      "name": "spec-register",
+      "file": "spec-register.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:36.411Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_complete_start",
+      "source_revision": "sha256:f9042e6ddf380af427cbe89d0e8d7f67f0226096f41af68d82a81a8a6c8ded97",
+      "sha256": "03ac35676c5363e00f7c904e4094d612dcad704e8a1f5fd9d98e7f51ed819609",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "04-assistant-register",
+          "action": 9,
+          "caption": "Check the saved register interface and implementation in Spec Editor."
+        }
+      ]
+    },
+    {
+      "name": "spec-composition",
+      "file": "spec-composition.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:34.553Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_05_start",
+      "source_revision": "sha256:fd25253e1aa5365b96ef111d21f70a26b9bdde3b4089b41df10aa7eb9e1d550e",
+      "sha256": "66d28a5029b497a69f0bd109d788ee72ee146085ba872a0a902d3819c947e01e",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "05-compose-design",
+          "action": 4,
+          "caption": "Hardware settings assign the containing Component\u2019s internal Design."
+        },
+        {
+          "lesson": "circuit-hierarchy",
+          "action": 1,
+          "caption": "A containing Component points to its internal Design."
+        }
+      ]
+    },
+    {
+      "name": "spec-instances",
+      "file": "spec-instances.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:34.804Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_05_start",
+      "source_revision": "sha256:fd25253e1aa5365b96ef111d21f70a26b9bdde3b4089b41df10aa7eb9e1d550e",
+      "sha256": "e10c962f58c0876dea7655abe67ddf1bec93416c47cf231a3effc7ac28ee8507",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "05-compose-design",
+          "action": 7,
+          "caption": "The Design lists two instances that reuse existing Component definitions."
+        },
+        {
+          "lesson": "systemc-cycle",
+          "action": 1,
+          "caption": "The source Design supplies explicit hierarchy and wire topology."
+        }
+      ]
+    },
+    {
+      "name": "circuit-edit",
+      "file": "circuit-edit.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:01:59.337Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:facfd220b57dca1875728b9031fcd134ad9891254c86f1fed18b5df8f8a0632c",
+      "sha256": "849281ffb170d5883cc2ca70b70e859430e2efd0eb2f06913823f6a4e8b8635b",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "06-connect-save",
+          "action": 2,
+          "caption": "An editable source-bound circuit has a private draft and Save to Spec control."
+        }
+      ]
+    },
+    {
+      "name": "circuit-connected",
+      "file": "circuit-connected.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:06.865Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "a0cc2852e1ec64dcfda7e69f86fecc7b47826eda4dd69330152d572470b1468b",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "06-connect-save",
+          "action": 10,
+          "caption": "The completed datapath has seven direct wire connections."
+        },
+        {
+          "lesson": "08-export-reopen",
+          "action": 7,
+          "caption": "Compare the saved canvas with each exported view."
+        }
+      ]
+    },
+    {
+      "name": "spec-design-verified",
+      "file": "spec-design-verified.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:38.561Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_complete_start",
+      "source_revision": "sha256:f9042e6ddf380af427cbe89d0e8d7f67f0226096f41af68d82a81a8a6c8ded97",
+      "sha256": "aff8f35af6f8a102771e6c38158e750ec513c28a05cd9df06ecc5dedfc18f068",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "07-generate-rtl",
+          "action": 2,
+          "caption": "Verify Design checks the saved hierarchical source before generation."
+        }
+      ]
+    },
+    {
+      "name": "spec-activity",
+      "file": "spec-activity.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:40.916Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_complete_start",
+      "source_revision": "sha256:f9042e6ddf380af427cbe89d0e8d7f67f0226096f41af68d82a81a8a6c8ded97",
+      "sha256": "e203bebc07fcb9e799c45a1cfe3b195b9d17b224c8f0b5ed2495d995b476c93f",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "07-generate-rtl",
+          "action": 6,
+          "caption": "Activity results identify the saved target, report, and published artifacts."
+        },
+        {
+          "lesson": "activity",
+          "action": 3,
+          "caption": "Activity keeps published results beside the Spec document."
+        }
+      ]
+    },
+    {
+      "name": "circuit-download",
+      "file": "circuit-download.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:07.203Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "4460f1c9209307b70cba1fbab140ab566f0c30d550944dbe85645fbe72d9645a",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "08-export-reopen",
+          "action": 2,
+          "caption": "File \u2192 Download offers portable JSON and image exports."
+        },
+        {
+          "lesson": "circuit-independent",
+          "action": 2,
+          "caption": "Download the portable Circuit before opening an independent copy."
+        }
+      ]
+    },
+    {
+      "name": "spec-invalid",
+      "file": "spec-invalid.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:18.916Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_09_start",
+      "source_revision": "sha256:d3c62d6eef56034c80ea51b46109cea381cc497684f0a607a38e80b35cb70de5",
+      "sha256": "65385edb72deb0b98d9c7f51d6382f084493b3ea81b5b9ab799ab60c6034785f",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "09-independent-change",
+          "action": 2,
+          "caption": "An invalid port range leaves the rejected draft available for correction."
+        }
+      ]
+    },
+    {
+      "name": "spec-port-description",
+      "file": "spec-port-description.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:20.349Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_09_start",
+      "source_revision": "sha256:48757d75860e145b95613c88debb944bb553aeb6c5f14e463d73378c31a39708",
+      "sha256": "aacbd4262e16f517eeecdd0d136592527f211090112dce0e2e13fe70844a99f0",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "09-independent-change",
+          "action": 4,
+          "caption": "Compare the saved interface after reopening the same Spec."
+        }
+      ]
+    },
+    {
+      "name": "circuit-hierarchy",
+      "file": "circuit-hierarchy.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:13.699Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "963ae7714d6143d491a5d1c31ef34013a3d3bbf710c7bf9e90d834826bb38e4f",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "circuit-hierarchy",
+          "action": 5,
+          "caption": "Two parent instances can reuse one containing Component definition."
+        }
+      ]
+    },
+    {
+      "name": "circuit-timing",
+      "file": "circuit-timing.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:08.473Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "1c298f21b0c04363bd609786e9595a14a1cae85f1dd1c3db31483f8553bfd8d9",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "circuit-timing",
+          "action": 4,
+          "caption": "Timing analysis reports paths and annotated cycle counts."
+        }
+      ]
+    },
+    {
+      "name": "circuit-clocks",
+      "file": "circuit-clocks.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:08.087Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "2697f0eab5e7f3753b3490e6941fc36b238244b051a49280ef5c57a767c0acdc",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "circuit-timing",
+          "action": 5,
+          "caption": "Clock settings describe the domains used for timing annotations."
+        }
+      ]
+    },
+    {
+      "name": "circuit-preferences",
+      "file": "circuit-preferences.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:09.299Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "f0e7a76ffa24a7145d1d60dc3543b9c0047604912d2e4a89e69ba050e25666cd",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "circuit-independent",
+          "action": 7,
+          "caption": "Actions and shortcuts reports binding conflicts."
+        }
+      ]
+    },
+    {
+      "name": "assistant-history",
+      "file": "assistant-history.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:15:14.884Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_assistant_restricted_start",
+      "source_revision": "sha256:ed71a102e955288118b5002feb9a3740fe12bf6334c7be7279a6fa43086cc11d",
+      "sha256": "f51d508ab8db66b18d21a57f9e10e4c2f0ea501bb3ec8696907d3d7424d89081",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "assistant-restricted",
+          "action": 5,
+          "caption": "Activity contains the pending adder explanation proposal."
+        }
+      ]
+    },
+    {
+      "name": "assistant-review",
+      "file": "assistant-review.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:15:17.573Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_assistant_restricted_start",
+      "source_revision": "sha256:ed71a102e955288118b5002feb9a3740fe12bf6334c7be7279a6fa43086cc11d",
+      "sha256": "5abc56e26b9914a1d6cd0f122179c648d5cb2d04cbdef163531e871c62f6578a",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "assistant-restricted",
+          "action": 6,
+          "caption": "Inspect the exact adder explanation diff before approval."
+        }
+      ]
+    },
+    {
+      "name": "circuit-proposals",
+      "file": "circuit-proposals.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:08.774Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "c8b30641a8da3a36f8e986e9d94a1d4e8452276fc3859840287067f81e5771f3",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "assistant-circuit",
+          "action": 5,
+          "caption": "Components lists the proposal review control; it is disabled when no proposal is pending."
+        }
+      ]
+    },
+    {
+      "name": "circuit-edit-connected",
+      "file": "circuit-edit-connected.jpg",
+      "app": "Circuit Designer",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:07.698Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_06_start",
+      "source_revision": "sha256:9f5bfdf7d205d9c5c10fab913b2eda300d7a8732777c8822a4c5939a5056ef02",
+      "sha256": "ac068c18b14a8d2e9b23b1a76f956328870bf8835d014ca50a3dc8f13f27f31d",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "assistant-circuit",
+          "action": 6,
+          "caption": "A source-bound private draft still requires Save to Spec."
+        }
+      ]
+    },
+    {
+      "name": "verification-source",
+      "file": "verification-source.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:18.703Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "aa1d8130c00d9382d702ab0b10120e80780faca3c7faea14b558d6ae8d97c9a3",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-plan",
+          "action": 1,
+          "caption": "A Test Plan is created from an imported source snapshot."
+        }
+      ]
+    },
+    {
+      "name": "verification-plan",
+      "file": "verification-plan.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:23.255Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "477f1d1ded8d718f82a23e764be193c71866f4dc5ee2ba12e43fe0ac12606018",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-plan",
+          "action": 9,
+          "caption": "Review the plan checklist before freezing P1."
+        }
+      ]
+    },
+    {
+      "name": "verification-coverage",
+      "file": "verification-coverage.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:27.102Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "e21a4b525313f12e4106d8f1eb68a2bb18aee0e89499a1dff5ce0fb32efabcd0",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-coverage",
+          "action": 4,
+          "caption": "Coverage objectives and evidence policy are separate from scenario activity."
+        }
+      ]
+    },
+    {
+      "name": "verification-evidence",
+      "file": "verification-evidence.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:30.058Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "075b0782ad249451b21ea28a8b81af117c555cd70c0a765a7b2b16260d99ccf4",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-coverage",
+          "action": 8,
+          "caption": "Stage and validate a synthetic result import before committing it."
+        }
+      ]
+    },
+    {
+      "name": "verification-bindings",
+      "file": "verification-bindings.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:31.897Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "08d865db1f36be405131a779537355cd7cb5898ded3545f6e82a9cd5d4e490f2",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-implementation",
+          "action": 2,
+          "caption": "Target bindings map observations to concrete ports and permissions."
+        }
+      ]
+    },
+    {
+      "name": "verification-implementation",
+      "file": "verification-implementation.jpg",
+      "app": "Verification Planner",
+      "attempt": "take-1794394864349",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": null,
+      "captured_at": "2026-11-11T11:02:32.323Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_circuit_hierarchy_start",
+      "source_revision": "sha256:5aca6bad45197903866026b611c9de655e879bc4969b529d3b742499ba4229d1",
+      "sha256": "2cba45eafc1c9d30b8349ded31ecbb0d5b13cb69134a540943e44a46f97d37bd",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "verification-implementation",
+          "action": 6,
+          "caption": "Implementation review and reference generation retain separate results."
+        }
+      ]
+    },
+    {
+      "name": "systemc-options",
+      "file": "systemc-options.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794390880630",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T09:55:04.938Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_systemc_cycle_start",
+      "source_revision": "sha256:5aec94d1182caa4e6d66dc63a063cb9e2727d6eba467748b343079dc855f68e3",
+      "sha256": "eb650dd30aadde51f67a20954e2d2a07a03719486ab6c360aa1847a9e7991e88",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "systemc-cycle",
+          "action": 3,
+          "caption": "Compatible SystemC Activities appear with target-specific availability."
+        }
+      ]
+    },
+    {
+      "name": "tlm-source",
+      "file": "tlm-source.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794390880630",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T09:55:06.238Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_tlm",
+      "source_revision": "sha256:f2d233bd5803506cafc266f95cd8acd4614ef0d4374f374bbd26a41d65397821",
+      "sha256": "1d10b51ff79e3e8c9e5b280bf9824dc866d168b3cd12f7524fcc6b9228f526fd",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "systemc-at",
+          "action": 2,
+          "caption": "The separate TLM example has two instances; its interface connection is omitted from the wire preview."
+        }
+      ]
+    },
+    {
+      "name": "tlm-activity",
+      "file": "tlm-activity.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794390880630",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T09:55:06.957Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_tlm",
+      "source_revision": "sha256:f2d233bd5803506cafc266f95cd8acd4614ef0d4374f374bbd26a41d65397821",
+      "sha256": "4a9ee255c6da9ebfad3bac74e1f5ca792f7811c133d5111ea0ae3d93a45415a9",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "systemc-at",
+          "action": 5,
+          "caption": "The AT skeleton Activity publishes its own report and source revision."
+        }
+      ]
+    },
+    {
+      "name": "spec-failed",
+      "file": "spec-failed.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:26.428Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:4ae97946234e938dfd297c358833d55146271c33701401f1d175773c091fec30",
+      "sha256": "409d00b872380beb50a86b3e3881567f10d8395db693e527e5ceb9e643ce158c",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "diagnostics",
+          "action": 4,
+          "caption": "Diagnostics groups the failed check under the saved adder target."
+        }
+      ]
+    },
+    {
+      "name": "spec-source",
+      "file": "spec-source.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:27.587Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:4ae97946234e938dfd297c358833d55146271c33701401f1d175773c091fec30",
+      "sha256": "bd7da8288462c1800a4a9212466d9a311dcd596b98c96d7f29738995acff43ea",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "diagnostics",
+          "action": 5,
+          "caption": "Go to source returns to the relevant saved SystemVerilog section."
+        }
+      ]
+    },
+    {
+      "name": "spec-stale",
+      "file": "spec-stale.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:28.546Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_diagnostics_start",
+      "source_revision": "sha256:f67bfe73bbd41536b4acd0c2e9c1ca27f3580ceaf120e365d806c73051f8712d",
+      "sha256": "71cb5edff8fc6fcd5170932ca4baf6667ac067d647b88b7c6b018f67fac1d7af",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "diagnostics",
+          "action": 6,
+          "caption": "An earlier result becomes stale after a source change."
+        }
+      ]
+    },
+    {
+      "name": "spec-download",
+      "file": "spec-download.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395929614",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:19:42.657Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_complete_start",
+      "source_revision": "sha256:f9042e6ddf380af427cbe89d0e8d7f67f0226096f41af68d82a81a8a6c8ded97",
+      "sha256": "a0f4d597332f334d87b2a966952fcd63837f749beb1ff71741564283e363af1c",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "activity",
+          "action": 6,
+          "caption": "The target-details job provides a document-bound Download JSON link."
+        }
+      ]
+    },
+    {
+      "name": "catalog-library",
+      "file": "catalog-library.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:13:00.322Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_catalog_reuse_start",
+      "source_revision": "sha256:97e62e492d7b8e79242c6d7a4bad69bd5bf006a6d0525c9805dabfd557ae0432",
+      "sha256": "f5a9d2ff4ea6e6a1c289c9414dd0ab6cad6196c41752c5010e96f857289a5e5b",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "catalog-reuse",
+          "action": 3,
+          "caption": "Inspect a release\u2019s interface, defaults, usage, and evidence before import."
+        }
+      ]
+    },
+    {
+      "name": "catalog-review",
+      "file": "catalog-review.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:13:06.183Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_catalog_reuse_start",
+      "source_revision": "sha256:36c8333586da03ccc22fe59eabcf60c671486a3338d76170e27db80f6317b45d",
+      "sha256": "136ef66106014e792fc9bbbcc674198459e77ff8f0a2efdd31c2042853ecac5f",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "catalog-reuse",
+          "action": 7,
+          "caption": "Review a renamed local copy before saving the import."
+        }
+      ]
+    },
+    {
+      "name": "catalog-origin",
+      "file": "catalog-origin.jpg",
+      "app": "Spec Editor",
+      "attempt": "take-1794395570017",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "theme": "clean",
+      "captured_at": "2026-11-11T11:13:07.741Z",
+      "source_commit": "ebf4ffe4c1bd3ed8a5ab804af20d65a5d7ffefbb",
+      "source_tree_digest": "0f58ec1c58d1dfa52f686abe7c80935715ab66ca0a68ecda4989afb1d6db51da",
+      "editor_bundle_sha256": "b5860228cfe021c15f98d26ce50fe06c86447cd8881b6eb1d034709ce7941696",
+      "document_id": "tutorial_catalog_reuse_start",
+      "source_revision": "sha256:e7344d14398b8efc9d2fd31e15b98bd61c3d5a13aa5c03eef63ca31098db0b5c",
+      "sha256": "1776a5d84d4de86c6e8c602e9e33a4c28f625e45fb8a14d107db7d099bec31da",
+      "model_provenance": null,
+      "uses": [
+        {
+          "lesson": "catalog-reuse",
+          "action": 8,
+          "caption": "Diagnostics separates Catalog origin from verification of the local Spec."
+        }
+      ]
+    }
+  ],
+  "note": "Real application captures. Prepared source is teaching data; only Assistant architecture captures labelled live used live inference. Human practice time is unmeasured."
+}

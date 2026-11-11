@@ -14,7 +14,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "docs/tutorials/example.json"
 STARTS = {"01": 0, "02": 0, "03": 1, "04": 2, "05": 3, "06": 4,
-          "07": 5, "08": 5, "09": 5, "complete": 5}
+          "07": 5, "08": 5, "09": 5, "complete": 5,
+          "diagnostics": 2, "activity": 5, "catalog-reuse": 0,
+          "circuit-hierarchy": 5, "circuit-timing": 5, "circuit-independent": 5,
+          "assistant-restricted": 5, "assistant-circuit": 5, "systemc-cycle": 5}
 
 
 def request(client, method, path, **kwargs):
@@ -110,7 +113,7 @@ def prepare(output: Path, planner_url: str | None = None):
     """Write fresh starts under an ignored repository TEMP_ directory."""
     output = output.resolve()
     relative = output.relative_to(ROOT)
-    if not any(part.startswith("TEMP_") for part in relative.parts):
+    if len(relative.parts) < 2 or relative.parts[0] != "temp" or not relative.parts[1].startswith("TEMP_"):
         raise ValueError("Use an ignored repository TEMP_ directory for tutorial outputs.")
     if output.exists():
         raise FileExistsError(f"Use a fresh output directory; refusing to replace {output}")

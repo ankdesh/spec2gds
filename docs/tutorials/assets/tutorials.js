@@ -1,4 +1,5 @@
 // Optional controls. The complete guide and navigation also work without scripts.
+document.documentElement.classList.add('tutorials-enhanced');
 const toggle = document.querySelector('.nav-toggle');
 const sidebar = document.querySelector('#sidebar');
 function closeNavigation() {

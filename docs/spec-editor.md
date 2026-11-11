@@ -300,7 +300,7 @@ The JSON file contains all source Sections for the selected target and its
 dependencies. This includes metadata, nested narrative, tables, protocol data,
 and SystemVerilog content. The export does not run RTL validation or change source.
 
-Open the Activity view and use **Download JSON** on **Target Section details**.
+Open the **Activity** toolbar tab and use **Download JSON** on **Target Section details**.
 The artifact role is `spec.summary` and remains visible in Technical details.
 The export records the snapshot and source revision. Downloads remain bound to
 the same Spec.

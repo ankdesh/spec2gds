@@ -5,10 +5,10 @@ It combines a structured Spec Editor, an independent Circuit Designer, an integr
 
 ## Learn the system
 
-Start with the [short HTML tutorials](docs/tutorials/index.html). Nine core guides
+Start with the [hands-on HTML tutorials](docs/tutorials/index.html). Nine core guides
 take a 16-bit adder from its first Spec to a saved circuit and an RTL project.
-Each guide includes a prepared start and a saved-state check. Optional guides
-cover Circuit Designer, AI Assistant controls, Verification Planner, and SystemC.
+Each guide includes a prepared start, action-by-action expected results, and a saved-state check. Optional guides
+cover Diagnostics, Activity outputs, Catalog reuse, Circuit Designer, AI Assistant controls, Verification Planner, and SystemC.
 See [environment setup and checkpoints](docs/tutorials/setup.html) before starting.
 
 ## System at a Glance

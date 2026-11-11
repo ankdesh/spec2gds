@@ -571,6 +571,8 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "co
           <p>Edit the specification name from the document cover. Use group <strong>Options</strong> menus to create components and entry designs, and entity menus to edit their introductory text.</p>
           <p>Entry designs can add named instances of available top-level components. Leaf Components support wire-port editing. Existing transaction and structured ports are read-only; wire ranges use <code>left:right</code> syntax.</p>
           <p>Use Save to Spec to validate and save each draft. Options lists compatible Activities; Export target details (JSON) exports the saved target and its dependencies.</p>
+          <p>Use the <strong>Diagnostics</strong> toolbar button for verification reports and source findings. Use <strong>Activity</strong> for job progress, downloads, and change reviews. Checks and jobs keep the panel closed until you open it, or select <strong>View details</strong> in a notification.</p>
+          <p>Add ports individually with <strong>Add port</strong> or <strong>Save and add another</strong>. Leave Range blank for a scalar, or enter explicit bounds such as <code>15:0</code>. Correct an invalid Range in the retained draft before saving.</p>
         </div>
       </Modal>
     );
