@@ -2,7 +2,7 @@
  * The visible document and a permanently bound Assistant package are distinct.
  * Spec service events invalidate projections; request ordering prevents a late response
  * for an older selection/revision from replacing the current view. */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from "react";
 
 import {
   A2UIDocumentSurface,
@@ -11,6 +11,7 @@ import {
   type SpecDocumentCommandController,
   type SpecDocumentEditController,
   type SpecOpenCircuitEventDetail,
+  type SpecSourceLocation,
 } from "@spec2gds/document-a2ui-react";
 import {
   SpecEditorHttpError,
@@ -33,6 +34,10 @@ import {
 
 import { publicFilenameStem } from "@spec2gds/circuit-core";
 
+import { UtilitySidebar, type UtilityTab } from "./UtilitySidebar";
+import { NotificationToast } from "./NotificationToast";
+import { DiagnosticsPanel } from "./DiagnosticsPanel";
+import { collectFindings } from "./diagnostics";
 import { CatalogDialog } from "./CatalogDialog";
 import EditorMenuBar, { PathDialog, type EditorView } from "./EditorMenuBar";
 import { acceptsView, draftRevisions, saveBaseRevision } from "./revision-guards";
@@ -76,6 +81,12 @@ export default function App() {
   }, [client]);
   const [catalogDocument, setCatalogDocument] = useState<{ key: string; revision: string } | null>(null);
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null);
+  const [reportSnapshot, setReportSnapshot] = useState<DocumentSnapshot | null>(null);
+  const [sourceLocation, setSourceLocation] = useState<SpecSourceLocation | null>(null);
+  const [selectedReport, setSelectedReport] = useState<EntityRef | null>(null);
+  const replaceSnapshot = useCallback((value: DocumentSnapshot) => { setSnapshot(value); setReportSnapshot(value); }, []);
+  const executionStates = useRef(new Map<string, string>());
+  const previousBinding = useRef<string | null>(null);
   const [batch, setBatch] = useState<A2UIDocumentBatch | null>(null);
   const [activity, setActivity] = useState<ActivityState>({
     executions: [],
@@ -86,7 +97,27 @@ export default function App() {
   const [view, setView] = useState<EditorView>(() => new URLSearchParams(window.location.search).get("view") === "activity" ? "activity" : "document");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+  const notificationId = useRef(0);
+  const [notification, setNotification] = useState<{ id: number; message: string; details?: UtilityTab; target?: EntityRef } | null>(null);
+  const setNotice = useCallback((update: SetStateAction<string>, details?: UtilityTab, target?: EntityRef) => {
+    const id = ++notificationId.current;
+    setNotification(current => {
+      const message = typeof update === "function" ? update(current?.message ?? "") : update;
+      return message ? { id, message, details, target } : null;
+    });
+  }, []);
+  const closePanel = useCallback((restoreFocus = true) => {
+    setView("document");
+    if (restoreFocus) requestAnimationFrame(() => document.getElementById(`editor-${view}-trigger`)?.focus());
+  }, [view]);
+  useEffect(() => {
+    const key = snapshot?.owner_document_key ?? null;
+    if (previousBinding.current && previousBinding.current !== key) {
+      setView("document"); setSelectedReport(null); setSourceLocation(null); setNotice("");
+      executionStates.current.clear();
+    }
+    previousBinding.current = key;
+  }, [snapshot?.owner_document_key, setNotice]);
   const commandPending = useRef(false);
   const assistantPending = useRef(false);
   const [launchingCircuit, setLaunchingCircuit] = useState(false);
@@ -148,6 +179,14 @@ export default function App() {
     setViewCursor(next.event_cursor);
     setApprovalPolicy(next.approval_policy);
     setActivity(next.activity);
+    setReportSnapshot(next.snapshot);
+    for (const execution of next.activity.executions) {
+      const id = text(execution.execution_id, "");
+      const status = text(execution.status, "unknown");
+      const previous = executionStates.current.get(id);
+      if (previous && previous !== status) setNotice(`${text(execution.title, "Activity")} ${status}.`, "activity");
+      executionStates.current.set(id, status);
+    }
     if (next.snapshot.edit_access) persistAccess(key, next.snapshot.edit_access);
     if (editing.current) {
       if (next.source_revision_hash !== currentRevision.current) {
@@ -159,7 +198,7 @@ export default function App() {
       return;
     }
     currentRevision.current = next.source_revision_hash;
-    setSnapshot(next.snapshot);
+    replaceSnapshot(next.snapshot);
     setBatch(next.a2ui);
     setExternalChange(null);
     setSyncState("Up to date");
@@ -172,7 +211,6 @@ export default function App() {
     let saved: { key: string; access: typeof client.editAccess } | null = null;
     try { saved = JSON.parse(window.sessionStorage.getItem("spec2gds.spec.selection") || "null"); } catch { /* A damaged selection must not stop the editor. */ }
     const key = initialDocumentKey.current || saved?.key;
-    initialDocumentKey.current = null;
     const channel = typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel("spec2gds.spec.tabs");
     let duplicate = false;
     channel?.addEventListener("message", event => {
@@ -185,6 +223,7 @@ export default function App() {
     channel?.postMessage({ kind: "claim", instance, participant: saved?.access.participant_id });
     const timer = window.setTimeout(() => {
       if (disposed || !key) return;
+      initialDocumentKey.current = null;
       activeKey.current = key;
       client.bindDocument(key);
       const linkedContext = new URLSearchParams(window.location.search).get("edit_context_id");
@@ -302,8 +341,12 @@ export default function App() {
           else executions.push(execution);
           return { ...current, executions };
         });
-        if (["succeeded", "failed", "cancelled"].includes(text(execution.status))) {
-          setNotice(current => current.startsWith("Queued ") ? "" : current);
+        const status = text(execution.status, "unknown");
+        if (executionStates.current.get(executionId) !== status) {
+          executionStates.current.set(executionId, status);
+          setNotice(`${text(execution.title, "Activity")} ${status}.`, "activity");
+        }
+        if (["succeeded", "failed", "cancelled"].includes(status)) {
           void refreshActivity().catch(caught => {
             if (epoch === documentEpoch.current && key === activeKey.current) {
               setError(`The job finished, but its results could not refresh: ${caught instanceof Error ? caught.message : String(caught)}`);
@@ -396,28 +439,27 @@ export default function App() {
 
   const executeAction = async (ref: EntityRef, action: EntityAction) => {
     const key = snapshot?.owner_document_key;
+    const epoch = documentEpoch.current;
     const execution = await client.executeEntityAction(ref, action.action_id);
-    if (activeKey.current !== key) return;
+    if (activeKey.current !== key || epoch !== documentEpoch.current) return;
     await refreshActivity();
-    if (activeKey.current !== key) return;
-    setNotice(`${action.title} ${text(execution.status, "completed")}.`);
-    setView("activity");
+    if (activeKey.current !== key || epoch !== documentEpoch.current) return;
+    setNotice(`${action.title} ${text(execution.status, "completed")}.`, "activity");
   };
 
   const reviewProposal = async (proposalId: string, decision: "accept" | "reject") => {
     if (!snapshot) return;
+    const key = snapshot.owner_document_key;
+    const epoch = documentEpoch.current;
     try {
-      const result = await client.reviewProposal(
+      await client.reviewProposal(
         proposalId,
         decision,
         snapshot.source_revision_hash,
       );
-      const nextSnapshot = record(result.snapshot) as unknown as DocumentSnapshot;
-      if (result.snapshot && !editing.current) {
-        setSnapshot(nextSnapshot);
-        setBatch(await client.getA2UIBatch());
-      }
+      if (activeKey.current !== key || epoch !== documentEpoch.current) return;
       await refreshActivity();
+      if (activeKey.current !== key || epoch !== documentEpoch.current) return;
       setNotice(`Proposal ${decision === "accept" ? "accepted" : "rejected"}.`);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -487,16 +529,14 @@ export default function App() {
 
   const executeActivity = async (ref: EntityRef, item: EntityActivity) => {
     if (!snapshot) return;
+    const epoch = documentEpoch.current;
     try {
       await client.launchEntityActivity(ref, item.definition.activity_id, snapshot.source_revision_hash);
     } finally {
-      if (activeKey.current === snapshot.owner_document_key) await loadView();
+      if (activeKey.current === snapshot.owner_document_key && epoch === documentEpoch.current) await loadView();
     }
-    if (activeKey.current !== snapshot.owner_document_key) return;
-    await refreshActivity();
-    if (activeKey.current !== snapshot.owner_document_key) return;
-    setNotice("");
-    setView("activity");
+    if (activeKey.current !== snapshot.owner_document_key || epoch !== documentEpoch.current) return;
+    setNotice(`${item.definition.title || "Activity"} queued.`, "activity");
   };
 
   const cancelActivity = async (executionId: string) => {
@@ -594,7 +634,7 @@ export default function App() {
       currentRevision.current = result.snapshot.source_revision_hash;
       draftRevision.current = result.snapshot.source_revision_hash;
       reviewedRevision.current = null;
-      setSnapshot(result.snapshot);
+      replaceSnapshot(result.snapshot);
       setExternalChange(null);
       setError("");
       setNotice(successNotice);
@@ -605,7 +645,7 @@ export default function App() {
         currentRevision.current = savedView.source_revision_hash;
         eventCursor.current = savedView.event_cursor;
         setViewCursor(savedView.event_cursor);
-        setSnapshot(savedView.snapshot);
+        replaceSnapshot(savedView.snapshot);
         setBatch(savedView.a2ui);
         setActivity(savedView.activity);
         setApprovalPolicy(savedView.approval_policy);
@@ -656,14 +696,15 @@ export default function App() {
       async verify(ref: EntityRef) {
         const key = snapshot.owner_document_key;
         setNotice("");
+        const epoch = documentEpoch.current;
         const result = await client.verifyComponent(ref, snapshot.source_revision_hash);
         const next = await client.getDocumentView(key);
-        if (activeKey.current === key && currentRevision.current === next.source_revision_hash) {
-          setSnapshot(next.snapshot); setBatch(next.a2ui);
+        if (epoch === documentEpoch.current && activeKey.current === key && currentRevision.current === next.source_revision_hash) {
+          replaceSnapshot(next.snapshot); setBatch(next.a2ui);
           setNotice(result.source_revision_hash !== next.source_revision_hash ? "Verification is out of date. Verify the current saved source."
             : result.status === "passed" ? "Lint passed. Functional simulation is unverified."
             : result.status === "failed" ? "Lint failed. Your saved text is preserved. Review the verification diagnostics."
-            : "Not verified. Review the verification details before generating RTL.");
+            : "Not verified. Review the verification details before generating RTL.", "diagnostics", ref);
         }
       },
       async createEntity(kind: "component" | "design", name: string, entryDesign = true) {
@@ -800,7 +841,11 @@ export default function App() {
       commandPending.current = true;
       try { await invoke(); }
       catch (caught) {
-        if (activeKey.current === key) setError(caught instanceof Error ? caught.message : String(caught));
+        if (activeKey.current === key) {
+          if (caught instanceof SpecEditorHttpError && record(caught.detail).verification) {
+            setNotice(caught.message, "diagnostics", ref);
+          } else setError(caught instanceof Error ? caught.message : String(caught));
+        }
         throw caught;
       } finally { commandPending.current = false; }
     };
@@ -848,20 +893,16 @@ export default function App() {
     } catch (caught) { separateTab?.close(); setError(caught instanceof Error ? caught.message : String(caught)); return false; }
   };
 
-  const sourceDiagnostics = snapshot?.diagnostics.source ?? [];
-  const artifactDiagnostics = snapshot?.diagnostics.artifacts ?? [];
-  const sectionDiagnostics = snapshot?.section_validation?.flatMap((result) =>
-    result.diagnostics.map((item) =>
-      `${snapshot && snapshot.entity_sections.find(section => section.section_id === result.section_id) ? referenceName(snapshot, snapshot.entity_sections.find(section => section.section_id === result.section_id)!.parent) : "Document"} › ${snapshot?.entity_sections.find(section => section.section_id === result.section_id)?.section_type === "sv" ? "SystemVerilog" : "Section"} · ${item.code}${item.line ? ` · ${item.line}${item.column ? `:${item.column}` : ""}` : ""}: ${item.message}`,
-    ),
-  ) ?? [];
+  const diagnosticCount = collectFindings(reportSnapshot).length;
+  const activityCount = activity.executions.filter(item => ["queued", "running"].includes(text(item.status))).length
+    + (activity.pending_review_count ?? activity.proposals.filter(item => item.review_status === "pending").length);
 
   return (
     <div className="app-shell" data-theme={themeId}>
       <EditorMenuBar
         dialogError={error}
-        activityCount={activity.executions.length + activity.proposals.length + activity.assistant_changes.length}
-        diagnosticCount={sourceDiagnostics.length + artifactDiagnostics.length + sectionDiagnostics.length}
+        activityCount={activityCount}
+        diagnosticCount={diagnosticCount}
         launchingAssistant={launchingAssistant}
         launchingCircuit={launchingCircuit}
         loading={loading}
@@ -876,7 +917,7 @@ export default function App() {
         onOpenCircuit={launchCircuitDesigner}
         onSelectTheme={selectTheme}
         onToggleTheme={toggleTheme}
-        onViewChange={setView}
+        onViewChange={next => setView(current => current === next ? "document" : next)}
         path={path}
         snapshot={snapshot}
         themeId={themeId}
@@ -890,10 +931,10 @@ export default function App() {
         <button id="spec-create-copy-trigger" type="button" onClick={() => { setError(""); setCopyDialog(true); }}>Create Copy…</button>
         <button type="button" onClick={() => void client.editAccessAction("acquire").then(access => { persistAccess(snapshot.owner_document_key, access); if (access.mode === "read_only") setError("This Spec is still in use. Create a copy to edit it."); else void loadView(); }).catch(caught => setError(String(caught)))}>Resume editing</button>
       </div>}
-      {notice && <div className="app-notice" role="status">{notice}<button aria-label="Dismiss notice" onClick={() => setNotice("")}>×</button></div>}
+      {notification && <NotificationToast key={notification.id} message={notification.message} onDismiss={() => setNotice("")}
+        onDetails={notification.details ? () => { setSelectedReport(notification.target ?? null); setView(notification.details!); setNotice(""); } : undefined} />}
       {snapshot && <div className="spec-status-bar" aria-label="Spec status">
         <span role="status">{syncState}</span>
-        <details><summary>Assistant settings</summary><span>{approvalPolicy === "automatic" ? "automatic submission" : "designer approval required"}</span></details>
       </div>}
       {externalChange && (
         <div className="app-refresh-notice" role="status">
@@ -922,36 +963,36 @@ export default function App() {
           await loadView(); setCatalogDocument(null); setNotice(reused ? "Reused the unchanged catalog Component." : "Component imported and saved to Spec.");
           setTimeout(() => { const section = document.getElementById(`component-${root.entity_id.replaceAll("_", "-")}`) ?? document.getElementById(root.entity_id); section?.scrollIntoView({ block: "start" }); section?.querySelector<HTMLElement>("h2,h3")?.focus(); }, 100);
         }} />}
-      <main>
+      <main className={view === "document" ? "editor-main" : "editor-main editor-main--with-panel"}>
+        <div className="editor-document" id="editor-document-pane">
         {loading && <LoadingState />}
-        {!loading && batch && <div style={{ display: view === "document" ? undefined : "none" }}>
+        {batch && <div hidden={loading}>
           <A2UIDocumentSurface
             batch={batch}
             editController={canEdit || inlineEditActive ? editController : undefined}
             commandController={canEdit ? commandController : undefined}
             onEditingChange={editingChanged}
+            diagnosticsMode="external"
+            sourceLocation={sourceLocation}
           />
         </div>}
-        {!loading && view === "activity" && (
-          <ActivityView
-            history={<AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${snapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />}
-            activity={activity}
-            client={client}
-            snapshot={snapshot}
-            onCancel={cancelActivity}
-            onRefresh={refreshActivity}
-            onReview={reviewProposal}
-          />
-        )}
-        {!loading && view === "diagnostics" && (
-          <DiagnosticsView source={sourceDiagnostics} artifacts={artifactDiagnostics} sections={sectionDiagnostics} />
-        )}
         {!loading && !batch && !error && (
           <div className="empty-state">
             <h1>Start a specification</h1>
             <p>Use <strong>File → New Spec</strong> or <strong>File → Open Spec</strong> with a server-local <code>.spec</code> path.</p>
           </div>
         )}
+        </div>
+        {view !== "document" && <UtilitySidebar tab={view} onTab={setView} onClose={closePanel}>
+          {view === "diagnostics" ? <DiagnosticsPanel snapshot={reportSnapshot} selectedTarget={selectedReport} onNavigate={location => {
+            if (window.innerWidth < 1280) closePanel(false);
+            setSourceLocation({ ...location });
+          }} /> : <>
+            <details><summary>Review policy</summary><p>{approvalPolicy === "automatic" ? "Automatic submission" : "Designer approval required"}</p></details>
+            <ActivityView history={<AssistantHistory key={snapshot?.owner_document_key} client={client} documentKey={snapshot?.owner_document_key ?? ""} revision={`${reportSnapshot?.source_revision_hash ?? ""}:${viewCursor}`} onChanged={loadView} />}
+              activity={activity} client={client} snapshot={reportSnapshot} onCancel={cancelActivity} onRefresh={refreshActivity} onReview={reviewProposal} />
+          </>}
+        </UtilitySidebar>}
       </main>
 
 
@@ -1189,38 +1230,4 @@ function CopyPathButton({ path }: { path: string }) {
     try { await navigator.clipboard.writeText(path); setMessage("Copied"); }
     catch { setMessage("Could not copy. Select the path to copy it."); }
   }}>Copy path</button></OptionsMenu><span role="status">{message}</span></>;
-}
-
-function DiagnosticsView({
-  source,
-  artifacts,
-  sections,
-}: {
-  source: string[];
-  artifacts: string[];
-  sections: string[];
-}) {
-  const count = source.length + artifacts.length + sections.length;
-  return (
-    <div className="utility-page utility-page--narrow">
-      <header className="utility-heading">
-        <h1>Diagnostics</h1>
-        <span className={count ? "health health--warning" : "health"}>
-          {count ? "Needs attention" : "Source valid"}
-        </span>
-      </header>
-      <UtilityPanel title="Source package" count={source.length}>
-        {source.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
-        {!source.length && <p className="diagnostic diagnostic--ok">No source diagnostics.</p>}
-      </UtilityPanel>
-      <UtilityPanel title="Entity sections" count={sections.length}>
-        {sections.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
-        {!sections.length && <p className="diagnostic diagnostic--ok">No entity-section diagnostics.</p>}
-      </UtilityPanel>
-      <UtilityPanel title="Artifact sidecar" count={artifacts.length}>
-        {artifacts.map((item, index) => <p className="diagnostic" key={index}>{item}</p>)}
-        {!artifacts.length && <p className="diagnostic diagnostic--ok">No artifact diagnostics.</p>}
-      </UtilityPanel>
-    </div>
-  );
 }

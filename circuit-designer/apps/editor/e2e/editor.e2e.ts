@@ -671,6 +671,7 @@ test("creates a Spec from its name in Spec root and refreshes the saved file", a
   const state = await mockEditorApi(page);
   await page.goto("/");
   await expect(page).toHaveTitle("spec2hw · Spec Editor");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   const dialog = page.getByRole("dialog", { name: "New Spec", exact: true });
   await expect(dialog.getByLabel("Spec name")).toBeFocused();
@@ -694,6 +695,7 @@ test("creates a Spec from its name in Spec root and refreshes the saved file", a
 test("chooses a folder with one click, cancels location changes, and adds a folder", async ({ page }) => {
   const state = await mockEditorApi(page);
   await page.goto("/");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   await page.getByLabel("Spec name").fill("New editor specification");
   await page.getByRole("button", { name: "Change location" }).click();
@@ -749,6 +751,7 @@ test("Open Spec starts at Spec root, filters names, and opens a file by double-c
 test("manual paths survive name and folder changes until reset to automatic", async ({ page }) => {
   const state = await mockEditorApi(page);
   await page.goto("/");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   await page.getByLabel("Spec name").fill("First name");
   await page.getByText("More options", { exact: true }).click();
@@ -776,6 +779,7 @@ test("retries a failed location load without losing the entered name", async ({ 
     return route.fallback();
   });
   await page.goto("/");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   await page.getByLabel("Spec name").fill("Keep this name");
   await expect(page.getByRole("alert")).toHaveText("Folders are unavailable. Try again.");
@@ -1069,8 +1073,10 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
   expect(state.generatedTargets).toEqual([{ entity_kind: "design", entity_id: designRef.entity_id }]);
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+  await page.locator("#editor-activity-trigger").click();
   await expect(page.getByText("Generate RTL", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
 
   await design.getByRole("button", { name: "Options", exact: true }).click();
   await expect(design.getByRole("menuitem", { name: /More actions|Launch activity/ })).toHaveCount(0);
@@ -1244,7 +1250,7 @@ test("offers Help content and remains usable at a narrow viewport", async ({ pag
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "File", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("button", { name: "Document", exact: true })).toBeVisible();
+  await expect(page.locator("#editor-diagnostics-trigger")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
@@ -1284,11 +1290,15 @@ test("shows generated RTL diagnostics on the checked target with their file loca
   });
   await openSample(page);
   const design = page.locator("#design-design_top");
-  await expect(design.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toContainText("Lint failed");
-  await expect(design).toContainText("1 blocking diagnostic");
-  await design.getByText("Verification details", { exact: true }).click();
-  await expect(design).toContainText("Generated RTL: designs/processor.sv:31:45");
+  await expect(design.locator(".spec-hardware-controls [role=status]")).toHaveCount(0);
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+  await page.locator("#editor-diagnostics-trigger").click();
+  await expect(page.locator(".utility-sidebar")).toContainText("Generated RTL: designs/processor.sv:31:45");
   await expect(page.locator(".spec-section-diagnostics")).toHaveCount(0);
+  await page.getByRole("button", { name: "Go to source", exact: true }).click();
+  await expect(design).toBeInViewport();
+  await expect(design.locator("h3")).toBeFocused();
+  await expect(page.locator(".spec-source-highlight")).toHaveCount(0);
 });
 
 test("keeps port actions compact and keyboard accessible in both themes", async ({ page }, testInfo) => {
@@ -1386,7 +1396,7 @@ test("provides narrow Contents navigation, focus restoration, and unobstructed s
   const header = await page.locator(".app-header").boundingBox();
   expect(header!.height).toBeLessThanOrEqual(120);
   await expect(page.locator(".spec-status-bar")).toHaveCSS("position", "static");
-  await expect(page.locator(".spec-status-bar")).toContainText("automatic submission");
+  await expect(page.locator(".spec-status-bar")).toContainText("Up to date");
   await expect(page.locator(".assistant-launch")).toBeVisible();
 });
 
@@ -1549,7 +1559,7 @@ test("ignores a command catalogue response from an earlier source revision", asy
   await expect(design.getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
 });
 
-test("preserves an unsaved draft while inspecting an Activity and disables editing hidden fields", async ({ page }) => {
+test("preserves an unsaved draft and selection while inspecting an Activity", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
   const design = page.locator("#design-design_top");
@@ -1559,20 +1569,23 @@ test("preserves an unsaved draft while inspecting an Activity and disables editi
   await design.getByRole("button", { name: "Options", exact: true }).click();
   await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+  await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
   const draft = design.getByLabel("Design explanation");
   await expect(draft).toHaveValue("Keep this private draft.");
   await draft.click();
   await draft.evaluate((input: HTMLTextAreaElement) => { input.setSelectionRange(0, input.value.length); document.dispatchEvent(new Event("selectionchange")); });
-  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Cut", exact: true })).toBeDisabled();
   await expect(page.getByRole("menuitem", { name: "Paste", exact: true })).toBeDisabled();
   await expect(page.getByRole("menuitem", { name: "Copy", exact: true })).toBeDisabled();
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
   await expect(design.getByLabel("Design explanation")).toHaveValue("Keep this private draft.");
+  expect(await draft.evaluate((input: HTMLTextAreaElement) => [input.selectionStart, input.selectionEnd])).toEqual([0, "Keep this private draft.".length]);
   expect(state.transactions).toHaveLength(0);
 });
 
@@ -1592,6 +1605,7 @@ test("refreshes artifacts after completion without requiring a source change or 
     };
   });
   const state = await mockEditorApi(page);
+  await page.clock.install();
   await openSample(page);
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: "Refresh From Disk", exact: true }).click();
@@ -1599,6 +1613,8 @@ test("refreshes artifacts after completion without requiring a source change or 
   const design = page.locator("#design-design_top");
   await design.getByRole("button", { name: "Options", exact: true }).click();
   await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+  await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
   await page.getByText("Artifacts", { exact: true }).click();
   await expect(page.getByText("No generated artifacts.")).toBeVisible();
@@ -1609,6 +1625,12 @@ test("refreshes artifacts after completion without requiring a source change or 
   await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
   await expect(page.getByText("Target Section details", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Download JSON" })).toHaveAttribute("href", /owner_document_key=/);
+  await page.mouse.move(0, 0);
+  await page.clock.fastForward(5100);
+  await expect(page.locator(".app-toast")).toHaveCount(0);
+  await page.evaluate(record => (window as unknown as { emitActivity: (record: object) => void }).emitActivity(record), finished);
+  await expect(page.locator(".app-toast")).toHaveCount(0);
+  await expect(page.locator("#utility-tab-activity")).toHaveAttribute("aria-selected", "true");
 });
 
 test("proposal review preserves a private draft and its authored revision", async ({ page }) => {
@@ -1620,13 +1642,13 @@ test("proposal review preserves a private draft and its authored revision", asyn
   await design.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
   await design.getByLabel("Design explanation").fill("Keep the authored draft.");
   state.proposals.push({ proposal_id: "proposal_draft_review", review_status: "pending", rationale: "Add a saved note", operations: [{ type: "upsert_narrative_block", block: { block_id: "review_note", type: "paragraph", text: "Saved source note" } }] });
-  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
   await page.locator(".utility-heading").getByRole("button", { name: "Options", exact: true }).click();
   await page.getByRole("menuitem", { name: "Refresh", exact: true }).click();
   await page.locator(".activity-item").filter({ hasText: "Add a saved note" }).getByRole("button", { name: "Options", exact: true }).click();
   await page.getByRole("menuitem", { name: "Accept", exact: true }).click();
   await expect(page.getByRole("status").filter({ hasText: "Proposal accepted." })).toBeVisible();
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
   await expect(design.getByLabel("Design explanation")).toHaveValue("Keep the authored draft.");
   state.staleNextTransaction = true;
   await design.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -1938,6 +1960,7 @@ test("late copy suggestions preserve edits and a pending copy submits once", asy
   await expect(page.getByRole("button", { name: "Creating…" })).toBeDisabled();
   await page.keyboard.press("Enter");
   await page.keyboard.press("Escape");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   await page.keyboard.press("Control+o");
   await expect(page.getByRole("dialog", { name: "Create Copy", exact: true })).toBeVisible();
@@ -1955,7 +1978,8 @@ test("file dialogs fit narrow screens in both themes and retain keyboard focus",
     await page.reload();
     for (const width of [390, 1440]) {
       await page.setViewportSize({ width, height: 844 });
-      await page.keyboard.press("Control+n");
+      await expect(page.locator(".app-header")).toBeVisible();
+  await page.keyboard.press("Control+n");
       const dialog = page.getByRole("dialog", { name: "New Spec", exact: true });
       await page.getByLabel("Spec name", { exact: true }).fill("My registered adder");
       await expect(dialog.getByRole("button", { name: "Create Spec", exact: true })).toBeEnabled();
@@ -1991,6 +2015,7 @@ test("a late folder response cannot replace a later location choice", async ({ p
     return route.fallback();
   });
   await page.goto("/");
+  await expect(page.locator(".app-header")).toBeVisible();
   await page.keyboard.press("Control+n");
   await page.getByLabel("Spec name", { exact: true }).fill("Keep the root");
   await page.getByRole("button", { name: "Change location" }).click();
@@ -2211,10 +2236,197 @@ test("Component library keeps an import pending and prevents duplicate actions",
     await expect(dialog.getByRole("button", { name: "Importing…", exact: true })).toBeDisabled();
     await expect(dialog.getByRole("button", { name: "Close Component library", exact: true })).toBeDisabled();
     await expect(dialog.getByLabel("Import as a renamed copy")).toBeDisabled();
-    await page.keyboard.press("Enter"); await page.keyboard.press("Escape"); await page.keyboard.press("Control+n");
+    await page.keyboard.press("Enter"); await page.keyboard.press("Escape"); await expect(page.locator(".app-header")).toBeVisible();
+  await page.keyboard.press("Control+n");
     await expect(dialog).toBeVisible();
     expect(requests).toBe(1);
   } finally { release(); }
   await expect(dialog).toHaveCount(0);
   expect(calls.imports).toHaveLength(1);
+});
+
+for (const status of ["passed", "failed", "unverified", "stale"] as const) {
+  test(`side panel: ${status} verification uses a short manual notification`, async ({ page }) => {
+    await mockEditorApi(page);
+    let verified = false;
+    const result = { target: designRef, source_revision_hash: status === "stale" ? "old" : revision,
+      status, tool_version: "Verilator fixture", functional_simulation: "unverified",
+      diagnostics: status === "failed" ? [{ code: "WIDTH", message: "Width mismatch", blocking: true, file_path: "rtl/top.sv", source_kind: "generated", line: 3 }] : [] };
+    await page.route("**/entities/design/design_top/verify*", async route => { verified = true; await route.fulfill({ json: result }); });
+    await page.route("**/documents/view*", route => route.fulfill({ json: {
+      snapshot: { ...snapshot, verifications: verified ? [result] : [] }, a2ui: batch,
+      activity: { executions: [], artifacts: [], proposals: [], assistant_changes: [], pending_review_count: 27 },
+      approval_policy: "review", event_cursor: 0, source_revision_hash: revision,
+    } }));
+    await openSample(page);
+    await page.clock.install();
+    const design = page.locator("#design-design_top");
+    await design.getByRole("button", { name: "Options", exact: true }).click();
+    await design.getByRole("menuitem", { name: "Verify Design", exact: true }).click();
+    const label = { passed: "Lint passed", failed: "Lint failed", unverified: "Not verified", stale: "out of date" }[status];
+    await expect(page.locator(".app-toast")).toContainText(label);
+    await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+    await expect(design.locator(".spec-verification-details, .spec-validation-badge")).toHaveCount(0);
+    await expect(page.locator("#editor-activity-trigger")).toHaveText("Activity27");
+    const details = page.locator(".app-toast").getByRole("button", { name: "View details" });
+    await details.focus();
+    await page.clock.fastForward(6000);
+    await expect(page.locator(".app-toast")).toBeVisible();
+    await details.click();
+    await expect(page.locator(".utility-sidebar")).toContainText(status === "stale" ? "Out of date" : label);
+    await expect(page.locator(".spec-paper")).toBeVisible();
+    if (status === "failed") await expect(page.locator("#editor-diagnostics-trigger span")).toHaveText("1");
+    await page.getByRole("button", { name: "Close side panel" }).click();
+    await expect(page.locator("#editor-diagnostics-trigger")).toBeFocused();
+    // A second result expires without removing the persistent report or attention count.
+    await design.getByRole("button", { name: "Options", exact: true }).click();
+    await design.getByRole("menuitem", { name: "Verify Design", exact: true }).click();
+    await page.mouse.move(0, 0);
+    await expect(page.locator(".app-toast")).toBeVisible();
+    await page.clock.fastForward(5100);
+    await expect(page.locator(".app-toast")).toHaveCount(0);
+    await page.locator("#editor-diagnostics-trigger").click();
+    await expect(page.locator(".utility-sidebar")).toContainText(status === "stale" ? "Out of date" : label);
+  });
+}
+
+test("side panel: responsive dock, keyboard resizing, themes and overlay focus", async ({ page }, testInfo) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  for (const theme of ["clean", "obsidian"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.locator(".theme-quick-toggle").click();
+    for (const width of [1440, 1280, 1024, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator("#editor-diagnostics-trigger").click();
+      const sidebar = page.locator(".utility-sidebar");
+      await expect(sidebar).toBeVisible();
+      if (width >= 1280) {
+        const resizer = sidebar.getByRole("separator", { name: "Resize side panel" });
+        await resizer.focus(); await page.keyboard.press("End");
+        await expect(resizer).toHaveAttribute("aria-valuenow", String(Math.min(560, width - 800)));
+        expect((await page.locator(".editor-document").boundingBox())!.width).toBeGreaterThanOrEqual(800);
+        const box = (await sidebar.boundingBox())!;
+        expect(box.x + box.width).toBe(width);
+      } else {
+        await expect(sidebar).toHaveAttribute("role", "dialog");
+        await expect(page.locator("body")).toHaveCSS("overflow", "hidden");
+        expect(await page.locator(".editor-document").evaluate(element => (element as HTMLElement).inert)).toBe(true);
+        await sidebar.getByRole("button", { name: "Close side panel" }).focus();
+        await page.keyboard.press("Tab");
+        expect(await sidebar.evaluate(element => element.contains(document.activeElement))).toBe(true);
+        if (width === 390) expect((await sidebar.boundingBox())!.width).toBe(390);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await page.screenshot({ path: testInfo.outputPath(`panel-${theme}-${width}.png`) });
+      await page.keyboard.press("Escape");
+      await expect(sidebar).toHaveCount(0);
+      await expect(page.locator("#editor-diagnostics-trigger")).toBeFocused();
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+  }
+});
+
+test("side panel: saved source navigation, duplicate findings and separate Catalog evidence", async ({ page }) => {
+  await mockEditorApi(page);
+  const diagnostic = { code: "WIDTH", message: "Width mismatch", blocking: true, file_path: "sections/top.sv", source_kind: "section", line: 1, column: 1 };
+  const checked = { ...snapshot,
+    entity_sections: [{ section_id: "section_sv_design_top", parent: designRef, section_type: "sv", type_version: 1, title: "SystemVerilog", media_type: "text/x-systemverilog", source_path: "sections/top.sv", source_sha256: "hash", content: "logic saved_marker;\n" }],
+    section_validation: [{ section_id: "section_sv_design_top", status: "errors", diagnostics: [diagnostic] }],
+    verifications: [{ target: designRef, status: "failed", source_revision_hash: revision, tool_version: "fixture", functional_simulation: "unverified", diagnostics: [diagnostic] }],
+    catalog_origins: [{ component_key: "published", version: "1", package_sha256: "release", source_vlnv: "vendor:lib:Published:1", root: designRef,
+      evidence: [{ evidence_sha256: "evidence", report: { checks: [{ kind: "lint", status: "passed", summary: "Published check" }] } }] }],
+  };
+  await page.route("**/documents/view*", route => route.fulfill({ json: { snapshot: checked, a2ui: batch,
+    activity: { executions: [], artifacts: [], proposals: [], assistant_changes: [] }, approval_policy: "automatic", event_cursor: 0, source_revision_hash: revision } }));
+  await openSample(page);
+  await expect(page.locator("#editor-diagnostics-trigger span")).toHaveText("1");
+  await expect(page.locator(".spec-paper")).not.toContainText("Catalog origin");
+  await page.locator("#editor-diagnostics-trigger").click();
+  await expect(page.locator(".diagnostic-finding")).toHaveCount(1);
+  await page.locator(".diagnostic-finding").getByRole("button", { name: "Go to source" }).click();
+  await expect(page.locator(".spec-source-highlight")).toHaveText("logic saved_marker;");
+  await page.locator(".utility-sidebar").getByText("Catalog evidence", { exact: true }).click();
+  await expect(page.locator(".utility-sidebar")).toContainText("Published release evidence is separate");
+  await expect(page.locator(".utility-sidebar")).toContainText("Published check");
+  await page.getByRole("button", { name: "Close side panel" }).click();
+  const section = page.locator(".spec-sv-section");
+  await section.getByRole("button", { name: "Options for SystemVerilog" }).click();
+  await section.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await section.locator(".cm-content").fill("logic private_draft;\n");
+  await page.locator("#editor-diagnostics-trigger").click();
+  await page.locator(".diagnostic-finding").getByRole("button", { name: "Go to source" }).click();
+  await expect(page.locator(".spec-source-highlight")).toHaveCount(0);
+  await expect(section.locator(".cm-content")).toContainText("private_draft");
+});
+
+test("side panel: existing Activity links open the panel beside the bound document", async ({ page }) => {
+  await mockEditorApi(page);
+  await page.goto(`/?owner_document_key=${snapshot.owner_document_key}&view=activity`);
+  await expect(page.locator(".spec-paper")).toBeVisible();
+  await expect(page.locator("#utility-tab-activity")).toHaveAttribute("aria-selected", "true");
+  await expect(page.locator("#editor-activity-trigger span")).toHaveCount(0);
+  await page.getByText("Review policy", { exact: true }).click();
+  await expect(page.locator(".utility-sidebar")).toContainText("Automatic submission");
+});
+
+test("side panel: a late job response cannot reopen tools or notify for another Spec", async ({ page }) => {
+  await mockEditorApi(page);
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let launched = false;
+  await page.route("**/activities/rtl.generate/executions*", async route => {
+    launched = true; await gate;
+    await route.fulfill({ json: { execution_id: "old-job", status: "queued" } });
+  });
+  const other = { ...snapshot, owner_document_key: "another-spec", narrative: { title: "Other Spec", blocks: [] }, verifications: [] };
+  await page.route("**/documents/open", async route => {
+    if (route.request().postDataJSON().path.endsWith("other.spec")) return route.fulfill({ json: other });
+    return route.fallback();
+  });
+  await page.route("**/documents/view*", route => {
+    const selected = new URL(route.request().url()).searchParams.get("owner_document_key") === other.owner_document_key ? other : snapshot;
+    const projection = structuredClone(batch);
+    projection.messages[1].updateComponents.components.find((item: any) => item.component === "SpecDocument")!.title = selected.narrative.title;
+    return route.fulfill({ json: { snapshot: selected, a2ui: projection,
+      activity: { executions: [], artifacts: [], proposals: [], assistant_changes: [], pending_review_count: 0 },
+      approval_policy: "automatic", event_cursor: 0, source_revision_hash: revision } });
+  });
+  await openSample(page);
+  await page.locator("#editor-diagnostics-trigger").click();
+  const design = page.locator("#design-design_top");
+  await design.getByRole("button", { name: "Options", exact: true }).click();
+  await design.getByRole("menuitem", { name: /^Generate RTL/ }).click();
+  await expect.poll(() => launched).toBe(true);
+  await expect(page.locator("#utility-tab-diagnostics")).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Open Spec/ }).click();
+  await page.getByText("More options", { exact: true }).click();
+  await page.getByLabel("File path", { exact: true }).fill("/home/designer/other.spec");
+  await page.getByRole("button", { name: "Open Spec", exact: true }).click();
+  await expect(page.locator(".spec-paper h1")).toHaveText("Other Spec");
+  const completed = page.waitForResponse(response => response.url().includes("activities/rtl.generate/executions"));
+  release(); await completed;
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+  await expect(page.locator(".app-toast")).toHaveCount(0);
+  await expect(page.locator("#editor-diagnostics-trigger span")).toHaveCount(0);
+});
+
+test("side panel: pointer resizing persists and scrollbar space preserves the document width", async ({ page }) => {
+  await mockEditorApi(page);
+  await openSample(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addStyleTag({ content: "html { scrollbar-gutter: stable; }" });
+  await page.locator("#editor-diagnostics-trigger").click();
+  const separator = page.getByRole("separator", { name: "Resize side panel" });
+  await separator.focus(); await page.keyboard.press("End");
+  const maximum = Math.min(560, await page.locator(".app-shell").evaluate(element => element.clientWidth) - 800);
+  await expect(separator).toHaveAttribute("aria-valuenow", String(maximum));
+  expect((await page.locator(".editor-document").boundingBox())!.width).toBeGreaterThanOrEqual(800);
+  const handle = (await separator.boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + 100);
+  await page.mouse.down(); await page.mouse.move(handle.x + handle.width / 2 + 40, handle.y + 100); await page.mouse.up();
+  await expect(separator).toHaveAttribute("aria-valuenow", String(maximum - 40));
+  await page.getByRole("button", { name: "Close side panel" }).click();
+  await page.locator("#editor-diagnostics-trigger").click();
+  await expect(separator).toHaveAttribute("aria-valuenow", String(maximum - 40));
 });

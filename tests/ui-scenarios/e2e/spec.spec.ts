@@ -40,10 +40,11 @@ test("manual authoring: readable names, pasted ports and explicit verification",
   await component.locator(".cm-content").fill("assign y = a;");
   await component.getByRole("button", { name: "Add section", exact: true }).click();
   await expect(component).not.toContainText("RTL implementation missing");
-  await expect(component.locator(".spec-validation-badge")).toHaveText("Not verified");
+  await expect(component.locator(".spec-validation-badge")).toHaveCount(0);
   await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
-  await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
+  await expect(page.locator(".app-toast")).toContainText("Lint passed");
+  await expect(page.locator(".utility-sidebar")).toHaveCount(0);
   await expect(component.getByText("Interface preview (read-only)", { exact: true })).toBeVisible();
   const beforeTheme = (await stack.snapshot()).source_revision_hash;
   for (const [theme, canvas] of [["clean", "#f7f9fc"], ["obsidian", "#09090b"]]) {
@@ -76,9 +77,9 @@ test("manual authoring: readable names, pasted ports and explicit verification",
   expect((await stack.snapshot()).entity_sections[0].content).toContain("assign y = ;");
   await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
-  await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint failed");
-  await expect(page.locator(".app-notice")).toContainText("Lint failed. Your saved text is preserved.");
-  await expect(page.locator(".app-notice")).not.toContainText("Use Verify Component");
+  await expect(component.locator(".spec-hardware-controls [role=status]")).toHaveCount(0);
+  await expect(page.locator(".app-toast")).toContainText("Lint failed. Your saved text is preserved.");
+  await expect(page.locator(".app-toast")).not.toContainText("Use Verify Component");
   await page.screenshot({ path: test.info().outputPath("verification-failed.png"), fullPage: true });
   await openSpec(page, stack);
   await expect(component.locator(".spec-sv-source")).toContainText("assign y = ;");
@@ -453,7 +454,7 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
     await component.getByRole("menuitem", { name: title, exact: true }).click();
     if (status === "cancelled") {
       await expect.poll(() => existsSync(`${stack.directory}/barrier/started`)).toBe(true);
-      await page.getByRole("button", { name: /^Activity \d/ }).click();
+      if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
       const job = page.locator(".activity-item").filter({ hasText: title });
       const options = job.getByRole("button", { name: "Options", exact: true });
       const cancel = job.getByRole("menuitem", { name: "Cancel", exact: true });
@@ -463,12 +464,12 @@ for (const [title, status] of [["Source proof", "succeeded"], ["Controlled failu
       await options.click(); await expect(cancel).toBeEnabled(); await page.keyboard.press("Escape");
       await page.reload();
       await openSpec(page, stack);
-      await page.getByRole("button", { name: /^Activity \d/ }).click();
+      if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
       await options.click(); await expect(cancel).toBeEnabled(); await cancel.click();
     }
     await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe(status);
     if (!await page.getByRole("heading", { name: "Activity", exact: true }).isVisible()) {
-      await page.getByRole("button", { name: /^Activity \d/ }).click();
+      if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
     }
     await expect(page.locator(".activity-item").filter({ hasText: title }).first()).toContainText(status);
     const execution = (await stack.json("/executions")).executions.at(-1);
@@ -499,6 +500,7 @@ test("exports target Section details as a downloadable saved JSON artifact", asy
   await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Export target details (JSON)", exact: true }).click();
   await expect.poll(async () => (await stack.json("/executions")).executions.at(-1)?.status).toBe("succeeded");
+  if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
   const event = page.waitForEvent("download");
   await page.getByRole("link", { name: "Download JSON" }).click();
@@ -510,7 +512,8 @@ test("exports target Section details as a downloadable saved JSON artifact", asy
   expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
   await stack.restart("spec");
   await openSpec(page, stack);
-  await page.getByRole("button", { name: /^Activity \d/ }).click();
+  if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
+  if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("link", { name: "Download JSON" })).toBeVisible();
 });
 
@@ -549,10 +552,11 @@ test("catalog: browse, import, rename a copy, reopen, and generate RTL without p
   await component.getByRole("button", { name: "Options", exact: true }).click();
   await expect(component.getByRole("menuitem", { name: "Generate RTL", exact: true })).toBeEnabled();
   await component.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+  await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
   await expect.poll(async () => (await stack.json("/documents/view")).activity.executions.some((e: any) => e.status === "succeeded")).toBe(true);
   expect((await stack.snapshot()).verifications[0].status).toBe("passed");
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
   dialog = await browse();
   await dialog.getByLabel("Import as a renamed copy").check();
   await dialog.getByRole("button", { name: "Review import", exact: true }).click();
@@ -589,7 +593,7 @@ test("catalog: browse, import, rename a copy, reopen, and generate RTL without p
   await design.getByRole("button", { name: "Options", exact: true }).click();
   await design.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
   await expect.poll(async () => (await stack.json("/executions")).executions.filter((e: any) => e.target?.entity_id === importedDesign.ref.entity_id).at(-1)?.status).toBe("succeeded");
-  await page.getByRole("button", { name: "Document", exact: true }).click();
+  if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
   for (const theme of ["clean", "obsidian"]) {
     if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /Switch theme/ }).click();
     await page.setViewportSize({ width: 560, height: 760 });

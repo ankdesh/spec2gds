@@ -1087,9 +1087,13 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         with session.lock:
             cursor = session.journal.observe(_source_event(session, "external", []))
             activity = session.activity.state
+            pending_reviews = session.journal.pending_review_ids() | {
+                item.proposal_id for item in activity.proposals if item.review_status == "pending"
+            }
             return {"snapshot": access_snapshot(session),
                     "a2ui": build_a2ui_batch(build_document_projection(session.revision)).model_dump(mode="json"),
                     "activity": {"executions": document_executions(session),
+                                 "pending_review_count": len(pending_reviews),
                                  "artifacts": [_jsonable(item) for item in activity.artifacts],
                                  "proposals": [_jsonable(item) for item in activity.proposals],
                                  "assistant_changes": [_jsonable(item) for item in activity.assistant_changes[-50:]]},

@@ -337,3 +337,35 @@ def test_document_scope_keeps_composite_ports_and_entity_boundaries_protected(tm
         scope="entity", target=refs["component_leaf"])
     with pytest.raises(fastapi.HTTPException): e["assistant_proposal_submit"](crossing, key)
     assert path.read_bytes() == before
+
+
+def test_document_view_counts_pending_reviews_across_pages_and_proposal_sources(tmp_path):
+    from spec2gds.spec.spec_format.actions import ChangeProposal
+
+    path = tmp_path / "pending.spec"
+    e = endpoints(review=True)
+    s = create(e, path)
+    key = s["owner_document_key"]
+    saved = path.read_bytes()
+    for index in range(31):
+        e["assistant_proposal_submit"](proposal(s, f"pending_{index}"), key)
+    assert len(e["assistant_history"](key, None, 25)["items"]) == 25
+    assert e["document_view"](key)["activity"]["pending_review_count"] == 31
+    assert path.read_bytes() == saved
+    e["assistant_submission_reject"]("pending_30", key)
+    assert e["document_view"](key)["activity"]["pending_review_count"] == 30
+
+    session = V1Session(str(path))
+    legacy = ChangeProposal(proposal_id="pending_0", base_source_revision_hash=s["source_revision_hash"],
+                            producer_execution_id="job", rationale="Review", operations=())
+    session.activity._append_proposals((legacy, legacy.model_copy(update={"proposal_id": "legacy-only"}),
+                                      legacy.model_copy(update={"proposal_id": "resolved", "review_status": "accepted"})))
+    session.activity.save()
+    session.package.save(str(path))
+    restarted = endpoints(review=True)
+    restarted["open_document"](OpenDocumentRequest(path=str(path), context_id=s["edit_access"]["context_id"],
+                                                  participant_id=s["edit_access"]["participant_id"]))
+    assert restarted["document_view"](key)["activity"]["pending_review_count"] == 31
+    other = restarted["create_document"](CreateDocumentRequest(path=str(tmp_path / "other.spec"), document_id="other", title="Other"))
+    assert restarted["document_view"](other["owner_document_key"])["activity"]["pending_review_count"] == 0
+    assert restarted["document_view"](key)["activity"]["pending_review_count"] == 31

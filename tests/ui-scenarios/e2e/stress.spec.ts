@@ -56,6 +56,8 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     await reopenedComp.getByRole("button", { name: "Options", exact: true }).click();
     await expect(reopenedComp.getByRole("menuitem", { name: "Generate RTL", exact: true })).toBeEnabled();
     await reopenedComp.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+    await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+    await page.locator("#editor-activity-trigger").click();
     await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
     await expect.poll(async () => (await stack.json("/documents/view")).activity.executions.some((e: any) => e.status === "succeeded")).toBe(true);
   });
@@ -165,12 +167,14 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     // Generate RTL and check activity execution
     await component.getByRole("button", { name: "Options", exact: true }).click();
     await component.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+    await expect(page.locator(".utility-sidebar")).toHaveCount(0);
+    await page.locator("#editor-activity-trigger").click();
     await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
     await expect.poll(async () => (await stack.json("/documents/view")).activity.executions.some((e: any) => e.status === "succeeded")).toBe(true);
 
     // Concurrent editing conflict check
     // Client 1 opens editor on description
-    await page.getByRole("button", { name: "Document", exact: true }).click();
+    if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
     const comp1 = await getComponent(page, stack);
     await editText(comp1, "Draft from client 1");
 

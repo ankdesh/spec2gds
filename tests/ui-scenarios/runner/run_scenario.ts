@@ -8,7 +8,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import type { Page } from "@playwright/test";
+import type { Page, Request } from "@playwright/test";
 import { generatedSpecReceipt, assertEvaluationCreationFlow, assertEvaluationInterface } from "./generalization_state.js";
 import { expectedBrowserFailure } from "./browser_failures.js";
 import { modelFixture, componentDescription } from "./model_fixture.js";
@@ -272,6 +272,12 @@ async function run(): Promise<void> {
     };
     const confirmations: string[] = [];
     const observePage = (page: Page) => {
+      let documentGeneration = 0;
+      const requestDocuments = new WeakMap<Request, number>();
+      page.on("request", request => {
+        if (request.isNavigationRequest() && request.frame() === page.mainFrame()) documentGeneration++;
+        requestDocuments.set(request, documentGeneration);
+      });
       page.setDefaultTimeout(60_000);
       page.on("pageerror", error => failures.push({ type: "pageerror", message: String(error) }));
       page.on("console", message => {
@@ -282,7 +288,8 @@ async function run(): Promise<void> {
       });
       page.on("requestfailed", request => {
         const url = request.url(), message = request.failure()?.errorText ?? "";
-        const expected = expectedBrowserFailure("network", url, message, { stopping, serviceUrl: owner, scenario });
+        const documentChanged = (requestDocuments.get(request) ?? documentGeneration) < documentGeneration;
+        const expected = expectedBrowserFailure("network", url, message, { stopping, serviceUrl: owner, scenario, documentChanged });
         failures.push({ type: "network", url, message, expected });
       });
     };
@@ -429,7 +436,7 @@ async function run(): Promise<void> {
         const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
         await section.getByRole("button", { name: "Options", exact: true }).click();
         await section.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
-        await expect(section.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
+        await expect(editor.locator(".app-toast")).toContainText("Lint passed");
         await section.getByRole("button", { name: "Options", exact: true }).click();
         await section.getByRole("menuitem", { name: /Generate RTL/ }).click();
         let execution: any;
@@ -623,7 +630,7 @@ async function run(): Promise<void> {
           await expect(editor.locator(".spec-paper")).toContainText("15:0", { timeout: 5_000 });
         } else await expect(editor.locator(".spec-paper")).toContainText("15:0", { timeout: 5_000 });
         if (presentation) {
-          await editor.getByRole("button", { name: "Document", exact: true }).click();
+          if (await editor.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await editor.getByRole("button", { name: "Close side panel", exact: true }).click();
           await editor.locator(`#component-${componentId.replaceAll("_", "-")}`).evaluate(element => element.scrollIntoView({ block: "start" }));
           await capture(editor, "05_spec_editor_refined_spec.png", "Spec Editor", "The saved Component now has a 16-bit IRQ port and matching SystemVerilog content.");
           assert.equal(current.designs.length, 1);
@@ -667,7 +674,7 @@ async function run(): Promise<void> {
           let count = 0, before: number | null = null;
           do { const page = await json(scoped(`/assistant/history?limit=25${before === null ? "" : `&before=${before}`}`)); count += page.items.length; before = page.next_cursor; } while (before !== null);
           assert.equal(count, 100);
-          await editor.getByRole("button", { name: /^Activity \d/ }).click();
+          if (await editor.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await editor.locator("#editor-activity-trigger").click();
           await expect(editor.getByText("AI Assistant submission history", { exact: true })).toBeVisible();
           assert.ok(await editor.locator(".activity-item").count() <= 75);
         }
@@ -677,7 +684,7 @@ async function run(): Promise<void> {
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
       await component.getByRole("button", { name: "Options", exact: true }).click();
       await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
-      await expect(component.locator(".spec-hardware-controls > .spec-edit-actions [role=status]")).toHaveText("Lint passed");
+      await expect(editor.locator(".app-toast")).toContainText("Lint passed");
       await component.getByRole("button", { name: "Options", exact: true }).click();
       await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
       await component.getByRole("menuitem", { name: /Generate RTL/ }).click();
@@ -706,7 +713,7 @@ async function run(): Promise<void> {
       await conversation.screenshot({ path: join(output, "assistant.png"), fullPage: true });
       await editor.screenshot({ path: join(output, "editor.png"), fullPage: true });
       if (presentation) {
-        await editor.getByRole("button", { name: /^Activity \d/ }).click();
+        if (await editor.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await editor.locator("#editor-activity-trigger").click();
         await editor.locator(".utility-heading").getByRole("button", { name: "Options", exact: true }).click();
         await editor.getByRole("menuitem", { name: "Refresh", exact: true }).click();
         await expect(editor.getByText("succeeded", { exact: true })).toBeVisible();

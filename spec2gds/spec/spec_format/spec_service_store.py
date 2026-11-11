@@ -253,6 +253,13 @@ class SpecServiceJournal(_Database):
                 }),))
         return self.get(proposal_id)
 
+    def pending_review_ids(self) -> set[str]:
+        """Return all ready submissions, independently of history pagination."""
+        with self.connection() as db:
+            rows = db.execute("SELECT proposal_id,record_json FROM submissions").fetchall()
+        return {row["proposal_id"] for row in rows
+                if _receipt(json.loads(row["record_json"]))["state"] == "ready"}
+
     def history(self, before: int | None = None, limit: int = 50) -> dict[str, Any]:
         if not 1 <= limit <= 100:
             raise ValueError("History limit must be between 1 and 100.")

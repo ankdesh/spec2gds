@@ -376,6 +376,8 @@ export interface SourceChangeEvent {
 }
 
 export interface ActivityState {
+  /** All ready reviews, including submissions outside the history page. */
+  pending_review_count?: number;
   executions: Array<Record<string, unknown>>;
   artifacts: Array<Record<string, unknown>>;
   proposals: Array<Record<string, unknown>>;

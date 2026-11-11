@@ -1654,3 +1654,25 @@
 .spec-options-menu button:disabled, .spec-options-menu small { color: var(--spec-muted, #9ca3af); }
 .spec-options-menu .spec-delete-button { color: var(--spec-danger, #f97316); }
 .spec-options-menu a { display: block; padding: .55rem .65rem; text-decoration: none; overflow-wrap: anywhere; }
+
+.spec-source-highlight { background: var(--spec-surface-subtle, #8883); outline: 2px solid var(--spec-accent, #8b5cf6); scroll-margin-block: 8rem; }
+/* Use the available document width when a dock consumes screen space. */
+@container spec-document (max-width: 1100px) {
+  .spec-document { grid-template-columns: 12rem minmax(0, 1fr); gap: 1rem; padding: 1rem; }
+  .spec-section, .spec-cover { padding: 1.5rem; }
+}
+@container spec-document (max-width: 800px) {
+  .spec-document { display: block; padding: .75rem; }
+  .spec-toc { margin-bottom: .75rem; }
+  .spec-toc__trigger { display: block; background: var(--spec-paper); border: 1px solid var(--spec-line-strong); color: var(--spec-text); }
+  .spec-toc__sticky { display: none; position: static; max-height: 50dvh; margin-top: .5rem; padding: .5rem; border: 1px solid var(--spec-line); background: var(--spec-paper); }
+  .spec-toc--open .spec-toc__sticky { display: block; }
+  .spec-toc__label { display: none; }
+  .spec-cover, .spec-section { padding: 1rem; }
+  .spec-cover h1 { font-size: 1.75rem; }
+  .spec-inline-editor, .spec-create-editor, .spec-port-editor-grid { grid-template-columns: minmax(0, 1fr); }
+  .spec-edit-field-wide, .spec-edit-error { grid-column: auto; }
+  .spec-toc__meta { grid-template-columns: 1fr; }
+  .spec-topology-card__actions { width: 100%; }
+  .spec-topology-card__actions button { flex: 1 1 auto; }
+}

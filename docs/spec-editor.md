@@ -27,6 +27,46 @@ Spec Editor provides a structured engineering interface for hardware specificati
 - The document view does not show Technical details panels. Job history, artifact records, and reviews retain their diagnostic details.
 - Existing transaction and structured ports are read-only in Spec Editor. Create and edit wire ports from the Component Options menu.
 
+### Diagnostics and Activity panel
+
+The **Diagnostics** and **Activity** toolbar buttons open one right panel. The
+Spec remains visible. Checks, job launches, and background updates do not open
+the panel or change its selected tab.
+
+- **Diagnostics** groups current verification and SystemVerilog findings by
+  Component or Design. It also lists source package issues, artifact issues,
+  Catalog origin, and published evidence. Published evidence is separate from
+  verification of the current saved Spec. Source revisions, tool versions,
+  resolved interfaces, and raw reports are under **Technical details**.
+- **Activity** shows job progress, cancellation, outputs, downloads, change
+  reviews, accepted changes, AI Assistant submission history, and review policy.
+- Verification and job changes produce a five-second notification. Select
+  **View details** to open the relevant panel tab. Hover or keyboard focus pauses
+  dismissal. Reconnecting does not repeat a notification for the same job state.
+- Toolbar counts show current diagnostic findings and queued/running jobs plus
+  pending reviews. Opening the panel does not clear a count. Zero counts are
+  hidden. Verification reports and status badges do not appear in the document.
+- **Go to source** reveals the relevant target or SystemVerilog line. A line is
+  highlighted only when the report matches the displayed saved revision and
+  the Section has no private draft. Generated RTL locations remain labelled as
+  generated files and link to the checked target.
+
+At 1280 pixels or more, the panel docks beside the document. Its initial width
+is 400 pixels. Drag its left edge or use the focused separator's arrow keys,
+Home, and End to resize it. The allowed range is 320–560 pixels, with at least
+800 pixels retained for the document area. The browser remembers the width.
+Contents and tables adapt to the remaining document width.
+
+Below 1280 pixels, the panel opens as an overlay. Below 620 pixels, it fills
+the screen width. Close or Escape returns focus to the toolbar button. Panel
+use preserves private drafts and source selection. Field errors, read-only
+access, and revision-conflict notices remain close to the relevant controls.
+Opening another Spec clears report selections and notifications and closes
+the panel. Existing `?view=activity` links open the Activity tab on arrival.
+
+The AI Assistant button continues to open its bound conversation separately.
+The panel structure permits a future Assistant tab without an empty tab now.
+
 ---
 
 ## 2. Application Menus and Controls
@@ -164,6 +204,11 @@ Document HTTP requests must select `service_document_key`; the legacy
 fallback. A document ID alone is accepted only when one in-root file matches.
 Writes also send `X-Spec-Edit-Context` and `X-Spec-Participant`. Event stream URLs
 can carry `edit_context_id` and `edit_participant_id` query parameters.
+
+`GET /documents/view` includes `activity.pending_review_count`. The Spec service
+counts pending Activity proposals and ready AI Assistant submissions across the
+complete history. A proposal ID is counted once. This field is independent of
+the paginated submission history and does not change the saved Spec.
 
 | Endpoint | Behavior |
 | --- | --- |

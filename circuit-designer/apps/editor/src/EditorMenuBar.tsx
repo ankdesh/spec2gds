@@ -844,18 +844,20 @@ export default function EditorMenuBar({
           </nav>
         </div>
 
-        <nav className="app-nav" aria-label="Editor views">
-          {(["document", "activity", "diagnostics"] as EditorView[]).map((item) => (
+        <nav className="app-nav" aria-label="Editor panels">
+          {(["diagnostics", "activity"] as EditorView[]).map((item) => (
             <button
               className={view === item ? "active" : ""}
-              aria-current={view === item ? "page" : undefined}
+              id={`editor-${item}-trigger`}
+              aria-expanded={view === item}
+              aria-controls={view === item ? "editor-utility-panel" : undefined}
               key={item}
               onClick={() => onViewChange(item)}
               type="button"
             >
               {item[0].toUpperCase() + item.slice(1)}
-              {item === "activity" && <span>{activityCount}</span>}
-              {item === "diagnostics" && <span>{diagnosticCount}</span>}
+              {item === "activity" && activityCount > 0 && <span>{activityCount}</span>}
+              {item === "diagnostics" && diagnosticCount > 0 && <span>{diagnosticCount}</span>}
             </button>
           ))}
         </nav>

@@ -95,6 +95,15 @@ export interface SpecDocumentCommandController {
   launchActivity(ref: EntityRef, activity: EntityActivity): Promise<void>;
 }
 
+export interface SpecSourceLocation {
+  target: EntityRef;
+  sectionId?: string;
+  line?: number | null;
+  column?: number | null;
+  sourceRevisionHash?: string;
+}
+
+const ExternalDiagnosticsContext = createContext(false);
 const CommandControllerContext = createContext<SpecDocumentCommandController | undefined>(undefined);
 
 export interface ComponentInstanceOption {
@@ -1066,6 +1075,7 @@ function NewSystemVerilogForm({ state }: { state: SectionEditState }) {
 }
 
 function HardwareControls({ state }: { state: SectionEditState }) {
+  const externalDiagnostics = useContext(ExternalDiagnosticsContext);
   const coordinator = useContext(EditCoordinatorContext);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1088,14 +1098,14 @@ function HardwareControls({ state }: { state: SectionEditState }) {
   };
   const apply = (operations: EditorTransactionOperation[]) => state.controller!.applyOperations!(operations);
   return <div className="spec-hardware-controls">
-    <div className="spec-edit-actions">
+    {!externalDiagnostics && <div className="spec-edit-actions">
       <span role="status">{result ? ({ passed: "Lint passed", failed: "Lint failed", unverified: "Not verified", stale: "Out of date" } as const)[result.status] : "Not verified"}</span>
       {result?.status === "failed" && <small>{blockingCount} blocking {blockingCount === 1 ? "diagnostic" : "diagnostics"} · See verification details</small>}
-    </div>
-    {source?.catalog_origins?.filter(origin => origin.root.entity_id === ref.entity_id).map(origin => <details key={origin.package_sha256}><summary>Catalog origin</summary><p>Imported from {origin.source_vlnv}. This is an editable local copy.</p><code>{origin.package_sha256}</code>{origin.metadata?.summary && <p>{origin.metadata.summary}</p>}{origin.metadata?.licence && <p>Published licence: {origin.metadata.licence}</p>}<p>Catalog evidence describes the published release. Use Verify to check the current saved source.</p>
+    </div>}
+    {!externalDiagnostics && source?.catalog_origins?.filter(origin => origin.root.entity_id === ref.entity_id).map(origin => <details key={origin.package_sha256}><summary>Catalog origin</summary><p>Imported from {origin.source_vlnv}. This is an editable local copy.</p><code>{origin.package_sha256}</code>{origin.metadata?.summary && <p>{origin.metadata.summary}</p>}{origin.metadata?.licence && <p>Published licence: {origin.metadata.licence}</p>}<p>Catalog evidence describes the published release. Use Verify to check the current saved source.</p>
       {!!origin.evidence?.length && <details><summary>Published release evidence</summary>{origin.evidence.map(evidence => <ul key={evidence.evidence_sha256}>{evidence.report.checks.map((check, index) => <li key={index}>{check.kind}{check.preset ? ` (${check.preset})` : ""}: {check.status} — {check.summary}</li>)}</ul>)}</details>}
     </details>)}
-    {result && <details className="spec-verification-details">
+    {!externalDiagnostics && result && <details className="spec-verification-details">
       <summary>Verification details</summary>
       <p>Checked target: <code>{result.target.entity_id}</code></p>
       <p>Source revision: <code>{result.source_revision_hash}</code></p>
@@ -1174,6 +1184,8 @@ const SpecSection = createComponentImplementation(
     return (
       <SectionEditContext.Provider value={editState}>
         <section
+          data-source-target-kind={section.entity_ref?.entity_kind}
+          data-source-target-id={section.entity_ref?.entity_id}
           className={`spec-section spec-section--level-${section.level}${!section.entity_ref && !sectionText && !section.narrative.length && !hasOverviewText ? " spec-section--compact" : ""}`}
           id={section.section_id}
         >
@@ -1243,6 +1255,7 @@ const SpecSection = createComponentImplementation(
 );
 
 function SystemVerilogSectionRenderer({ section }: { section: EntityContentSection }) {
+  const externalDiagnostics = useContext(ExternalDiagnosticsContext);
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(section.payload.content ?? "");
@@ -1280,13 +1293,13 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
     }
   };
   return (
-    <section className="spec-entity-section spec-sv-section" aria-labelledby={`${section.section_id}-title`}>
+    <section data-source-section={section.section_id} className="spec-entity-section spec-sv-section" aria-labelledby={`${section.section_id}-title`}>
       <header>
         <div>
-          <h4 id={`${section.section_id}-title`}>{section.title}</h4>
-          <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
+          <h4 tabIndex={-1} id={`${section.section_id}-title`}>{section.title}</h4>
+          {!externalDiagnostics && <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
             {{ verified: "Section lint passed", warnings: "Lint warnings", unverified: "Not verified", errors: "Lint failed" }[section.validation_status]}
-          </span>
+          </span>}
         </div>
         {!editing && coordinator.controller && (
           <OptionsMenu label={section.title} triggerLabel="Options for SystemVerilog"><button role="menuitem" onClick={() => {
@@ -1308,9 +1321,9 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
           </div>
         </div>
       ) : (
-        <pre className="spec-sv-source"><code>{section.payload.content || "// Empty SystemVerilog body"}</code></pre>
+        <pre className="spec-sv-source"><code>{(section.payload.content || "// Empty SystemVerilog body").split("\n").map((line, index, lines) => <Fragment key={index}><span data-source-line={index + 1}>{line}</span>{index < lines.length - 1 ? "\n" : ""}</Fragment>)}</code></pre>
       )}
-      {section.diagnostics.length > 0 && (
+      {!externalDiagnostics && section.diagnostics.length > 0 && (
         <ul className="spec-section-diagnostics">
           {section.diagnostics.map((item, index) => {
             const location = item.source_kind === "generated" ? "Generated RTL" : "SystemVerilog";
@@ -2080,12 +2093,44 @@ export function A2UIDocumentSurface({
   editController,
   commandController,
   onEditingChange,
+  diagnosticsMode = "inline",
+  sourceLocation,
 }: {
   batch: A2UIDocumentBatch;
   editController?: SpecDocumentEditController;
   commandController?: SpecDocumentCommandController;
   onEditingChange?: (editing: boolean) => void;
+  diagnosticsMode?: "inline" | "external";
+  sourceLocation?: SpecSourceLocation | null;
 }) {
+  const root = useRef<HTMLDivElement>(null);
+  const displayedRevision = useRef(batch.source_revision_hash);
+  displayedRevision.current = batch.source_revision_hash;
+  useEffect(() => {
+    root.current?.querySelectorAll(".spec-source-highlight").forEach(item => item.classList.remove("spec-source-highlight"));
+  }, [batch.source_revision_hash]);
+  useEffect(() => {
+    if (!sourceLocation || !root.current) return;
+    const frame = requestAnimationFrame(() => {
+      const host = root.current;
+      if (!host) return;
+      host.querySelectorAll(".spec-source-highlight").forEach(item => item.classList.remove("spec-source-highlight"));
+      const { target, sectionId, line, sourceRevisionHash } = sourceLocation;
+      const parent = Array.from(host.querySelectorAll<HTMLElement>("[data-source-target-id]"))
+        .find(item => item.dataset.sourceTargetId === target.entity_id && item.dataset.sourceTargetKind === target.entity_kind);
+      const section = sectionId ? Array.from(host.querySelectorAll<HTMLElement>("[data-source-section]")).find(item => item.dataset.sourceSection === sectionId) : null;
+      const container = section ?? parent;
+      if (!container || !host.contains(container)) return;
+      // Saved line numbers must never be applied to a private draft or another revision.
+      const match = line && sourceRevisionHash === displayedRevision.current && !container.querySelector(".cm-editor")
+        ? container.querySelector<HTMLElement>(`[data-source-line="${Math.max(1, Math.floor(line))}"]`) : null;
+      match?.classList.add("spec-source-highlight");
+      const heading = container.querySelector<HTMLElement>("h2,h3,h4");
+      heading?.focus({ preventScroll: true });
+      (match ?? container).scrollIntoView({ block: "center" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [sourceLocation]);
   const processor = useMemo(() => createDocumentMessageProcessor(batch), [batch]);
   const surface = processor.model.surfacesMap.get(batch.surface_id);
   if (!surface) {
@@ -2098,7 +2143,9 @@ export function A2UIDocumentSurface({
       resetKey={batch.source_revision_hash}
     >
       <CommandControllerContext.Provider value={commandController}>
-        <A2uiSurface surface={surface} />
+        <ExternalDiagnosticsContext.Provider value={diagnosticsMode === "external"}>
+          <div ref={root}><A2uiSurface surface={surface} /></div>
+        </ExternalDiagnosticsContext.Provider>
       </CommandControllerContext.Provider>
     </EditCoordinatorProvider>
   );

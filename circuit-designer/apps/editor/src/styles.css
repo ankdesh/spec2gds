@@ -1513,7 +1513,7 @@ button:disabled {
 .activity-history { margin-top: 1rem; }
 .spec-status-bar details { max-width: 50%; }
 [data-theme="clean"] .app-header [role="tablist"],
-[data-theme="clean"] .app-header nav[aria-label="Editor views"] { background: var(--spec-surface-subtle); }
+[data-theme="clean"] .app-header nav[aria-label="Editor panels"] { background: var(--spec-surface-subtle); }
 [data-theme="clean"] .app-header button:not(.assistant-launch) { color: var(--spec-text); }
 @media (max-width: 620px) {
   .spec-status-bar details { display: none; }
@@ -1551,4 +1551,50 @@ button:disabled {
   .directory-browser__new-folder { grid-template-columns: 1fr 1fr; }
   .directory-browser__new-folder input { grid-column: 1 / -1; }
   .editor-dialog { padding: 1rem; }
+}
+
+/* The document stays mounted while tools occupy the right side. */
+.editor-main { min-width: 0; }
+.editor-document { min-width: 0; container: spec-document / inline-size; }
+.utility-sidebar { position: fixed; z-index: 60; top: var(--spec-toolbar-height, 4rem); right: var(--utility-inset, 0px); bottom: 0; width: var(--utility-width, 400px); display: flex; flex-direction: column; min-width: 0; background: var(--spec-paper); color: var(--spec-text); border-left: 1px solid var(--spec-line); box-shadow: -.25rem 0 1rem #0002; }
+.utility-sidebar__header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .75rem; border-bottom: 1px solid var(--spec-line); }
+.utility-sidebar__header [role=tablist] { display: flex; flex-wrap: wrap; gap: .25rem; }
+.utility-sidebar__header button, .diagnostics-panel button { border: 1px solid var(--spec-line-strong); background: var(--spec-paper); color: var(--spec-text); padding: .5rem .75rem; }
+.utility-sidebar__header [aria-selected=true] { background: var(--spec-surface-subtle); border-color: var(--spec-accent); }
+.utility-sidebar__body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1rem; overflow-wrap: anywhere; }
+.utility-sidebar :is(h1,h2,h3,p,pre) { max-width: 100%; }
+.utility-sidebar h1, .utility-sidebar h2 { font-size: 1.1rem; }
+.utility-sidebar h3 { font-size: 1rem; }
+.utility-sidebar pre { overflow: auto; white-space: pre-wrap; font-size: var(--spec-font-small); }
+.utility-sidebar .utility-page { padding: 0; }
+.utility-sidebar .activity-grid { display: grid; grid-template-columns: minmax(0,1fr); }
+.utility-sidebar .utility-heading { margin-block: .5rem 1rem; }
+.utility-sidebar .activity-item { min-width: 0; }
+.utility-sidebar .utility-panel { margin-block: .75rem; }
+.utility-sidebar details > summary { color: var(--spec-text); }
+.utility-resizer { position: absolute; top: 0; bottom: 0; left: -4px; width: 8px; cursor: col-resize; touch-action: none; }
+.utility-resizer:focus-visible { outline: 2px solid var(--spec-accent); outline-offset: -2px; }
+.utility-backdrop { position: fixed; inset: 0; background: #0005; z-index: 79; }
+.diagnostic-target { padding-block: .75rem; border-bottom: 1px solid var(--spec-line); scroll-margin-top: 1rem; }
+.diagnostic-target h3 { margin-bottom: .25rem; }
+.diagnostic-finding { padding-block: .5rem; }
+.diagnostic-context, .diagnostic-location { color: var(--spec-muted); }
+.diagnostic-location code { overflow-wrap: anywhere; white-space: normal; }
+.app-toast { position: fixed; z-index: 110; bottom: 1.25rem; right: 1.25rem; display: flex; align-items: center; gap: .75rem; max-width: min(42rem, calc(100vw - 2.5rem)); padding: .75rem 1rem; background: var(--spec-paper); color: var(--spec-text); border: 1px solid var(--spec-line-strong); border-radius: var(--spec-radius); box-shadow: 0 .25rem 1rem #0003; }
+.app-toast > span { min-width: 0; overflow-wrap: anywhere; }
+.app-toast button { flex-shrink: 0; background: var(--spec-surface-subtle); color: var(--spec-text); border: 1px solid var(--spec-line-strong); padding: .5rem; }
+@media (min-width: 1280px) {
+  .editor-main--with-panel { padding-right: var(--utility-width, 400px); }
+}
+@media (max-width: 1279px) {
+  .utility-sidebar { top: 0; right: 0; width: min(400px, 100vw); z-index: 100; }
+}
+@media (max-width: 619px) {
+  .utility-sidebar { width: 100vw; }
+  .app-toast { left: .75rem; right: .75rem; bottom: .75rem; max-width: none; flex-wrap: wrap; }
+  .app-toast > span { flex: 1 1 100%; }
+}
+@media print {
+  .utility-sidebar, .utility-backdrop, .app-toast { display: none; }
+  .editor-main--with-panel { padding-right: 0; }
 }
