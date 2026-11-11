@@ -21,33 +21,34 @@ def unbracket(value: str) -> str:
     return value[1:-1].strip() if value.startswith("[") and value.endswith("]") else value
 
 
-def split_range(expression: str) -> tuple[str, str]:
+def split_range(expression: str, *, require_pair: bool = False) -> tuple[str, str]:
     """Find a range separator without splitting a constant conditional expression."""
     for scope in re.finditer(r"::", expression):
         if not re.search(r"[A-Za-z_$][\w$]*\s*$", expression[:scope.start()]) or not re.match(r"\s*[A-Za-z_$]", expression[scope.end():]):
             raise ValueError("Wire port Range requires a valid left:right expression pair.")
-    depth = 0
+    delimiters: list[str] = []
     conditional = 0
     separator = None
     for index, character in enumerate(expression):
         if character in "([{":
-            depth += 1
+            delimiters.append(character)
         elif character in ")]}":
-            depth -= 1
-        elif depth == 0 and character == "?":
+            if not delimiters or delimiters.pop() != "([{"[")]}".index(character)]:
+                raise ValueError("Wire port Range has unbalanced delimiters.")
+        elif not delimiters and character == "?":
             conditional += 1
-        elif depth == 0 and character == ":" and not (expression[index:index + 2] == "::" or index and expression[index - 1:index + 1] == "::"):
+        elif not delimiters and character == ":" and not (expression[index:index + 2] == "::" or index and expression[index - 1:index + 1] == "::"):
             if conditional:
                 conditional -= 1
             elif separator is not None:
                 raise ValueError("Wire port Range requires one left:right expression pair.")
             else:
                 separator = index
-        if depth < 0:
-            raise ValueError("Wire port Range has unbalanced delimiters.")
-    if depth or conditional:
+    if delimiters or conditional:
         raise ValueError("Wire port Range has unbalanced delimiters.")
     if separator is None:
+        if require_pair:
+            raise ValueError("Wire port Range requires a left:right expression pair, for example 15:0 or WIDTH-1:0. Leave blank for a scalar port.")
         return expression, expression
     left, right = expression[:separator].strip(), expression[separator + 1:].strip()
     if not left or not right:

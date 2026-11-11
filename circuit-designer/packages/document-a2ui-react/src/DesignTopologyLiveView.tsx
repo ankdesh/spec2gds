@@ -6,6 +6,7 @@ import type { NarrativeBlock } from "@spec2gds/document-core";
 
 import {
   circuitSvgFilename,
+  componentPreviewSize,
   readDesignTopologyOptions,
   renderDesignTopology,
   type RenderedDesignTopology,
@@ -97,6 +98,25 @@ export function DesignTopologyLiveView({
   const expandRef = useRef<HTMLButtonElement>(null);
   const label = options?.read_only ? "Interface preview (read-only)" : block.text || "Circuit topology";
   const ref = block.entity_refs[0];
+  const compact = ref?.entity_kind === "component";
+  const cardRef = useRef<HTMLElement>(null);
+  const [availableWidth, setAvailableWidth] = useState(640);
+  useEffect(() => {
+    const parent = cardRef.current?.parentElement;
+    if (!compact || !parent) return;
+    const update = () => {
+      const style = getComputedStyle(parent);
+      setAvailableWidth(Math.max(0, parent.clientWidth - parseFloat(style.paddingLeft || "0") - parseFloat(style.paddingRight || "0")));
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, [compact]);
+  const size = compact ? componentPreviewSize(rendered?.width ?? 288, rendered?.height ?? 88, availableWidth) : undefined;
+  const cardClass = `spec-topology-card${compact ? " spec-topology-card--interface" : ""}`;
+  const cardStyle = { "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas,
+    ...(size ? { width: size.cardWidth } : {}) } as React.CSSProperties;
   const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
 
   useEffect(() => {
@@ -131,7 +151,7 @@ export function DesignTopologyLiveView({
   }, [rendered]);
 
   if (!options) {
-    return <div className="spec-topology-card spec-topology-card--unavailable" role="status">
+    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle} role="status">
       <strong>{label}</strong>
       <p>This topology view has unsupported renderer options.</p>
     </div>;
@@ -143,20 +163,20 @@ export function DesignTopologyLiveView({
   ];
   const unavailableMessage = options.status === "unavailable" ? options.message || "This topology cannot be represented safely." : renderError;
   if (unavailableMessage) {
-    return <div className="spec-topology-card spec-topology-card--unavailable" role="status">
+    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle} role="status">
       <strong>{label}</strong>
       <p>Preview unavailable: {unavailableMessage}</p>
     </div>;
   }
   if (options.status === "empty") {
-    return <div className="spec-topology-card spec-topology-card--empty" role="status">
+    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--empty`} style={cardStyle} role="status">
       <strong>{label}</strong>
       <p>No instances or physical-wire connections to display.</p>
     </div>;
   }
 
   return (
-    <figure aria-busy={!imageUrl} className="spec-topology-card" style={{ "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas } as React.CSSProperties}>
+    <figure ref={cardRef} aria-busy={!imageUrl} className={cardClass} style={cardStyle}>
       <figcaption>
         <div>
           <strong>{label}</strong>
@@ -175,9 +195,9 @@ export function DesignTopologyLiveView({
           </a>
         </OptionsMenu>
       </figcaption>
-      <div className="spec-topology-card__preview">
+      <div className="spec-topology-card__preview" style={size ? { height: size.viewportHeight } : undefined}>
         {imageUrl
-          ? <img alt={`${label} circuit diagram`} height={rendered?.height} src={imageUrl} width={rendered?.width} />
+          ? <img alt={`${label} circuit diagram`} height={rendered?.height} src={imageUrl} width={rendered?.width} style={size ? { width: size.imageWidth, height: size.imageHeight } : undefined} />
           : <p className="spec-topology-card__loading" role="status">Laying out circuit…</p>}
       </div>
       {omissions.length > 0 && (

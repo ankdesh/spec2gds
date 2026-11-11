@@ -32,8 +32,7 @@ import {
   type PersistedEntitySectionType,
 } from "./section-registry";
 import { DesignTopologyLiveView } from "./DesignTopologyLiveView";
-import { portInputFromRow, rowText, wireRangeError } from "./port-input";
-import { parsePortRows } from "./port-paste";
+import { portInputFromRow, rowText, wireRangeError, normalizeWireRange, WIRE_RANGE_GUIDANCE } from "./port-input";
 import type { DocumentSnapshot, EditorTransactionOperation, ParameterInput } from "@spec2gds/document-core";
 export { SPEC_DOCUMENT_CATALOG_ID, PERSISTED_ENTITY_SECTION_TYPES } from "./section-registry";
 
@@ -1505,9 +1504,6 @@ function ComponentPortsTable({
   sectionEdit: SectionEditState | null;
 }) {
   const addFamily = sectionEdit ? PORT_FAMILY_BY_MODE[sectionEdit.mode] : undefined;
-  const [pasting, setPasting] = useState(false);
-  const coordinator = useContext(EditCoordinatorContext);
-  const pasteId = `${table.table_id}-paste`;
   const internalDesign = sectionEdit?.controller?.source?.component_compositions.find(
     composition => composition.component.entity_id === sectionEdit.section.entity_ref?.entity_id,
   )?.internal_design;
@@ -1517,13 +1513,11 @@ function ComponentPortsTable({
         <h4 id={`${table.table_id}-title`}>Ports</h4>
         <span>{table.rows.length} {table.rows.length === 1 ? "port" : "ports"}</span>
         {sectionEdit?.portAvailability.enabled && sectionEdit.controller && <OptionsMenu label="Ports" triggerLabel="Options for Ports"><button role="menuitem" type="button" onClick={() => sectionEdit.begin?.("add-wire-port")}>Add port</button>
-          {sectionEdit.controller.addComponentPorts && <button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(pasteId)) setPasting(true); }}>Paste rows</button>}
         </OptionsMenu>}
       </div>
       {!sectionEdit?.portAvailability.enabled && internalDesign && <p className="spec-boundary-port-help">
         These ports are shared with the assigned Design. <button type="button" onClick={() => dispatchOpenCircuit(internalDesign)}>Edit boundary ports in Circuit Designer</button>
       </p>}
-      {pasting && sectionEdit && <PortPasteEditor state={sectionEdit} existing={table.rows.map(row => rowText(row, "name"))} finish={() => { setPasting(false); coordinator.finishEditor(pasteId); }} />}
       <div className="spec-table-scroll" role="group" aria-labelledby={`${table.table_id}-title`} tabIndex={0}>
         <table>
           <thead>
@@ -1655,6 +1649,8 @@ function PortEditorCard({
   );
   const [description, setDescription] = useState(initial?.description ?? "");
   const [error, setError] = useState("");
+  const [rangeInvalid, setRangeInvalid] = useState(false);
+  const rangeRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => formRef.current?.querySelector<HTMLInputElement | HTMLSelectElement>("input, select")?.focus(), []);
@@ -1673,7 +1669,8 @@ function PortEditorCard({
     }
     if (family === "wire") {
       const message = wireRangeError(range);
-      if (message) { setError(message); return; }
+      if (message) { setRangeInvalid(true); setError(message); rangeRef.current?.focus(); return; }
+      setRangeInvalid(false);
     }
     if (family === "transactional" && transactionKind === "custom" && !customKind.trim()) {
       setError("Custom transactional ports require a custom kind name.");
@@ -1683,7 +1680,7 @@ function PortEditorCard({
     setError("");
     const common = { name: name.trim(), description };
     const value: ComponentPortInput = family === "wire"
-      ? { ...common, family, direction, range: range.trim() || null }
+      ? { ...common, family, direction, range: normalizeWireRange(range) }
       : family === "transactional"
         ? {
           ...common,
@@ -1751,8 +1748,8 @@ function PortEditorCard({
         {family === "wire" && (
           <div className="spec-edit-field-wide">
             <label htmlFor={`${idPrefix}-range`}>Range</label>
-            <input id={`${idPrefix}-range`} onChange={(event) => setRange(event.target.value)} placeholder="DATA_WIDTH-1:0" value={range} />
-            <small>Optional. Use left:right, or one expression for identical bounds.</small>
+            <input ref={rangeRef} id={`${idPrefix}-range`} aria-invalid={rangeInvalid || undefined} aria-describedby={`${idPrefix}-range-help${rangeInvalid ? ` ${idPrefix}-error` : ""}`} onChange={(event) => { setRange(event.target.value); if (rangeInvalid) { setRangeInvalid(false); setError(""); } }} placeholder="DATA_WIDTH-1:0" value={range} />
+            <small id={`${idPrefix}-range-help`}>{WIRE_RANGE_GUIDANCE}</small>
           </div>
         )}
         {family === "transactional" && (
@@ -1799,7 +1796,7 @@ function PortEditorCard({
           <textarea id={`${idPrefix}-description`} onChange={(event) => setDescription(event.target.value)} rows={3} value={description} />
         </div>
       </div>
-      {error && <p className="spec-edit-error" role="alert">{error}</p>}
+      {error && <p id={`${idPrefix}-error`} className="spec-edit-error" role="alert">{error}</p>}
       <div className="spec-port-actions">
           <button disabled={busy} type="submit">{busy ? "Saving…" : "Save to Spec"}</button>
           {adding && <button disabled={busy} type="button" onClick={() => void save(true)}>Save and add another</button>}
@@ -1807,26 +1804,6 @@ function PortEditorCard({
       </div>
     </form>
   );
-}
-
-function PortPasteEditor({ state, existing, finish }: { state: SectionEditState; existing: string[]; finish(): void }) {
-  const [text, setText] = useState("");
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const rows = parsePortRows(text, existing);
-  return <form className="spec-inline-editor" onSubmit={async event => {
-    event.preventDefault(); setError(""); setBusy(true);
-    try { await state.controller!.addComponentPorts!(state.section.entity_ref!, rows.map(row => row.port)); finish(); }
-    catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)); }
-    finally { setBusy(false); }
-  }}>
-    <label htmlFor={`${state.section.section_id}-paste-text`}>Paste port rows (TSV or Markdown)</label>
-    <textarea id={`${state.section.section_id}-paste-text`} rows={5} value={text} onChange={event => setText(event.target.value)} placeholder={'Port ID\tDirection\tRange\tDescription'} />
-    <small>Columns: Port ID, Direction, Range, Description. Omitted ranges use 0:0; blank ranges stay scalar. Edit the pasted text to correct rows.</small>
-    {!!rows.length && <div className="spec-table-scroll"><table><thead><tr><th>ID</th><th>Direction</th><th>Range</th><th>Description</th><th>Review</th></tr></thead><tbody>{rows.map((row, index) => <tr key={index}><td>{row.port.name}</td><td>{row.port.direction}</td><td>{row.port.range ?? "scalar"}</td><td>{row.port.description}</td><td>{row.errors.join(" ") || "Ready"}</td></tr>)}</tbody></table></div>}
-    {error && <p role="alert">{error}</p>}
-    <div className="spec-edit-actions"><button type="submit" disabled={busy || !rows.length || rows.some(row => row.errors.length > 0)}>Add {rows.length} ports</button><button type="button" disabled={busy} onClick={finish}>Cancel paste</button></div>
-  </form>;
 }
 
 function safeHref(value: string): string | undefined {

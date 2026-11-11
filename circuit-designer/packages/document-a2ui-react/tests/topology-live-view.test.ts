@@ -5,6 +5,7 @@ import { projectDocument, renderCircuitSvg } from "@spec2gds/circuit-core";
 
 import {
   circuitSvgFilename,
+  componentPreviewSize,
   readDesignTopologyOptions,
   renderDesignTopology,
 } from "../src/topology-live-view";
@@ -59,4 +60,20 @@ describe("design topology live views", () => {
     expect(circuitSvgFilename("Editor Test", "Top / Main")).toBe("editor-test-top-main-circuit.svg");
     expect(circuitSvgFilename("x".repeat(200), "design").length).toBeLessThanOrEqual(124);
   });
+});
+
+describe("Component preview sizing", () => {
+  it.each([[160, 70, 900], [1800, 200, 900], [200, 1800, 900], [640, 500, 210]])(
+    "fits %s by %s into %s pixels without enlargement", (width, height, available) => {
+      const size = componentPreviewSize(width, height, available);
+      expect(size.cardWidth).toBeLessThanOrEqual(Math.min(640, available));
+      expect(size.cardWidth).toBeGreaterThanOrEqual(Math.min(320, available));
+      expect(size.viewportHeight).toBeGreaterThanOrEqual(120);
+      expect(size.viewportHeight).toBeLessThanOrEqual(320);
+      expect(size.imageWidth).toBeLessThanOrEqual(width);
+      expect(size.imageHeight).toBeLessThanOrEqual(height);
+      expect(size.imageWidth).toBeLessThanOrEqual(size.cardWidth - 32);
+      expect(size.imageHeight).toBeLessThanOrEqual(size.viewportHeight - 32);
+      expect(size.imageWidth / size.imageHeight).toBeCloseTo(width / height);
+    });
 });

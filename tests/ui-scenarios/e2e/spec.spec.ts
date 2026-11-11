@@ -21,7 +21,7 @@ test("renames the Spec through its authoring control and retains the title after
   await expect(page.getByRole("heading", { name: "Released Spec 1.0", exact: true })).toBeVisible();
 });
 
-test("manual authoring: readable names, pasted ports and explicit verification", async ({ page, stack }) => {
+test("manual authoring: readable names, individual ports and explicit verification", async ({ page, stack }) => {
   await newSpec(page, stack);
   await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
   await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
@@ -31,9 +31,17 @@ test("manual authoring: readable names, pasted ports and explicit verification",
   const ref = (await stack.snapshot()).components[0].ref;
   const component = page.locator(`#component-${ref.entity_id.replaceAll("_", "-")}`);
   await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Paste rows", exact: true }).click();
-  await component.getByLabel("Paste port rows (TSV or Markdown)").fill("Port ID\tDirection\tRange\tDescription\na\tin\t7:0\tInput\ny\tout\t7:0\tOutput");
-  await component.getByRole("button", { name: "Add 2 ports", exact: true }).click();
+  await expect(component.getByRole("menuitem", { name: "Paste rows", exact: true })).toHaveCount(0);
+  await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+  const portDraft = component.locator(".spec-port-editor");
+  for (const [name, direction, description] of [["a", "in", "Input"], ["y", "out", "Output"]]) {
+    await portDraft.getByLabel("Port ID", { exact: true }).fill(name);
+    await portDraft.getByLabel("Direction", { exact: true }).selectOption(direction);
+    await portDraft.getByLabel("Range", { exact: true }).fill("7:0");
+    await portDraft.getByLabel("Description", { exact: true }).fill(description);
+    await portDraft.getByRole("button", { name: name === "a" ? "Save and add another" : "Save to Spec", exact: true }).click();
+    if (name === "a") await expect(portDraft.getByLabel("Port ID", { exact: true })).toHaveValue("");
+  }
   await expect(component.locator(".spec-port-row")).toHaveCount(2);
   await component.getByRole("button", { name: "Options", exact: true }).click();
   await component.getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
@@ -726,4 +734,98 @@ test("duplicate names keep the form and saved Spec intact", async ({ page, stack
   await expect(page.getByLabel("File path", { exact: true })).toHaveValue(stack.path("different-filename.spec"));
   expect(existsSync(stack.path("different-filename.spec"))).toBe(false);
   expect(readFileSync(stack.path())).toEqual(before);
+});
+
+test("explicit port ranges preserve invalid drafts and compact previews adapt to available width", async ({ page, stack }) => {
+  await newSpec(page, stack);
+  const component = await addComponent(page, stack);
+  const before = await stack.snapshot();
+  const archive = stack.archive(stack.path());
+  let draft = await portDraft(component);
+  await draft.getByLabel("Port ID", { exact: true }).fill("bus");
+  await draft.getByLabel("Description", { exact: true }).fill("Retained description");
+  await draft.getByLabel("Range", { exact: true }).fill("15-0");
+  await draft.getByRole("button", { name: "Save and add another", exact: true }).click();
+  await expect(draft.getByLabel("Range", { exact: true })).toBeFocused();
+  await expect(draft.getByLabel("Range", { exact: true })).toHaveAttribute("aria-invalid", "true");
+  await expect(draft.getByRole("alert")).toContainText("Use left:right");
+  await expect(draft.getByLabel("Description", { exact: true })).toHaveValue("Retained description");
+  expect((await stack.snapshot()).source_revision_hash).toBe(before.source_revision_hash);
+  expect(stack.archive(stack.path())).toEqual(archive);
+  await draft.getByLabel("Range", { exact: true }).fill("[15:0]");
+  await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  let row = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "bus", exact: true }) });
+  await row.getByRole("button", { name: "Options for port bus", exact: true }).click();
+  await row.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  draft = component.locator(".spec-port-editor");
+  await expect(draft.getByLabel("Range", { exact: true })).toHaveValue("15:0");
+  const saved = await stack.snapshot();
+  await draft.getByLabel("Range", { exact: true }).fill("15-0");
+  await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(draft.getByLabel("Range", { exact: true })).toBeFocused();
+  expect((await stack.snapshot()).source_revision_hash).toBe(saved.source_revision_hash);
+  await draft.getByLabel("Range", { exact: true }).fill("15:15");
+  await draft.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await openSpec(page, stack);
+  row = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "bus", exact: true }) });
+  await expect(row).toContainText("15:15");
+  await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "Paste rows", exact: true })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  const card = component.locator(".spec-topology-card--interface");
+  const image = card.locator(".spec-topology-card__preview img");
+  await expect(image).toBeVisible();
+  const previewRevision = (await stack.snapshot()).source_revision_hash;
+  await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+  await card.getByRole("menuitem", { name: "Expand", exact: true }).click();
+  const expanded = page.getByRole("dialog", { name: "Interface preview (read-only)", exact: true });
+  await expect(expanded.getByRole("img")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(card.getByRole("button", { name: "Options for circuit preview", exact: true })).toBeFocused();
+  await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+  const downloaded = page.waitForEvent("download");
+  await card.getByRole("menuitem", { name: "Download SVG", exact: true }).click();
+  const download = await downloaded;
+  const svgPath = test.info().outputPath("component-interface.svg");
+  await download.saveAs(svgPath);
+  const originalSvg = await image.evaluate(element => fetch((element as HTMLImageElement).src).then(response => response.text()));
+  expect(readFileSync(svgPath, "utf8")).toBe(originalSvg);
+  for (const theme of ["clean", "obsidian"]) {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /Switch theme/ }).click();
+    for (const width of [1440, 1280, 1024, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const panel of [false, true]) {
+        if (panel) await page.locator("#editor-diagnostics-trigger").click();
+        await expect.poll(async () => image.evaluate(element => {
+          const img = element as HTMLImageElement;
+          const card = img.closest("figure")!;
+          const viewport = img.parentElement!;
+          const box = img.getBoundingClientRect(), cb = card.getBoundingClientRect(), vb = viewport.getBoundingClientRect();
+          return img.complete && box.width <= img.naturalWidth + 1 && box.height <= img.naturalHeight + 1
+            && cb.width <= 641 && cb.width <= card.parentElement!.clientWidth + 1
+            && vb.height >= 119 && vb.height <= 321
+            && box.left >= vb.left && box.right <= vb.right + 1 && box.top >= vb.top && box.bottom <= vb.bottom + 1;
+        })).toBe(true);
+        const contrast = await component.locator(".spec-hardware-controls > details > summary").first().evaluate(element => {
+          const canvas = document.createElement("canvas"); canvas.width = canvas.height = 1;
+          const context = canvas.getContext("2d")!;
+          const luminance = (color: string) => {
+            context.clearRect(0, 0, 1, 1); context.fillStyle = color; context.fillRect(0, 0, 1, 1);
+            const [r, g, b] = Array.from(context.getImageData(0, 0, 1, 1).data).map(v => {
+              const c = v / 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4;
+            });
+            return .2126 * r + .7152 * g + .0722 * b;
+          };
+          const color = luminance(getComputedStyle(element).color);
+          const paper = luminance(getComputedStyle(element).getPropertyValue("--spec-paper"));
+          return (Math.max(color, paper) + .05) / (Math.min(color, paper) + .05);
+        });
+        expect(contrast).toBeGreaterThanOrEqual(4.5);
+        await page.screenshot({ path: test.info().outputPath(`refinements-${theme}-${width}-${panel ? "panel" : "document"}.png`), fullPage: true });
+        if (panel) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
+      }
+    }
+  }
+  expect((await stack.snapshot()).source_revision_hash).toBe(previewRevision);
 });

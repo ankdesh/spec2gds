@@ -10,10 +10,11 @@ export function expectedBrowserFailure(
   const releaseOnUnload = url.startsWith(context.serviceUrl + "/documents/edit-access/release?")
     && /ERR_ABORTED|AbortError/.test(message);
   const localDownload = url.startsWith(`blob:${context.serviceUrl}/`) && /ERR_ABORTED|AbortError/.test(message);
-  // Navigation can cancel a bound history read that belonged to the previous page.
+  // Navigation can cancel bound history/view reads that belonged to the previous page.
   // A failure on the current page, a different endpoint, or another origin still fails.
-  const historyOnNavigation = context.documentChanged && url.startsWith(context.serviceUrl + "/assistant/history?")
+  const boundReadOnNavigation = context.documentChanged
+    && (url.startsWith(context.serviceUrl + "/assistant/history?") || url.startsWith(context.serviceUrl + "/documents/view?"))
     && Boolean(new URL(url).searchParams.get("owner_document_key")) && /ERR_ABORTED|AbortError/.test(message);
-  return stopping || releaseOnUnload || localDownload || Boolean(historyOnNavigation)
+  return stopping || releaseOnUnload || localDownload || Boolean(boundReadOnNavigation)
     || (/\/(events|activity-events)(?:\?|$)/.test(url) && /ERR_ABORTED|AbortError/.test(message));
 }

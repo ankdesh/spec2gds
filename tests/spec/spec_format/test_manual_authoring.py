@@ -227,3 +227,60 @@ def test_recovery_binding_uses_one_conditional_registration_without_reload(monke
     assert len(requests) == 1
     assert json.loads(requests[0].data)["recovery"] == recovery
     assert result["lease"]["lease_id"] == "new"
+
+
+@pytest.mark.parametrize("bad_range", ["15-0", "15", "WIDTH-1", "15:", ":0", "15:0:1", "[]", "([WIDTH)]:0"])
+def test_port_format_rejection_is_atomic_without_compiler(tmp_path, monkeypatch, bad_range):
+    api = endpoints(tmp_path, monkeypatch)
+    path = tmp_path / "ranges.spec"
+    snapshot = api["create_document"](CreateDocumentRequest(path=str(path), title="Ranges"))
+    def commit(ops):
+        nonlocal snapshot
+        snapshot = api["transaction"](TransactionRequest(expected_source_revision_hash=snapshot["source_revision_hash"], operations=ops, validation_mode="authoring"))["snapshot"]
+    with patch("subprocess.run", side_effect=AssertionError("Implicit compiler invocation")):
+        commit([{"type": "create_entity", "kind": "component", "name": "Ranges"}])
+        ref = snapshot["components"][0]["ref"]
+        base = {"family": "wire", "direction": "in", "range": "15:0"}
+        commit([{"type": "add_component_port", "component": ref, "port": {**base, "name": "a"}}])
+        before, revision = path.read_bytes(), snapshot["source_revision_hash"]
+        for operations in [
+            [{"type": "add_component_port", "component": ref, "port": {**base, "name": "bad", "range": bad_range}}],
+            [{"type": "update_component_port", "component": ref, "name": "a", "port": {**base, "range": bad_range}}],
+            [{"type": "add_component_port", "component": ref, "port": {**base, "name": name, "range": value}} for name, value in [("ok", "7:0"), ("bad", bad_range)]],
+        ]:
+            with pytest.raises(fastapi.HTTPException) as error:
+                commit(operations)
+            assert error.value.status_code == 422
+            assert path.read_bytes() == before
+            assert api["document_snapshot"]()["source_revision_hash"] == revision
+
+
+def test_explicit_range_format_preserves_legacy_readers_and_equal_bounds():
+    from spec2gds.spec.spec_format.source_edits import parse_wire_range, format_wire_range
+    from spec2gds.spec.spec_format.rtl_interface import split_range
+    for source, expected in [("", (None, None)), ("15:0", ("15", "0")), ("[15:0]", ("15", "0")),
+                             ("0:15", ("0", "15")), ("-1:-4", ("-1", "-4")), ("WIDTH-1:0", ("WIDTH-1", "0")),
+                             ("pkg::WIDTH-1:0", ("pkg::WIDTH-1", "0")), ("VALUE[3:0]:0", ("VALUE[3:0]", "0")),
+                             ("(USE ? WIDTH:4)-1:0", ("(USE ? WIDTH:4)-1", "0"))]:
+        assert parse_wire_range(source) == expected
+    assert split_range("15-0") == ("15-0", "15-0")
+    assert format_wire_range("15", "15") == "15:15"
+    assert format_wire_range("15-0", "15-0") == "15-0:15-0"
+
+
+def test_legacy_identical_expression_bounds_open_and_survive_unrelated_edits(tmp_path, monkeypatch):
+    from spec2gds.spec.spec_format.testing import _xml
+    from spec2gds.spec.spec_format.v1_api import OpenDocumentRequest
+    package = SpecPackage.create("legacy_ranges")
+    body = '<ipxact:model><ipxact:ports><ipxact:port><ipxact:name>a</ipxact:name><ipxact:wire><ipxact:direction>in</ipxact:direction><ipxact:vectors><ipxact:vector><ipxact:left>15-0</ipxact:left><ipxact:right>15-0</ipxact:right></ipxact:vector></ipxact:vectors></ipxact:wire></ipxact:port></ipxact:ports></ipxact:model>'
+    package.add_document("component", _xml("component", "component_legacy", "legacy", body))
+    path = tmp_path / "legacy.spec"
+    package.save(str(path))
+    api = endpoints(tmp_path, monkeypatch)
+    with patch("subprocess.run", side_effect=AssertionError("Implicit compiler invocation")):
+        saved = api["open_document"](OpenDocumentRequest(path=str(path)))
+        component_bytes = next(value for name, value in SpecPackage.load(str(path)).files.items() if name.startswith("ipxact/components/"))
+        view = api["document_view"]()
+        assert "15-0:15-0" in str(view["a2ui"])
+        api["transaction"](TransactionRequest(expected_source_revision_hash=saved["source_revision_hash"], operations=[{"type": "set_document_title", "title": "Legacy retained"}], validation_mode="authoring"))
+        assert next(value for name, value in SpecPackage.load(str(path)).files.items() if name.startswith("ipxact/components/")) == component_bytes

@@ -262,7 +262,8 @@ async function run(): Promise<void> {
     const architectureCapture = async (file: string, caption: string) => {
       if (!presentation) return;
       const card = conversation.locator('[data-s2g-architecture-review="pending"]').last();
-      await expect(card).toBeVisible();
+      // A capture must wait for the asynchronous review, within the flow's UI budget.
+      await expect(card).toBeVisible({ timeout: 60_000 });
       for (const detail of await card.locator("details").all()) {
         const label = (await detail.locator("summary").innerText()).trim();
         if (await detail.getAttribute("open") !== null && label !== "concrete configuration") await detail.locator("summary").click();

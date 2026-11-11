@@ -1676,3 +1676,31 @@
   .spec-topology-card__actions { width: 100%; }
   .spec-topology-card__actions button { flex: 1 1 auto; }
 }
+
+/* Subheadings share a quiet accent in both document themes. */
+.spec-document {
+  --spec-subheading-color: color-mix(in srgb, var(--spec-accent, #8b5cf6) 70%, var(--spec-text, #f4f4f5));
+}
+.spec-document .spec-hardware-controls > details > summary,
+.spec-document .spec-table-block__heading h4,
+.spec-document .spec-entity-section h4,
+.spec-document .spec-topology-card--interface > figcaption strong,
+.spec-document .spec-topology-card--interface > strong {
+  color: var(--spec-subheading-color);
+  font-weight: 600;
+}
+.spec-hardware-controls > details > summary { cursor: pointer; }
+.spec-topology-card--interface { max-width: 100%; box-sizing: border-box; }
+.spec-topology-card--interface > figcaption { min-width: 0; }
+.spec-topology-card--interface > figcaption > div { min-width: 0; overflow-wrap: anywhere; }
+.spec-topology-card--interface .spec-topology-card__preview {
+  min-height: 120px;
+  max-height: 320px;
+  padding: 16px;
+  box-sizing: border-box;
+}
+.spec-topology-card--interface .spec-topology-card__preview img {
+  max-width: 100%;
+  max-height: 288px;
+  object-fit: contain;
+}

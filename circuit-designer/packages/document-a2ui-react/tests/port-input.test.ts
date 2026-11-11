@@ -40,6 +40,13 @@ it("does not mutate table cells while creating a draft", () => {
 
 it("checks delimiters while allowing conditional expressions, scoped names, and bit selections", async () => {
   const { wireRangeError } = await import("../src/port-input");
-  for (const range of ["", "4:1", "-1:-4", "(USE ? WIDTH:4)-1:0", "pkg::WIDTH-1:0", "VALUE[3:0]"]) expect(wireRangeError(range)).toBeNull();
-  for (const range of ["31::0", "31:", ":0", "31:0:1", "(WIDTH-1:0"]) expect(wireRangeError(range)).toContain("left:right expression pair");
+  for (const range of ["", "4:1", "-1:-4", "(USE ? WIDTH:4)-1:0", "pkg::WIDTH-1:0", "VALUE[3:0]:0", "USE ? WIDTH:4:0", "0:USE ? WIDTH:4", "[15:0]"]) expect(wireRangeError(range)).toBeNull();
+  for (const range of ["15-0", "15", "WIDTH-1", "[]", "([WIDTH)]:0", "(31::0):0", "31::0", "31:", ":0", "31:0:1", "(WIDTH-1:0"]) expect(wireRangeError(range)).toContain("left:right expression pair");
+});
+
+it("normalizes optional brackets without changing bound expressions", async () => {
+  const { normalizeWireRange } = await import("../src/port-input");
+  expect(normalizeWireRange(" [15:0] ")).toBe("15:0");
+  expect(normalizeWireRange("VALUE[3:0]:0")).toBe("VALUE[3:0]:0");
+  expect(normalizeWireRange(" ")).toBeNull();
 });

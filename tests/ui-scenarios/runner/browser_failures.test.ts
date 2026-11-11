@@ -33,14 +33,14 @@ test("real transport failures are distinct from event-stream cancellation", () =
   assert.equal(expectedBrowserFailure("console", context.serviceUrl + "/transactions", "409 Conflict", { ...context, scenario: "live" }), true);
 });
 
-test("bound history cancellation requires an observed main-document navigation", () => {
-  const path = "/assistant/history?limit=25&owner_document_key=spec_test";
+for (const endpoint of ["/assistant/history", "/documents/view"]) test(`bound ${endpoint} cancellation requires an observed main-document navigation`, () => {
+  const path = `${endpoint}?limit=25&owner_document_key=spec_test`;
   const navigated = { ...context, documentChanged: true };
   assert.equal(expectedBrowserFailure("network", context.serviceUrl + path, "net::ERR_ABORTED", navigated), true);
   assert.equal(expectedBrowserFailure("network", context.serviceUrl + path, "net::ERR_ABORTED", context), false);
   assert.equal(expectedBrowserFailure("network", context.serviceUrl + path, "net::ERR_FAILED", navigated), false);
   assert.equal(expectedBrowserFailure("network", "http://foreign.invalid" + path, "net::ERR_ABORTED", navigated), false);
-  assert.equal(expectedBrowserFailure("network", context.serviceUrl + "/assistant/history?limit=25", "net::ERR_ABORTED", navigated), false);
+  assert.equal(expectedBrowserFailure("network", context.serviceUrl + endpoint + "?limit=25", "net::ERR_ABORTED", navigated), false);
   assert.equal(expectedBrowserFailure("network", context.serviceUrl + "/transactions?owner_document_key=spec_test", "net::ERR_ABORTED", navigated), false);
   assert.equal(expectedBrowserFailure("console", context.serviceUrl + path, "500 Internal Server Error", navigated), false);
 });

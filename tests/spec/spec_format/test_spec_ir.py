@@ -314,7 +314,7 @@ def test_direct_editor_adds_and_updates_profiled_ports_but_blocks_composites() -
                 direction="out",
                 description="Opaque packed result.",
             )),
-            AddComponentPort(sink.ref, "indexed", WirePortInput(direction="in", range="0")),
+            AddComponentPort(sink.ref, "indexed", WirePortInput(direction="in", range="0:0")),
         ),
     ).apply(updated)
     assert families.succeeded, families.diagnostics

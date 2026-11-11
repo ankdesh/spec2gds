@@ -206,14 +206,14 @@ def parse_wire_range(value: typing.Any) -> tuple[str | None, str | None]:
         if not expression:
             raise ValueError("Wire port Range cannot be empty.")
     from spec2gds.spec.spec_format.rtl_interface import split_range
-    return split_range(expression)
+    return split_range(expression, require_pair=True)
 
 
 def format_wire_range(left: str | None, right: str | None) -> str:
     """Return the compact editor display for one optional IP-XACT vector."""
     if left is None or right is None:
         return ""
-    return left if left == right else f"{left}:{right}"
+    return f"{left}:{right}"
 
 
 def _build_port(value: dict[str, typing.Any]) -> etree._Element:

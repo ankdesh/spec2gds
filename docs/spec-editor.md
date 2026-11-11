@@ -27,6 +27,24 @@ Spec Editor provides a structured engineering interface for hardware specificati
 - The document view does not show Technical details panels. Job history, artifact records, and reviews retain their diagnostic details.
 - Existing transaction and structured ports are read-only in Spec Editor. Create and edit wire ports from the Component Options menu.
 
+### Subheadings, interface previews, and port input
+
+Hardware settings, Parameters, Ports, SystemVerilog, and interface-preview titles
+use a subtle theme accent and medium-bold text. Component interface previews fit
+the complete diagram without enlargement. Their preferred width is 320–640 px,
+capped by the available document width, with a 120–320 px preview viewport.
+Use **Expand** for close inspection. SVG downloads retain their original geometry.
+
+Use **Add port** or **Save and add another** to create ports. The Ports menu does
+not import pasted rows; normal text-field paste remains available. A wire Range
+must be blank for a scalar port or contain explicit `left:right` bounds, such as
+`15:0`, `15:15`, or `WIDTH-1:0`. Optional outer brackets are removed on save.
+Single values and standalone formulas such as `15-0` are rejected. Client and
+service format checks preserve the draft and reject invalid writes atomically;
+they do not invoke a compiler. Use **Verify** for full expression resolution.
+Existing saved Specs remain readable without migration. Identical stored bounds
+are displayed explicitly; no previous expression is reinterpreted as a bus range.
+
 ### Diagnostics and Activity panel
 
 The **Diagnostics** and **Activity** toolbar buttons open one right panel. The
