@@ -2006,7 +2006,7 @@ const LiveView = createComponentImplementation(
       return <DesignTopologyLiveView
         block={block}
         documentId={props.documentId}
-        onOpenCircuit={!block.options.read_only && circuitRef && (circuitRef.entity_kind === "design" || circuitRef.entity_kind === "component")
+        onOpenCircuit={circuitRef && (circuitRef.entity_kind === "design" || circuitRef.entity_kind === "component")
           ? () => dispatchOpenCircuit(circuitRef)
           : undefined}
       />;

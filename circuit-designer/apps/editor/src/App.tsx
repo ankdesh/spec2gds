@@ -470,12 +470,6 @@ export default function App() {
     entityKind: "component" | "design",
     entityId: string,
   ) => {
-    if (entityKind === "component" && snapshot?.components.some(item => item.ref.entity_id === entityId)
-      && !snapshot.component_compositions.some(item => item.component.entity_id === entityId)) {
-      setView("document");
-      requestAnimationFrame(() => document.getElementById(`component-${entityId.replaceAll("_", "-")}`)?.querySelector(".spec-topology-card")?.scrollIntoView({ block: "center" }));
-      return;
-    }
     if (launchingCircuit) return;
     const pendingWindow = window.open("about:blank", "_blank");
     if (pendingWindow) {

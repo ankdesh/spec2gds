@@ -331,8 +331,15 @@ const batch = {
           section("component-component_timer", "Timer", 2, componentRef, {
             facts: componentFacts,
             tables: [allPortsTable],
-            children: ["narrative-component-timer-desc", "table-component-component_timer-ports"],
+            children: ["narrative-component-timer-desc", "preview-component-timer", "table-component-component_timer-ports"],
           }),
+          {
+            id: "preview-component-timer",
+            component: "LiveView",
+            block: { ...topologyBlock, block_id: "derived_topology_component_timer", entity_refs: [componentRef],
+              options: { ...topologyBlock.options, read_only: true } },
+            documentId,
+          },
           {
             id: "narrative-component-timer-desc",
             component: "NarrativeBlock",
@@ -428,7 +435,7 @@ type ApiState = {
   staleNextTransaction: boolean;
 };
 
-async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean } = {}): Promise<ApiState> {
+async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolean; topologyState?: "empty" | "render-error" | "unsupported" } = {}): Promise<ApiState> {
   const state: ApiState = {
     activityExecutions: [],
     generatedTargets: [],
@@ -523,6 +530,14 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
           omitted_ports: [],
           message: "connected structured endpoint cannot be represented",
         };
+      }
+      if (options.topologyState === "empty") {
+        liveView.block.options.status = "empty";
+        delete liveView.block.options.circuit_document;
+      } else if (options.topologyState === "render-error") {
+        liveView.block.options.circuit_document.protocol_version = "invalid";
+      } else if (options.topologyState === "unsupported") {
+        liveView.block.options.schema_version = 99;
       }
       if (state.transactions.length) {
         if (liveView.block.options.circuit_document) {
@@ -938,9 +953,11 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   await card.getByText("1 unsupported item omitted from this preview").click();
   await expect(card.getByText("Interface connection: control_bus")).toBeVisible();
 
+  await card.getByRole("button", { name: "Open in Circuit Designer", exact: true }).click();
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
   await card.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
-  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+  await expect.poll(() => state.circuits).toEqual(Array(2).fill({ entity_kind: "design", entity_id: "design_top" }));
 
   const firstImageUrl = await image.getAttribute("src");
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
@@ -974,14 +991,82 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   await expect.poll(async () => image.getAttribute("src")).not.toBe(firstImageUrl);
 });
 
-test("keeps design tables available when a circuit preview is unsafe", async ({ page }) => {
-  await mockEditorApi(page, { topologyUnavailable: true });
+test("keeps design tables and launch access available when a circuit preview is unsafe", async ({ page }) => {
+  const state = await mockEditorApi(page, { topologyUnavailable: true });
   await openSample(page);
   const design = page.locator("#design-design_top");
 
   await expect(design.getByText("Preview unavailable: connected structured endpoint cannot be represented")).toBeVisible();
   await expect(design.getByRole("region", { name: "Component instances" })).toBeVisible();
   await expect(design.getByRole("img", { name: "Circuit topology circuit diagram" })).toHaveCount(0);
+  await design.locator(".spec-topology-card").getByRole("button", { name: "Open in Circuit Designer", exact: true }).click();
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+});
+
+for (const topologyState of ["empty", "render-error", "unsupported"] as const) {
+  test(`opens the same Design when its preview is ${topologyState}`, async ({ page }) => {
+    const state = await mockEditorApi(page, { topologyState });
+    await openSample(page);
+    const card = page.locator("#design-design_top .spec-topology-card");
+    await expect(card.getByRole("status")).toContainText(topologyState === "empty"
+      ? "No instances" : topologyState === "render-error" ? "Preview unavailable" : "unsupported renderer options");
+    await card.getByRole("button", { name: "Open in Circuit Designer", exact: true }).click();
+    await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+    expect(state.transactions).toHaveLength(0);
+  });
+}
+
+test("opens leaf and composite Components from the menu and leaf previews with the keyboard", async ({ page }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  for (const [name, id] of [[/Timer.*Read-only preview/, "component_timer"], [/Subsystem.*Open assigned Design/, "component_subsystem"]] as const) {
+    const trigger = page.getByRole("menuitem", { name: "Circuit Designer", exact: true });
+    await trigger.focus();
+    await page.keyboard.press("ArrowDown");
+    const item = page.getByRole("menu", { name: "Circuit Designer", exact: true }).getByRole("menuitem", { name });
+    await item.focus();
+    await page.keyboard.press("Enter");
+    await expect.poll(() => state.circuits.at(-1)).toEqual({ entity_kind: "component", entity_id: id });
+  }
+  const component = page.locator("#component-component_timer");
+  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  const draft = component.getByLabel("Component explanation");
+  await draft.fill("Private explanation, not saved to Spec.");
+  const leaf = component.locator(".spec-topology-card");
+  await expect(leaf).toContainText("Interface preview (read-only)");
+  const button = leaf.getByRole("button", { name: "Open in Circuit Designer", exact: true });
+  await button.focus();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => state.circuits).toEqual([
+    { entity_kind: "component", entity_id: "component_timer" },
+    { entity_kind: "component", entity_id: "component_subsystem" },
+    { entity_kind: "component", entity_id: "component_timer" },
+  ]);
+  await expect(draft).toHaveValue("Private explanation, not saved to Spec.");
+  expect(state.transactions).toHaveLength(0);
+});
+
+test("reports launch errors, closes the pending tab, and permits retry", async ({ page, context }) => {
+  const state = await mockEditorApi(page);
+  await openSample(page);
+  await page.route("**/circuit-designer/launch*", route => route.fulfill({ status: 503, json: { detail: "Circuit Designer is unavailable." } }), { times: 1 });
+  const pagesBefore = context.pages().length;
+  const button = page.locator("#design-design_top .spec-topology-card").getByRole("button", { name: "Open in Circuit Designer", exact: true });
+  await button.click();
+  await expect(page.getByRole("alert")).toContainText("Circuit Designer is unavailable.");
+  await expect.poll(() => context.pages().length).toBe(pagesBefore);
+  await button.click();
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(state.transactions).toHaveLength(0);
+});
+
+test("keeps Circuit Designer visible with no circuit sources", async ({ page }) => {
+  await mockEditorApi(page);
+  await page.goto("/");
+  await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+  await expect(page.getByRole("menuitem", { name: "No circuit sources", exact: true })).toBeDisabled();
 });
 
 test("adds an available top-level component instance to the entry design", async ({ page }) => {
@@ -1041,8 +1126,8 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   const state = await mockEditorApi(page);
   await openSample(page);
 
-  await page.getByRole("menuitem", { name: "Circuit", exact: true }).click();
-  const circuitMenu = page.getByRole("menu", { name: "Circuit" });
+  await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+  const circuitMenu = page.getByRole("menu", { name: "Circuit Designer" });
   await expect(circuitMenu.getByText("Designs", { exact: true })).toBeVisible();
   await expect(circuitMenu.getByText("Components", { exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: /Processor Entry/ }).click();
@@ -1262,10 +1347,10 @@ test("opens the assigned Design for boundary edits and identifies launch modes",
   await edit.click();
   await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
   expect(state.transactions).toHaveLength(0);
-  await page.getByRole("menuitem", { name: "Circuit", exact: true }).click();
-  const menu = page.getByRole("menu", { name: "Circuit" });
+  await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Circuit Designer" });
   await expect(menu.getByRole("menuitem", { name: /Processor.*Edit Design/ })).toBeVisible();
-  await expect(menu.getByRole("menuitem", { name: /Subsystem.*Read-only preview/ })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Subsystem.*Open assigned Design/ })).toBeVisible();
   await page.keyboard.press("Escape");
   for (const theme of ["clean", "obsidian"]) {
     if (await page.locator("html").getAttribute("data-theme") !== theme) await page.locator(".theme-quick-toggle").click();
@@ -1275,6 +1360,20 @@ test("opens the assigned Design for boundary edits and identifies launch modes",
       await preview.scrollIntoViewIfNeeded();
       await expect(preview).toHaveCSS("background-color", theme === "clean" ? "rgb(247, 249, 252)" : "rgb(9, 9, 11)");
       await expect(preview.locator("img")).toBeVisible();
+      for (const card of [page.locator("#design-design_top .spec-topology-card"), page.locator("#component-component_timer .spec-topology-card")]) {
+        const launch = card.getByRole("button", { name: "Open in Circuit Designer", exact: true });
+        await launch.scrollIntoViewIfNeeded();
+        await expect(launch).toBeVisible();
+        const launchBox = await launch.boundingBox();
+        expect(launchBox!.x).toBeGreaterThanOrEqual(0);
+        expect(launchBox!.x + launchBox!.width).toBeLessThanOrEqual(size.width);
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (size.width === 560) await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+      await expect(page.getByRole("menu", { name: "Circuit Designer", exact: true })).toBeVisible();
+      await page.keyboard.press("Escape");
+      if (size.width === 560) await page.keyboard.press("Escape");
       await page.screenshot({ path: testInfo.outputPath(`preview-${theme}-${size.width}.png`) });
     }
   }

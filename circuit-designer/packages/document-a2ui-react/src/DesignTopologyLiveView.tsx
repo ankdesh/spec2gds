@@ -118,6 +118,15 @@ export function DesignTopologyLiveView({
   const cardStyle = { "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas,
     ...(size ? { width: size.cardWidth } : {}) } as React.CSSProperties;
   const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
+  const launchButton = onOpenCircuit && (
+    <button onClick={onOpenCircuit} type="button">
+      Open in Circuit Designer <span aria-hidden="true">↗</span>
+    </button>
+  );
+  const statusHeader = <figcaption>
+    <div><strong>{label}</strong></div>
+    {launchButton && <div className="spec-topology-card__actions">{launchButton}</div>}
+  </figcaption>;
 
   useEffect(() => {
     const update = () => setThemeId(document.documentElement.dataset.theme === "obsidian" ? "obsidian" : "blueprint-slate");
@@ -151,10 +160,10 @@ export function DesignTopologyLiveView({
   }, [rendered]);
 
   if (!options) {
-    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle} role="status">
-      <strong>{label}</strong>
-      <p>This topology view has unsupported renderer options.</p>
-    </div>;
+    return <figure ref={cardRef} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle}>
+      {statusHeader}
+      <p role="status">This topology view has unsupported renderer options.</p>
+    </figure>;
   }
 
   const omissions = [
@@ -163,16 +172,16 @@ export function DesignTopologyLiveView({
   ];
   const unavailableMessage = options.status === "unavailable" ? options.message || "This topology cannot be represented safely." : renderError;
   if (unavailableMessage) {
-    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle} role="status">
-      <strong>{label}</strong>
-      <p>Preview unavailable: {unavailableMessage}</p>
-    </div>;
+    return <figure ref={cardRef} className={`${cardClass} spec-topology-card--unavailable`} style={cardStyle}>
+      {statusHeader}
+      <p role="status">Preview unavailable: {unavailableMessage}</p>
+    </figure>;
   }
   if (options.status === "empty") {
-    return <div ref={cardRef as React.RefObject<HTMLDivElement>} className={`${cardClass} spec-topology-card--empty`} style={cardStyle} role="status">
-      <strong>{label}</strong>
-      <p>No instances or physical-wire connections to display.</p>
-    </div>;
+    return <figure ref={cardRef} className={`${cardClass} spec-topology-card--empty`} style={cardStyle}>
+      {statusHeader}
+      <p role="status">No instances or physical-wire connections to display.</p>
+    </figure>;
   }
 
   return (
@@ -182,18 +191,21 @@ export function DesignTopologyLiveView({
           <strong>{label}</strong>
           <span>Derived from the current specification revision</span>
         </div>
-        <OptionsMenu label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
-          {onOpenCircuit && <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
-          <button role="menuitem" disabled={!imageUrl} onClick={() => setExpanded(true)} type="button">Expand</button>
-          <a role="menuitem"
-            aria-disabled={!imageUrl}
-            download={circuitSvgFilename(String(block.options.document_name || "Specification"), entityName)}
-            href={imageUrl || undefined}
-            onClick={(event) => { if (!imageUrl) event.preventDefault(); }}
-          >
-            Download SVG
-          </a>
-        </OptionsMenu>
+        <div className="spec-topology-card__actions">
+          {launchButton}
+          <OptionsMenu label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
+            {onOpenCircuit && <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
+            <button role="menuitem" disabled={!imageUrl} onClick={() => setExpanded(true)} type="button">Expand</button>
+            <a role="menuitem"
+              aria-disabled={!imageUrl}
+              download={circuitSvgFilename(String(block.options.document_name || "Specification"), entityName)}
+              href={imageUrl || undefined}
+              onClick={(event) => { if (!imageUrl) event.preventDefault(); }}
+            >
+              Download SVG
+            </a>
+          </OptionsMenu>
+        </div>
       </figcaption>
       <div className="spec-topology-card__preview" style={size ? { height: size.viewportHeight } : undefined}>
         {imageUrl

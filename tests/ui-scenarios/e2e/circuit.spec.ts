@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { test, expect, type Stack } from "./fixtures.js";
+import { test, expect, openSpec, type Stack } from "./fixtures.js";
 import type { Page } from "@playwright/test";
 
 async function menu(page: Page, name: string, action: string | RegExp): Promise<void> {
@@ -23,6 +23,54 @@ async function launch(page: Page, stack: Stack, kind: string, id: string): Promi
   await expect(page.getByTestId("circuit-canvas")).toBeVisible();
   return launched;
 }
+
+test("opens exact Spec targets from the Circuit Designer menu and embedded previews without changing the Spec", async ({ page, stack }) => {
+  stack.seedSample();
+  await openSpec(page, stack);
+  const snapshot = await stack.snapshot();
+  const before = stack.archive(stack.path());
+  const composite = snapshot.component_compositions[0];
+  const leaf = snapshot.components.find((item: any) => !snapshot.component_compositions.some((mapping: any) => mapping.component.entity_id === item.ref.entity_id));
+  const design = snapshot.designs.find((item: any) => item.ref.entity_id === composite.internal_design.entity_id);
+  const component = snapshot.components.find((item: any) => item.ref.entity_id === composite.component.entity_id);
+  const targets = [design, component, leaf];
+  for (const target of targets) {
+    const ref = target.ref;
+    const routes = ref.entity_id === component.ref.entity_id ? ["menu"] : ["menu", "preview"];
+    for (const route of routes) {
+      const launched = page.waitForEvent("popup");
+      if (route === "menu") {
+        await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+        const name = target.display_name || target.vlnv.split(":")[2];
+        const status = target === leaf ? "Read-only preview" : target === component ? "Open assigned Design" : "Edit Design";
+        await page.getByRole("menu", { name: "Circuit Designer", exact: true }).getByRole("menuitem")
+          .filter({ hasText: name }).filter({ hasText: status }).click();
+      } else {
+        const anchor = `${ref.entity_kind}-${ref.entity_id.replaceAll("_", "-")}`;
+        await page.locator(`#${anchor} .spec-topology-card`).getByRole("button", { name: "Open in Circuit Designer", exact: true }).click();
+      }
+      const circuit = await launched;
+      await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
+      const documentId = new URL(circuit.url()).searchParams.get("document_id");
+      expect(documentId).toBeTruthy();
+      const response = await fetch(`${stack.circuit}/api/circuit-designer/v1/documents/${documentId}/source-binding`);
+      expect(response.ok).toBe(true);
+      const binding = await response.json();
+      expect(binding.source_entity).toEqual(ref);
+      expect(binding.base_source_revision_hash).toBe(snapshot.source_revision_hash);
+      expect(binding.source_owner_document_key).toBe(snapshot.owner_document_key);
+      expect(binding.writable).toBe(target !== leaf);
+      if (target === component) expect(binding.editable_design_id).toBe(composite.internal_design.entity_id);
+      if (target === leaf) {
+        await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
+        await expect(circuit.getByRole("menuitem", { name: "Begin editing", exact: true })).toBeDisabled();
+      }
+      expect((await stack.snapshot()).source_revision_hash).toBe(snapshot.source_revision_hash);
+      expect(stack.archive(stack.path())).toEqual(before);
+      await circuit.close();
+    }
+  }
+});
 
 test("@smoke saves Circuit topology to real Spec source and reopens both applications", async ({ page, stack }) => {
   const snapshot = await sourceDesign(stack);

@@ -809,7 +809,7 @@ export default function EditorMenuBar({
               <div className="editor-menu__separator" role="separator" />
               <MenuAction onActivate={activate(() => setDialog("preferences"))} shortcut="Ctrl/⌘ ,">Preferences…</MenuAction>
             </TopMenu>
-            <TopMenu id="circuit" label="Circuit" openMenu={openMenu} setOpenMenu={setOpenMenu}>
+            <TopMenu id="circuit" label="Circuit Designer" openMenu={openMenu} setOpenMenu={setOpenMenu}>
               {designs.length > 0 && <div className="editor-menu__group" role="presentation">Designs</div>}
               {designs.map((design) => (
                 <MenuAction
@@ -826,7 +826,8 @@ export default function EditorMenuBar({
                 <MenuAction
                   disabled={launchingCircuit}
                   key={`component-${component.ref.entity_id}`}
-                  status="Read-only preview"
+                  status={snapshot?.component_compositions.some(item => item.component.entity_id === component.ref.entity_id)
+                    ? "Open assigned Design" : "Read-only preview"}
                   onActivate={activate(() => { void onOpenCircuit("component", component.ref.entity_id); })}
                 >
                   {component.display_name || displayEntityName(component.vlnv)}

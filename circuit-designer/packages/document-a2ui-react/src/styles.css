@@ -837,13 +837,13 @@
 
 .spec-topology-card--empty,
 .spec-topology-card--unavailable {
-  padding: 1rem 1.1rem;
   color: #d4d4d8;
 }
 
 .spec-topology-card--empty p,
 .spec-topology-card--unavailable p {
-  margin: 0.35rem 0 0;
+  margin: 0;
+  padding: 1rem 1.1rem;
 }
 
 .spec-topology-card--unavailable {

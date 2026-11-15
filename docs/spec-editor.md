@@ -93,7 +93,7 @@ The panel structure permits a future Assistant tab without an empty tab now.
 flowchart LR
     Menu["Spec Editor Menus"] --> File["File: New, Open, Refresh from Disk"]
     Menu --> Edit["Edit: Copy Selection, Select All"]
-    Menu --> Circuit["Circuit: Open Component / Design in Circuit Designer"]
+    Menu --> Circuit["Circuit Designer: Open Component / Design"]
     Menu --> Help["Help: Shortcuts, OpenAPI Docs, Version Info"]
     Bar["Application Bar"] --> AssistantBtn["AI Assistant: Open Bound Conversation"]
 ```
@@ -114,17 +114,22 @@ flowchart LR
 - **Edit Menu**:
   - Supports standard clipboard copy for text and tables.
   - Cut and Paste work in editable text fields and the SystemVerilog editor. Menu actions retain the field selection; native keyboard shortcuts remain available.
-- **Circuit Menu**:
+- **Circuit Designer Menu**:
   - Lists launchable entry designs, sub-designs, and leaf components.
   - Selecting an item opens the projected topology in Circuit Designer.
   - Leaf components open as read-only instance previews.
   - Composite designs open as editable, source-bound circuits.
+  - Composite Components open their assigned internal Design.
+  - With no circuit sources, the menu shows **No circuit sources** as a disabled item.
 
 ### Circuit Previews and Preservation
 - Every design section displays an SVG circuit preview generated from IP-XACT topology.
 - Previews display component instances, connections, and pipeline cycle markers.
 - Spec Editor preserves circuit layout annotations across saves so manual positions and routing stay stable.
 - Leaf components display a read-only instance preview with attached wire ports.
+- Each embedded preview has a visible **Open in Circuit Designer ↗** button beside **Options**. The same action remains in **Options** with **Expand** and **Download SVG**.
+- The button and the **Circuit Designer** menu open the selected Component or Design in a new browser tab, using the current saved Spec revision. Leaf Components remain read-only.
+- Launch access remains available when a preview is empty or cannot render. Launch errors appear in Spec Editor. Opening Circuit Designer does not save private Spec Editor drafts.
 
 ---
 
