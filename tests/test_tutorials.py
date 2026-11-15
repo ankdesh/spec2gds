@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import os
 from html.parser import HTMLParser
 from urllib.parse import unquote, urlsplit
@@ -56,8 +56,11 @@ def test_tutorial_html_is_current_and_local_navigation_resolves():
                 linked.feed(destination.read_text())
                 assert parts.fragment in linked.ids, f"{name}: missing fragment {target}"
         if name not in {"index.html", "setup.html", "example.html", "validation.html"}:
-            item = next(item for item in build_tutorials.CORE + build_tutorials.EXTRAS
-                        if name == f'{item["slug"]}.html')
+            item = next(
+                item
+                for item in build_tutorials.CORE + build_tutorials.EXTRAS
+                if name == f"{item['slug']}.html"
+            )
             assert len(page.images) == len(item["pictures"])
             assert {f"action-{i}" for i in range(1, len(item["actions"]) + 1)} <= page.ids
             assert path.read_text().count("Expected result:</strong>") == len(item["actions"])
@@ -71,13 +74,17 @@ def test_action_illustrations_have_current_provenance():
     manifest = json.loads((assets / "captures.json").read_text())
     images = {item["name"]: item for item in manifest["captures"]}
     assert set(images) == set(capture_plan())
-    assert manifest["source_digests"] == source_digests(), "UI source changed: review and recapture affected tutorial images."
+    assert manifest["source_digests"] == source_digests(), (
+        "UI source changed: review and recapture affected tutorial images."
+    )
     for name, uses in capture_plan().items():
         record = images[name]
         assert record["uses"] == uses
         assert record["source_commit"] and record["captured_at"] and record["app"]
         assert record["viewport"] == {"width": 1440, "height": 900}
-        assert record["sha256"] == hashlib.sha256((assets / record["file"]).read_bytes()).hexdigest()
+        assert (
+            record["sha256"] == hashlib.sha256((assets / record["file"]).read_bytes()).hexdigest()
+        )
         if name.startswith("assistant-") and record["app"] == "AI Assistant":
             assert record["model_provenance"] == "live"
     for lesson in build_tutorials.CORE + build_tutorials.EXTRAS:
@@ -92,7 +99,13 @@ def test_lessons_cover_current_panels_and_range_contract():
     assert "Technical details" in pages["03-hardware-behavior.html"]
     assert "View details" in pages["diagnostics.html"]
     for page in pages.values():
-        for obsolete in ["Activity view", "Verification details", "timer Component", "5–8 minutes", "{{"]:
+        for obsolete in [
+            "Activity view",
+            "Verification details",
+            "timer Component",
+            "5–8 minutes",
+            "{{",
+        ]:
             assert obsolete not in page
 
 
@@ -123,7 +136,9 @@ def tutorial_run():
 def test_prepared_starts_reopen_with_the_required_progression(tutorial_run):
     directory, manifest = tutorial_run
     for name, stage in [("02", 0), ("03", 1), ("04", 2), ("05", 3), ("06", 4), ("07", 5)]:
-        revision = SpecRevision.from_package(SpecPackage.load(str(directory / f"{name}-start.spec")))
+        revision = SpecRevision.from_package(
+            SpecPackage.load(str(directory / f"{name}-start.spec"))
+        )
         assert revision.source_revision_hash == manifest["starts"][name]["source_revision_hash"]
         assert len(revision.components) == (0 if stage == 0 else 1 if stage < 3 else 3)
         assert len(revision.designs) == (1 if stage >= 4 else 0)
@@ -140,7 +155,9 @@ def test_prepared_starts_reopen_with_the_required_progression(tutorial_run):
         saved = SpecRevision.from_package(SpecPackage.load(str(directory / f"{key}-start.spec")))
         assert len(saved.components) == count
     files = [directory / f"{key}-start.spec" for key in manifest["starts"]]
-    assert len({SpecRevision.from_package(SpecPackage.load(str(path))).document_id for path in files}) == len(files)
+    assert len(
+        {SpecRevision.from_package(SpecPackage.load(str(path))).document_id for path in files}
+    ) == len(files)
 
 
 def test_starts_are_accepted_by_rtl_tlm_and_verification_consumers(tutorial_run):
@@ -170,9 +187,13 @@ def test_starts_are_accepted_by_rtl_tlm_and_verification_consumers(tutorial_run)
             assert response.is_success
             assert len(response.json()) == count
         plan = starts["implementation"]
-        preview = client.post(f"{base}/plans/{plan['plan_id']}/checkpoints/preview", json={
-            "layer": "implementation", "upstream_checkpoint_id": plan["c1"],
-        })
+        preview = client.post(
+            f"{base}/plans/{plan['plan_id']}/checkpoints/preview",
+            json={
+                "layer": "implementation",
+                "upstream_checkpoint_id": plan["c1"],
+            },
+        )
         assert preview.is_success
         assert preview.json()["blockers"] == []
         synthetic = json.loads((directory / "verification/synthetic-results.json").read_text())

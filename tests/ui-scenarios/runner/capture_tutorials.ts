@@ -61,7 +61,7 @@ config.spec_catalog.state_dir = join(output, 'catalog-state');
 const registry = join(output, 'services.json');
 writeFileSync(registry, JSON.stringify(config, null, 2));
 mkdirSync(join(output, 'scratch'), { recursive: true });
-const env = { ...process.env, SPEC_EDITOR_STATE_ROOT: join(state, 'spec-state'), SPEC_DOCUMENT_ROOT: output, ASSISTANT_STATE: join(state, 'assistant-state'), SPEC2GDS_SCRATCH_ROOT: join(output, 'scratch'), TMPDIR: join(output, 'scratch'), TMP: join(output, 'scratch'), TEMP: join(output, 'scratch') };
+const env = { ...process.env, SPEC_EDITOR_STATE_ROOT: join(state, 'spec-state'), SPEC_DOCUMENT_ROOT: output, ASSISTANT_STATE: join(state, 'assistant-state'), SPEC2GDS_SCRATCH_ROOT: join(output, 'scratch'), TMPDIR: join(output, 'scratch'), TMP: join(output, 'scratch'), TEMP: join(output, 'scratch'), ASSISTANT_MAX_STEPS_PER_TURN: '10' };
 Object.assign(process.env, { TMPDIR: env.TMPDIR, TMP: env.TMP, TEMP: env.TEMP });
 async function start(name: string, cmd: string, argv: string[], cwd: string, health: string) { const stream = createWriteStream(join(output, `${attempt}-${name}.log`)); const child = spawn(cmd, argv, { cwd, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] }); children.push(child); const secrets = Object.entries(env).filter(([key, value]) => /KEY|TOKEN|SECRET|PASSWORD/i.test(key) && typeof value === 'string' && value.length > 6).map(([, value]) => value as string);
     const redact = (line: string) => secrets.reduce((text, secret) => text.replaceAll(secret, '[REDACTED]'), line).replace(/([?&]token=)[^\s&#]+/g, '$1[REDACTED]');
@@ -90,8 +90,8 @@ async function api(path: string, body?: any) { const url = new URL(path, spec); 
 async function snapshot() { return api('/documents/snapshot'); }
 async function commit(operations: any[]) { const before = await snapshot(); return api('/transactions', { expected_source_revision_hash: before.source_revision_hash, operations }); }
 async function capture(page: Page, name: string, area: string, target?: Locator) { await page.evaluate(() => document.fonts.ready); if (target)
-    await target.scrollIntoViewIfNeeded(); const file = join(raw, `${name}.jpg`); await page.screenshot({ path: file, type: 'jpeg', quality: 90, fullPage: false, animations: 'disabled' }); const source = selected ? await snapshot() : null; const record = { name, file: relative(output, file), app: area, attempt, viewport: page.viewportSize(), theme: await page.locator('html').getAttribute('data-theme'), captured_at: new Date().toISOString(), source_commit: run.source_commit, source_tree_digest: run.source_tree_digest, editor_bundle_sha256: run.editor_bundle_sha256, document_id: source?.document_id, source_revision: source?.source_revision_hash, sha256: createHash('sha256').update(readFileSync(file)).digest('hex'), model_provenance: area === 'AI Assistant' ? 'live' : null }; manifest.captures = manifest.captures.filter((x: any) => x.name !== name); manifest.captures.push(record); save(); console.log(`Captured ${name}`); }
-async function open(page: Page, key: string) { selected = await api('/documents/open', { path: join(starts, `${key}-start.spec`) }); await page.goto(`${spec}/editor?owner_document_key=${encodeURIComponent(selected.owner_document_key)}&edit_context_id=${encodeURIComponent(selected.edit_access.context_id)}`); await expect(page.locator('.spec-paper')).toBeVisible(); if (await page.locator('html').getAttribute('data-theme') !== 'clean')
+    await target.scrollIntoViewIfNeeded(); const file = join(raw, `${name}.jpg`); await page.screenshot({ path: file, type: 'jpeg', quality: 90, fullPage: false, animations: 'disabled' }); const source = selected ? await snapshot() : null; const htmlTheme = await page.locator('html').getAttribute('data-theme'); const appTheme = !htmlTheme ? await page.evaluate(() => document.querySelector('[data-theme]')?.getAttribute('data-theme') || null) : null; const record = { name, file: relative(output, file), app: area, attempt, viewport: page.viewportSize(), theme: htmlTheme || appTheme || null, captured_at: new Date().toISOString(), source_commit: run.source_commit, source_tree_digest: run.source_tree_digest, editor_bundle_sha256: run.editor_bundle_sha256, document_id: source?.document_id, source_revision: source?.source_revision_hash, sha256: createHash('sha256').update(readFileSync(file)).digest('hex'), model_provenance: area === 'AI Assistant' ? 'live' : null }; manifest.captures = manifest.captures.filter((x: any) => x.name !== name); manifest.captures.push(record); save(); console.log(`Captured ${name}`); }
+async function open(page: Page, key: string) { selected = await api('/documents/open', { path: join(starts, `${key}-start.spec`) }); await page.goto(`${spec}/editor?owner_document_key=${encodeURIComponent(selected.owner_document_key)}&edit_context_id=${encodeURIComponent(selected.edit_access.context_id)}`); await expect(page.locator('.spec-paper')).toBeVisible(); if (await page.locator('html').getAttribute('data-theme') !== 'obsidian')
     await page.getByRole('button', { name: /Switch theme/ }).click(); }
 const component = (page: Page, id = 'add16') => page.locator(`#component-${id.replaceAll('_', '-')}`);
 async function options(area: Locator, label: string) { await area.getByRole('button', { name: 'Options', exact: true }).click(); await area.getByRole('menuitem', { name: label, exact: true }).click(); }
@@ -101,7 +101,7 @@ async function closePanel(page: Page) { const close = page.getByRole('button', {
     await close.click(); }
 async function editSV(page: Page, text: string) { const section = component(page).locator('.spec-sv-section'); await section.getByRole('button', { name: 'Options for SystemVerilog', exact: true }).click(); await section.getByRole('menuitem', { name: 'Edit', exact: true }).click(); await section.locator('.cm-content').fill(text); await section.getByRole('button', { name: 'Save to Spec', exact: true }).click(); await expect(section.locator('.spec-sv-source')).toContainText(text); }
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
-const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, colorScheme: 'light', acceptDownloads: true });
+const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, colorScheme: 'dark', acceptDownloads: true });
 await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
 const page = await context.newPage();
 page.setDefaultTimeout(20000);
@@ -121,7 +121,7 @@ try {
     await start('spec', join(root, '.venv/bin/spec2gds-spec-service'), ['--service-config', registry], root, `${spec}/health`);
     await group('spec', async () => {
         await page.goto(spec);
-        if (await page.locator('html').getAttribute('data-theme') !== 'clean')
+        if (await page.locator('html').getAttribute('data-theme') !== 'obsidian')
             await page.getByRole('button', { name: /Switch theme/ }).click();
         await page.getByRole('menuitem', { name: 'File', exact: true }).click();
         await page.getByRole('menuitem', { name: /New Spec/ }).click();
@@ -326,6 +326,9 @@ try {
         const c = await context.newPage();
         await c.goto(launched.editor_url);
         await expect(c.getByTestId('circuit-canvas')).toBeVisible();
+        if (await c.locator('.standalone-shell').getAttribute('data-theme') !== 'obsidian') {
+            await c.getByRole('button', { name: /Switch theme/ }).click();
+        }
         await expect(c.locator('.react-flow__node[data-id^="u_"]')).toHaveCount(2);
         await cmenu(c, 'View', 'Fit circuit');
         await cmenu(c, 'Edit', 'Begin editing');
@@ -378,6 +381,9 @@ try {
         await commit([{ type: 'create_entity', kind: 'design', name: 'Reuse practice', entity_id: 'reuse_practice', entry_design: true }, { type: 'upsert_instance', design: 'design:reuse_practice', instance: { name: 'u_left', component_vlnv: ref.vlnv } }, { type: 'upsert_instance', design: 'design:reuse_practice', instance: { name: 'u_right', component_vlnv: ref.vlnv } }]);
         const parent = await api('/circuit-designer/launch', { entity_kind: 'design', entity_id: 'reuse_practice' });
         await page.goto(parent.editor_url);
+        if (await page.locator('.standalone-shell').getAttribute('data-theme') !== 'obsidian') {
+            await page.getByRole('button', { name: /Switch theme/ }).click();
+        }
         await expect(page.locator('.react-flow__node')).toHaveCount(2);
         await capture(page, 'circuit-hierarchy', 'Circuit Designer');
     });
@@ -502,7 +508,13 @@ try {
         await expect(b.locator('html')).toHaveAttribute('data-spec2gds-launch', 'ready', { timeout: 60000 });
         await b.locator('[data-composer-input][contenteditable="true"]').fill('Change only the existing 16-bit modulo adder explanation: append the sentence "Arithmetic wraps modulo 65536." Keep all interfaces, SystemVerilog, other explanations, and connections unchanged. Submit this text-only edit for restricted content review.');
         await b.getByRole('button', { name: 'Send message', exact: true }).click();
-        await expect.poll(async () => (await api('/documents/view')).activity.pending_review_count, { timeout: 180000 }).toBeGreaterThan(0);
+        await expect.poll(async () => {
+            const pending = b.locator('[data-s2g-architecture-review="pending"]').last();
+            if (await pending.isVisible()) {
+                await pending.getByRole('button', { name: 'Approve architecture', exact: true }).click();
+            }
+            return (await api('/documents/view')).activity.pending_review_count;
+        }, { timeout: 180000 }).toBeGreaterThan(0);
         await page.locator('#editor-activity-trigger').click();
         await expect(page.getByText('AI Assistant submission history', { exact: true })).toBeVisible();
         await expect(page.getByRole('button', { name: 'Options for Assistant submission', exact: true }).first()).toBeVisible({ timeout: 180000 });
