@@ -91,6 +91,7 @@ class SectionIndexEntry(StrictModel):
     path: str
     media_type: str
     sha256: str
+    usage: typing.Literal["implementation", "reference"] = "implementation"
 
     @pydantic.field_validator("section_id")
     @classmethod
@@ -111,8 +112,14 @@ class SectionIndexEntry(StrictModel):
 class SectionIndex(StrictModel):
     """Versioned index for persisted entity sections."""
 
-    version: typing.Literal[1] = SECTION_INDEX_VERSION
+    version: typing.Literal[1, 2] = SECTION_INDEX_VERSION
     sections: list[SectionIndexEntry] = pydantic.Field(default_factory=list)
+
+    @pydantic.model_validator(mode="after")
+    def _usage_version(self) -> "SectionIndex":
+        if self.version == 1 and any(item.usage != "implementation" for item in self.sections):
+            raise ValueError("Reference SV requires entity-section index version 2.")
+        return self
 
 
 @dataclass(frozen=True)
@@ -128,6 +135,7 @@ class SectionIR:
     source_path: str
     source_sha256: str
     content: str
+    usage: typing.Literal["implementation", "reference"] = "implementation"
 
 
 def _json_bytes(value: typing.Any) -> bytes:
@@ -191,8 +199,9 @@ def load_entity_sections(manifest: typing.Any, files: typing.Mapping[str, bytes]
         else:  # pragma: no cover - registry currently has one persisted type.
             content = data.decode("utf-8")
         result.append(SectionIR(
-            entry.section_id, entry.section_type, entry.type_version, definition.title,
-            entry.parent, entry.media_type, entry.path, entry.sha256, content,
+            entry.section_id, entry.section_type, entry.type_version,
+            "SystemVerilog reference — excluded from implementation" if entry.usage == "reference" else definition.title,
+            entry.parent, entry.media_type, entry.path, entry.sha256, content, entry.usage,
         ))
     actual_paths = {path for path in files if path.startswith(f"{SECTION_ROOT}/")}
     if actual_paths != indexed_paths:
@@ -289,6 +298,7 @@ def upsert_systemverilog_section(package: typing.Any, parent: EntityRef, content
     entry = SectionIndexEntry(
         section_id=identity, section_type="sv", type_version=1, parent=parent,
         path=path, media_type=SV_MEDIA_TYPE, sha256=sha256_digest(data),
+        usage=existing.usage if existing else "implementation",
     )
     current = SectionIndex.model_validate_json(package.files[SECTION_INDEX_PATH]) if SECTION_INDEX_PATH in package.files else SectionIndex()
     entries = [item for item in current.sections if not (item.parent == parent and item.section_type == "sv")]
@@ -298,11 +308,32 @@ def upsert_systemverilog_section(package: typing.Any, parent: EntityRef, content
         if item.parent == parent and item.section_type == "sv":
             package.files.pop(item.path, None)
     package.files[path] = data
-    package.files[SECTION_INDEX_PATH] = _json_bytes(SectionIndex(sections=entries))
-    schemas = [item for item in package.manifest.annotation_schemas if item.namespace != SECTION_NAMESPACE]
-    schemas.append(AnnotationSchemaEntry(namespace=SECTION_NAMESPACE, version=1, path_prefix=SECTION_ROOT))
-    package.manifest = package.manifest.model_copy(update={"annotation_schemas": schemas})
+    _write_section_index(package, entries, current.version)
     return next(item for item in load_entity_sections(package.manifest, package.files) if item.section_id == identity)
+
+
+def _write_section_index(package: typing.Any, entries: list[SectionIndexEntry], previous_version: int = 1) -> None:
+    """Keep legacy bytes readable and fail closed on reference-SV metadata."""
+    version = 2 if previous_version == 2 or any(item.usage == "reference" for item in entries) else 1
+    value = SectionIndex(version=version, sections=entries).model_dump(mode="json")
+    if version == 1:
+        for entry in value["sections"]:
+            entry.pop("usage", None)
+    package.files[SECTION_INDEX_PATH] = _json_bytes(value)
+    schemas = [item for item in package.manifest.annotation_schemas if item.namespace != SECTION_NAMESPACE]
+    schemas.append(AnnotationSchemaEntry(namespace=SECTION_NAMESPACE, version=version, path_prefix=SECTION_ROOT))
+    package.manifest = package.manifest.model_copy(update={"annotation_schemas": schemas})
+
+
+def set_section_usage(package: typing.Any, parent: EntityRef, section_id: str, usage: typing.Literal["implementation", "reference"]) -> None:
+    """Change an SV Section's role without changing its content or identity."""
+    load_entity_sections(package.manifest, package.files)
+    index = SectionIndex.model_validate_json(package.files[SECTION_INDEX_PATH])
+    match = next((item for item in index.sections if item.section_id == section_id and item.parent == parent and item.section_type == "sv"), None)
+    if match is None:
+        raise ValueError("Unknown SystemVerilog Section.")
+    replacement = SectionIndexEntry.model_validate({**match.model_dump(), "usage": usage})
+    _write_section_index(package, [replacement if item.section_id == section_id else item for item in index.sections], index.version)
 
 
 def delete_entity_section(package: typing.Any, parent: EntityRef, section_type: str, section_id: str | None = None) -> None:
@@ -323,9 +354,10 @@ def _write_remaining_sections(package: typing.Any, remaining: list[SectionIR]) -
     if remaining:
         entries = [SectionIndexEntry(
             section_id=item.section_id, section_type=item.section_type, type_version=item.type_version,
-            parent=item.parent, path=item.source_path, media_type=item.media_type, sha256=item.source_sha256,
+            parent=item.parent, path=item.source_path, media_type=item.media_type, sha256=item.source_sha256, usage=item.usage,
         ) for item in remaining]
-        package.files[SECTION_INDEX_PATH] = _json_bytes(SectionIndex(sections=entries))
+        previous = SectionIndex.model_validate_json(package.files[SECTION_INDEX_PATH]).version
+        _write_section_index(package, entries, previous)
     else:
         package.files.pop(SECTION_INDEX_PATH, None)
         package.manifest = package.manifest.model_copy(update={

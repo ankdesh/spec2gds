@@ -47,19 +47,25 @@ export class HttpSourceDesignProvider {
     });
   }
 
-  preview(binding: CircuitSourceBindingV1, requestId: string, candidate: CircuitDocument): Promise<CircuitSourceSyncResult> {
+  transition(binding: CircuitSourceBindingV1, action: "prepare" | "discard", requestId: string): Promise<CircuitSourceSyncResult> {
+    return this.call(`internal-design/${action}`, { request_id: requestId, base_source_revision_hash: binding.base_source_revision_hash });
+  }
+
+  preview(binding: CircuitSourceBindingV1, requestId: string, candidate: CircuitDocument, svDisposition?: "retain_reference" | "remove"): Promise<CircuitSourceSyncResult> {
     return this.call("preview", {
       request_id: requestId,
       base_source_revision_hash: binding.base_source_revision_hash,
       candidate_document: candidate,
+      ...(svDisposition ? { sv_disposition: svDisposition } : {}),
     });
   }
 
-  commit(binding: CircuitSourceBindingV1, requestId: string, candidate: CircuitDocument): Promise<CircuitSourceSyncResult> {
+  commit(binding: CircuitSourceBindingV1, requestId: string, candidate: CircuitDocument, svDisposition?: "retain_reference" | "remove"): Promise<CircuitSourceSyncResult> {
     return this.call("commit", {
       request_id: requestId,
       base_source_revision_hash: binding.base_source_revision_hash,
       candidate_document: candidate,
+      ...(svDisposition ? { sv_disposition: svDisposition } : {}),
     });
   }
 
@@ -98,4 +104,5 @@ export interface SourceCommitBody {
   batch: CircuitOperationBatch;
   lease_id: string;
   proposal_id?: string;
+  sv_disposition?: "retain_reference" | "remove";
 }

@@ -160,16 +160,24 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
     batch: CircuitOperationBatch,
     leaseId: string,
     proposalId?: string,
+    svDisposition?: "retain_reference" | "remove",
   ): Promise<CircuitSourceSyncResponse> {
     return await this.sendJson(`${this.documentUrl(documentId)}/source/commit`, "POST", {
       batch,
       lease_id: leaseId,
       ...(proposalId ? { proposal_id: proposalId } : {}),
+      ...(svDisposition ? { sv_disposition: svDisposition } : {}),
     }) as CircuitSourceSyncResponse;
   }
 
   async reloadSource(documentId: string): Promise<CircuitSourceSyncResponse> {
     return await this.sendJson(`${this.documentUrl(documentId)}/source/reload`, "POST", {}) as CircuitSourceSyncResponse;
+  }
+
+  async transitionInternalDesign(documentId: string, action: "prepare" | "discard", leaseId: string, requestId: string): Promise<CircuitSourceSyncResponse> {
+    return await this.sendJson(`${this.documentUrl(documentId)}/source/internal-design/${action}`, "POST", {
+      lease_id: leaseId, request_id: requestId,
+    }) as CircuitSourceSyncResponse;
   }
 
   async getLease(documentId: string): Promise<EditLease | null> {

@@ -115,17 +115,18 @@ export function DesignTopologyLiveView({
   }, [compact]);
   const size = compact ? componentPreviewSize(rendered?.width ?? 288, rendered?.height ?? 88, availableWidth) : undefined;
   const cardClass = `spec-topology-card${compact ? " spec-topology-card--interface" : ""}`;
-  const cardStyle = { "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas,
-    ...(size ? { width: size.cardWidth } : {}) } as React.CSSProperties;
+  const cardStyle = { "--spec-preview-canvas": getCircuitTheme(themeId).colors.canvas } as React.CSSProperties;
   const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
-  const launchButton = onOpenCircuit && (
-    <button onClick={onOpenCircuit} type="button">
-      Open in Circuit Designer <span aria-hidden="true">↗</span>
-    </button>
+  const launchOptions = onOpenCircuit && (
+    <div className="spec-topology-card__actions">
+      <OptionsMenu label={label} triggerLabel="Options for circuit preview">
+        <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>
+      </OptionsMenu>
+    </div>
   );
   const statusHeader = <figcaption>
     <div><strong>{label}</strong></div>
-    {launchButton && <div className="spec-topology-card__actions">{launchButton}</div>}
+    {launchOptions}
   </figcaption>;
 
   useEffect(() => {
@@ -192,7 +193,6 @@ export function DesignTopologyLiveView({
           <span>Derived from the current specification revision</span>
         </div>
         <div className="spec-topology-card__actions">
-          {launchButton}
           <OptionsMenu label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
             {onOpenCircuit && <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
             <button role="menuitem" disabled={!imageUrl} onClick={() => setExpanded(true)} type="button">Expand</button>

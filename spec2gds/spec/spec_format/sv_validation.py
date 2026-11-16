@@ -24,7 +24,7 @@ def cached_revision_sections(revision: SpecRevision, section_ids: set[str] | Non
     """Read checked results without finding or starting a compiler."""
     results = []
     for section in revision.entity_sections:
-        if section.section_type != "sv" or section_ids is not None and section.section_id not in section_ids:
+        if section.section_type != "sv" or section.usage != "implementation" or section_ids is not None and section.section_id not in section_ids:
             continue
         # A containing Design's lint cannot establish a leaf Section's status.
         found = next((result for key, result in reversed(tuple(_CACHE.items()))
@@ -109,7 +109,7 @@ def _validate_revision_sections(
     """Validate selected SV sections in generated context when Verilator exists."""
     sections = tuple(
         item for item in revision.entity_sections
-        if item.section_type == "sv" and (section_ids is None or item.section_id in section_ids)
+        if item.section_type == "sv" and item.usage == "implementation" and (section_ids is None or item.section_id in section_ids)
     )
     if not sections:
         return ()
@@ -201,6 +201,7 @@ def _lint_standalone_component(
         range_text = "" if port.width == 1 else f" {port.width}"
         ports.append(f"    {directions[port.direction]}{range_text} {port.name}")
     from dataclasses import asdict
+
     from spec2gds.spec.spec_format.rtl_interface import module_declaration
     declaration = module_declaration("section_lint", [
         {"name": port.name, "direction": port.direction,

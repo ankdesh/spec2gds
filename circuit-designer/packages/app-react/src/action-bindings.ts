@@ -36,6 +36,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("export-svg", "File", "Export SVG", "Export the circuit as an SVG image."),
   command("export-png", "File", "Export PNG", "Export the circuit as a PNG image."),
   command("begin-edit", "Edit", "Begin editing", "Acquire a private edit lease for this circuit."),
+  command("create-internal-design", "Edit", "Create internal Design", "Begin editing a Component without an internal Design first. Requires Spec edit access. The new Design stays private until Save to Spec."),
   command("undo", "Edit", "Undo", "Undo the most recent private draft operation."),
   command("redo", "Edit", "Redo", "Redo the most recently undone draft operation."),
   command("delete-selection", "Edit", "Delete selected", "Delete the selected instance with its connectivity, or the selected net."),

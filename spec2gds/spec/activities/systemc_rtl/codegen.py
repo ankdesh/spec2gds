@@ -125,7 +125,7 @@ class _Assembler:
         self.sections = {
             (item.parent.entity_kind, item.parent.entity_id): item
             for item in spec.low.entity_sections
-            if item.section_type == "sv"
+            if item.section_type == "sv" and item.usage == "implementation"
         }
         self.files: dict[str, bytes] = {}
         self.section_records: list[dict[str, str]] = []

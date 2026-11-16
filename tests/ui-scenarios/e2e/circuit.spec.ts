@@ -47,7 +47,9 @@ test("opens exact Spec targets from the Circuit Designer menu and embedded previ
           .filter({ hasText: name }).filter({ hasText: status }).click();
       } else {
         const anchor = `${ref.entity_kind}-${ref.entity_id.replaceAll("_", "-")}`;
-        await page.locator(`#${anchor} .spec-topology-card`).getByRole("button", { name: "Open in Circuit Designer", exact: true }).click();
+        const preview = page.locator(`#${anchor} .spec-topology-card`);
+        await preview.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+        await preview.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
       }
       const circuit = await launched;
       await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
@@ -63,7 +65,7 @@ test("opens exact Spec targets from the Circuit Designer menu and embedded previ
       if (target === component) expect(binding.editable_design_id).toBe(composite.internal_design.entity_id);
       if (target === leaf) {
         await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
-        await expect(circuit.getByRole("menuitem", { name: "Begin editing", exact: true })).toBeDisabled();
+        await expect(circuit.getByRole("menuitem", { name: "Begin editing", exact: true })).toBeEnabled();
       }
       expect((await stack.snapshot()).source_revision_hash).toBe(snapshot.source_revision_hash);
       expect(stack.archive(stack.path())).toEqual(before);
@@ -206,14 +208,159 @@ test("a stale Circuit save cannot replace a later Spec edit", async ({ page, sta
   await expect(page.locator(".save-error")).toHaveCount(0);
 });
 
-test("leaf Component Circuit previews remain read-only", async ({ page, stack }) => {
-  const created = await stack.json("/documents/create", { path: stack.path(), document_id: "leaf_source" });
-  const snapshot = (await stack.commit([{ type: "create_entity", kind: "component", name: "leaf" }], created)).snapshot;
+for (const theme of ["blueprint-slate", "obsidian"]) {
+  test(`creates a blank Component internal Design with an empty first save in ${theme}`, async ({ page: specPage, stack }) => {
+    const created = await stack.json("/documents/create", { path: stack.path(), document_id: "blank_source" });
+    const snapshot = (await stack.commit([{ type: "create_entity", kind: "component", name: "Blank Component" }], created)).snapshot;
+    const ref = snapshot.components[0].ref;
+    await specPage.goto(`${stack.spec}/editor?owner_document_key=${encodeURIComponent(created.owner_document_key)}&edit_context_id=${encodeURIComponent(created.edit_access.context_id)}`);
+    await expect(specPage.locator(".spec-paper")).toBeVisible();
+    const opened = specPage.waitForEvent("popup");
+    if (theme === "blueprint-slate") {
+      await specPage.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+      await specPage.getByRole("menu", { name: "Circuit Designer", exact: true }).getByRole("menuitem").filter({ hasText: "Blank Component" }).click();
+    } else {
+      const preview = specPage.locator(".spec-topology-card");
+      await preview.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
+      await preview.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+    }
+    const page = await opened;
+    await expect(page.getByTestId("circuit-canvas")).toBeVisible();
+    if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /^Switch theme/ }).click();
+    await page.setViewportSize({ width: 540, height: 820 });
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
+    await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toHaveAttribute("title", "Select Begin editing first.");
+    await page.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Components", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "New local component", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    const before = stack.archive(stack.path());
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitem", { name: "Create internal Design", exact: true }).focus();
+    if (theme === "obsidian") {
+      await page.route("**/source/internal-design/prepare", async route => {
+        await route.fetch();
+        await route.abort("failed");
+      }, { times: 1 });
+    } else {
+      await page.route("**/source/internal-design/prepare", route => route.fulfill({
+        status: 200, contentType: "application/json", body: JSON.stringify({ accepted: false,
+          source_revision_hash: snapshot.source_revision_hash,
+          diagnostics: [{ severity: "error", code: "source_projection_failed", message: "Preparation rejected for this check." }] }),
+      }), { times: 1 });
+    }
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".notice")).toContainText("Could not confirm Design preparation");
+    await menu(page, "File", "Cancel changes");
+    await expect(page.locator(".notice")).toContainText("Draft cancelled");
+    expect(stack.archive(stack.path())).toEqual(before);
+    await menu(page, "Edit", "Begin editing");
+    await menu(page, "Edit", "Create internal Design");
+    await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toBeEnabled();
+    const saveBounds = await page.getByRole("button", { name: "Save to Spec", exact: true }).boundingBox();
+    expect(saveBounds!.x + saveBounds!.width).toBeLessThanOrEqual(540);
+    await page.screenshot({ path: test.info().outputPath(`pending-design-${theme}.png`) });
+    expect(stack.archive(stack.path())).toEqual(before);
+    await menu(page, "File", "Cancel changes");
+    await expect(page.locator(".notice")).toContainText("Draft cancelled");
+    expect(stack.archive(stack.path())).toEqual(before);
+    await menu(page, "Edit", "Begin editing");
+    await menu(page, "Edit", "Create internal Design");
+    await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+    await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+    const saved = await stack.snapshot();
+    expect(saved.designs).toHaveLength(1);
+    expect(saved.designs[0].instances).toHaveLength(0);
+    expect(saved.entry_designs).toHaveLength(0);
+    expect(saved.component_compositions[0].component).toEqual(ref);
+    expect(saved.component_compositions[0].internal_design).toEqual(saved.designs[0].ref);
+    await expect(specPage.locator(".spec-topology-card")).not.toContainText("Interface preview (read-only)");
+    await page.reload();
+    await menu(page, "Edit", "Begin editing");
+    await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
+    await page.keyboard.press("Escape");
+    await page.screenshot({ path: test.info().outputPath(`internal-design-${theme}.png`) });
+  });
+}
+
+for (const choice of ["Retain SV", "Remove SV"]) {
+  test(`creates an internal Design with ${choice}, cancelled saving, ports, and source-safe retries`, async ({ page, stack }) => {
+    const created = await stack.json("/documents/create", { path: stack.path(), document_id: "sv_source" });
+    let snapshot = (await stack.commit([{ type: "create_entity", kind: "component", name: "SV Component" }], created)).snapshot;
+    const ref = snapshot.components[0].ref;
+    snapshot = (await stack.json("/transactions", { expected_source_revision_hash: snapshot.source_revision_hash, validation_mode: "authoring", operations: [
+      { type: "add_component_port", component: ref, port: { name: "a", family: "wire", direction: "in", range: "7:0" } },
+      { type: "upsert_entity_section", parent: ref, section_type: "sv", type_version: 1, payload: { content: "assign retained_broken = ;" } },
+    ] })).snapshot;
+    await launch(page, stack, "component", ref.entity_id);
+    await menu(page, "Edit", "Begin editing");
+    await menu(page, "Edit", "Create internal Design");
+    const before = stack.archive(stack.path());
+    await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
+    await page.getByRole("button", { name: "New Boundary Port", exact: true }).click();
+    await page.setViewportSize({ width: 540, height: 820 });
+    if (choice === "Remove SV") await page.getByRole("button", { name: /^Switch theme/ }).click();
+    await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Save the internal Design" })).toBeVisible();
+    await expect(page.getByRole("button", { name: choice, exact: true })).toBeInViewport();
+    await page.screenshot({ path: test.info().outputPath(`sv-choice-${choice.replaceAll(" ", "-")}.png`) });
+    await page.getByRole("button", { name: "Cancel saving", exact: true }).click();
+    expect(stack.archive(stack.path())).toEqual(before);
+    await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+    // Let the real save finish, then withhold its response to exercise receipt retry.
+    let requestId: string | undefined;
+    await page.route("**/source/commit", async route => {
+      requestId = route.request().postDataJSON().batch.request_id;
+      await route.fetch();
+      await route.abort("failed");
+    }, { times: 1 });
+    await page.getByRole("button", { name: choice, exact: true }).click();
+    await expect(page.locator(".save-error")).toContainText("Retry Save to Spec");
+    const committed = stack.archive(stack.path());
+    const retry = page.waitForRequest(request => request.url().endsWith("/source/commit"));
+    await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
+    expect((await retry).postDataJSON().batch.request_id).toBe(requestId);
+    await expect(page.locator(".notice")).toContainText("Changes saved to the source");
+    expect(stack.archive(stack.path())).toEqual(committed);
+    const saved = await stack.snapshot();
+    expect(saved.designs).toHaveLength(1);
+    expect(saved.components[0].ports).toHaveLength(2);
+    if (choice === "Retain SV") {
+      expect(saved.entity_sections[0].usage).toBe("reference");
+      expect(saved.entity_sections[0].content).toBe("assign retained_broken = ;");
+    } else expect(saved.entity_sections).toHaveLength(0);
+    await openSpec(page, stack);
+    if (choice === "Retain SV") await expect(page.getByText("Reference only · excluded from implementation", { exact: true })).toBeVisible();
+  });
+}
+
+test("a displaced internal Design draft can be discarded without releasing the successor's lease", async ({ page, context, stack }) => {
+  const created = await stack.json("/documents/create", { path: stack.path(), document_id: "pending_takeover" });
+  const snapshot = (await stack.commit([{ type: "create_entity", kind: "component", name: "Pending Component" }], created)).snapshot;
   const launched = await launch(page, stack, "component", snapshot.components[0].ref.entity_id);
-  expect(launched.source_binding.writable).toBe(false);
-  await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
-  await expect(page.getByRole("menuitem", { name: "Begin editing", exact: true })).toBeDisabled();
-  expect((await stack.snapshot()).source_revision_hash).toBe(snapshot.source_revision_hash);
+  const before = stack.archive(stack.path());
+  await menu(page, "Edit", "Begin editing");
+  await menu(page, "Edit", "Create internal Design");
+  await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toBeEnabled();
+  const second = await context.newPage();
+  await second.goto(launched.editor_url);
+  await second.getByRole("button", { name: "Take over editing", exact: true }).click();
+  await second.getByRole("dialog").getByRole("button", { name: "Take over editing", exact: true }).click();
+  await expect(second.locator(".notice")).toContainText("Editing taken over");
+  const endpoint = `${stack.circuit}/api/circuit-designer/v1/documents/${launched.document_id}/lock`;
+  const successor = (await (await fetch(endpoint)).json()).lease;
+  await expect(page.locator(".notice")).toContainText("Editing permission was lost");
+  await menu(page, "File", "Cancel changes");
+  await expect(page.locator(".notice")).toContainText("Draft cancelled");
+  expect((await (await fetch(endpoint)).json()).lease.lease_id).toBe(successor.lease_id);
+  expect(stack.archive(stack.path())).toEqual(before);
+  await menu(second, "Edit", "Create internal Design");
+  await expect(second.getByRole("button", { name: "Save to Spec", exact: true })).toBeEnabled();
+  await menu(second, "File", "Cancel changes");
+  expect(stack.archive(stack.path())).toEqual(before);
 });
 
 test("standalone circuit roundtrip and malformed open preserve authoritative data", async ({ page, stack }) => {

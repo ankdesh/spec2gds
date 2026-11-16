@@ -12,7 +12,7 @@ const action = (commandId: CircuitActionId): CircuitMenuEntry<CircuitActionId> =
 });
 const menus: MenuDefinition[] = [
   { id: "file", label: "File", entries: [action("new-document"), action("open-document"), { kind: "separator" }, action("save-document"), action("cancel-changes"), { kind: "separator" }, { kind: "submenu", id: "download", label: "Download", entries: [action("download-json"), action("export-svg"), action("export-png")] }] },
-  { id: "edit", label: "Edit", entries: [action("begin-edit"), { kind: "separator" }, action("undo"), action("redo"), { kind: "separator" }, action("delete-selection"), { kind: "separator" }, { kind: "submenu", id: "preferences", label: "Preferences", entries: [action("open-preferences")] }] },
+  { id: "edit", label: "Edit", entries: [action("begin-edit"), action("create-internal-design"), { kind: "separator" }, action("undo"), action("redo"), { kind: "separator" }, action("delete-selection"), { kind: "separator" }, { kind: "submenu", id: "preferences", label: "Preferences", entries: [action("open-preferences")] }] },
   { id: "components", label: "Components", entries: [action("open-component-catalog"), action("create-local-component"), action("review-proposals"), { kind: "separator" }, action("open-child-design")] },
   { id: "selection", label: "Selection", entries: [action("select-all"), action("clear-selection"), action("center-selection")] },
   { id: "connect", label: "Connect", entries: [action("open-connect")] },
@@ -37,17 +37,20 @@ export interface CircuitMenuBarProps {
   onOpenChange?: (open: boolean) => void;
   sourceBound?: boolean;
   sourceSaveLabel?: string;
+  createInternalDesignHint?: string;
   tools: CircuitToolContribution[];
   toolsEnabled: boolean;
   onRunTool: (toolId: string) => void;
 }
 
-export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, tools, toolsEnabled, onRunTool }: CircuitMenuBarProps) {
+export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, createInternalDesignHint, tools, toolsEnabled, onRunTool }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
   const rootRef = useRef<HTMLElement>(null);
   const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || tools.length).map((menu) => ({
     ...menu,
-    entries: menu.id === "tools" ? toolMenuEntries(tools) : menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "save-document" && sourceBound
+    entries: menu.id === "tools" ? toolMenuEntries(tools) : menu.entries.map((entry) => entry.kind === "action" && entry.commandId === "create-internal-design"
+      ? { ...entry, description: createInternalDesignHint ?? definitions.get("create-internal-design")?.description }
+      : entry.kind === "action" && entry.commandId === "save-document" && sourceBound
       ? { ...entry, label: sourceSaveLabel ?? "Save to Spec" }
       : entry.kind === "action" && entry.commandId === "toggle-inspector"
       ? { ...entry, checked: inspectorOpen, checkType: "checkbox" as const }
@@ -56,7 +59,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
       : entry.kind === "action" && entry.commandId === "review-proposals"
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
-  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, tools]);
+  })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, createInternalDesignHint, tools]);
   const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 

@@ -76,6 +76,9 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     label: binding.source_name || "Specification package",
     revision: binding.base_source_revision_hash,
     writable: binding.writable,
+    pendingInternalDesign: binding.pending_internal_design,
+    svChoiceRequired: binding.sv_choice_required,
+    interfacePreview: binding.source_entity.entity_kind === "component" && !binding.editable_design_id,
     capabilities: binding.capabilities,
     message: binding.message,
     saveLabel: "Save to Spec",
@@ -93,8 +96,18 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
       const result = await backend.recoverSource(documentId, expectedLeaseId, clientId);
       return { lease: result.lease, snapshot: result.snapshot, state: state(result.binding) };
     },
-    async commit(documentId, batch, leaseId, proposalId) {
-      const result = await backend.commitSource(documentId, batch, leaseId, proposalId);
+    async prepareInternalDesign(documentId, leaseId, requestId) {
+      const result = await backend.transitionInternalDesign(documentId, "prepare", leaseId, requestId);
+      return { accepted: result.accepted, revision: result.source_revision_hash, diagnostics: result.diagnostics,
+        state: state(result.binding), snapshot: result.snapshot, lease: result.lease };
+    },
+    async discardInternalDesign(documentId, leaseId, requestId) {
+      const result = await backend.transitionInternalDesign(documentId, "discard", leaseId, requestId);
+      return { accepted: result.accepted, revision: result.source_revision_hash, diagnostics: result.diagnostics,
+        state: state(result.binding), snapshot: result.snapshot, lease: result.lease };
+    },
+    async commit(documentId, batch, leaseId, proposalId, svDisposition) {
+      const result = await backend.commitSource(documentId, batch, leaseId, proposalId, svDisposition);
       return {
         accepted: result.accepted,
         revision: result.source_revision_hash,

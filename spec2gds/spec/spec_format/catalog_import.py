@@ -32,7 +32,7 @@ from spec2gds.spec.spec_format.naming import (
     unique_name,
     validate_package_names,
 )
-from spec2gds.spec.spec_format.sections import upsert_systemverilog_section
+from spec2gds.spec.spec_format.sections import set_section_usage, upsert_systemverilog_section
 from spec2gds.spec.spec_format.source_edits import set_entity_metadata
 
 ORIGIN_ROOT = "annotations/catalog-imports"
@@ -227,7 +227,7 @@ def _fingerprint(revision: SpecRevision, ref: EntityRef) -> str:
     )
     data = {
         "xml": etree.tostring(xml, method="c14n").decode(),
-        "sections": [s.content for s in revision.entity_sections_for(ref, "sv")],
+        "sections": [s.content if s.usage == "implementation" else {"content": s.content, "usage": s.usage} for s in revision.entity_sections_for(ref, "sv")],
     }
     if ref.entity_kind == "component":
         internal = revision.internal_design(revision.resolve(ref))
@@ -471,6 +471,8 @@ def prepare_import(
                 section.content,
                 f"import_{seed}_{section.section_id}",
             )
+            if section.usage == "reference":
+                set_section_usage(target, refs[section.parent.entity_id], f"import_{seed}_{section.section_id}", "reference")
     for entity in entities:
         if entity.ref.entity_kind == "design" and entity.ref.entity_id not in reused_ids:
             for loader, writer in (

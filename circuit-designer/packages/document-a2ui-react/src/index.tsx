@@ -1296,7 +1296,8 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
       <header>
         <div>
           <h4 tabIndex={-1} id={`${section.section_id}-title`}>{section.title}</h4>
-          {!externalDiagnostics && <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
+          {section.payload.usage === "reference" && <span>Reference only · excluded from implementation</span>}
+          {section.payload.usage !== "reference" && !externalDiagnostics && <span className={`spec-validation-badge spec-validation-badge--${section.validation_status}`}>
             {{ verified: "Section lint passed", warnings: "Lint warnings", unverified: "Not verified", errors: "Lint failed" }[section.validation_status]}
           </span>}
         </div>

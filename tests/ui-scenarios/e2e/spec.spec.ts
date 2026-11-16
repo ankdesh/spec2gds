@@ -736,7 +736,7 @@ test("duplicate names keep the form and saved Spec intact", async ({ page, stack
   expect(readFileSync(stack.path())).toEqual(before);
 });
 
-test("explicit port ranges preserve invalid drafts and compact previews adapt to available width", async ({ page, stack }) => {
+test("explicit port ranges preserve invalid drafts and preview containers span the available width", async ({ page, stack }) => {
   await newSpec(page, stack);
   const component = await addComponent(page, stack);
   const before = await stack.snapshot();
@@ -802,8 +802,10 @@ test("explicit port ranges preserve invalid drafts and compact previews adapt to
           const card = img.closest("figure")!;
           const viewport = img.parentElement!;
           const box = img.getBoundingClientRect(), cb = card.getBoundingClientRect(), vb = viewport.getBoundingClientRect();
+          const parentStyle = getComputedStyle(card.parentElement!);
+          const available = card.parentElement!.clientWidth - parseFloat(parentStyle.paddingLeft) - parseFloat(parentStyle.paddingRight);
           return img.complete && box.width <= img.naturalWidth + 1 && box.height <= img.naturalHeight + 1
-            && cb.width <= 641 && cb.width <= card.parentElement!.clientWidth + 1
+            && Math.abs(cb.width - available) <= 1
             && vb.height >= 119 && vb.height <= 321
             && box.left >= vb.left && box.right <= vb.right + 1 && box.top >= vb.top && box.bottom <= vb.bottom + 1;
         })).toBe(true);

@@ -20,6 +20,8 @@ export interface CircuitSourceBindingV1 {
     entity_kind: "component" | "design";
   };
   editable_design_id?: string;
+  pending_internal_design?: boolean;
+  sv_choice_required?: boolean;
   base_source_revision_hash: string;
   writable: boolean;
   capabilities: string[];
@@ -35,12 +37,14 @@ export interface CircuitSourceSyncResult {
   document?: CircuitDocument;
   diagnostics: Diagnostic[];
   impact?: Record<string, unknown>;
+  binding?: CircuitSourceBindingV1;
 }
 
 /** Browser-facing result after the Circuit service reconciles a provider response. */
 export interface CircuitSourceSyncResponse extends CircuitSourceSyncResult {
   binding?: CircuitSourceBindingV1;
   snapshot?: CircuitSnapshot;
+  lease?: import("./types.generated").EditLease;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -64,6 +68,9 @@ export function isCircuitSourceBindingV1(value: unknown): value is CircuitSource
     || !isStringArray(value.omitted_ports)
   ) return false;
   if (value.editable_design_id !== undefined && typeof value.editable_design_id !== "string") return false;
+  for (const field of ["pending_internal_design", "sv_choice_required"]) {
+    if (value[field] !== undefined && typeof value[field] !== "boolean") return false;
+  }
   for (const field of ["source_name", "source_entity_name", "source_owner_document_key"]) {
     if (value[field] !== undefined && typeof value[field] !== "string") return false;
   }

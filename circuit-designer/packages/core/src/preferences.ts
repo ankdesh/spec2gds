@@ -7,6 +7,7 @@ export const circuitActionIds = [
   "export-svg",
   "export-png",
   "begin-edit",
+  "create-internal-design",
   "undo",
   "redo",
   "delete-selection",

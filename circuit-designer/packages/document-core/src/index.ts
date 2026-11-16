@@ -75,7 +75,7 @@ export interface EntityContentSection {
   type_version: number;
   title: string;
   parent: EntityRef;
-  payload: { content?: string; media_type?: string; source_path?: string; count?: number };
+  payload: { content?: string; usage?: "implementation" | "reference"; media_type?: string; source_path?: string; count?: number };
   editable: boolean;
   deletable: boolean;
   validation_status: SectionValidationStatus;
@@ -83,6 +83,7 @@ export interface EntityContentSection {
 }
 
 export interface PersistedEntitySection {
+  usage?: "implementation" | "reference";
   section_id: string;
   section_type: "sv";
   type_version: number;

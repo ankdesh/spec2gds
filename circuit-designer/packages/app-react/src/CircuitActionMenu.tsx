@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 
 export type CircuitMenuEntry<CommandId extends string> =
-  | { kind: "action"; commandId: CommandId; label: string; checked?: boolean; checkType?: "checkbox" | "radio"; status?: string }
+  | { kind: "action"; commandId: CommandId; label: string; description?: string; checked?: boolean; checkType?: "checkbox" | "radio"; status?: string }
   | { kind: "separator" }
   | { kind: "submenu"; id: string; label: string; entries: CircuitMenuEntry<CommandId>[] };
 
@@ -143,10 +143,12 @@ export function CircuitActionMenuPanel<CommandId extends string>({
       const role = entry.checkType === "checkbox" ? "menuitemcheckbox" : entry.checkType === "radio" ? "menuitemradio" : "menuitem";
       return <button
         aria-checked={entry.checkType ? Boolean(entry.checked) : undefined}
+        aria-description={entry.description}
         disabled={!isCommandEnabled(entry.commandId)}
         key={`${entry.commandId}-${index}`}
         onClick={() => { onCommand(entry.commandId); onDismiss(); }}
         role={role}
+        title={entry.description}
         type="button"
       >
         <span>{entry.checkType && entry.checked ? "✓ " : ""}{entry.label}</span>

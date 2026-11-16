@@ -1,7 +1,5 @@
 """Catalog imports preserve source, reject conflicts, and remap local references."""
 
-from spec2gds.spec.spec_format.testing import direct_api_endpoints
-
 import dataclasses
 import json
 from pathlib import Path
@@ -17,6 +15,7 @@ from spec2gds.spec.spec_format.catalog_import import (
 )
 from spec2gds.spec.spec_format.ir import SpecRevision
 from spec2gds.spec.spec_format.models import sha256_digest
+from spec2gds.spec.spec_format.testing import direct_api_endpoints
 from spec2gds.spec.spec_format.transactions import (
     ImportCatalogPackage,
     SpecEditTransaction,
@@ -136,6 +135,22 @@ def test_composite_import_remaps_internal_design_and_preserves_entry_designs():
     assert internal and internal.ref.document_id == destination.document_id
     assert not candidate.to_package().manifest.entry_designs
     assert all(candidate.by_vlnv("component", i.component_vlnv) for i in internal.instances)
+
+
+def test_import_preserves_reference_sv_and_fingerprint():
+    from spec2gds.spec.spec_format.sections import set_section_usage
+    source, details = release()
+    package = source.to_package()
+    original = source.entity_sections[0]
+    set_section_usage(package, original.parent, original.section_id, "reference")
+    source = SpecRevision.from_package(package)
+    details = {**details, "package_sha256": sha256_digest(package.to_bytes())}
+    destination = SpecRevision.from_package(SpecPackage.create())
+    preview, candidate = prepare_import(destination, source, details, request(destination, details))
+    assert preview["can_import"] and candidate.entity_sections[0].usage == "reference"
+    assert candidate.entity_sections[0].content == original.content
+    reused, same = prepare_import(candidate, source, details, request(candidate, details))
+    assert reused["reused"] and same.source_revision_hash == candidate.source_revision_hash
 
 
 def test_import_api_keeps_document_binding_and_rejects_a_stale_preview(tmp_path, monkeypatch):

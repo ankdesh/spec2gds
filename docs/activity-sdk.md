@@ -107,6 +107,14 @@ connections = context.spec.low.connections(design_ref)
 The low-level API returns concrete immutable `SpecIR` objects.
 It never exposes raw XML or mutable write handles.
 
+`context.spec.low.entity_sections` and `entity_sections_for(reference, "sv")`
+expose each Section's `usage`: `implementation` or `reference`. Activities that
+generate hardware or run hardware lint must use implementation SV only. Reference
+SV remains available for documentation and Assistant context. Existing section-index
+version 1 packages default to implementation SV. Reference status uses index version 2;
+readers that do not support version 2 must reject it. Editing reference text preserves
+its usage, including after its internal Design is cleared.
+
 ---
 
 ## 4. Define and Register an Activity

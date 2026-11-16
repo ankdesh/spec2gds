@@ -66,7 +66,7 @@ import { browserRandomUuid } from "./browser-id";
 import { connectionEndpoint } from "./connection-input";
 import { ActionSettingsPage } from "./ActionSettingsPage";
 import { CircuitMenuBar } from "./CircuitMenuBar";
-import { CircuitConfirmationDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
+import { CircuitConfirmationDialog, CircuitSvDispositionDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
 import { CircuitContextMenu } from "./CircuitActionMenu";
 import {
   buildCircuitContextMenu,
@@ -156,6 +156,14 @@ export function App({
   const [leaseLost, setLeaseLost] = useState(false);
   const [recovering, setRecovering] = useState(false);
   const [sourceBinding, setSourceBinding] = useState<CircuitSourceState>();
+  const [svChoiceOpen, setSvChoiceOpen] = useState(false);
+  const [sourceBusy, setSourceBusy] = useState(false);
+  const savingRef = useRef(false);
+  const transitioningRef = useRef(false);
+  const transitionRequestRef = useRef<string>();
+  const discardRequestRef = useRef<string>();
+  const creationLeaseRef = useRef<string>();
+  const sourceSaveRef = useRef<{ version: number; batch: ReturnType<CircuitDraft["toBatch"]>; disposition?: "retain_reference" | "remove"; leaseId: string }>();
   const [sourceConflict, setSourceConflict] = useState(false);
   const [layout, setLayout] = useState<LayoutResult>();
   const [layoutProgress, setLayoutProgress] = useState("");
@@ -203,6 +211,7 @@ export function App({
   const actionBindings = preferences.action_bindings;
   const inspectorOpen = preferences.ui.inspector_open;
   const timingOverlayVisible = preferences.ui.timing_overlay_visible;
+  const canEditCircuit = Boolean(lease && (!sourceBinding || sourceBinding.writable) && !sourceBusy && !sourceSaveRef.current);
   const sourceIdentifierPattern = sourceBinding?.identifierPattern;
   const isSourceIdentifier = (value: string): boolean => !sourceIdentifierPattern || new RegExp(sourceIdentifierPattern).test(value);
 
@@ -435,9 +444,10 @@ export function App({
   }, [backend, events, lease, snapshot?.document.document_id, snapshot?.revision]);
 
   async function inspectLease(documentId: string): Promise<void> {
+    if (transitioningRef.current) return;
     const held = currentLeaseRef.current;
     const current = await backend.getLease(documentId);
-    if (held !== currentLeaseRef.current || currentDocumentIdRef.current !== documentId) return;
+    if (transitioningRef.current || held !== currentLeaseRef.current || currentDocumentIdRef.current !== documentId) return;
     setRemoteLease(current);
     if (held && current?.lease_id !== held.lease_id) {
       currentLeaseRef.current = undefined;
@@ -500,8 +510,8 @@ export function App({
 
   function mutateBatch(operations: CircuitOperation[], success: string): boolean {
     const draft = draftRef.current;
-    if (!draft || !lease) {
-      setMessage("Unlock the document before editing.");
+    if (!draft || !canEditCircuit || savingRef.current) {
+      setMessage(sourceBinding && !sourceBinding.writable ? "Select Edit → Create internal Design before changing this Component." : "Begin editing before changing this circuit.");
       return false;
     }
     const diagnostics = draft.applyBatch(operations);
@@ -534,7 +544,7 @@ export function App({
       setRemoteLease(nextLease);
       setLeaseLost(false);
       setDocument(draftRef.current.document);
-      setMessage("Private draft opened. Save commits atomically; Cancel discards it.");
+      setMessage(sourceBinding?.capabilities.includes("create-internal-design") ? "Editing permission acquired. Select Edit → Create internal Design." : "Private draft opened. Save commits atomically; Cancel discards it.");
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
       await inspectLease(snapshot.document.document_id).catch(() => undefined);
@@ -583,22 +593,61 @@ export function App({
     });
   }
 
-  async function save(): Promise<void> {
+  async function createInternalDesign(): Promise<void> {
+    if (!snapshot || !lease || !source?.prepareInternalDesign || sourceBusy) return;
+    transitionRequestRef.current ??= operationId("prepare_design");
+    creationLeaseRef.current = lease.lease_id;
+    setSourceBusy(true);
+    transitioningRef.current = true;
+    try {
+      const result = await source.prepareInternalDesign(snapshot.document.document_id, lease.lease_id, transitionRequestRef.current);
+      if (!result.accepted || !result.snapshot || !result.lease || !result.state) throw new Error(result.diagnostics.map(item => item.message).join(" · ") || "Could not prepare the internal Design.");
+      currentSnapshotRef.current = result.snapshot;
+      setSnapshot(result.snapshot);
+      setDocument(result.snapshot.document);
+      setSourceBinding(result.state);
+      setSourceDescription(result.state.message ?? "Private internal Design. Save to Spec to create and assign it.");
+      currentLeaseRef.current = result.lease;
+      creationLeaseRef.current = result.lease.lease_id;
+      setLease(result.lease);
+      setRemoteLease(result.lease);
+      setLeaseLost(false);
+      draftRef.current = new CircuitDraft(result.snapshot.document, result.snapshot.revision);
+      sourceSaveRef.current = undefined;
+      transitionRequestRef.current = undefined;
+      setLayout(undefined);
+      setSelection([]);
+      setMessage("Private internal Design opened. Save to Spec creates and assigns it. Cancel changes discards it.");
+    } catch (reason) {
+      setMessage(`Could not confirm Design preparation. Retry Create internal Design. ${reason instanceof Error ? reason.message : String(reason)}`);
+    } finally { transitioningRef.current = false; setSourceBusy(false); }
+  }
+
+  async function save(disposition?: "retain_reference" | "remove"): Promise<void> {
+    if (savingRef.current || sourceBusy) return;
+    if (sourceBinding?.pendingInternalDesign && sourceBinding.svChoiceRequired && !disposition && !sourceSaveRef.current) {
+      setSvChoiceOpen(true);
+      return;
+    }
+    setSvChoiceOpen(false);
     setSaveError("");
-    try { await saveDraft(); }
+    savingRef.current = true;
+    setSourceBusy(true);
+    try { await saveDraft(disposition); }
     catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : String(reason));
       if (isLeaseConflict(reason) && snapshot) {
         await inspectLease(snapshot.document.document_id).catch(() => undefined);
         setMessage("Editing permission changed. Your draft is preserved for download or discard.");
       } else setMessage(`Save failed. The complete draft is preserved. ${reason instanceof Error ? reason.message : String(reason)}`);
-    }
+    } finally { savingRef.current = false; setSourceBusy(false); }
   }
 
-  async function saveDraft(): Promise<void> {
+  async function saveDraft(disposition?: "retain_reference" | "remove"): Promise<void> {
     const draft = draftRef.current;
-    if (!snapshot || !backend || !lease || !draft) return;
-    if (!draft.dirty) {
+    const saveLeaseId = lease?.lease_id ?? sourceSaveRef.current?.leaseId;
+    if (!snapshot || !backend || !saveLeaseId || !draft) return;
+    if (!draft.dirty && !sourceBinding?.pendingInternalDesign) {
       await cancel();
       return;
     }
@@ -611,7 +660,10 @@ export function App({
       }
       // Persist the actual visible geometry alongside semantic edits. Generated
       // layout is not source state until it joins this revision-guarded save batch.
-      const materialize: CircuitOperation[] = [
+      const retry = sourceSaveRef.current?.version === draftChangeRef.current ? sourceSaveRef.current : undefined;
+      const materialize: CircuitOperation[] = retry ? [] : [
+        // Layout settings also give a blank Design a valid source-save batch.
+        { operation_id: operationId("save_layout"), type: "set_layout_settings", direction: layout.layout.direction, grid_size: draft.document.layout.grid_size },
         ...Object.entries(layout.layout.node_geometry).map(([instanceId, geometry]) => ({
           operation_id: operationId("save_geometry"),
           type: "set_instance_geometry" as const,
@@ -639,19 +691,22 @@ export function App({
         return;
       }
       setDocument(draft.document);
-      draftChangeRef.current += 1;
+      if (!retry) draftChangeRef.current += 1;
       if (!source) {
         setSaveError("This host did not provide a writable source adapter.");
         setMessage("This host did not provide a writable source adapter.");
         return;
       }
+      const pendingSave = retry ?? { version: draftChangeRef.current, batch: draft.toBatch(operationId("source_save")), disposition, leaseId: saveLeaseId };
+      sourceSaveRef.current = pendingSave;
       let result;
       try {
         result = await source.commit(
           snapshot.document.document_id,
-          draft.toBatch(operationId("source_save")),
-          lease.lease_id,
+          pendingSave.batch,
+          pendingSave.leaseId,
           stagedProposalId,
+          pendingSave.disposition,
         );
       } catch (reason) {
         if (isLeaseConflict(reason)) throw reason;
@@ -660,6 +715,7 @@ export function App({
         return;
       }
       if (!result.accepted || !result.snapshot) {
+        sourceSaveRef.current = undefined;
         setSaveError(result.diagnostics.map((item) => item.message).join(" · ") || "The Spec service rejected the save.");
         const conflict = result.diagnostics.some((item) => item.code === "source_revision_conflict");
         setSourceConflict(conflict);
@@ -669,6 +725,8 @@ export function App({
       // Close the private draft only after the adapter returns its authoritative
       // snapshot. Rejected or uncertain saves above preserve the complete draft.
       currentSnapshotRef.current = result.snapshot;
+      sourceSaveRef.current = undefined;
+      creationLeaseRef.current = undefined;
       draftRef.current = undefined;
       setLease(undefined);
       currentLeaseRef.current = undefined;
@@ -687,14 +745,14 @@ export function App({
     const result = await backend.commit(
       snapshot.document.document_id,
       draft.toBatch(operationId("draft_save")),
-      lease.lease_id,
+      saveLeaseId,
     );
     if (result.status !== "accepted" || !result.snapshot) {
       setSaveError(result.diagnostics.map((item) => item.message).join(" · ") || "The Circuit service rejected the save.");
       setMessage(result.diagnostics.map((item) => item.message).join(" · "));
       return;
     }
-    try { await backend.releaseLease(snapshot.document.document_id, lease.lease_id); }
+    try { await backend.releaseLease(snapshot.document.document_id, saveLeaseId); }
     catch (reason) { if (!isLeaseConflict(reason)) throw reason; }
     currentSnapshotRef.current = result.snapshot;
     draftRef.current = undefined;
@@ -710,6 +768,7 @@ export function App({
 
   async function reopenLatestSource(): Promise<void> {
     if (!snapshot || !sourceBinding || !source) return;
+    if (sourceBinding.pendingInternalDesign) { await cancel(); return; }
     if (lease) await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
     draftRef.current?.cancel();
     draftRef.current = undefined;
@@ -733,8 +792,75 @@ export function App({
   async function cancel(): Promise<void> {
     if (!snapshot || !backend) return;
     let releaseWarning = "";
-    if (lease) {
-      try { await backend.releaseLease(snapshot.document.document_id, lease.lease_id); }
+    let restored: CircuitSnapshot | undefined;
+    let releaseLease = lease;
+    let displaced = false;
+    if (sourceBinding?.pendingInternalDesign) {
+      const current = await backend.getLease(snapshot.document.document_id);
+      if (current && current.lease_id !== (lease?.lease_id ?? creationLeaseRef.current)) {
+        // Discard only this client's preserved draft after takeover. The new
+        // designer's lease and pending source state must remain intact.
+        restored = await backend.get(snapshot.document.document_id);
+        const latestState = await source?.load(snapshot.document.document_id);
+        setSnapshot(restored);
+        currentSnapshotRef.current = restored;
+        setSourceBinding(latestState);
+        setRemoteLease(current);
+        setLayout(undefined);
+        setSelection([]);
+        releaseLease = undefined;
+        displaced = true;
+      }
+    }
+    if (!displaced && (sourceBinding?.pendingInternalDesign || transitionRequestRef.current)) {
+      transitioningRef.current = true;
+      try {
+        let leaseId = lease?.lease_id ?? creationLeaseRef.current;
+        if (!leaseId || !source?.discardInternalDesign) throw new Error("The source adapter cannot discard this pending Design.");
+        let pending = sourceBinding?.pendingInternalDesign;
+        if (transitionRequestRef.current && !pending) {
+          const latestState = await source.load(snapshot.document.document_id);
+          if (!latestState) throw new Error("Could not confirm whether Design preparation succeeded.");
+          pending = latestState.pendingInternalDesign;
+          if (pending) {
+            try {
+              const prepared = await source.prepareInternalDesign?.(snapshot.document.document_id, leaseId, transitionRequestRef.current);
+              if (!prepared?.accepted || !prepared.lease) throw new Error("Retry Create internal Design to confirm preparation before discarding it.");
+              leaseId = prepared.lease.lease_id;
+              creationLeaseRef.current = leaseId;
+              currentLeaseRef.current = prepared.lease;
+            } catch (reason) {
+              // An expired lease can still discard. A successor's lease will
+              // reject the discard below and preserve this client's draft.
+              if (!isLeaseConflict(reason)) throw reason;
+            }
+          } else setSourceBinding(latestState);
+        }
+        if (pending) {
+          discardRequestRef.current ??= operationId("discard_design");
+          const result = await source.discardInternalDesign(snapshot.document.document_id, leaseId, discardRequestRef.current);
+          if (!result.accepted || !result.snapshot || !result.state) throw new Error(result.diagnostics.map(item => item.message).join(" · ") || "Could not discard the pending Design.");
+          restored = result.snapshot;
+          releaseLease = result.lease;
+          currentLeaseRef.current = result.lease;
+          setSnapshot(restored);
+          currentSnapshotRef.current = restored;
+          setSourceBinding(result.state);
+          setSourceDescription(result.state.message ?? "Component interface preview.");
+          setLayout(undefined);
+          setSelection([]);
+        }
+      } catch (reason) {
+        setMessage(`Discard failed. Your draft is preserved. ${reason instanceof Error ? reason.message : String(reason)}`);
+        return;
+      } finally { transitioningRef.current = false; }
+    }
+    sourceSaveRef.current = undefined;
+    transitionRequestRef.current = undefined;
+    discardRequestRef.current = undefined;
+    creationLeaseRef.current = undefined;
+    if (releaseLease) {
+      try { await backend.releaseLease(snapshot.document.document_id, releaseLease.lease_id); }
       catch (reason) {
         if (!isLeaseConflict(reason)) {
           releaseWarning = ` Lease release failed; it will expire automatically. ${String(reason)}`;
@@ -747,7 +873,7 @@ export function App({
     currentLeaseRef.current = undefined;
     setLeaseLost(false);
     setStagedProposalId(undefined);
-    setDocument(snapshot.document);
+    setDocument((restored ?? snapshot).document);
     setSaveError("");
     setSourceConflict(false);
     setMessage(`Draft cancelled. No changes were persisted.${releaseWarning}`);
@@ -1458,34 +1584,35 @@ export function App({
     switch (actionId) {
       case "new-document": return !lease && !draftRef.current && !openingFile;
       case "open-document": return Boolean(snapshot) && !lease && !draftRef.current && !openingFile;
-      case "save-document": return Boolean(lease && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
-      case "cancel-changes": return Boolean(lease || draftRef.current);
+      case "save-document": return Boolean((canEditCircuit || sourceSaveRef.current) && !sourceBusy && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
+      case "cancel-changes": return Boolean(lease || draftRef.current) && !sourceBusy;
       case "download-json":
       case "export-svg":
       case "export-png": return Boolean(snapshot && layout && layoutGraphRef.current === graph) && !lease;
-      case "begin-edit": return Boolean(snapshot) && !lease && !draftRef.current && Boolean(!linkedDocumentId || sourceBinding?.writable);
-      case "undo": return Boolean(lease && draftRef.current?.canUndo);
-      case "redo": return Boolean(lease && draftRef.current?.canRedo);
-      case "delete-selection": return Boolean(lease && (selection.length || (invocation.target && selectionItemForTarget(invocation.target))));
+      case "begin-edit": return Boolean(snapshot) && !lease && !draftRef.current && Boolean(!linkedDocumentId || sourceBinding?.writable || sourceBinding?.capabilities.includes("create-internal-design")) && !sourceBusy;
+      case "create-internal-design": return Boolean(lease && source?.prepareInternalDesign && sourceBinding?.capabilities.includes("create-internal-design") && !sourceBinding.pendingInternalDesign && !sourceBusy);
+      case "undo": return Boolean(canEditCircuit && draftRef.current?.canUndo);
+      case "redo": return Boolean(canEditCircuit && draftRef.current?.canRedo);
+      case "delete-selection": return Boolean(canEditCircuit && (selection.length || (invocation.target && selectionItemForTarget(invocation.target))));
       case "open-component-catalog": return Boolean(document);
-      case "create-local-component": return Boolean(lease && document);
+      case "create-local-component": return Boolean(canEditCircuit && document);
       case "review-proposals": return proposals.length > 0;
-      case "open-child-design": return Boolean(contextualInstance && !draftRef.current?.dirty);
+      case "open-child-design": return Boolean(contextualInstance && !draftRef.current?.dirty && !sourceBinding?.pendingInternalDesign && !sourceBinding?.interfacePreview);
       case "select-all": return Boolean(graph);
       case "clear-selection": return Boolean(graph);
       case "center-selection": return Boolean(selection.length || (invocation.target && invocation.target.kind !== "canvas"));
-      case "open-connect": return Boolean(lease);
-      case "reroute-selected": return Boolean(lease && contextualNetId && !contextualRouteLocked);
-      case "lock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && !contextualRouteLocked);
-      case "unlock-selected-route": return Boolean(lease && contextualNetId && contextualRoute && contextualRouteLocked);
-      case "arrange-all": return Boolean(lease);
-      case "add-cycle-edge": return Boolean(lease && document);
-      case "open-clock-settings": return Boolean(lease && document);
+      case "open-connect": return Boolean(canEditCircuit);
+      case "reroute-selected": return Boolean(canEditCircuit && contextualNetId && !contextualRouteLocked);
+      case "lock-selected-route": return Boolean(canEditCircuit && contextualNetId && contextualRoute && !contextualRouteLocked);
+      case "unlock-selected-route": return Boolean(canEditCircuit && contextualNetId && contextualRoute && contextualRouteLocked);
+      case "arrange-all": return Boolean(canEditCircuit);
+      case "add-cycle-edge": return Boolean(canEditCircuit && document);
+      case "open-clock-settings": return Boolean(canEditCircuit && document);
       case "open-timing-analysis": return Boolean(document);
-      case "edit-cycle-edge": return Boolean(lease && contextualCycleEdge);
-      case "lock-cycle-edge": return Boolean(lease && contextualCycleEdge && !contextualCycleEdge.locked);
-      case "unlock-cycle-edge": return Boolean(lease && contextualCycleEdge?.locked);
-      case "delete-cycle-edge": return Boolean(lease && contextualCycleEdge);
+      case "edit-cycle-edge": return Boolean(canEditCircuit && contextualCycleEdge);
+      case "lock-cycle-edge": return Boolean(canEditCircuit && contextualCycleEdge && !contextualCycleEdge.locked);
+      case "unlock-cycle-edge": return Boolean(canEditCircuit && contextualCycleEdge?.locked);
+      case "delete-cycle-edge": return Boolean(canEditCircuit && contextualCycleEdge);
       case "pan-up":
       case "pan-left":
       case "pan-down":
@@ -1501,25 +1628,25 @@ export function App({
       case "about": return true;
       case "pan-canvas": return false;
       case "add-bend-here": {
-        if (!lease || invocation.target?.kind !== "route-segment" || !contextualRoute || !invocation.circuitPoint) return false;
+        if (!canEditCircuit || invocation.target?.kind !== "route-segment" || !contextualRoute || !invocation.circuitPoint) return false;
         return JSON.stringify(insertRouteBend(contextualRoute, invocation.target.segmentId, invocation.circuitPoint, document?.layout.grid_size ?? 20)) !== JSON.stringify(contextualRoute);
       }
       case "remove-bend": {
-        if (!lease || invocation.target?.kind !== "route-vertex" || invocation.target.vertexKind !== "bend" || !contextualRoute) return false;
+        if (!canEditCircuit || invocation.target?.kind !== "route-vertex" || invocation.target.vertexKind !== "bend" || !contextualRoute) return false;
         return JSON.stringify(removeRouteBend(contextualRoute, invocation.target.vertexId)) !== JSON.stringify(contextualRoute);
       }
       case "select-connected-net": return Boolean(contextualNetId);
-      case "disconnect-port": return Boolean(lease && contextualNetId && terminal);
-      case "delete-boundary-terminal": return Boolean(lease && invocation.target && selectionItemForTarget(invocation.target)?.kind === "boundary");
+      case "disconnect-port": return Boolean(canEditCircuit && contextualNetId && terminal);
+      case "delete-boundary-terminal": return Boolean(canEditCircuit && invocation.target && selectionItemForTarget(invocation.target)?.kind === "boundary");
       case "terminal-side-north":
       case "terminal-side-east":
       case "terminal-side-south":
       case "terminal-side-west":
       case "terminal-lock-placement":
-      case "terminal-unlock-placement": return Boolean(lease && terminal);
-      case "terminal-move-earlier": return Boolean(lease && terminal && terminal.index > 0);
-      case "terminal-move-later": return Boolean(lease && terminal && terminal.index >= 0 && terminal.index < terminal.sameSide.length - 1);
-      case "terminal-reset-placement": return Boolean(lease && terminal && document?.layout.terminal_placements[terminal.terminalKey]);
+      case "terminal-unlock-placement": return Boolean(canEditCircuit && terminal);
+      case "terminal-move-earlier": return Boolean(canEditCircuit && terminal && terminal.index > 0);
+      case "terminal-move-later": return Boolean(canEditCircuit && terminal && terminal.index >= 0 && terminal.index < terminal.sameSide.length - 1);
+      case "terminal-reset-placement": return Boolean(canEditCircuit && terminal && document?.layout.terminal_placements[terminal.terminalKey]);
     }
   }
 
@@ -1543,6 +1670,7 @@ export function App({
       case "export-svg": void download("svg"); return true;
       case "export-png": void download("png"); return true;
       case "begin-edit": void unlock(); return true;
+      case "create-internal-design": void createInternalDesign(); return true;
       case "undo": undoDraft("undo"); return true;
       case "redo": undoDraft("redo"); return true;
       case "delete-selection": return deleteCurrentSelection(
@@ -1711,6 +1839,11 @@ export function App({
         proposalCount={proposals.length}
         sourceBound={Boolean(sourceBinding)}
         sourceSaveLabel={sourceBinding?.saveLabel}
+        createInternalDesignHint={sourceBinding?.pendingInternalDesign ? "Save or cancel the pending Design first."
+          : !sourceBinding?.capabilities.includes("create-internal-design") ? sourceBinding?.interfacePreview ? "Spec edit access is required." : "Select a Component without an internal Design in Spec Editor."
+          : !source?.prepareInternalDesign ? "Creation is unavailable in this view."
+          : !lease ? "Select Begin editing first."
+          : sourceBusy ? "Wait for the current action to finish." : undefined}
         tools={tools}
         toolsEnabled={Boolean(snapshot) && !lease && !draftRef.current && !recovering}
         onRunTool={runTool}
@@ -1738,9 +1871,9 @@ export function App({
       >
         <span aria-hidden="true">{theme.id === "obsidian" ? "☀️" : "🌙"}</span>
       </button>
-      {sourceBinding?.writable && lease && draftRef.current?.dirty && <button
+      {sourceBinding?.writable && (lease || sourceSaveRef.current) && (draftRef.current?.dirty || sourceBinding.pendingInternalDesign) && <button
         className="source-save-button"
-        disabled={!layout || layoutGraphRef.current !== graph}
+        disabled={sourceBusy || !layout || layoutGraphRef.current !== graph}
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
         type="button"
       >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}
@@ -1778,7 +1911,7 @@ export function App({
       <div className="stage">
         <div className="canvas-actions" aria-label="Circuit view controls">
           <button type="button" disabled={!layout} onClick={() => executeCircuitAction({ commandId: "fit-circuit", source: "menubar" })}>Fit circuit</button>
-          <button type="button" disabled={!lease || !layout || Boolean(layoutProgress)} onClick={() => executeCircuitAction({ commandId: "arrange-all", source: "menubar" })}>Arrange</button>
+          <button type="button" disabled={!canEditCircuit || !layout || Boolean(layoutProgress)} onClick={() => executeCircuitAction({ commandId: "arrange-all", source: "menubar" })}>Arrange</button>
           <button type="button" aria-pressed={inspectorOpen} onClick={() => executeCircuitAction({ commandId: "toggle-inspector", source: "menubar" })}>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
         </div>
         <div
@@ -1804,7 +1937,7 @@ export function App({
             componentLabels={Object.fromEntries(document?.components.map(component => [component.id, component.label]) ?? [])}
             layout={layout.layout}
             boundaryGeometry={layout.boundary_geometry}
-            editable={Boolean(lease)}
+            editable={canEditCircuit}
             selection={selection}
             onSelectionChange={setSelection}
             onNodeGeometryChanges={moveNodes}
@@ -1835,7 +1968,7 @@ export function App({
       {inspectorOpen && <aside className="inspector">
         <p className="eyebrow">Inspector</p>
         {sourceBinding?.capabilities.includes("boundary-ports") && <button
-          disabled={!lease}
+          disabled={!canEditCircuit}
           onClick={addBoundaryPort}
           type="button"
         >New Boundary Port</button>}
@@ -1849,12 +1982,12 @@ export function App({
               return;
             }
             mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label } }, "Instance name updated.");
-          }} disabled={!lease} /></label>
+          }} disabled={!canEditCircuit} /></label>
           <details><summary>Technical details</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
         {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2>
           <label>Name<input
-            disabled={!lease}
+            disabled={!canEditCircuit}
             pattern={sourceIdentifierPattern}
             value={selectedBoundary.label}
             onChange={(event) => {
@@ -1867,12 +2000,12 @@ export function App({
             }}
           /></label>
           <label>Direction<select
-            disabled={!lease}
+            disabled={!canEditCircuit}
             value={selectedBoundary.direction}
             onChange={(event) => updateBoundaryPort({ ...selectedBoundary, direction: event.target.value as "input" | "output" | "inout" })}
           ><option value="input">Input</option><option value="output">Output</option><option value="inout">In/out</option></select></label>
           <label>Wire width or range<input
-            disabled={!lease}
+            disabled={!canEditCircuit}
             value={String(selectedBoundary.width)}
             onChange={(event) => {
               const raw = event.target.value.trim();
@@ -1893,8 +2026,8 @@ export function App({
         </>}
         {selectedCycleEdge && <><span className="kind">cycle edge</span><h2>{selectedCycleEdge.label ?? `Cycle edge ${timing.cycle_edges.findIndex((edge) => edge.id === selectedCycleEdge.id) + 1}`}</h2><code>x = {selectedCycleEdge.x}</code>
           <p className="draw-hint">Every same-domain path crossing this marker gains one cycle.</p>
-          <button disabled={!lease} onClick={() => setDialog("cycle-edge")} type="button">Edit edge</button>
-          <button disabled={!lease} onClick={() => updateCycleEdge({ ...selectedCycleEdge, locked: !selectedCycleEdge.locked })} type="button">{selectedCycleEdge.locked ? "Unlock edge" : "Lock edge"}</button>
+          <button disabled={!canEditCircuit} onClick={() => setDialog("cycle-edge")} type="button">Edit edge</button>
+          <button disabled={!canEditCircuit} onClick={() => updateCycleEdge({ ...selectedCycleEdge, locked: !selectedCycleEdge.locked })} type="button">{selectedCycleEdge.locked ? "Unlock edge" : "Lock edge"}</button>
         </>}
       </aside>}
     </section>}
@@ -1972,6 +2105,7 @@ export function App({
         ? formatKeyboardShortcut(actionBindings[commandId as CircuitActionId].keyboard)
         : undefined}
     />}
+    {svChoiceOpen && <CircuitSvDispositionDialog onCancel={() => setSvChoiceOpen(false)} onSave={(choice) => void save(choice)} />}
     {confirmation && <CircuitConfirmationDialog
       confirmLabel={confirmation.confirmLabel}
       message={confirmation.message}

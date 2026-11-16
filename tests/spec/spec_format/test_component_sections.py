@@ -19,6 +19,7 @@ from spec2gds.spec.spec_format.sections import (
     SECTION_NAMESPACE,
     SV_MAX_BYTES,
     delete_entity_section,
+    set_section_usage,
     upsert_systemverilog_section,
 )
 from spec2gds.spec.spec_format.testing import build_test_package
@@ -50,6 +51,38 @@ def test_sv_section_round_trips_deterministically_and_cleans_registration(tmp_pa
     delete_entity_section(mutable, leaf.ref, "sv")
     assert SECTION_INDEX_PATH not in mutable.files
     assert not any(item.namespace == SECTION_NAMESPACE for item in mutable.manifest.annotation_schemas)
+
+
+def test_reference_usage_versions_integrity_and_edits(tmp_path: Path) -> None:
+    package = build_test_package()
+    leaf = SpecRevision.from_package(package).by_vlnv("component", "spec2gds.example:demo:leaf:1.0")
+    original = upsert_systemverilog_section(package, leaf.ref, "assign irq = irq_in;\n")
+    legacy_index = json.loads(package.files[SECTION_INDEX_PATH])
+    assert legacy_index["version"] == 1 and "usage" not in legacy_index["sections"][0]
+    set_section_usage(package, leaf.ref, original.section_id, "reference")
+    index = json.loads(package.files[SECTION_INDEX_PATH])
+    assert index["version"] == 2 and index["sections"][0]["usage"] == "reference"
+    assert package.files[original.source_path] == original.content.encode()
+    assert index["sections"][0]["sha256"] == original.source_sha256
+    assert next(item for item in package.manifest.annotation_schemas if item.namespace == SECTION_NAMESPACE).version == 2
+    path = tmp_path / "reference.spec"
+    package.save(path)
+    reopened = SpecRevision.load(path)
+    section = reopened.entity_sections_for(leaf.ref, "sv")[0]
+    assert section.usage == "reference" and section.section_id == original.section_id
+    assert "reference" in section.title
+    from spec2gds.spec.spec_format.sv_validation import (
+        cached_revision_sections,
+        validate_revision_sections,
+    )
+    assert cached_revision_sections(reopened) == ()
+    assert validate_revision_sections(reopened) == ()
+    edited = upsert_systemverilog_section(package, leaf.ref, "logic changed_reference;")
+    assert edited.usage == "reference" and edited.section_id == original.section_id
+    index["version"] = 1
+    package.files[SECTION_INDEX_PATH] = json.dumps(index).encode()
+    with pytest.raises(SpecValidationError, match="version 2"):
+        SpecRevision.from_package(package)
 
 
 def test_sv_boundaries_and_portability_checks() -> None:

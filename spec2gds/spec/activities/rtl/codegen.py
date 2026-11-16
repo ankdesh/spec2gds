@@ -457,7 +457,7 @@ class _Analyzer:
         self.sections_by_parent = {
             item.parent.entity_id: item
             for item in spec.low.entity_sections
-            if item.section_type == "sv"
+            if item.section_type == "sv" and item.usage == "implementation"
         }
 
     def analyze(self, target: EntityRef) -> _Analysis:
@@ -554,6 +554,7 @@ class _Analyzer:
                 f"Component {entity_name(component)} declares unsupported bus interface {interface.name}."
             )
         from dataclasses import asdict
+
         from spec2gds.spec.spec_format.rtl_interface import resolve_interface
         try:
             resolved = resolve_interface(
@@ -864,7 +865,7 @@ class _Normalizer:
                     for param in component.parameters
                     if param.name in parent_params
                 ]
-            param_str = f" #(\n        " + ",\n        ".join(param_assigns) + "\n    )" if param_assigns else ""
+            param_str = " #(\n        " + ",\n        ".join(param_assigns) + "\n    )" if param_assigns else ""
             instances.append(
                 _RtlInstance(
                     source_name=instance.name,
@@ -1076,6 +1077,7 @@ def _render_module(module: _RtlModule) -> str:
         if module.leaf and not has_body and port.direction in {"out", "inout"}
     )
     from dataclasses import asdict
+
     from spec2gds.spec.spec_format.rtl_interface import parameter_declarations
     header = f"module {module.name}"
     declarations = parameter_declarations([asdict(parameter) for parameter in module.parameters])

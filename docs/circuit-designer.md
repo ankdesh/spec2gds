@@ -51,13 +51,21 @@ The designer does not need to switch between Select, Connect, Route, or Pan mode
 A traditional compact menubar provides all operations:
 
 - **File**: Document creation, opening, draft save/cancel, and JSON/SVG/PNG exports.
-- **Edit**: Edit lease acquisition, undo, redo, object deletion, and preferences.
+- **Edit**: **Begin editing**, **Create internal Design**, undo, redo, object deletion, and preferences.
 - **Components**: Component catalog, local definitions, and hierarchical child design drill-down.
 - **Selection**: Select all, invert selection, and clear selection.
 - **Connect & Route**: Manual wire routing, orthogonal clean-up, and segment locking.
 - **Timing**: Cycle edge markers, clock domains, and path latency analysis.
 - **View**: Canvas zoom controls, grid snapping toggles, and property Inspector panel.
 - **Tools**: Host-contributed tools, including the AI Assistant.
+
+For a Component opened from Spec Editor without an internal Design, select
+**Begin editing → Create internal Design**. The interface preview stays read-only
+until creation succeeds. The new Design remains private until **Save to Spec**.
+An empty first save is allowed. **Cancel changes** restores the interface preview.
+If implementation SV exists, choose **Retain SV**, **Remove SV**, or **Cancel saving**.
+Retained SV becomes reference text and is excluded from hardware generation and lint.
+See the [Spec Editor guide](spec-editor.md#create-an-internal-design-for-a-blank-component).
 
 ---
 

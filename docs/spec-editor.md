@@ -31,7 +31,8 @@ Spec Editor provides a structured engineering interface for hardware specificati
 
 Hardware settings, Parameters, Ports, SystemVerilog, and interface-preview titles
 use a subtle theme accent and medium-bold text. Component interface previews fit
-the complete diagram without enlargement. Their preferred width is 320–640 px,
+the complete diagram without enlargement. Preview containers fill the available
+Section width. Diagram sizing still uses a preferred width of 320–640 px,
 capped by the available document width, with a 120–320 px preview viewport.
 Use **Expand** for close inspection. SVG downloads retain their original geometry.
 
@@ -127,9 +128,26 @@ flowchart LR
 - Previews display component instances, connections, and pipeline cycle markers.
 - Spec Editor preserves circuit layout annotations across saves so manual positions and routing stay stable.
 - Leaf components display a read-only instance preview with attached wire ports.
-- Each embedded preview has a visible **Open in Circuit Designer ↗** button beside **Options**. The same action remains in **Options** with **Expand** and **Download SVG**.
-- The button and the **Circuit Designer** menu open the selected Component or Design in a new browser tab, using the current saved Spec revision. Leaf Components remain read-only.
+- Use **Options → Open in Circuit Designer** in each embedded preview. Ready previews also provide **Expand** and **Download SVG** in **Options**.
+- The preview action and the **Circuit Designer** menu open the selected Component or Design in a new browser tab, using the current saved Spec revision. Leaf Components start with a read-only interface preview.
 - Launch access remains available when a preview is empty or cannot render. Launch errors appear in Spec Editor. Opening Circuit Designer does not save private Spec Editor drafts.
+
+### Create an internal Design for a blank Component
+
+1. Create a Component in Spec Editor. Ports and parameters can be added now or later.
+2. Open that Component in Circuit Designer from the top menu or preview **Options**.
+3. Select **Edit → Begin editing**, then **Edit → Create internal Design**. Both require Spec edit access. The canvas opens a private Design with the supported Component wire ports as boundary terminals.
+4. Add ports, place Components, and connect them as needed. Select **Save to Spec** to create the Design and assign it to the Component. An empty Design can also be saved. It is not an entry Design.
+
+If the Component has implementation SV, the first save requires a choice:
+
+- **Retain SV** preserves the Section as **SystemVerilog reference — excluded from implementation**. It remains readable and editable. Hardware generation and hardware lint exclude it.
+- **Remove SV** deletes the SV Section in the same save.
+- **Cancel saving** keeps the complete circuit draft open.
+
+**File → Cancel changes** discards the pending Design and restores the interface preview. Preparation and cancellation leave the saved Spec unchanged. A failed save preserves the draft. Retry an uncertain save with **Save to Spec**. A source conflict requires reopening the latest source or downloading the draft.
+
+Existing Specs retain their SV behavior. Editing reference SV or clearing its internal Design does not activate it. Creation from a placed instance or child-Design navigation is outside this flow.
 
 ---
 

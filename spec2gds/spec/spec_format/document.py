@@ -982,7 +982,7 @@ def _content_sections(
         type_version=item.type_version,
         title=item.title,
         parent=item.parent,
-        payload={"content": item.content, "media_type": item.media_type, "source_path": item.source_path,
+        payload={"content": item.content, "usage": item.usage, "media_type": item.media_type, "source_path": item.source_path,
                  **({"source_sha256": item.source_sha256} if not validate else {})},
         editable=SECTION_TYPES[item.section_type].editable,
         deletable=SECTION_TYPES[item.section_type].deletable,
@@ -1106,7 +1106,7 @@ def build_document_projection(
             eyebrow="Composite component" if component.ref.entity_id in composition else "Component",
             entity_ref=component.ref,
             implementation_kind="internal_design" if component.ref.entity_id in composition else
-                "sv" if any(item.section_type == "sv" and item.payload.get("content", "").strip() for item in content_sections) else "missing",
+                "sv" if any(item.section_type == "sv" and item.payload.get("usage", "implementation") == "implementation" and item.payload.get("content", "").strip() for item in content_sections) else "missing",
             preview_mode="design" if component.ref.entity_id in composition else "interface",
             facts=facts,
             tables=_component_tables(component, root, anchors_by_vlnv),

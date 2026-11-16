@@ -22,7 +22,7 @@ def verify_target(revision: SpecRevision, target: EntityRef) -> dict:
         if entity.ref.entity_id in seen:
             return
         seen.add(entity.ref.entity_id)
-        sections = revision.entity_sections_for(entity.ref, "sv")
+        sections = tuple(item for item in revision.entity_sections_for(entity.ref, "sv") if item.usage == "implementation")
         section_ids.update(section.section_id for section in sections)
         if isinstance(entity, ComponentIR):
             internal = revision.internal_design(entity)

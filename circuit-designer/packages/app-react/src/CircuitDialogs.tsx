@@ -79,6 +79,20 @@ export function CircuitConfirmationDialog({
   </CircuitModal>;
 }
 
+export function CircuitSvDispositionDialog({ onCancel, onSave }: {
+  onCancel: () => void;
+  onSave: (disposition: "retain_reference" | "remove") => void;
+}) {
+  return <CircuitModal onClose={onCancel} title="Save the internal Design">
+    <div className="circuit-dialog__copy"><p>This Component has implementation SV. Choose how to handle it when saving the new internal Design.</p><p>Retained SV becomes reference text. It is excluded from hardware generation and hardware lint.</p></div>
+    <div className="circuit-dialog__actions">
+      <button autoFocus onClick={onCancel} type="button">Cancel saving</button>
+      <button onClick={() => onSave("retain_reference")} type="button">Retain SV</button>
+      <button onClick={() => onSave("remove")} type="button">Remove SV</button>
+    </div>
+  </CircuitModal>;
+}
+
 export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;

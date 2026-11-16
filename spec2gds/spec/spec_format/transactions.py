@@ -47,6 +47,7 @@ from spec2gds.spec.spec_format.sections import (
     SECTION_TYPES,
     delete_entity_section,
     delete_sections_for_parent,
+    set_section_usage,
     upsert_systemverilog_section,
 )
 from spec2gds.spec.spec_format.source_edits import (
@@ -368,6 +369,15 @@ class DeleteSection:
 
 
 @dataclass(frozen=True)
+class SetSectionUsage:
+    """Explicitly retain an SV Section as implementation or reference text."""
+
+    parent: EntityRef
+    section_id: str
+    usage: typing.Literal["implementation", "reference"]
+
+
+@dataclass(frozen=True)
 class UpsertCircuitLayout:
     """Persist one source-semantic circuit layout annotation."""
 
@@ -413,6 +423,7 @@ EditOperation = typing.Union[
     RemoveAsset,
     UpsertSection,
     DeleteSection,
+    SetSectionUsage,
     UpsertCircuitLayout,
     UpsertCircuitTiming,
 ]
@@ -468,7 +479,7 @@ class SpecEditTransaction:
         for component in next_revision.components:
             if component.ref not in updated_owners:
                 continue
-            body = "\n".join(section.content for section in next_revision.entity_sections_for(component.ref, "sv"))
+            body = "\n".join(section.content for section in next_revision.entity_sections_for(component.ref, "sv") if section.usage == "implementation")
             if not body and (not component.parameters or next_revision.internal_design(component.ref) is not None):
                 continue
             try:
@@ -679,6 +690,8 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRe
                     raise ValueError("Every ports payload item must be an object.")
                 upsert_component_port(root, value)
             package.add_document("component", _serialize(root))
+    elif isinstance(operation, SetSectionUsage):
+        set_section_usage(package, operation.parent, operation.section_id, operation.usage)
     elif isinstance(operation, DeleteSection):
         definition = SECTION_TYPES.get(operation.section_type)
         if definition is None or not definition.deletable:

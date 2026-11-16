@@ -10,6 +10,7 @@ import type {
   CircuitSnapshot,
   CircuitEditRecovery,
   Diagnostic,
+  EditLease,
   ServiceEvent,
 } from "@spec2gds/circuit-core";
 
@@ -51,6 +52,9 @@ export interface CircuitSourceState {
   label: string;
   revision: string;
   writable: boolean;
+  pendingInternalDesign?: boolean;
+  svChoiceRequired?: boolean;
+  interfacePreview?: boolean;
   capabilities: string[];
   message?: string;
   saveLabel?: string;
@@ -67,11 +71,14 @@ export interface CircuitSourceSaveResult {
   diagnostics: Diagnostic[];
   state?: CircuitSourceState;
   snapshot?: CircuitSnapshot;
+  lease?: EditLease;
 }
 
 export interface CircuitSourceAdapter {
   load(documentId: string): Promise<CircuitSourceState | undefined>;
-  commit(documentId: string, batch: CircuitOperationBatch, leaseId: string, proposalId?: string): Promise<CircuitSourceSaveResult>;
+  commit(documentId: string, batch: CircuitOperationBatch, leaseId: string, proposalId?: string, svDisposition?: "retain_reference" | "remove"): Promise<CircuitSourceSaveResult>;
+  prepareInternalDesign?(documentId: string, leaseId: string, requestId: string): Promise<CircuitSourceSaveResult>;
+  discardInternalDesign?(documentId: string, leaseId: string, requestId: string): Promise<CircuitSourceSaveResult>;
   reload(documentId: string): Promise<CircuitSourceSaveResult>;
   recover?(documentId: string, expectedLeaseId: string, clientId: string): Promise<CircuitEditRecovery & { state?: CircuitSourceState }>;
 }

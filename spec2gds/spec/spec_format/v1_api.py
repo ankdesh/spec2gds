@@ -83,6 +83,9 @@ from spec2gds.spec.spec_format.circuit_adapter import (
     source_session_document_id,
 )
 from spec2gds.spec.spec_format.document import build_a2ui_batch, build_document_projection
+from spec2gds.spec.spec_format.edit_access import EditAccessError, SpecEditAccess
+from spec2gds.spec.spec_format.hosted_files import SpecFilesystem
+from spec2gds.spec.spec_format.internal_design_drafts import InternalDesignDraft
 from spec2gds.spec.spec_format.ir import (
     ConnectionIR,
     EndpointSliceIR,
@@ -139,10 +142,6 @@ from spec2gds.spec.spec_format.transactions import (
     UpsertSection,
     WirePortInput,
 )
-
-
-from spec2gds.spec.spec_format.hosted_files import SpecFilesystem
-from spec2gds.spec.spec_format.edit_access import SpecEditAccess, EditAccessError
 
 _request_context: ContextVar[dict] = ContextVar("spec_request", default={})
 
@@ -243,6 +242,7 @@ class CircuitSourceSyncRequest(pydantic.BaseModel):
     request_id: str
     base_source_revision_hash: str
     candidate_document: dict[str, typing.Any] | None = None
+    sv_disposition: typing.Literal["retain_reference", "remove"] | None = None
 
 
 class AssistantLaunchRequest(pydantic.BaseModel):
@@ -935,7 +935,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
 
     @app.get("/documents/copy-suggestion")
     def copy_suggestion(owner_document_key: str) -> dict:
-        from .naming import unique_name, readable_name
+        from .naming import readable_name, unique_name
         source = bound_session(owner_document_key)
         path = Path(source.path)
         names = []
@@ -1201,6 +1201,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             permitted = access.status(session.service_document_key, current_context.get("context_id"), current_context.get("participant_id"))["mode"] == "edit"
             participation = access.acquire(session.service_document_key, current_context.get("context_id"), "circuit:" + launched.document_id) if permitted else {"mode": "read_only"}
             writable = projection.editable_design_id is not None and permitted
+            can_create = permitted and projection.source_entity_kind == "component" and projection.editable_design_id is None
             binding = {
                 "schema_version": 1,
                 "binding_id": binding_id,
@@ -1221,10 +1222,12 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "capabilities": ([
                     "topology", "layout", "timing", "local-components", "numeric-part-selects",
                     *(["boundary-ports"] if projection.parent_component_id else []),
-                ] if writable else []),
+                ] if writable else ["create-internal-design"] if can_create else []),
                 "omitted_bus_items": list(projection.omitted_bus_items),
                 "omitted_ports": list(projection.omitted_ports),
-                **({"message": "Leaf-component previews have no internal design and remain read-only."} if not writable else {}),
+                **({"message": "This Component has no internal Design. Select Begin editing, then Create internal Design." if can_create else
+                    "This Component has no internal Design. Its interface preview is read-only." if projection.editable_design_id is None else
+                    "The Spec is read-only. Acquire Spec edit access before editing this Design."} if not writable else {}),
             }
             state["circuit_source_bindings"][token] = {
                 "binding": binding,
@@ -1283,8 +1286,14 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
 
     def circuit_source_projection(record: dict[str, typing.Any], revision: SpecRevision | None = None) -> typing.Any:
         session = circuit_source_session(record)
+        source_revision = revision or session.revision
+        pending = record.get("pending_internal_design")
+        if pending and source_revision.internal_design(pending.component) is None:
+            if source_revision.source_revision_hash != record["binding"]["base_source_revision_hash"]:
+                raise CircuitAdapterError("The Spec changed. Discard this pending Design before reopening its latest source.")
+            source_revision = pending.stage(source_revision)
         projection = project_source_to_circuit(
-            revision or session.revision, record["entity_kind"], record["entity_id"],
+            source_revision, record["entity_kind"], record["entity_id"],
             session_document_id=record["session_document_id"], include_catalog=True,
         )
         projection.document["label"] = record["projection_label"]
@@ -1306,6 +1315,67 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "diagnostics": [{"severity": "error", "code": code, "message": message}],
         }
 
+    def has_circuit_edit_access(record: dict, session: V1Session) -> bool:
+        participant = record.get("edit_access", {})
+        return access.status(session.service_document_key, participant.get("context_id"), participant.get("participant_id"))["mode"] == "edit"
+
+    @app.post("/circuit-designer/source/internal-design/prepare")
+    def prepare_internal_design(request: CircuitSourceSyncRequest, authorization: str | None = fastapi.Header(default=None)) -> dict:
+        record = circuit_source_record(authorization)
+        session = circuit_source_session(record)
+        with session.lock:
+            if not has_circuit_edit_access(record, session):
+                return sync_failure("source_read_only", "Spec edit access is required.", session.revision.source_revision_hash)
+            if request.base_source_revision_hash != session.revision.source_revision_hash:
+                return sync_failure("source_revision_conflict", "The Spec changed. Reopen its latest source before creating an internal Design.", session.revision.source_revision_hash)
+            if not record.get("pending_internal_design"):
+                if "create-internal-design" not in record["binding"]["capabilities"]:
+                    return sync_failure("internal_design_unavailable", "Select a Component without an internal Design.", session.revision.source_revision_hash)
+                original = dict(record["binding"])
+                try:
+                    pending = InternalDesignDraft.prepare(session.revision, EntityRef(**original["source_entity"]))
+                    # Validate the complete wire projection before publishing pending state.
+                    projection = project_source_to_circuit(pending.stage(session.revision), "component", pending.component.entity_id,
+                        session_document_id=record["session_document_id"], include_catalog=True)
+                except (ValueError, CircuitAdapterError) as exc:
+                    return sync_failure("source_projection_failed", str(exc), session.revision.source_revision_hash)
+                record["original_binding"] = original
+                record["pending_internal_design"] = pending
+                record["binding"] = {**original, "writable": True, "editable_design_id": pending.design.entity_id,
+                    "pending_internal_design": True, "sv_choice_required": bool(pending.sv_sections),
+                    "capabilities": ["topology", "layout", "timing", "local-components", "numeric-part-selects", "boundary-ports"],
+                    "omitted_bus_items": list(projection.omitted_bus_items), "omitted_ports": list(projection.omitted_ports),
+                    "message": "Private internal Design draft. Save to Spec creates and assigns the Design; Cancel leaves the Spec unchanged."}
+            return {"accepted": True, "source_revision_hash": session.revision.source_revision_hash,
+                "document": circuit_source_projection(record).document, "binding": record["binding"], "diagnostics": []}
+
+    @app.post("/circuit-designer/source/internal-design/discard")
+    def discard_internal_design(request: CircuitSourceSyncRequest, authorization: str | None = fastapi.Header(default=None)) -> dict:
+        record = circuit_source_record(authorization)
+        session = circuit_source_session(record)
+        with session.lock:
+            restored = dict(record)
+            if restored.get("pending_internal_design"):
+                restored.pop("pending_internal_design")
+                restored["binding"] = dict(restored.pop("original_binding"))
+            try:
+                projection = circuit_source_projection(restored)
+            except CircuitAdapterError as exc:
+                return sync_failure("source_projection_failed", str(exc), session.revision.source_revision_hash)
+            record.clear()
+            record.update(restored)
+            # A different tab may have created the internal Design in the meantime.
+            writable = projection.editable_design_id is not None and has_circuit_edit_access(record, session)
+            if projection.editable_design_id:
+                record["binding"].update(writable=writable, editable_design_id=projection.editable_design_id,
+                    capabilities=["topology", "layout", "timing", "local-components", "numeric-part-selects", "boundary-ports"] if writable else [],
+                    message="Opened the latest saved internal Design.")
+            elif not has_circuit_edit_access(record, session):
+                record["binding"].update(writable=False, capabilities=[], message="This Component has no internal Design. Acquire Spec edit access before creating one.")
+            record["binding"]["base_source_revision_hash"] = session.revision.source_revision_hash
+            return {"accepted": True, "source_revision_hash": session.revision.source_revision_hash,
+                "document": projection.document, "binding": record["binding"], "diagnostics": []}
+
     @app.post("/circuit-designer/source/resolve")
     def resolve_circuit_source(
         request: CircuitSourceSyncRequest,
@@ -1324,6 +1394,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "source_revision_hash": session.revision.source_revision_hash,
             "document": projection.document,
             "diagnostics": [],
+            "binding": record["binding"],
         }
 
     def preview_circuit_source_change(
@@ -1334,6 +1405,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         session = circuit_source_session(record)
         def fail(code: str, message: str) -> dict[str, typing.Any]:
             return sync_failure(code, message, session.revision.source_revision_hash)
+        if not has_circuit_edit_access(record, session):
+            return record, fail("source_read_only", "Spec edit access has expired. The private draft is preserved."), None
         if request.base_source_revision_hash != session.revision.source_revision_hash:
             return record, fail(
                 "source_revision_conflict",
@@ -1343,7 +1416,11 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             return record, fail("candidate_required", "A candidate Circuit document is required."), None
         try:
             projection = circuit_source_projection(record)
-            operations = compile_circuit_sync_operations(session.revision, projection, request.candidate_document)
+            pending = record.get("pending_internal_design")
+            staging = pending.stage(session.revision) if pending else session.revision
+            operations = compile_circuit_sync_operations(staging, projection, request.candidate_document)
+            if pending:
+                operations = (*pending.creation_operations(), *operations, *pending.sv_operations(request.sv_disposition))
             result = SpecEditTransaction(session.revision.source_revision_hash, operations, "authoring").apply(session.revision)
         except (CircuitAdapterError, KeyError, TypeError, ValueError, pydantic.ValidationError) as exc:
             return record, fail("source_sync_invalid", str(exc)), None
@@ -1355,6 +1432,9 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "source_revision_hash": result.revision.source_revision_hash,
             "document": authoritative.document,
             "diagnostics": [],
+            "binding": {**record["binding"], "base_source_revision_hash": result.revision.source_revision_hash,
+                **({"pending_internal_design": False, "sv_choice_required": False,
+                    "message": "Internal Design saved to Spec."} if pending else {})},
             "impact": {
                 "operation_count": len(operations),
                 "affected_design_id": authoritative.editable_design_id,
@@ -1395,12 +1475,14 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             if not response["accepted"] or revision is None:
                 return response
             session.commit_revision(revision)
-            record["binding"]["base_source_revision_hash"] = revision.source_revision_hash
+            record["binding"] = response["binding"]
+            record.pop("pending_internal_design", None)
+            record.pop("original_binding", None)
             _publish_source_event(
                 state,
                 session,
                 origin="circuit-designer",
-                affected_entities=[{
+                affected_entities=[record["binding"]["source_entity"], {
                     "document_id": revision.document_id,
                     "entity_id": record["binding"]["editable_design_id"],
                     "entity_kind": "design",
