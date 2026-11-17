@@ -243,3 +243,22 @@ def test_lost_spec_edit_access_rejects_creation_and_save(source, prepare_first):
         result = api["prepare_internal_design"](request, authorization=auth)
     assert not result["accepted"] and result["diagnostics"][0]["code"] == "source_read_only"
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("disposition", ["retain_reference", "remove"])
+def test_direct_component_creation_is_atomic_and_retryable(source, disposition):
+    api, path, component, launch, edit = source
+    edit([{"type": "upsert_entity_section", "parent": component, "section_type": "sv", "payload": {"content": "// Reference notes"}}])
+    before = api["document_snapshot"]()
+    operation = {"type": "create_internal_design", "component": component, "design_id": "direct_internal", "name": "Direct internal", "sv_disposition": disposition}
+    request = TransactionRequest(expected_source_revision_hash=before["source_revision_hash"], operations=[operation], validation_mode="authoring")
+    saved = api["transaction"](request)["snapshot"]
+    assert len(saved["designs"]) == 1
+    assert saved["entry_designs"] == []
+    assert saved["component_compositions"][0]["internal_design"]["entity_id"] == "direct_internal"
+    data = path.read_bytes()
+    replay = api["transaction"](request)["snapshot"]
+    assert replay["source_revision_hash"] == saved["source_revision_hash"]
+    assert path.read_bytes() == data
+    assert all(section["usage"] == "reference" for section in saved["entity_sections"])
+    assert len(saved["entity_sections"]) == int(disposition == "retain_reference")

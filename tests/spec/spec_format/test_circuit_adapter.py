@@ -175,7 +175,7 @@ def test_preserves_symbolic_part_select_in_ir_but_marks_circuit_projection_unava
 
 
 def test_round_trips_source_semantic_layout_and_numeric_slices() -> None:
-    revision = _direct_revision()
+    revision = _direct_revision(bounds=("3", "0"))
     session_id = source_session_document_id(revision, "design_direct")
     projection = project_design_to_circuit(
         revision, "design_direct", session_document_id=session_id, include_catalog=True
@@ -184,7 +184,8 @@ def test_round_trips_source_semantic_layout_and_numeric_slices() -> None:
     candidate["layout"]["instance_geometry"]["source0"] = {
         "x": 40, "y": 60, "width": 180, "height": 100, "pinned": True,
     }
-    candidate["design"]["nets"][0]["endpoints"][0]["slice"] = {"lsb": 1, "width": 2}
+    for endpoint in candidate["design"]["nets"][0]["endpoints"]:
+        endpoint["slice"] = {"lsb": 1, "width": 2}
     operations = compile_circuit_sync_operations(revision, projection, candidate)
     result = SpecEditTransaction(revision.source_revision_hash, operations).apply(revision)
 
@@ -236,7 +237,7 @@ def test_round_trips_multi_sink_net_without_splitting_its_identity() -> None:
 
 
 def test_round_trips_timing_markers_and_semantic_clock_assignments() -> None:
-    revision = _direct_revision()
+    revision = _direct_revision(bounds=("7", "0"))
     session_id = source_session_document_id(revision, "design_direct")
     projection = project_design_to_circuit(
         revision, "design_direct", session_document_id=session_id, include_catalog=True
@@ -278,7 +279,7 @@ def test_round_trips_timing_markers_and_semantic_clock_assignments() -> None:
 
 
 def test_round_trip_creates_a_real_local_component_and_instance() -> None:
-    revision = _direct_revision()
+    revision = _direct_revision(bounds=("7", "0"))
     projection = project_design_to_circuit(
         revision,
         "design_direct",

@@ -8,6 +8,7 @@ const documentId = "editor_test";
 const revision = "sha256:editor-test";
 
 const designRef = { document_id: documentId, entity_id: "design_top", entity_kind: "design" };
+const internalDesignRef = { document_id: documentId, entity_id: "design_internal", entity_kind: "design" };
 const componentRef = { document_id: documentId, entity_id: "component_timer", entity_kind: "component" };
 const compositeRef = { document_id: documentId, entity_id: "component_subsystem", entity_kind: "component" };
 const busRef = { document_id: documentId, entity_id: "bus_control", entity_kind: "bus_definition" };
@@ -22,11 +23,11 @@ const snapshot = {
     { ref: componentRef, vlnv: "acme:blocks:Timer:1.0" },
     { ref: compositeRef, vlnv: "acme:blocks:Subsystem:1.0" },
   ],
-  designs: [{ ref: designRef, vlnv: "acme:systems:Processor:1.0" }],
+  designs: [{ ref: designRef, vlnv: "acme:systems:Processor:1.0" }, { ref: internalDesignRef, vlnv: "acme:systems:SubsystemImplementation:1.0" }],
   entry_designs: [{ ref: designRef, vlnv: "acme:systems:Processor:1.0" }],
   bus_definitions: [],
   abstraction_definitions: [],
-  component_compositions: [{ component: compositeRef, internal_design: designRef }],
+  component_compositions: [{ component: compositeRef, internal_design: internalDesignRef }],
   narrative: { title: "Editor Test", blocks: [] },
   diagnostics: { source: [], artifacts: [] },
   entity_sections: [],
@@ -293,7 +294,7 @@ const batch = {
         surfaceId: "spec-document-editor-test",
         components: [
           section("overview", "Overview", 1, null),
-          section("designs", "Designs", 1, null),
+          section("designs", "Top-level Designs", 1, null),
           section("design-design_top", "Processor", 2, designRef, {
             eyebrow: "Entry design",
             tables: [designInstancesTable],
@@ -374,6 +375,7 @@ const batch = {
             tables: [compositePortTable],
             children: ["table-component-component_subsystem-ports"],
           }),
+          section("design-design_internal", "Subsystem implementation", 3, internalDesignRef, { eyebrow: "Internal Design" }),
           {
             id: "table-component-component_subsystem-ports",
             component: "SpecTable",
@@ -389,11 +391,12 @@ const batch = {
             sourceRevisionHash: revision,
             toc: [
               { section_id: "overview", title: "Overview", level: 1 },
-              { section_id: "designs", title: "Designs", level: 1 },
+              { section_id: "designs", title: "Top-level Designs", level: 1 },
               { section_id: "design-design_top", title: "Processor", level: 2 },
               { section_id: "components", title: "Components", level: 1 },
               { section_id: "component-component_timer", title: "Timer", level: 2 },
               { section_id: "component-component_subsystem", title: "Subsystem", level: 2 },
+              { section_id: "design-design_internal", title: "Subsystem implementation", level: 3 },
               { section_id: "bus-definition-bus_control", title: "Control Bus", level: 2 },
             ],
             children: [
@@ -403,6 +406,7 @@ const batch = {
               "section-components",
               "section-component-component_timer",
               "section-component-component_subsystem",
+              "section-design-design_internal",
               "section-bus-definition-bus_control",
             ],
           },
@@ -1133,7 +1137,7 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
 
   await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
   const circuitMenu = page.getByRole("menu", { name: "Circuit Designer" });
-  await expect(circuitMenu.getByText("Designs", { exact: true })).toBeVisible();
+  await expect(circuitMenu.getByText("Top-level Designs", { exact: true })).toBeVisible();
   await expect(circuitMenu.getByText("Components", { exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: /Processor Entry/ }).click();
   await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
@@ -1350,7 +1354,7 @@ test("opens the assigned Design for boundary edits and identifies launch modes",
   const composite = page.locator("#component-component_subsystem");
   const edit = composite.getByRole("button", { name: "Edit boundary ports in Circuit Designer", exact: true });
   await edit.click();
-  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_top" }]);
+  await expect.poll(() => state.circuits).toEqual([{ entity_kind: "design", entity_id: "design_internal" }]);
   expect(state.transactions).toHaveLength(0);
   await page.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Circuit Designer" });

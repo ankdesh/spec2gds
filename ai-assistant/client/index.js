@@ -482,6 +482,8 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
   }
 
   function ReviewCard({ review: initial }) {
+    const [sourceReadOnly, setSourceReadOnly] = React.useState(false);
+    React.useEffect(() => { const listener = event => { if (event.detail.sessionId === initial.sessionId) setSourceReadOnly(event.detail.mode === "read_only"); }; window.addEventListener("spec2gds-edit-access", listener); return () => window.removeEventListener("spec2gds-edit-access", listener); }, [initial.sessionId]);
     const [review, setReview] = React.useState(initial);
     React.useEffect(() => { setReview(previous => previous.proposalId !== initial.proposalId || (initial.version || 0) >= (previous.version || 0) ? initial : previous); }, [initial]);
     const [busy, setBusy] = React.useState(false);
@@ -515,7 +517,7 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
         h("small", null, record(review.error).retryable ? "This may be retried after the underlying condition changes." : "No automatic retry will be attempted.")) : null,
       h(ProposalComparison, { review, onRetry: busy ? undefined : refreshPreview }),
       review.domain === "circuit" ? h(CircuitDiff, { preview: review.preview }) : null,
-      actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Save to Spec" : "Send to Circuit Designer") : null) : null,
+      actionable ? h("div", { className: "s2g-actions" }, h("button", { disabled: busy, onClick: () => act("discard") }, "Discard"), ["ready", "reconcile"].includes(review.state) ? h("button", { className: "primary", disabled: busy || sourceReadOnly, onClick: () => act(review.domain === "spec" ? "apply" : "send") }, review.state === "reconcile" ? "Reconcile" : review.domain === "spec" ? "Save to Spec" : "Send to Circuit Designer") : null) : null,
       error ? h("p", { className: "s2g-error" }, error) : null);
   }
 
@@ -838,14 +840,14 @@ window.__ModuleLoader__.load({ id: "@spec2gds/harness-web", factory: (require) =
     React.useEffect(() => {
       let disposed = false;
       const refresh = async () => {
-        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}?optional=true`); if (!disposed) { setSource(result.session); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
+        try { const result = await api(`/bindings/${encodeURIComponent(sessionId)}?optional=true`); if (!disposed) { setSource(result.session ? { ...result.session, editAccess: result.edit_access } : null); window.dispatchEvent(new CustomEvent("spec2gds-edit-access", { detail: { sessionId, mode: result.edit_access?.mode } })); if (onSourceNamed && result.session) await onSourceNamed(result.session); } }
         catch { /* Retain the source label while the lookup is unavailable. */ }
       };
       void refresh(); const timer = setInterval(() => void refresh(), 15000);
       return () => { disposed = true; clearInterval(timer); };
     }, [sessionId]);
     if (!source) return null;
-    return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}`), source.domain === "spec" ? h("button", { onClick: () => void api(`/bindings/${encodeURIComponent(sessionId)}/edit-access`, {}).then(result => { if (result.edit_access.mode !== "edit") window.alert("This Spec is in use. Open Spec Editor and create a copy to edit independently."); }).catch(() => undefined) }, "Resume editing") : null);
+    return h("div", { className: "s2g-source-name" }, h("span", null, `Source: ${source.sourceName || "Selected document"}${source.editAccess?.mode === "read_only" ? " · Read-only — private drafts preserved" : ""}`), source.domain === "spec" ? h("button", { onClick: () => void api(`/bindings/${encodeURIComponent(sessionId)}/edit-access`, {}).then(result => { if (result.edit_access.mode !== "edit") window.alert("This Spec is in use. Open Spec Editor and create a copy to edit independently."); }).catch(() => undefined) }, "Resume editing") : null);
   }
 
   function FlowPresentationView({ sessionId, executionId, dock = false }) {

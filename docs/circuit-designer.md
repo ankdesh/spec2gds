@@ -154,3 +154,17 @@ read-only Spec opens a read-only projection. Save to Spec requires both a valid
 Circuit edit lease and valid Spec edit access. A linked open view renews Spec
 participation after Spec Editor closes. Independent `.circuit.json` files keep
 their existing save and shared-record behavior.
+
+## Spec interfaces and access
+
+Spec Editor can create an empty internal Design directly from a Component.
+Open it here and select **Begin editing** before changing the circuit.
+Top-level Designs have their own ports and parameters; internal Designs use their
+Component’s interface. Boundary changes save to the appropriate source through
+**Save to Spec**. Circuit saves preserve declared ranges and explicit instance
+parameter mappings, including different effective widths on reused Components.
+
+**Close Spec** in Spec Editor ends linked editing access. The circuit draft stays
+available, while saving is disabled. Request new access from Spec Editor before
+starting a new source-bound edit. Retained Component SV is reference text whenever
+an internal Design supplies the implementation.

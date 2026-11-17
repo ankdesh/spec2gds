@@ -271,10 +271,10 @@ export class CircuitDesignerService {
       if (method === "GET" && tail[0] === "components" && tail.length === 1) {
         const origin = url.searchParams.get("origin") as "local" | "builtin" | "provider" | null;
         return this.jsonResponse(response, 200, {
-          components: await this.backend.lookupComponents(documentId, {
+          components: (await this.backend.lookupComponents(documentId, {
             ...(url.searchParams.get("text") ? { text: url.searchParams.get("text")! } : {}),
             ...(origin ? { origin } : {}),
-          }),
+          })).filter(component => !component.appearance.properties.source_variant),
         });
       }
       if (method === "POST" && tail[0] === "components" && tail[2] === "resolve") {

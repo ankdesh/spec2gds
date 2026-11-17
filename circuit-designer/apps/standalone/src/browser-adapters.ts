@@ -89,6 +89,7 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     metadata: binding,
   }) : undefined;
   return {
+    checkAccess: documentId => backend.sourceAccess(documentId).then(access => access.mode === "edit"),
     async load(documentId) {
       return state(await backend.getSourceBinding(documentId));
     },

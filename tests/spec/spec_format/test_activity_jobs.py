@@ -152,3 +152,36 @@ def test_activity_job_manager_migrates_existing_database(tmp_path: Path) -> None
         columns = {row[1] for row in connection.execute("PRAGMA table_info(jobs)")}
     assert "workspace_root" in columns
     manager.close()
+
+
+def test_end_session_fences_running_job_finalization(tmp_path):
+    from spec2gds.spec.spec_format.edit_access import SpecEditAccess
+    from spec2gds.spec.spec_format.spec_service_store import document_key
+
+    package, snapshot, registry, _, _ = setup_job(tmp_path)
+    key = document_key(str(package), snapshot.manifest.source.document_id)
+    access = SpecEditAccess(tmp_path / "access.sqlite3")
+    grant = access.acquire(key)
+    before = package.read_bytes()
+
+    def publish(envelope, result):
+        with access.guard(key, envelope.edit_context_id, envelope.record.execution_id):
+            package.write_bytes(b"An old job must not publish this result.")
+        return envelope.record
+
+    manager = ActivityJobManager(registry, tmp_path / "generated", publish, edit_access=access)
+    try:
+        job = manager.enqueue(activity_id="tests.slow", snapshot=snapshot, package_path=str(package),
+                              sidecar_root=str(tmp_path / "artifacts"), edit_context_id=grant["context_id"])
+        for _ in range(100):
+            if manager.get(job.execution_id).record.status == "running":
+                break
+            time.sleep(.001)
+        assert manager.get(job.execution_id).record.status == "running"
+        access.end_session(key, grant["context_id"], grant["participant_id"])
+        successor = access.acquire(key)
+        assert wait_terminal(manager, job.execution_id).status == "failed"
+        assert package.read_bytes() == before
+        assert access.status(key, successor["context_id"], successor["participant_id"])["mode"] == "edit"
+    finally:
+        manager.close()

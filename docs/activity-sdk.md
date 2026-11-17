@@ -173,3 +173,17 @@ role `spec.summary` and media type `application/json`. Its schema is
   and use the constrained `context.workspace` writer.
 - Return typed proposals for source changes. An Activity cannot approve its own
   changes.
+
+### Design interfaces and instance parameters
+
+`spec.low.designs` exposes each standalone Design’s `ports` and `parameters`.
+`spec.low.boundary_interface(design)` returns the single applicable interface:
+the Design itself for a top-level Design, or its Component for an internal Design.
+`InstanceIR.parameter_values` holds immutable name/expression pairs. An absent
+override uses the child default; there is no implicit forwarding by matching name.
+
+Top-level interfaces are stored as `spec2gds.design-interface` version 1 metadata,
+with the required `design-interface-v1` feature declaration. Source snapshots
+preserve these records. Activities must resolve interfaces in the containing
+parameter scope and retain explicit mappings. Reference SV never supplies a
+hardware implementation. Ended Spec edit contexts cannot commit late job writes.

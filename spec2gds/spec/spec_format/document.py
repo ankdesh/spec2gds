@@ -629,6 +629,13 @@ def _design_tables(
     def endpoint_width(component: ComponentIR | None, name: str) -> int | str | None:
         return next((port.width for port in component.ports if port.name == name), None) if component else None
     tables = _configuration_tables(root, prefix)
+    if parent is None:
+        tables.append(_table(f"{prefix}-ports", "design_ports", "Ports",
+            _columns(("name", "ID", "design-interface/ports/name"), ("direction", "Direction", "design-interface/ports/direction"), ("range", "Range", "design-interface/ports/range")),
+            [{"name": _cell(p.name, "design-interface/ports/name"), "direction": _cell(p.direction, "design-interface/ports/direction"), "range": _cell(p.range or "scalar", "design-interface/ports/range")} for p in design.ports]))
+        tables.append(_table(f"{prefix}-design-parameters", "design_parameters", "Parameters",
+            _columns(("name", "ID", "design-interface/parameters/name"), ("value", "Default", "design-interface/parameters/value")),
+            [{"name": _cell(p.name, "design-interface/parameters/name"), "value": _cell(p.value, "design-interface/parameters/value")} for p in design.parameters]))
     instances = [{
         "name": _cell(instance.name, "/componentInstances/componentInstance/instanceName"),
         "component": _cell(
@@ -1037,7 +1044,7 @@ def build_document_projection(
         narrative=[named_block(block) for block in overview_narrative],
     ))
 
-    sections.append(DocumentSection(section_id="designs", title="Designs", level=1, eyebrow="IP-XACT hierarchy"))
+    sections.append(DocumentSection(section_id="designs", title="Top-level Designs", level=1, eyebrow="IP-XACT hierarchy"))
     entry_ids = [design.ref.entity_id for design in revision.entry_designs()]
     design_by_id = {design.ref.entity_id: design for design in revision.designs}
     anchors_by_vlnv = {
@@ -1053,6 +1060,8 @@ def build_document_projection(
         *(design_by_id[entity_id] for entity_id in entry_ids),
         *(design for design in revision.designs if design.ref.entity_id not in set(entry_ids)),
     ]
+    internal_ids = {m.internal_design.entity_id for m in revision.manifest.component_compositions}
+    internal_sections = {}
     for design in ordered_designs:
         root = roots[design.ref.entity_id]
         content_sections, available_section_types = _content_sections(revision, design.ref, root, validate=not source_only)
@@ -1066,7 +1075,7 @@ def build_document_projection(
             section_id=_anchor("design", design.ref.entity_id),
             title=entity_name(design),
             level=2,
-            eyebrow="Entry design" if design.ref.entity_id in entry_ids else "Design",
+            eyebrow="Entry Design" if design.ref.entity_id in entry_ids else "Design",
             entity_ref=design.ref,
             preview_mode="design",
             facts=_identity_facts(root, design.vlnv),
@@ -1075,6 +1084,13 @@ def build_document_projection(
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
+
+    for section in sections[:]:
+        if section.entity_ref and section.entity_ref.entity_id in internal_ids:
+            sections.remove(section)
+            section.level = 3
+            section.eyebrow = "Internal Design"
+            internal_sections[section.entity_ref.entity_id] = section
 
     sections.append(DocumentSection(section_id="components", title="Components", level=1, eyebrow="Reusable hardware"))
     composition = {mapping.component.entity_id: mapping.internal_design.entity_id for mapping in revision.manifest.component_compositions}
@@ -1114,6 +1130,8 @@ def build_document_projection(
             content_sections=content_sections,
             available_section_types=available_section_types,
         ))
+        if component.ref.entity_id in composition:
+            sections.append(internal_sections[composition[component.ref.entity_id]])
 
     sections.append(DocumentSection(section_id="protocols", title="Protocols", level=1, eyebrow="Bus and abstraction definitions"))
     for bus in revision.bus_definitions:

@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from spec2gds.spec.spec_format.archive import SpecPackage
 from spec2gds.spec.spec_format.edit_access import EditAccessError, SpecEditAccess
 from spec2gds.spec.spec_format.hosted_files import SpecFilesystem
-from spec2gds.spec.spec_format.spec_service_store import SpecServiceBindings, document_key
+from spec2gds.spec.spec_format.spec_service_store import SpecServiceBindings
 from spec2gds.spec.spec_format.v1_api import create_app
 
 
@@ -201,3 +201,38 @@ def test_file_publication_is_exclusive_and_directory_names_are_local(tmp_path):
     with pytest.raises(ValueError):
         with bindings.reserve_name(str(tmp_path / "a/other.spec"), "other", "Counter"):
             pass
+
+
+def test_end_session_releases_all_applications_and_fences_late_requests(hosted):
+    client, root = hosted
+    saved = client.post("/documents/create", json={"path": str(root / "handoff.spec"), "title": "Handoff"}).json()
+    key = saved["owner_document_key"]
+    query = {"owner_document_key": key}
+    first = saved["edit_access"]
+    child = client.post("/documents/edit-access/acquire", params=query, json={"context_id": first["context_id"], "participant_id": "circuit:linked"}).json()
+    source = (root / "handoff.spec").read_bytes()
+    closed = client.post("/documents/edit-access/end-session", params=query, json=first)
+    assert closed.status_code == 200
+    for participant in (first, child):
+        assert client.post("/documents/edit-access/renew", params=query, json=participant).status_code == 423
+        headers = {"X-Spec-Edit-Context": participant["context_id"], "X-Spec-Participant": participant["participant_id"]}
+        assert client.post("/transactions", params=query, headers=headers, json={"expected_source_revision_hash": saved["source_revision_hash"], "operations": [{"type": "set_document_title", "title": "Late linked write"}]}).status_code == 423
+    next_access = client.post("/documents/edit-access/acquire", params=query, json={}).json()
+    assert next_access["mode"] == "edit"
+    assert next_access["context_id"] != first["context_id"]
+    assert client.post("/documents/edit-access/end-session", params=query, json=first).status_code == 200
+    assert client.post("/documents/edit-access/renew", params=query, json=next_access).status_code == 200
+    assert client.post("/documents/edit-access/acquire", params=query, json=child).json()["mode"] == "read_only"
+    headers = {"X-Spec-Edit-Context": first["context_id"], "X-Spec-Participant": first["participant_id"]}
+    assert client.post("/transactions", params=query, headers=headers, json={"expected_source_revision_hash": saved["source_revision_hash"], "operations": [{"type": "set_document_title", "title": "Late write"}]}).status_code == 423
+    assert (root / "handoff.spec").read_bytes() == source
+
+
+def test_read_only_close_cannot_revoke_an_editing_context(hosted):
+    client, root = hosted
+    saved = client.post("/documents/create", json={"path": str(root / "read_only.spec"), "title": "Read only close"}).json()
+    query = {"owner_document_key": saved["owner_document_key"]}
+    grant = saved["edit_access"]
+    assert client.post("/documents/edit-access/acquire", params=query, json={}).json()["mode"] == "read_only"
+    assert client.post("/documents/edit-access/end-session", params=query, json={}).status_code == 423
+    assert client.post("/documents/edit-access/renew", params=query, json=grant).status_code == 200

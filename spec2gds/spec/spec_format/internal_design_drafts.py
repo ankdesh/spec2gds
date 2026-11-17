@@ -44,7 +44,6 @@ class InternalDesignDraft:
             tuple(
                 item.section_id
                 for item in revision.entity_sections_for(component, "sv")
-                if item.usage == "implementation"
             ),
         )
 
@@ -60,13 +59,15 @@ class InternalDesignDraft:
                 "The Component already has an internal Design. Reopen its latest source."
             )
         result = SpecEditTransaction(
-            revision.source_revision_hash, self.creation_operations(), "authoring"
+            revision.source_revision_hash, self.creation_operations() + self.sv_operations("retain_reference"), "authoring"
         ).apply(revision)
         if result.revision is None:
             raise ValueError(" · ".join(result.diagnostics))
         return result.revision
 
     def sv_operations(self, disposition: Literal["retain_reference", "remove"] | None) -> tuple:
+        if disposition not in {None, "retain_reference", "remove"}:
+            raise ValueError("Select Retain SV or Remove SV.")
         if self.sv_sections and disposition is None:
             raise ValueError("Choose Retain SV or Remove SV before saving the internal Design.")
         if disposition == "remove":

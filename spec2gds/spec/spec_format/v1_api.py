@@ -860,6 +860,9 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
         if action == "release":
             access.release(session.service_document_key, request.context_id, request.participant_id)
             return {"mode": "read_only"}
+        if action == "end-session":
+            access.end_session(session.service_document_key, request.context_id, request.participant_id)
+            return {"mode": "read_only"}
         raise fastapi.HTTPException(status_code=404, detail="Unknown edit-access action.")
 
     def created_snapshot(session: V1Session, request_id: str | None) -> dict:
@@ -1221,7 +1224,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "writable": writable,
                 "capabilities": ([
                     "topology", "layout", "timing", "local-components", "numeric-part-selects",
-                    *(["boundary-ports"] if projection.parent_component_id else []),
+                    "boundary-ports",
                 ] if writable else ["create-internal-design"] if can_create else []),
                 "omitted_bus_items": list(projection.omitted_bus_items),
                 "omitted_ports": list(projection.omitted_ports),
@@ -1713,11 +1716,16 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
 
         async def events() -> typing.AsyncIterator[str]:
             observed = max(0, requested)
+            participation = dict(_request_context.get())
+            ended_notified = False
             # No event ID here: replay must not skip changes racing connection.
             yield f"event: source.resync\ndata: {json.dumps(_source_event(session, 'external', []))}\n\n"
             while True:
                 try:
                     current = bound_session(key)
+                    if participation.get("context_id") and not ended_notified and access.status(key, participation.get("context_id"), participation.get("participant_id"))["mode"] != "edit":
+                        yield 'event: edit-access.ended\ndata: {"mode":"read_only"}\n\n'
+                        ended_notified = True
                     latest = current.journal.observe(_source_event(current, "external", []))
                     if observed > latest:
                         observed = latest
@@ -2002,7 +2010,15 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 details=request,
             )
             session = bound_session(owner_document_key)
-            operations = _decode_transaction_operations(session.revision.document_id, request.operations)
+            if len(request.operations) == 1 and request.operations[0].get("type") == "create_internal_design":
+                raw = request.operations[0]
+                assigned = session.revision.internal_design(EntityRef.model_validate(raw["component"]))
+                if assigned and assigned.ref.entity_id == raw.get("design_id"):
+                    from .naming import entity_name
+                    if entity_name(assigned) != raw.get("name"):
+                        raise ValueError("The creation ID was already used with another Design name.")
+                    return {"committed": True, "snapshot": _snapshot(session), "section_validation": []}
+            operations = _decode_transaction_operations(session.revision.document_id, request.operations, session.revision)
         except (KeyError, ValueError, pydantic.ValidationError) as exc:
             raise fastapi.HTTPException(status_code=422, detail=str(exc)) from exc
         with session.lock:
@@ -2260,7 +2276,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
     return app
 
 
-def _decode_transaction_operations(document_id: str, raw_operations: list[dict[str, typing.Any]]) -> tuple[typing.Any, ...]:
+def _decode_transaction_operations(document_id: str, raw_operations: list[dict[str, typing.Any]], revision: SpecRevision | None = None) -> tuple[typing.Any, ...]:
     """Decode the JSON API operation vocabulary to V1.2 typed transactions."""
     def entity(value: typing.Any) -> EntityRef:
         """Accept compact ``kind:id`` or full public reference objects."""
@@ -2334,6 +2350,18 @@ def _decode_transaction_operations(document_id: str, raw_operations: list[dict[s
             operations.append(DeleteParameter(entity(raw["component"]), str(raw["name"])))
         elif kind == "upsert_instance":
             operations.append(UpsertInstance(entity(raw["design"]), InstanceIR(**raw["instance"])))
+        elif kind == "set_design_interface":
+            from .transactions import SetDesignInterface
+            operations.append(SetDesignInterface(entity(raw["design"]), tuple(raw["ports"]), tuple(raw["parameters"]), tuple(raw.get("port_renames", {}).items())) )
+        elif kind == "create_internal_design":
+            if revision is None:
+                raise ValueError("Internal Design creation requires a saved revision.")
+            pending = InternalDesignDraft.prepare(revision, entity(raw["component"]))
+            if raw.get("design_id"):
+                pending = dataclasses.replace(pending, design=pending.design.model_copy(update={"entity_id": str(raw["design_id"])}))
+            if raw.get("name"):
+                pending = dataclasses.replace(pending, name=str(raw["name"]))
+            operations.extend((*pending.creation_operations(), *pending.sv_operations(raw.get("sv_disposition"))))
         elif kind == "delete_instance":
             operations.append(DeleteInstance(entity(raw["design"]), str(raw["instance_name"])))
         elif kind == "reorder_instances":

@@ -493,7 +493,7 @@ class _Analyzer:
                 visit_component(self.components_by_vlnv[instance.component_vlnv])
 
         if root_parent is None:
-            visit_design(entity, None)
+            visit_design(entity, entity)
         else:
             visit_component(root_parent)
 
@@ -504,6 +504,9 @@ class _Analyzer:
         ]
         for component in components:
             self._validate_component(component)
+        for design, parent in design_pairs.values():
+            if isinstance(parent, DesignIR):
+                self._validate_component(parent)
 
         design_analyses = tuple(
             self._analyze_design(design, parent) for design, parent in design_pairs.values()
@@ -596,6 +599,21 @@ class _Analyzer:
     def _analyze_design(self, design: DesignIR, parent: ComponentIR | None) -> _DesignAnalysis:
         """Validate effective widths, slice bounds, overlap and ordinary drivers."""
         instances = {item.name: item for item in design.instances}
+        from spec2gds.spec.spec_format.design_interfaces import instance_interface, resolve_ports
+        for instance in design.instances:
+            try:
+                effective = instance_interface(self.spec.low, design, instance)
+                evaluated = resolve_ports(effective)
+                for port in effective.ports:
+                    if port.style != "wire":
+                        continue
+                    bounds = evaluated[port.name]
+                    self.shapes[(f"{design.ref.entity_id}/{instance.name}", port.name)] = _PortShape(
+                        f"[{port.range}]" if port.range else "",
+                        (bounds["left"], bounds["right"]) if port.range else None,
+                    )
+            except (ValueError, OSError) as exc:
+                self.errors.append(f"Design {entity_name(design)} instance {instance.name}: {exc}")
         referenced: set[tuple[str, str]] = set()
         occupied: dict[tuple[str, str, str], list[tuple[int, int, str]]] = {}
         connections: list[_Connection] = []
@@ -616,7 +634,7 @@ class _Analyzer:
                 if endpoint.symbolic_slice is not None:
                     self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
                 referenced.add((endpoint.instance_name, endpoint.port_name))
-                endpoints.append(_Endpoint("instance", port, endpoint.instance_name, endpoint.slice, component.ref.entity_id))
+                endpoints.append(_Endpoint("instance", port, endpoint.instance_name, endpoint.slice, f"{design.ref.entity_id}/{endpoint.instance_name}"))
             for endpoint in connection.external_ports:
                 if endpoint.symbolic_slice is not None:
                     self.errors.append(f"{label} uses unsupported symbolic part-select {endpoint.symbolic_slice}.")
@@ -711,6 +729,11 @@ class _Normalizer:
                     f"port:{component.ref.entity_id}:{port.name}",
                 )
 
+        for design in self.analysis.designs:
+            if isinstance(design.parent, DesignIR):
+                pool = _IdentifierPool()
+                for port in design.parent.ports:
+                    self.port_names[(design.parent.ref.entity_id, port.name)] = self._allocate(pool, "port", design.parent.vlnv, port.name, f"port:{design.parent.ref.entity_id}:{port.name}")
         modules = [self._component_module(component) for component in self.analysis.components]
         if self.analysis.root_parent is not None:
             top_module = self.module_names[self.analysis.root_parent.ref.entity_id]
@@ -857,14 +880,7 @@ class _Normalizer:
                         expression=expression,
                     )
                 )
-            param_assigns = []
-            if parent is not None:
-                parent_params = {p.name for p in parent.parameters}
-                param_assigns = [
-                    f".{param.name}({param.name})"
-                    for param in component.parameters
-                    if param.name in parent_params
-                ]
+            param_assigns = [f".{name}({value})" for name, value in instance.parameter_values]
             param_str = " #(\n        " + ",\n        ".join(param_assigns) + "\n    )" if param_assigns else ""
             instances.append(
                 _RtlInstance(
@@ -887,7 +903,7 @@ class _Normalizer:
             parameters=parent.parameters if parent is not None else (),
             component_sv=(
                 self.analysis.sections_by_parent.get(parent.ref.entity_id)
-                if parent is not None else None
+                if isinstance(parent, ComponentIR) else None
             ),
             design_sv=self.analysis.sections_by_parent.get(analysis.design.ref.entity_id),
         )

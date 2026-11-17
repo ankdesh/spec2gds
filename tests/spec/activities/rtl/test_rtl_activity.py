@@ -385,17 +385,16 @@ def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
     assert "assign dout = '0;" not in unit_source
     assert "_unused_ok" not in unit_source
     assert "assign dout = din;" in unit_source
-    assert cluster_source.index("unit u0") < cluster_source.index("logic component_marker")
-    assert cluster_source.index("logic component_marker") < cluster_source.index("logic design_marker")
-    assert f'`line 1 "{component_body.source_path}" 0' in cluster_source
+    assert cluster_source.index("unit u0") < cluster_source.index("logic design_marker")
+    assert "logic component_marker" not in cluster_source
+    assert component_body.usage == "reference"
+    assert f'`line 1 "{component_body.source_path}" 0' not in cluster_source
     assert f'`line 1 "{design_body.source_path}" 0' in cluster_source
     assert manifest["schema_version"] == "spec2gds.rtl-generation.v3"
     assert {item["section_id"] for item in manifest["source_sections"]} >= {
-        component_body.section_id,
         design_body.section_id,
     }
     assert {item["section_id"] for item in result.report["source_sections"]} >= {
-        component_body.section_id,
         design_body.section_id,
     }
 
@@ -409,7 +408,6 @@ def test_sv_bodies_survive_activity_snapshot_and_render_with_v2_provenance(
         (lambda: _rtl_package(mismatch=True), "design_rtl_top", ("incompatible ranges",)),
         (lambda: _rtl_package(multiple_driver=True), "design_rtl_top", ("multiple ordinary drivers",)),
         (lambda: _rtl_package(reused_endpoint=True), "design_rtl_top", ("reuses endpoint",)),
-        (lambda: _rtl_package(top_boundary=True), "design_rtl_top", ("unowned design",)),
         (lambda: _rtl_package(multiple_boundary=True), "design_rtl_top", ("multiple external",)),
     ],
 )
@@ -537,3 +535,8 @@ def test_generated_project_lints_with_required_verilator(tmp_path: Path) -> None
         cwd=tmp_path / result.report["output_path"],
         check=True,
     )
+
+
+def test_unknown_top_level_boundary_is_rejected_in_source():
+    with pytest.raises(ValueError, match="root_in"):
+        SpecRevision.from_package(_rtl_package(top_boundary=True))

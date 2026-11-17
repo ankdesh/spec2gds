@@ -31,7 +31,7 @@ test("opens exact Spec targets from the Circuit Designer menu and embedded previ
   const before = stack.archive(stack.path());
   const composite = snapshot.component_compositions[0];
   const leaf = snapshot.components.find((item: any) => !snapshot.component_compositions.some((mapping: any) => mapping.component.entity_id === item.ref.entity_id));
-  const design = snapshot.designs.find((item: any) => item.ref.entity_id === composite.internal_design.entity_id);
+  const design = snapshot.entry_designs[0];
   const component = snapshot.components.find((item: any) => item.ref.entity_id === composite.component.entity_id);
   const targets = [design, component, leaf];
   for (const target of targets) {
@@ -130,7 +130,7 @@ test("replaces a deleted instance with another definition using the same name", 
   await expect(page.locator(".notice")).toContainText("Changes saved to the source");
   await expect(page.locator(".save-error")).toHaveCount(0);
   const saved = await stack.snapshot();
-  expect(saved.designs[0].instances).toEqual([{ name: "u_read", component_vlnv: replacement.vlnv }]);
+  expect(saved.designs[0].instances).toEqual([{ name: "u_read", component_vlnv: replacement.vlnv, parameter_values: [] }]);
   await launch(page, stack, "design", snapshot.designs[0].ref.entity_id);
   await expect(page.locator('.react-flow__node[data-id="u_read"]')).toContainText("Four input selector");
 });

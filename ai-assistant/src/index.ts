@@ -754,7 +754,8 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
           const id = decodeURIComponent(accessMatch[1]!);
           const binding = state.getBinding(id);
           if (!binding) throw new HttpError(404, "Unknown binding.");
-          const granted = await owners.editAccess(binding, "acquire");
+          let granted = await owners.editAccess(binding, "acquire");
+          if (granted.mode !== "edit" && binding.domain === "spec") granted = await owners.editAccess({ ...binding, editContextId: null }, "acquire");
           if (binding.domain === "spec") state.setEditAccess(id, typeof granted.context_id === "string" ? granted.context_id : undefined, typeof granted.participant_id === "string" ? granted.participant_id : undefined);
           return writeJson(response, 200, { edit_access: granted });
         }
@@ -770,10 +771,11 @@ export function apply(ctx: AppContext, rawConfig: Record<string, unknown>): void
               }
               throw new HttpError(404, "Unknown binding.");
             }
-            if (binding.editContextId || binding.domain === "circuit") { try { await owners.editAccess(binding); } catch { /* Expired access stays read-only until explicitly acquired. */ } }
+            let editAccess: Record<string, unknown> = { mode: "read_only" };
+            if (binding.editContextId || binding.domain === "circuit") { try { editAccess = await owners.editAccess(binding); } catch { /* Closed participation cannot save. */ } }
             try { const names = await owners.names(binding); binding = state.refreshSourceName(sessionId, sourceName(names), typeof names.name === "string" ? names.name : undefined); }
             catch { /* Retain the last source name while the owner is unavailable. */ }
-            return writeJson(response, 200, { session: binding, instruction_release: (() => {
+            return writeJson(response, 200, { session: binding, edit_access: editAccess, instruction_release: (() => {
               if (!snapshots.has(sessionId)) return { status: "legacy", reason: defaultInstructions.text("host.31") };
               try { const release = snapshots.get(sessionId)!.snapshot; return { status: "pinned", version: release.version, hash: release.hash }; }
               catch (error) { return { status: "incompatible", reason: error instanceof Error ? error.message : String(error) }; }

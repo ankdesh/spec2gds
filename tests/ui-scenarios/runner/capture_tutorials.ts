@@ -221,15 +221,14 @@ try {
         await page.locator('#editor-diagnostics-trigger').click();
         await expect(page.locator('.diagnostics-panel')).toContainText('Lint passed');
         await open(page, '05');
-        await options(page.locator('#designs'), 'Add design…');
-        await page.getByLabel('Design name', { exact: true }).fill('Registered adder implementation');
-        await page.getByRole('button', { name: 'Create design', exact: true }).click();
-        await expect.poll(async () => (await snapshot()).designs.length).toBe(1);
+        const containing = component(page, 'registered_adder');
+        await options(containing, 'Create internal Design…');
+        const creation = page.getByRole('dialog', { name: 'Create internal Design', exact: true });
+        await creation.getByLabel('Design name', { exact: true }).fill('Registered adder implementation');
+        await creation.getByRole('button', { name: 'Create internal Design', exact: true }).click();
+        await expect(creation).toBeHidden();
         const authored = (await snapshot()).designs[0];
         const authoredDesign = page.locator(`#design-${authored.ref.entity_id.replaceAll('_', '-')}`);
-        const containing = component(page, 'registered_adder');
-        await containing.locator('.spec-hardware-controls > details').filter({ has: page.getByText('Hardware settings', { exact: true }) }).locator('summary').click();
-        await containing.getByLabel('Internal Design', { exact: true }).selectOption(authored.ref.entity_id);
         await expect.poll(async () => (await snapshot()).component_compositions.length).toBe(1);
         const definitions = (await snapshot()).components;
         for (const [name, id] of [['u_add', 'add16'], ['u_reg', 'reg16']]) {

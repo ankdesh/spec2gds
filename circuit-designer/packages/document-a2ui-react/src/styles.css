@@ -1706,3 +1706,22 @@
   max-height: 288px;
   object-fit: contain;
 }
+
+.spec-hardware-dialog { width: min(42rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); box-sizing: border-box; overflow: auto; padding: 1.25rem; border: 1px solid var(--spec-line-strong); border-radius: var(--spec-radius); background: var(--spec-paper); color: var(--spec-text); }
+.spec-hardware-dialog::backdrop { background: #0008; }
+.spec-hardware-dialog form, .spec-hardware-dialog label { display: grid; gap: .5rem; }
+.spec-hardware-dialog form { gap: 1rem; }
+.spec-hardware-dialog fieldset { display: grid; gap: .5rem; min-width: 0; border: 1px solid var(--spec-line-strong); }
+.spec-hardware-dialog input, .spec-hardware-dialog select { min-width: 0; width: 100%; box-sizing: border-box; color: var(--spec-text); background: var(--spec-surface-subtle); border: 1px solid var(--spec-line-strong); padding: .5rem; }
+.spec-hardware-dialog button { color: var(--spec-text); background: var(--spec-surface-subtle); border: 1px solid var(--spec-line-strong); padding: .5rem .75rem; }
+.spec-hardware-dialog .spec-edit-actions { flex-wrap: wrap; }
+
+/* Hardware summaries and empty previews use the active document theme. */
+.spec-facts div, .spec-entity-section { background: var(--spec-surface-subtle); color: var(--spec-text); border-color: var(--spec-line); }
+.spec-facts dt { color: var(--spec-muted); }
+.spec-topology-card--empty { color: var(--spec-text); }
+.spec-topology-card--empty strong { color: var(--spec-subheading-color); }
+.spec-topology-card--unavailable { color: var(--spec-error-text, #fecaca); background: var(--spec-error-bg, #450a0a); border-color: var(--spec-error-border, #f87171); }
+
+.spec-edit-error, .spec-port-error-row td { color: var(--spec-error-text, #fecaca); }
+.spec-port-error-row td { background: var(--spec-error-bg, #450a0a); }

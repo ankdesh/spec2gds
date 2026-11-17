@@ -50,6 +50,7 @@ def edit_parameter(root: etree._Element, value: dict[str, typing.Any] | None, na
     if container is None:
         container = _ensure_ordered(root, "parameters", _COMPONENT_ORDER)
     parameter = existing if existing is not None else etree.SubElement(container, _q("parameter"))
+    parameter.set("parameterId", parameter.get("parameterId") or name)
     parameter.set(f"{{{RTL_NAMESPACE}}}type", value.get("rtl_type", ""))
     for field in ("name", "description", "value"):
         child = _child(parameter, field)

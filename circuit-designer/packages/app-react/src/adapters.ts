@@ -75,6 +75,7 @@ export interface CircuitSourceSaveResult {
 }
 
 export interface CircuitSourceAdapter {
+  checkAccess?(documentId: string): Promise<boolean>;
   load(documentId: string): Promise<CircuitSourceState | undefined>;
   commit(documentId: string, batch: CircuitOperationBatch, leaseId: string, proposalId?: string, svDisposition?: "retain_reference" | "remove"): Promise<CircuitSourceSaveResult>;
   prepareInternalDesign?(documentId: string, leaseId: string, requestId: string): Promise<CircuitSourceSaveResult>;

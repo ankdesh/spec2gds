@@ -240,9 +240,11 @@ def validate_layout_annotations(manifest: typing.Any, files: typing.Mapping[str,
             for instance_name, vlnv in instances.items()
             for port_name in component_ports.get(vlnv, set())
         }
+        from .design_interfaces import read_interface
         terminal_keys.update(
             f"boundary:{port_name}"
-            for port_name in component_ports.get(owner_vlnv_by_design.get(value.design.entity_id, ""), set())
+            for port_name in component_ports.get(owner_vlnv_by_design.get(value.design.entity_id, ""),
+                                                {p.name for p in read_interface(files, value.design).ports})
         )
         unknown_geometry = set(value.instance_geometry) - set(instances)
         unknown_placements = set(value.terminal_placements) - terminal_keys

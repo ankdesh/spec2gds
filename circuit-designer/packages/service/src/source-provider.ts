@@ -36,6 +36,7 @@ export class HttpSourceDesignProvider {
     const response = await this.fetchImpl(new URL("renew", `${this.callback.toString().replace(/\/?$/, "/")}`), {
       method: "POST", headers: { Authorization: `Bearer ${this.token}` },
     });
+    if (response.status === 423) return { mode: "read_only" };
     if (!response.ok) throw new Error(`Spec edit access returned HTTP ${response.status}.`);
     return await response.json() as Record<string, unknown>;
   }

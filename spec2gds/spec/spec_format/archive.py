@@ -318,6 +318,12 @@ class SpecPackage:
             diagnostics.append(f"Invalid entity sections: {exc}")
 
         try:
+            from .design_interfaces import validate_interfaces
+            validate_interfaces(self.manifest, self.files)
+        except (ValueError, pydantic.ValidationError) as exc:
+            diagnostics.append(f"Invalid Design interfaces: {exc}")
+
+        try:
             from spec2gds.spec.spec_format.circuit_layouts import validate_layout_annotations
 
             validate_layout_annotations(self.manifest, self.files)

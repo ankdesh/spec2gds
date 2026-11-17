@@ -134,20 +134,26 @@ flowchart LR
 
 ### Create an internal Design for a blank Component
 
-1. Create a Component in Spec Editor. Ports and parameters can be added now or later.
-2. Open that Component in Circuit Designer from the top menu or preview **Options**.
-3. Select **Edit → Begin editing**, then **Edit → Create internal Design**. Both require Spec edit access. The canvas opens a private Design with the supported Component wire ports as boundary terminals.
-4. Add ports, place Components, and connect them as needed. Select **Save to Spec** to create the Design and assign it to the Component. An empty Design can also be saved. It is not an entry Design.
+1. Create a Component in Spec Editor. Add its ports and parameters as needed.
+2. Select the Component’s **Options → Create internal Design…**. Confirm its name. The Design uses the Component’s interface; no top-level Design is needed.
+3. If an SV Section exists, choose **Retain SV** to keep reference text, **Remove SV** to delete it, or **Cancel**. Creation, assignment, and the SV choice save in one transaction. Cancel leaves the saved Spec unchanged.
+4. Select **Open in Circuit Designer**, then **Edit → Begin editing** before circuit changes. Use **Save to Spec** to commit the circuit draft.
 
-If the Component has implementation SV, the first save requires a choice:
+Internal Designs appear under their Components. **Top-level Designs** contains standalone Designs. Entry status selects build roots among top-level Designs; an internal Design cannot also be an entry Design.
 
-- **Retain SV** preserves the Section as **SystemVerilog reference — excluded from implementation**. It remains readable and editable. Hardware generation and hardware lint exclude it.
-- **Remove SV** deletes the SV Section in the same save.
-- **Cancel saving** keeps the complete circuit draft open.
+Retained SV is labelled **SystemVerilog reference — excluded from implementation**. It remains readable and editable. Hardware generation and hardware lint exclude it. Editing reference SV or removing its Design assignment does not activate it.
 
-**File → Cancel changes** discards the pending Design and restores the interface preview. Preparation and cancellation leave the saved Spec unchanged. A failed save preserves the draft. Retry an uncertain save with **Save to Spec**. A source conflict requires reopening the latest source or downloading the draft.
+The alternate Circuit Designer route remains available: open a blank Component, select **Begin editing → Create internal Design**, and use **Save to Spec** for its first save. Its preparation and cancellation leave saved source unchanged. Creation from a placed instance or child-Design navigation is outside this flow.
 
-Existing Specs retain their SV behavior. Editing reference SV or clearing its internal Design does not activate it. Creation from a placed instance or child-Design navigation is outside this flow.
+### Top-level Design interfaces
+
+Each top-level Design has **Ports** and **Parameters**. Select **Edit Design interface…** to save them together. Ports support input, output, and bidirectional wires. Leave Range blank for a scalar or enter a numeric or parameter-based range such as `DATA_WIDTH-1:0`.
+
+Use an instance’s **Options → Edit parameters…** to map a child parameter to a Design parameter or constant expression. A blank value uses the Component default. Matching names do not create a mapping. For example, save `WIDTH = DATA_WIDTH` explicitly.
+
+Circuit Designer displays the Design ports as boundary terminals. Its boundary edits update the same interface. Port expressions and instance parameter mappings survive circuit saves. Generated RTL declares the saved top-level interface and explicit instance overrides. Symbolic ranges require Verilator for resolution; unavailable tools and invalid expressions produce diagnostics.
+
+Top-level interfaces use registered, versioned Spec metadata. No hidden Component stores their ports. There is no runtime migration or legacy role-repair workflow.
 
 ---
 
@@ -236,8 +242,12 @@ draft is open, the copy opens separately and the original draft remains in its t
 
 Edit participants renew every 30 seconds. Access expires five minutes after the
 last renewal. Spec Editor, linked Circuit Designer views, open Assistant views,
-and queued or running jobs can retain participation. Closing Spec Editor releases
-its participant. Other disconnected participants expire. Old tokens cannot save after expiry. **Resume editing** acquires
+and queued or running jobs can retain participation. **File → Close Spec** ends the full editing session and releases all its participants.
+Save or cancel an inline draft first. Linked applications retain private drafts,
+but cannot save with the ended access. Running computations may finish; their old
+credentials cannot modify the Spec. Another designer can then acquire editing
+access immediately. A read-only tab closes locally. Closing only the browser tab
+releases that tab’s participant; disconnected participants expire. Old tokens cannot save after expiry. **Resume editing** acquires
 access only if another context does not hold it.
 
 Document HTTP requests must select `service_document_key`; the legacy
@@ -260,6 +270,7 @@ the paginated submission history and does not change the saved Spec.
 | `POST /documents/edit-access/acquire` | Returns edit access, or read-only when another context holds the file. |
 | `POST /documents/edit-access/renew` | Renews a valid participant; expired access returns HTTP 423. |
 | `POST /documents/edit-access/release` | Releases only the specified participant. |
+| `POST /documents/edit-access/end-session` | Ends all participation in the caller’s editing context. Retries cannot revoke a successor context. |
 
 Spec names are unique per directory. Shared lists show root-relative paths to
 distinguish matching names. Artifacts and generated output use the file-specific

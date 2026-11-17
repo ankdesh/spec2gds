@@ -29,6 +29,7 @@ interface EditorMenuBarProps {
   onCreateDirectory: (parent: string, name: string) => Promise<FilesystemDirectoryListing>;
   onError: (message: string) => void;
   onOpen: (path: string) => Promise<boolean>;
+  onClose: () => Promise<void>;
   onOpenAssistant: () => Promise<void>;
   onOpenCircuit: (entityKind: "component" | "design", entityId: string) => Promise<void>;
   onSelectTheme: (themeId: SpecEditorThemeId) => void;
@@ -602,6 +603,7 @@ function HelpDialog({ dialog, onClose }: { dialog: Exclude<DialogId, "new" | "co
 }
 
 export default function EditorMenuBar({
+  onClose,
   dialogError,
   activityCount,
   diagnosticCount,
@@ -660,7 +662,7 @@ export default function EditorMenuBar({
       if (rightEntry !== undefined) return 1;
       return left.index - right.index;
     })
-    .map(({ design }) => design), [entryIds, snapshot]);
+    .map(({ design }) => design).filter(design => !snapshot?.component_compositions.some(item => item.internal_design.entity_id === design.ref.entity_id)), [entryIds, snapshot]);
   const components = snapshot?.components ?? [];
 
   const openPathDialog = (mode: "new" | "open") => {
@@ -794,6 +796,7 @@ export default function EditorMenuBar({
               <MenuAction onActivate={activate(() => openPathDialog("new"))} shortcut="Ctrl/⌘ N">New Spec…</MenuAction>
               <MenuAction onActivate={activate(() => openPathDialog("open"))} shortcut="Ctrl/⌘ O">Open Spec…</MenuAction>
               {snapshot && onCopy && <MenuAction onActivate={activate(() => { onError(""); setDialog("copy"); })}>Create Copy…</MenuAction>}
+              <MenuAction disabled={!snapshot || loading} onActivate={activate(() => { void onClose(); })}>Close Spec</MenuAction>
               <MenuAction
                 disabled={!path || loading}
                 onActivate={activate(() => { void onOpen(path); })}
@@ -810,7 +813,7 @@ export default function EditorMenuBar({
               <MenuAction onActivate={activate(() => setDialog("preferences"))} shortcut="Ctrl/⌘ ,">Preferences…</MenuAction>
             </TopMenu>
             <TopMenu id="circuit" label="Circuit Designer" openMenu={openMenu} setOpenMenu={setOpenMenu}>
-              {designs.length > 0 && <div className="editor-menu__group" role="presentation">Designs</div>}
+              {designs.length > 0 && <div className="editor-menu__group" role="presentation">Top-level Designs</div>}
               {designs.map((design) => (
                 <MenuAction
                   disabled={launchingCircuit}

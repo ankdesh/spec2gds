@@ -74,7 +74,7 @@ def build_start(client, destination, stage, example):
     if stage >= 4:
         design = example["design"]
         operations = [{"type": "create_entity", "kind": "design", "name": design["name"],
-                       "entity_id": design["id"], "entry_design": True}]
+                       "entity_id": design["id"], "entry_design": False}]
         operations += [{"type": "upsert_instance", "design": f"design:{design['id']}",
                         "instance": {"name": name, "component_vlnv": f"spec2gds.local:work:{components[key]['name']}:1.0"}}
                        for name, key in design["instances"]]

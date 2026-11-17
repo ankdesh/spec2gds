@@ -321,6 +321,28 @@ export default function App() {
     }
   }, [browserLogger, client, loadView]);
 
+  const closeDocument = useCallback(async () => {
+    if (!snapshot || loading) return;
+    if (editing.current) { setError("Save or cancel your draft before closing this Spec."); return; }
+    setLoading(true); setError("");
+    try {
+      if (client.editAccess.mode === "edit") await client.editAccessAction("end-session");
+      ++documentEpoch.current; ++viewRequest.current;
+      activeKey.current = null; initialDocumentKey.current = null; client.bindDocument("");
+      client.setEditAccess({ mode: "read_only" }); setEditAccess({ mode: "read_only" });
+      window.sessionStorage.removeItem("spec2gds.spec.selection");
+      const url = new URL(window.location.href);
+      ["owner_document_key", "service_document_key", "edit_context_id", "view"].forEach(key => url.searchParams.delete(key));
+      window.history.replaceState({}, "", url);
+      setSnapshot(null); setReportSnapshot(null); setBatch(null); setPath("");
+      setSelectedReport(null); setSourceLocation(null); setReviewSource(null); setExternalChange(null);
+      setActivity({ executions: [], artifacts: [], proposals: [], assistant_changes: [] });
+      setCatalogDocument(null); setCopyDialog(false); setCopiedLink(""); setNotice(""); setView("document");
+      currentRevision.current = ""; eventCursor.current = 0; setViewCursor(0); setSyncState("Disconnected");
+    } catch (caught) { setError(`Could not confirm closure. Retry Close Spec. ${caught instanceof Error ? caught.message : String(caught)}`); }
+    finally { setLoading(false); }
+  }, [client, snapshot, loading, setNotice]);
+
   useEffect(() => {
     if (!snapshot) return;
     const key = snapshot.owner_document_key;
@@ -429,6 +451,11 @@ export default function App() {
       }
     };
     source.addEventListener("source.changed", onChange as EventListener);
+    source.addEventListener("edit-access.ended", () => {
+      if (activeKey.current !== key) return;
+      persistAccess(key, { mode: "read_only" });
+      setError("This Spec’s editing session ended. Your draft is preserved. Resume editing to request new access.");
+    });
     source.addEventListener("source.resync", onChange as EventListener);
     source.addEventListener("assistant.submission.changed", schedule);
     source.addEventListener("source.unavailable", () => setSyncState("Bound package unavailable"));
@@ -908,6 +935,7 @@ export default function App() {
         onError={setError}
         onOpen={openDocument}
         onOpenAssistant={launchDocumentAssistant}
+        onClose={closeDocument}
         onOpenCircuit={launchCircuitDesigner}
         onSelectTheme={selectTheme}
         onToggleTheme={toggleTheme}
@@ -923,7 +951,7 @@ export default function App() {
       {snapshot && !canEdit && <div className="app-refresh-notice" role="status">
         <span>This Spec is read-only. Create a copy to edit independently.</span>
         <button id="spec-create-copy-trigger" type="button" onClick={() => { setError(""); setCopyDialog(true); }}>Create Copy…</button>
-        <button type="button" onClick={() => void client.editAccessAction("acquire").then(access => { persistAccess(snapshot.owner_document_key, access); if (access.mode === "read_only") setError("This Spec is still in use. Create a copy to edit it."); else void loadView(); }).catch(caught => setError(String(caught)))}>Resume editing</button>
+        <button type="button" onClick={() => void client.editAccessAction("acquire").then(access => { persistAccess(snapshot.owner_document_key, access); if (access.mode === "read_only") setError("This Spec is still in use. Create a copy to edit it."); else { setError(""); void loadView(); } }).catch(caught => setError(String(caught)))}>Resume editing</button>
       </div>}
       {notification && <NotificationToast key={notification.id} message={notification.message} onDismiss={() => setNotice("")}
         onDetails={notification.details ? () => { setSelectedReport(notification.target ?? null); setView(notification.details!); setNotice(""); } : undefined} />}

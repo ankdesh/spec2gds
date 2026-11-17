@@ -11,6 +11,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { InternalDesignForm, DesignInterfaceControls, InstanceParameterForm } from "./HardwareInterfaceControls";
 import { OptionsMenu } from "./OptionsMenu";
 export { OptionsMenu } from "./OptionsMenu";
 import { A2uiSurface, createComponentImplementation } from "@a2ui/react/v0_9";
@@ -512,7 +513,8 @@ function SectionOptionsMenu({
           )}
           {section.section_id === "components" && coordinator.controller?.browseCatalog && <button role="menuitem" type="button" disabled={!!coordinator.activeEditorId} onClick={() => { close(); coordinator.controller!.browseCatalog!(); }}>Import from catalog…</button>}
           {section.entity_ref && coordinator.controller?.verify && ["component", "design"].includes(section.entity_ref.entity_kind) && <button role="menuitem" type="button" disabled={busy || !!coordinator.activeEditorId} onClick={() => void runHardware()}>Verify {section.entity_ref.entity_kind === "component" ? "Component" : "Design"}</button>}
-          {section.entity_ref?.entity_kind === "component" && coordinator.controller?.source?.component_compositions.some(c => c.component.entity_id === section.entity_ref!.entity_id) && <button role="menuitem" type="button" disabled={busy} onClick={() => void runHardware([{ type: "clear_internal_design", component: section.entity_ref! }])}>Clear assignment</button>}
+          {section.entity_ref?.entity_kind === "component" && coordinator.controller && !coordinator.controller.source?.component_compositions.some(c => c.component.entity_id === section.entity_ref!.entity_id) && <button role="menuitem" type="button" disabled={!!coordinator.activeEditorId} onClick={() => { close(); editState?.begin?.("create-internal-design"); }}>Create internal Design…</button>}
+
           {onRename && (
             <button
               onClick={() => {
@@ -580,19 +582,16 @@ function SectionOptionsMenu({
               Add SystemVerilog section…
             </button>
           )}
-          {circuitRef && (
+          {circuitRef && section.preview_mode !== "interface" && (
             <button
               onClick={() => {
                 close(true);
-                if (section.preview_mode === "interface") {
-                  const preview = document.getElementById(section.section_id)?.querySelector<HTMLElement>(".spec-topology-card");
-                  preview?.scrollIntoView({ block: "center" });
-                } else dispatchOpenCircuit(circuitRef);
+                dispatchOpenCircuit(circuitRef);
               }}
               role="menuitem"
               type="button"
             >
-              <span>{section.preview_mode === "interface" ? "Preview interface" : "Open in Circuit Designer"}</span>
+              <span>Open in Circuit Designer</span>
               {section.entity_ref?.entity_kind === "component" && <small>Read-only preview</small>}
             </button>
           )}
@@ -680,6 +679,8 @@ function FactList({
 type SectionEditMode = ""
   | "create-component"
   | "create-design"
+  | "create-internal-design"
+  | "design-interface"
   | "add-component-instance"
   | "rename"
   | "metadata"
@@ -687,7 +688,7 @@ type SectionEditMode = ""
   | "add-sv"
   | "overview-narrative";
 
-interface SectionEditState {
+export interface SectionEditState {
   section: DocumentSectionData;
   mode: SectionEditMode;
   editorId: string;
@@ -1113,12 +1114,11 @@ function HardwareControls({ state }: { state: SectionEditState }) {
       {result.diagnostics.map((item, index) => <p key={index}><code>{item.code}</code>: {item.message}{item.file_path && <small> · {item.source_kind === "generated" ? "Generated RTL: " : "Section: "}{item.file_path}{item.line ? `:${item.line}${item.column ? `:${item.column}` : ""}` : ""}</small>}</p>)}
     </details>}
     <details><summary>Hardware settings</summary>
-      {!component && <label><input type="checkbox" checked={!!isEntry} disabled={busy} onChange={event => void run(() => apply([{ type: event.target.checked ? "add_entry_design" : "remove_entry_design", design: ref }]))} /> Entry Design</label>}
-      {component && <label>Internal Design<select aria-label="Internal Design" value={internal?.entity_id ?? ""} disabled={busy} onChange={event => {
-        const design = source?.designs.find(item => item.ref.entity_id === event.target.value);
-        void run(() => apply([design ? { type: "set_internal_design", component: ref, internal_design: design.ref } : { type: "clear_internal_design", component: ref }]));
-      }}><option value="">No internal Design</option>{source?.designs.map(item => <option key={item.ref.entity_id} value={item.ref.entity_id}>{item.display_name || item.vlnv}</option>)}</select></label>}
+      {!component && !source?.component_compositions.some(c => c.internal_design.entity_id === ref.entity_id) && <label><input type="checkbox" checked={!!isEntry} disabled={busy} onChange={event => void run(() => apply([{ type: event.target.checked ? "add_entry_design" : "remove_entry_design", design: ref }]))} /> Entry Design</label>}
+      {component && <p>Internal Design: {internal ? <button type="button" onClick={() => dispatchOpenCircuit(ref)}>Open in Circuit Designer</button> : <button type="button" onClick={() => state.begin?.("create-internal-design")}>Create internal Design…</button>}</p>}
+
     </details>
+    {!component && !source?.component_compositions.some(c => c.internal_design.entity_id === ref.entity_id) && <section><h4>Ports</h4>{source?.designs.find(d => d.ref.entity_id === ref.entity_id)?.ports?.map(p => <p key={p.name}><code>{p.name}</code> · {p.direction} · {p.range || "scalar"}</p>)}<h4>Parameters</h4>{source?.designs.find(d => d.ref.entity_id === ref.entity_id)?.parameters?.map(p => <p key={p.name}><code>{p.name} = {p.value}</code></p>)}<button type="button" onClick={() => state.begin?.("design-interface")}>Edit Design interface…</button></section>}
     {component && <details><summary>Parameters</summary>
       {(source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters ?? []).map(item => <div className="spec-edit-actions" key={item.name}><code>{item.name}: {item.rtl_type || "untyped"} = {item.value}</code><OptionsMenu label={`parameter ${item.name}`} triggerLabel={`Options for parameter ${item.name}`}><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(item.name); setParameter({ ...item, rtl_type: item.rtl_type || "", description: item.description || "" }); } }}>Edit</button><hr role="separator" /><button role="menuitem" className="spec-delete-button" type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete parameter ${item.name}?`)) void run(() => apply([{ type: "delete_parameter", component: ref, name: item.name }])); }}>Delete</button></OptionsMenu></div>)}
       {!parameter && <OptionsMenu label="Parameters" triggerLabel="Options for Parameters"><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(""); setParameter({ name: "", rtl_type: "int unsigned", value: "1", description: "" }); } }}>Add parameter</button></OptionsMenu>}
@@ -1234,6 +1234,8 @@ const SpecSection = createComponentImplementation(
           )}
           {mode === "create-component" && <HardwareCreationForm kind="component" state={editState} />}
           {mode === "create-design" && <HardwareCreationForm kind="design" state={editState} />}
+          {mode === "create-internal-design" && <InternalDesignForm state={editState} />}
+          {mode === "design-interface" && <DesignInterfaceControls state={editState} />}
           {mode === "add-component-instance" && <ComponentInstanceForm state={editState} />}
           {mode === "add-sv" && <NewSystemVerilogForm state={editState} />}
           {mode === "overview-narrative" && <OverviewNarrativeForm state={editState} />}
@@ -1391,6 +1393,7 @@ export function DocumentTableView({
   changedPaths?: string[];
 }) {
   const sectionEdit = useContext(SectionEditContext);
+  if (["design_ports", "design_parameters"].includes(table.kind) && sectionEdit?.controller?.applyOperations) return null;
   if (table.kind === "parameters" && sectionEdit?.controller?.applyOperations && sectionEdit.section.entity_ref?.entity_kind === "component") return null;
   if (table.kind === "component_ports" || table.kind === "component_port") {
     return <ComponentPortsTable changedPaths={changedPaths} sectionEdit={sectionEdit} table={table} />;
@@ -1459,8 +1462,10 @@ function InstanceActions({ row, state }: { row: DocumentTable["rows"][number]; s
   const coordinator = useContext(EditCoordinatorContext);
   const [error, setError] = useState("");
   const name = rowText(row, "name");
+  const [parametersOpen, setParametersOpen] = useState(false);
   const id = `${state.section.section_id}-instance-${name}`;
-  return <><OptionsMenu label={`instance ${name}`} triggerLabel={`Options for instance ${name}`}>
+  return <>{parametersOpen && <InstanceParameterForm state={state} name={name} cancel={() => { setParametersOpen(false); coordinator.finishEditor(id); }} />}<OptionsMenu label={`instance ${name}`} triggerLabel={`Options for instance ${name}`}>
+    <button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(id)) setParametersOpen(true); }}>Edit parameters…</button>
     <button role="menuitem" type="button" onClick={() => { const anchor = row.cells.component?.reference_anchor; if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: "start" }); }}>View Component definition</button>
     <hr role="separator" /><button role="menuitem" className="spec-delete-button" type="button" onClick={() => {
       if (!window.confirm(`Delete instance ${name}? Connected instances cannot be deleted.`) || !coordinator.requestEditor(id)) return;

@@ -298,7 +298,7 @@ def upsert_systemverilog_section(package: typing.Any, parent: EntityRef, content
     entry = SectionIndexEntry(
         section_id=identity, section_type="sv", type_version=1, parent=parent,
         path=path, media_type=SV_MEDIA_TYPE, sha256=sha256_digest(data),
-        usage=existing.usage if existing else "implementation",
+        usage="reference" if any(c.component == parent for c in package.manifest.component_compositions) else existing.usage if existing else "implementation",
     )
     current = SectionIndex.model_validate_json(package.files[SECTION_INDEX_PATH]) if SECTION_INDEX_PATH in package.files else SectionIndex()
     entries = [item for item in current.sections if not (item.parent == parent and item.section_type == "sv")]

@@ -109,7 +109,7 @@ def resolve_interface(ports, parameters=None, systemverilog="", overrides=None):
     parameter_declarations(parameters)
     names = set()
     literal_ports = []
-    needs_compiler = False
+    needs_compiler = bool(parameters)
     for port in ports:
         if not isinstance(port, dict):
             raise ValueError("Each port must contain an ID, direction, and range.")

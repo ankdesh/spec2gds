@@ -1,7 +1,5 @@
 """V1.4 API/editor acceptance checks for the current deterministic format."""
 
-from spec2gds.spec.spec_format.testing import direct_api_endpoints
-
 import inspect
 import json
 import os
@@ -17,7 +15,11 @@ from scripts.spec2gds_spec import main as package_cli
 from spec2gds.spec.spec_format.assistant import SpecChangeProposal
 from spec2gds.spec.spec_format.ir import SpecRevision
 from spec2gds.spec.spec_format.models import EntityRef
-from spec2gds.spec.spec_format.testing import build_test_package, write_test_package
+from spec2gds.spec.spec_format.testing import (
+    build_test_package,
+    direct_api_endpoints,
+    write_test_package,
+)
 from spec2gds.spec.spec_format.v1_api import (
     ActivityExecutionRequest,
     AssistantDocumentLaunchRequest,
@@ -352,6 +354,7 @@ def test_v1_api_applies_direct_editor_entity_metadata_and_port_operations(tmp_pa
     assert created["designs"][0]["instances"] == [{
         "name": "timer0",
         "component_vlnv": "spec2gds.local:work:timer:1.0",
+        "parameter_values": [],
     }]
 
     edited = endpoints["transaction"](TransactionRequest(

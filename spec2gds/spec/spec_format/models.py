@@ -347,6 +347,14 @@ class SpecManifest(StrictModel):
     narrative_path: str = "document/document.json"
     assets: list[AssetEntry] = pydantic.Field(default_factory=list)
     annotation_schemas: list[AnnotationSchemaEntry] = pydantic.Field(default_factory=list)
+    required_features: list[str] = pydantic.Field(default_factory=list)
+
+    @pydantic.field_validator("required_features")
+    @classmethod
+    def _required_features(cls, value):
+        if set(value) - {"design-interface-v1"}:
+            raise ValueError("This Spec requires unsupported source features.")
+        return value
 
     @pydantic.field_validator("document_id")
     @classmethod
@@ -415,6 +423,9 @@ class SpecManifest(StrictModel):
                 raise ValueError("An internal design can have at most one component owner.")
             composition_ids.add(composition.component.entity_id)
             owned_designs.add(composition.internal_design.entity_id)
+
+        if owned_designs & entry_ids:
+            raise ValueError("An internal Design cannot also be an entry Design.")
 
         asset_ids = [asset.asset_id for asset in self.assets]
         asset_paths = [asset.path for asset in self.assets]

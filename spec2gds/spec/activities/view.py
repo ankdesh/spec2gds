@@ -256,6 +256,11 @@ class LowLevelSpecApi:
         """Return the design composing a component, when one is assigned."""
         return self._revision.internal_design(reference)
 
+    def boundary_interface(self, reference: DesignIR | EntityRef) -> ComponentIR | DesignIR:
+        """Read the single interface used by a standalone or internal Design."""
+        from spec2gds.spec.spec_format.design_interfaces import boundary_interface
+        return boundary_interface(self._revision, reference)
+
     def connections(self, reference: DesignIR | EntityRef) -> tuple[typing.Any, ...]:
         """Return all typed connections owned by one design."""
         return self._revision.connections(reference)

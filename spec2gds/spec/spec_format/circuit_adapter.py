@@ -14,7 +14,7 @@ import typing
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from spec2gds.spec.spec_format.circuit_layouts import (
     DesignCircuitLayoutV1,
@@ -143,6 +143,11 @@ def _component_port(component: ComponentIR, name: str) -> PortIR:
     return port
 
 
+def _parameter_ids(component):
+    ids = _Ids()
+    return {p.name: ids.get(p.name, "parameter") for p in component.parameters}
+
+
 def _component_definition(
     component: ComponentIR,
     component_id: str,
@@ -155,7 +160,7 @@ def _component_definition(
         "origin": "provider",
         "editable": False,
         "terminals": terminals,
-        "parameters": [],
+        "parameters": [{"id": _parameter_ids(component)[p.name], "label": p.name, "type": "string", "default": p.value} for p in component.parameters],
         "appearance": {"renderer_key": "generic", "properties": {}},
     }
 
@@ -338,7 +343,9 @@ def project_design_to_circuit(
             terminal_id = terminal_ids.get(port.name, "port")
             terminal_id_by_port[(vlnv, port.name)] = terminal_id
             terminal_name_by_component_id[component_id][terminal_id] = port.name
-            terminals.append(_terminal(port, terminal_id))
+            from .design_interfaces import resolve_ports
+            shape = resolve_ports(component).get(port.name) if component.parameters else None
+            terminals.append(_terminal(replace(port, width=shape["width"] if shape else port.width), terminal_id))
         circuit_components.append(_component_definition(component, component_id, terminals))
 
     instance_ids = _Ids()
@@ -354,7 +361,8 @@ def project_design_to_circuit(
             "parameter_values": {},
         })
 
-    parent_component = None
+    from .design_interfaces import boundary_interface, resolve_ports
+    parent_component = boundary_interface(revision, design)
     for mapping in revision.manifest.component_compositions:
         if mapping.internal_design.entity_id == design.ref.entity_id:
             resolved = revision.resolve(mapping.component)
@@ -381,9 +389,41 @@ def project_design_to_circuit(
     for name in external_port_names:
         assert parent_component is not None
         port = _component_port(parent_component, name)
+        if parent_component.parameters:
+            shape = resolve_ports(parent_component)[name]
+            port = replace(port, width=shape["width"])
         terminal_id = boundary_ids.get(name, "port")
         boundary_id_by_port[name] = terminal_id
         boundary_terminals.append(_terminal(port, terminal_id))
+
+    from .design_interfaces import instance_interface, resolve_ports
+    variant_id_by_instance = {}
+    variants = {}
+    for circuit_instance, instance in zip(circuit_instances, design.instances):
+        declared = component_by_vlnv[instance.component_vlnv]
+        circuit_instance["parameter_values"] = {_parameter_ids(declared)[name]: value for name, value in instance.parameter_values}
+        if not declared.parameters and not instance.parameter_values:
+            variant_id_by_instance[instance.name] = circuit_instance["component_id"]
+            continue
+        effective = instance_interface(revision, design, instance)
+        shapes = resolve_ports(effective)
+        original_id = circuit_instance["component_id"]
+        base_definition = next(c for c in circuit_components if c["id"] == original_id)
+        effective_terminals = [{**t, "width": shapes[terminal_name_by_component_id[original_id][t["id"]]]["width"]} for t in base_definition["terminals"]]
+        if effective_terminals != base_definition["terminals"]:
+            from .naming import unique_name
+            signature = (original_id, json.dumps(effective_terminals, sort_keys=True))
+            if signature not in variants:
+                variant_id = component_ids.get(f"{declared.ref.entity_id}_{hashlib.sha256(signature[1].encode()).hexdigest()[:10]}", "component")
+                variant = {**base_definition, "id": variant_id, "terminals": effective_terminals,
+                           "label": unique_name(f"{base_definition['label'][:170]} configured", (c["label"] for c in circuit_components)),
+                           "appearance": {**base_definition["appearance"], "properties": {"source_variant": True}}}
+                circuit_components.append(variant)
+                component_entity_id_by_id[variant_id] = declared.ref.entity_id
+                terminal_name_by_component_id[variant_id] = terminal_name_by_component_id[original_id]
+                variants[signature] = variant_id
+            circuit_instance["component_id"] = variants[signature]
+        variant_id_by_instance[instance.name] = circuit_instance["component_id"]
 
     net_ids = _Ids()
     net_name_by_id: dict[str, str] = {}
@@ -451,11 +491,11 @@ def project_design_to_circuit(
     circuit_design_id = design_ids.get(design.ref.entity_id, "design")
     label = entity_name(design)
     source_map = CircuitSourceMap(
-        component_vlnv_by_id={component_id_by_vlnv[vlnv]: vlnv for vlnv in component_id_by_vlnv},
+        component_vlnv_by_id={c["id"]: next(comp.vlnv for comp in revision.components if comp.ref.entity_id == component_entity_id_by_id[c["id"]]) for c in circuit_components},
         component_entity_id_by_id=component_entity_id_by_id,
         instance_name_by_id={value: key for key, value in instance_id_by_name.items()},
         instance_component_id_by_id={
-            instance_id_by_name[instance.name]: component_id_by_vlnv[instance.component_vlnv]
+            instance_id_by_name[instance.name]: variant_id_by_instance[instance.name]
             for instance in design.instances
         },
         terminal_name_by_component_id=terminal_name_by_component_id,
@@ -489,7 +529,7 @@ def project_design_to_circuit(
         omitted_ports=tuple(omitted_ports),
         source_map=source_map,
         editable_design_id=design.ref.entity_id,
-        parent_component_id=parent_component.ref.entity_id if parent_component else None,
+        parent_component_id=parent_component.ref.entity_id if isinstance(parent_component, ComponentIR) else None,
     )
 
 
@@ -810,7 +850,9 @@ def compile_circuit_sync_operations(
         component_vlnv[component_id] = f"spec2gds.local:work:{name}:1.0"
 
     base_instances = projection.source_map.instance_name_by_id
-    candidate_instances = {item["id"]: item for item in candidate["design"]["instances"]}
+    candidate_instances = {item["id"]: {**item, "parameter_values": {
+        next((p["label"] for p in candidate_components[item["component_id"]]["parameters"] if p["id"] == key), key): str(value)
+        for key, value in item.get("parameter_values", {}).items()}} for item in candidate["design"]["instances"]}
     replaced_instances = {
         instance_id for instance_id, current in candidate_instances.items()
         if instance_id in base_instances
@@ -845,20 +887,37 @@ def compile_circuit_sync_operations(
     candidate_map = _candidate_source_map(candidate)
     for instance_id, instance in candidate_instances.items():
         if instance_id in base_instances and instance_id not in replaced_instances:
-            continue
+            old = next(i for i in design.instances if i.name == base_instances[instance_id])
+            if dict(old.parameter_values) == instance.get("parameter_values", {}):
+                continue
         name = str(instance["label"]).strip()
         if not ID_PATTERN.fullmatch(name):
             raise CircuitAdapterError(f"Instance name {name!r} must be an XML-compatible identifier.")
         vlnv = component_vlnv.get(instance["component_id"])
         if not vlnv:
             raise CircuitAdapterError(f"Unknown component for instance {name}.")
-        operations.append(UpsertInstance(design_ref, InstanceIR(name, vlnv)))
+        operations.append(UpsertInstance(design_ref, InstanceIR(name, vlnv, instance.get("parameter_values", {}))))
 
     owner = next((item for item in revision.components if item.ref.entity_id == projection.parent_component_id), None)
     base_boundaries = projection.source_map.boundary_name_by_id
     candidate_boundaries = {item["id"]: item for item in candidate["design"]["boundary_terminals"]}
-    if candidate_boundaries and owner is None:
-        raise CircuitAdapterError("Entry designs do not own component boundary ports.")
+    if owner is None:
+        from .design_interfaces import resolve_ports
+        from .transactions import SetDesignInterface
+        shapes = resolve_ports(design)
+        old_by_name = {p.name: p for p in design.ports}
+        ports = []
+        for terminal_id, terminal in candidate_boundaries.items():
+            name = str(terminal["label"]).strip()
+            old_name = base_boundaries.get(terminal_id)
+            old = old_by_name.get(old_name)
+            unchanged = old and terminal["width"] == shapes[old_name]["width"]
+            ports.append({"name": name, "direction": _direction_to_source(terminal["direction"]),
+                          "range": old.range if unchanged else (_wire_range(terminal["width"]) or ""),
+                          "description": old.description if old else ""})
+        from dataclasses import asdict
+        if ports != [{"name": p.name, "direction": p.direction, "range": p.range, "description": p.description} for p in design.ports]:
+            operations.append(SetDesignInterface(design.ref, tuple(ports), tuple(asdict(p) for p in design.parameters), tuple((base_boundaries[k], t["label"]) for k, t in candidate_boundaries.items() if k in base_boundaries and base_boundaries[k] != t["label"])))
     if owner is not None:
         owner_ports = {item.name: item for item in owner.ports}
         for terminal_id, old_name in base_boundaries.items():
@@ -889,7 +948,8 @@ def compile_circuit_sync_operations(
                 active_name = new_name
             source_port = owner_ports[old_name]
             direction = _direction_to_source(terminal["direction"])
-            port_range = _wire_range(terminal.get("width", 1))
+            projected = next(t for t in projection.document["design"]["boundary_terminals"] if t["id"] == terminal_id)
+            port_range = source_port.range if terminal["width"] == projected["width"] else _wire_range(terminal.get("width", 1))
             if direction != source_port.direction or (port_range or "") != source_port.range:
                 operations.append(UpdateComponentPort(owner.ref, active_name, WirePortInput(direction, port_range), True))
         for terminal_id, terminal in candidate_boundaries.items():

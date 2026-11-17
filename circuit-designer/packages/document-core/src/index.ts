@@ -174,6 +174,8 @@ export interface HardwareEntitySummary {
   vlnv: string;
   display_name?: string;
   parameters?: ParameterInput[];
+  ports?: Array<{ name: string; direction: string; range: string; description: string }>;
+  instances?: Array<{ name: string; component_vlnv: string; parameter_values: Array<[string, string]> }>;
 }
 
 export interface ComponentComposition {
@@ -225,6 +227,7 @@ export type ComponentPortUpdateInput =
   | Omit<StructuredPortInput, "name">;
 
 export interface ComponentInstanceInput {
+  parameter_values?: Record<string, string>;
   name: string;
   component_vlnv: string;
 }
@@ -241,6 +244,8 @@ export interface ComponentVerification {
 }
 
 export type EditorTransactionOperation =
+  | { type: "create_internal_design"; component: EntityRef; design_id: string; name: string; sv_disposition?: "retain_reference" | "remove" }
+  | { type: "set_design_interface"; design: EntityRef; port_renames?: Record<string, string>; ports: Array<{ name: string; direction: string; range: string; description: string }>; parameters: ParameterInput[] }
   | { type: "create_entity"; kind: "component" | "design"; name: string; entry_design?: boolean }
   | { type: "delete_document"; ref: EntityRef }
   | { type: "delete_component_port"; component: EntityRef; name: string }
@@ -526,7 +531,7 @@ export class SpecEditorHttpClient {
     });
   }
 
-  editAccessAction(action: "acquire" | "renew" | "release"): Promise<SpecEditAccess> {
+  editAccessAction(action: "acquire" | "renew" | "release" | "end-session"): Promise<SpecEditAccess> {
     return this.request(this.documentPath(`/documents/edit-access/${action}`), {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ context_id: this.editAccess.context_id, participant_id: this.editAccess.participant_id }),

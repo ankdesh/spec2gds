@@ -7,10 +7,11 @@ import os
 import re
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from spec2gds.spec.activities.view import SpecAccess
+from spec2gds.spec.spec_format.design_interfaces import instance_interface, resolve_ports
 from spec2gds.spec.spec_format.ir import ComponentIR, DesignIR, PortIR
 from spec2gds.spec.spec_format.models import EntityRef, sha256_digest
 from spec2gds.spec.spec_format.naming import entity_name
@@ -67,6 +68,8 @@ def _port_width(port: PortIR) -> tuple[int, str]:
         raise ValueError(f"Port {port.name!r} must be a physical input or output wire.")
     if port.width == 1:
         return 1, ""
+    if isinstance(port.width, int) and 1 < port.width <= 64:
+        return port.width, f"[{port.width - 1}:0]"
     if not isinstance(port.width, str) or (match := _RANGE.fullmatch(port.width)) is None:
         raise ValueError(f"Port {port.name!r} has an unsupported symbolic range.")
     left, right = map(int, match.groups())
@@ -141,14 +144,14 @@ class _Assembler:
             raise ValueError("Cycle-accurate generation requires a selected design.")
         owner = self.owner_by_design.get(design.ref.entity_id)
         if owner is None:
-            self._emit_design(design, None)
+            self._emit_design(design, design)
             top = self._design_name(design)
-            top_ports: tuple[tuple[str, str, int], ...] = ()
+            top_ports = tuple((p.name, p.direction, resolve_ports(design)[p.name]["width"]) for p in design.ports)
         else:
             self._emit_component(owner)
             top = self._component_name(owner)
             top_ports = tuple(
-                (p.name, p.direction, _port_width(p)[0]) for p in owner.ports
+                (p.name, p.direction, resolve_ports(owner)[p.name]["width"]) for p in owner.ports
             )
         return PreparedProject(
             source_files=self.files,
@@ -180,7 +183,8 @@ class _Assembler:
         if component.interfaces:
             raise ValueError(f"Component {entity_name(component)} has unsupported bus interfaces.")
         for port in component.ports:
-            _port_width(port)
+            shape = resolve_ports(component)[port.name]
+            _port_width(replace(port, width=shape["width"]))
             _checked_identifier(port.name, "Port")
         internal = self.spec.low.internal_design(component)
         if internal is None:
@@ -201,7 +205,7 @@ class _Assembler:
                 raise ValueError(f"Unknown component {instance.component_vlnv}.")
             self._emit_component(component)
         if owner is not None:
-            module_name = self._component_name(owner)
+            module_name = self._design_name(owner) if isinstance(owner, DesignIR) else self._component_name(owner)
             component_body = self.sections.get(("component", owner.ref.entity_id))
         else:
             module_name = self._design_name(design)
@@ -217,6 +221,9 @@ class _Assembler:
         Behavior comes from stored SystemVerilog, not inferred SystemC callbacks.
         """
         instances = {item.name: item for item in design.instances}
+        effective = {i.name: instance_interface(self.spec.low, design, i) for i in design.instances}
+        effective_shapes = {name: resolve_ports(c) for name, c in effective.items()}
+        boundary_shapes = resolve_ports(owner) if owner is not None else {}
         for name in instances:
             _checked_identifier(name, "Instance")
         hookups: dict[tuple[str, str], str] = {}
@@ -236,7 +243,7 @@ class _Assembler:
                 instance = instances.get(endpoint.instance_name)
                 if instance is None:
                     raise ValueError(f"Unknown connection instance {endpoint.instance_name!r}.")
-                component = self.components[instance.component_vlnv]
+                component = effective[instance.name]
                 port = next((p for p in component.ports if p.name == endpoint.port_name), None)
                 if port is None:
                     raise ValueError(f"Unknown port {endpoint.port_name!r}.")
@@ -244,7 +251,7 @@ class _Assembler:
                 if key in claimed:
                     raise ValueError(f"Port {key!r} occurs in multiple connections.")
                 claimed.add(key)
-                members.append((endpoint.instance_name, port.name, port.direction, _port_width(port)[0]))
+                members.append((endpoint.instance_name, port.name, port.direction, effective_shapes[instance.name][port.name]["width"]))
             external = connection.external_ports[0] if connection.external_ports else None
             if external is not None:
                 if external.slice or external.symbolic_slice:
@@ -253,7 +260,7 @@ class _Assembler:
                 port = next((p for p in owner.ports if p.name == external.port_name), None)
                 if port is None:
                     raise ValueError(f"Unknown boundary port {external.port_name!r}.")
-                members.append(("", port.name, "out" if port.direction == "in" else "in", _port_width(port)[0]))
+                members.append(("", port.name, "out" if port.direction == "in" else "in", boundary_shapes[port.name]["width"]))
             widths = {member[3] for member in members}
             if len(widths) != 1 or not widths:
                 raise ValueError(f"Connection {connection.name!r} has mismatched or missing widths.")
@@ -266,8 +273,9 @@ class _Assembler:
                 expression = source[1]
             else:
                 expression = f"spec_net_{index}"
-                width = next(iter(widths))
-                net_lines.append(f"wire {'[' + str(width - 1) + ':0] ' if width > 1 else ''}{expression};")
+                source_port = next(p for p in effective[source[0]].ports if p.name == source[1])
+                range_text = f"[{source_port.range}] " if source_port.range else ""
+                net_lines.append(f"wire {range_text}{expression};")
             for member in members:
                 if member[0]:
                     hookups[(member[0], member[1])] = expression
@@ -276,7 +284,7 @@ class _Assembler:
             self.connection_count += 1
         instance_lines: list[str] = []
         for instance in design.instances:
-            component = self.components[instance.component_vlnv]
+            component = effective[instance.name]
             bindings: list[str] = []
             for port in component.ports:
                 expression = hookups.get((instance.name, port.name))
@@ -285,13 +293,13 @@ class _Assembler:
                         expression = "'0"
                     else:
                         expression = f"spec_unused_{_name(instance.name, 'i')}_{_name(port.name, 'p')}"
-                        width = _port_width(port)[0]
-                        net_lines.append(
-                            f"wire {'[' + str(width - 1) + ':0] ' if width > 1 else ''}{expression};"
-                        )
+                        range_text = f"[{port.range}] " if port.range else ""
+                        net_lines.append(f"wire {range_text}{expression};")
                 bindings.append(f".{port.name}({expression})")
+            from spec2gds.spec.activities.rtl.codegen import _is_plain_identifier
+            instance_name = instance.name if _is_plain_identifier(instance.name) else f"spec_instance_{instance.name}"
             instance_lines.append(
-                f"{self._component_name(component)} {instance.name} ("
+                f"{self._component_name(component)}" + (" #(" + ", ".join(f".{key}({value})" for key, value in instance.parameter_values) + ")" if instance.parameter_values else "") + f" {instance_name} ("
                 + ", ".join(bindings)
                 + ");"
             )
@@ -309,11 +317,16 @@ class _Assembler:
         has_body = any(item is not None and item.content.strip() for item in sections)
         declarations = []
         for port in ports:
-            _, range_text = _port_width(port)
+            shape = resolve_ports(component)[port.name]
+            _port_width(replace(port, width=shape["width"]))
+            range_text = port.width if isinstance(port.width, str) else ""
             direction = "input" if port.direction == "in" else "output"
             wire_kind = "logic" if has_body else "wire"
             declarations.append(f"{direction} {wire_kind} {range_text} {port.name}".replace("  ", " "))
-        header = f"module {name}" + (" (" + ", ".join(declarations) + ")" if declarations else "") + ";\n"
+        from spec2gds.spec.spec_format.rtl_interface import parameter_declarations
+        parameters = parameter_declarations([asdict(p) for p in component.parameters]) if component else ""
+        parameter_header = f" #(\n{parameters}\n)" if parameters else ""
+        header = f"module {name}" + parameter_header + (" (" + ", ".join(declarations) + ")" if declarations else "") + ";\n"
         path = f"source/{name}.sv"
         body = structure + ("\n" if structure else "")
         for section in sections:

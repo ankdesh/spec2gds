@@ -48,8 +48,8 @@ def source_digests():
     prefixes = ["circuit-designer/apps/editor/src", "circuit-designer/packages/document-a2ui-react/src",
                 "circuit-designer/packages/app-react/src", "circuit-designer/packages/react/src",
                 "testplan-service/src/testplan_service/ui/static", "ai-assistant/profile"]
-    names = subprocess.check_output(["git", "ls-files", "--", *prefixes], cwd=ROOT, text=True).splitlines()
-    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in names}
+    names = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", *prefixes], cwd=ROOT, text=True).splitlines()
+    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in sorted(set(names))}
 
 
 def publish(output: Path):

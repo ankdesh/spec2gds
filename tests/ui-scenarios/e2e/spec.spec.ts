@@ -198,7 +198,7 @@ for (const family of ["wire", "transactional", "structured"]) {
     const port = family === "transactional"
       ? { name: "interface0", family, initiative: "provides", kind: "custom", custom_kind: "service0", bus_width: "DATA_WIDTH", description: "Interface contract" }
       : { name: "interface0", family, direction: "out", description: "Interface contract", ...(family === "wire" ? { range: "WIDTH-1:0" } : {}) };
-    await stack.commit([{ type: "add_component_port", component: initial.components[0].ref, port }]);
+    await stack.commit([...(family === "wire" ? [{ type: "update_parameter", component: initial.components[0].ref, parameter: { name: "WIDTH", rtl_type: "int unsigned", value: "8" } }] : []), { type: "add_component_port", component: initial.components[0].ref, port }]);
     await openSpec(page, stack);
     const row = component.locator(".spec-port-row", { hasText: "interface0" });
     await expect(row).toContainText("Interface contract");
@@ -830,4 +830,185 @@ test("explicit port ranges preserve invalid drafts and preview containers span t
     }
   }
   expect((await stack.snapshot()).source_revision_hash).toBe(previewRevision);
+});
+
+for (const theme of ["clean", "obsidian"] as const) test(`direct internal Design creation is separate from top-level Designs (${theme})`, async ({ page, stack }) => {
+  await newSpec(page, stack);
+  await stack.commit([{ type: "create_entity", kind: "component", name: "Module" }]);
+  let saved = await stack.snapshot();
+  const ref = saved.components[0].ref;
+  await stack.commit([{ type: "upsert_entity_section", parent: ref, section_type: "sv", payload: { content: "// Architecture reference" } }]);
+  const section = page.locator(`#component-${ref.entity_id.replaceAll("_", "-")}`);
+  await expect(section).toBeVisible();
+  if (await page.locator("html").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /Switch theme/ }).click();
+  await page.setViewportSize({ width: 540, height: 760 });
+  const options = section.locator(".spec-section__header").first().getByRole("button", { name: "Options", exact: true });
+  await options.click();
+  await expect(section.getByRole("menuitem", { name: "Preview interface", exact: true })).toHaveCount(0);
+  await section.getByRole("menuitem", { name: "Create internal Design…", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Create internal Design", exact: true });
+  await expect(dialog.getByLabel("Design name")).toBeFocused();
+  const before = (await stack.snapshot()).source_revision_hash;
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  expect((await stack.snapshot()).source_revision_hash).toBe(before);
+  await options.click();
+  await section.getByRole("menuitem", { name: "Create internal Design…", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Retain SV", exact: true })).toBeInViewport();
+  await dialog.screenshot({ path: `${stack.directory}/internal-dialog-${theme}.png` });
+  if (theme === "clean") {
+    await page.route("**/transactions?**", async route => { await route.fetch(); await route.abort("failed"); await page.unroute("**/transactions?**"); });
+    await dialog.getByRole("button", { name: "Retain SV", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Could not confirm creation");
+    await expect(dialog.getByLabel("Design name")).toBeDisabled();
+  }
+  await dialog.getByRole("button", { name: "Retain SV", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  saved = await stack.snapshot();
+  expect(saved.designs).toHaveLength(1);
+  expect(saved.entry_designs).toHaveLength(0);
+  expect(saved.entity_sections[0].usage).toBe("reference");
+  await expect(section).toContainText("excluded from implementation");
+  const internal = page.locator(`#design-${saved.designs[0].ref.entity_id.replaceAll("_", "-")}`);
+  await expect(internal).toContainText("Internal Design");
+  await expect(page.locator("#designs")).toContainText("Top-level Designs");
+  await expect(page.getByRole("combobox", { name: "Internal Design", exact: true })).toHaveCount(0);
+  await page.screenshot({ path: `${stack.directory}/internal-${theme}.png`, fullPage: true });
+  await openSpec(page, stack);
+  expect((await stack.snapshot()).component_compositions).toHaveLength(1);
+});
+
+test("top-level interface and instance parameter mappings survive circuit saves", async ({ page, stack }) => {
+  await stack.start("circuit"); await stack.start("circuit-ui");
+  await newSpec(page, stack);
+  await stack.commit([{ type: "create_entity", kind: "design", name: "System" }, { type: "create_entity", kind: "component", name: "Buffer" }]);
+  let saved = await stack.snapshot();
+  const design = saved.designs[0].ref, component = saved.components[0];
+  await stack.commit([{ type: "update_parameter", component: component.ref, parameter: { name: "WIDTH", rtl_type: "int unsigned", value: "4", description: "Data width" } },
+    { type: "add_component_port", component: component.ref, port: { name: "a", family: "wire", direction: "in", range: "WIDTH-1:0" } }]);
+  await openSpec(page, stack);
+  const section = page.locator(`#design-${design.entity_id.replaceAll("_", "-")}`);
+  await section.getByRole("button", { name: "Edit Design interface…", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit Design interface", exact: true });
+  await dialog.getByRole("button", { name: "Add parameter", exact: true }).click();
+  const parameter = dialog.getByRole("group", { name: "Parameter 1", exact: true });
+  await parameter.getByLabel("Parameter ID", { exact: true }).fill("DATA_WIDTH");
+  await parameter.getByLabel("Default expression", { exact: true }).fill("8");
+  await dialog.getByRole("button", { name: "Add port", exact: true }).click();
+  const port = dialog.getByRole("group", { name: "Port 1", exact: true });
+  await port.getByLabel("Port ID", { exact: true }).fill("a");
+  await port.getByLabel("Range", { exact: true }).fill("DATA_WIDTH-1:0");
+  await dialog.getByRole("button", { name: "Save interface to Spec", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await stack.commit([{ type: "upsert_instance", design, instance: { name: "u", component_vlnv: component.vlnv } }]);
+  await section.getByRole("button", { name: "Options for instance u", exact: true }).click();
+  await section.getByRole("menuitem", { name: "Edit parameters…", exact: true }).click();
+  const mappings = page.getByRole("dialog", { name: "Parameters for u", exact: true });
+  await mappings.getByLabel("WIDTH", { exact: true }).fill("DATA_WIDTH");
+  await mappings.getByRole("button", { name: "Save parameters to Spec", exact: true }).click();
+  await expect(mappings).toBeHidden();
+  await stack.commit([{ type: "upsert_connection", design, connection: { name: "input", kind: "ad_hoc", port_endpoints: [{ instance_name: "u", port_name: "a" }], external_ports: [{ port_name: "a" }] } }]);
+  const launched = await stack.json("/circuit-designer/launch", { entity_kind: "design", entity_id: design.entity_id });
+  expect(launched.source_binding.capabilities).toContain("boundary-ports");
+  const circuit = await page.context().newPage();
+  await circuit.goto(launched.editor_url);
+  await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
+  await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await circuit.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
+  if (await circuit.getByRole("button", { name: "Show Inspector", exact: true }).isVisible()) await circuit.getByRole("button", { name: "Show Inspector", exact: true }).click();
+  await circuit.getByRole("button", { name: "New Boundary Port", exact: true }).click();
+  await circuit.getByRole("button", { name: "Save to Spec", exact: true }).click();
+  await expect(circuit.locator(".notice")).toContainText(/saved/i);
+  saved = await stack.snapshot();
+  expect(saved.designs[0].ports[0].range).toBe("DATA_WIDTH-1:0");
+  expect(saved.designs[0].instances[0].parameter_values).toEqual([["WIDTH", "DATA_WIDTH"]]);
+  await circuit.close();
+  await openSpec(page, stack);
+  await expect(section).toContainText("DATA_WIDTH-1:0");
+});
+
+for (const theme of ["clean", "obsidian"] as const) test(`Close Spec releases linked editing and banners remain readable (${theme})`, async ({ page, browser, stack }) => {
+  await stack.start("circuit"); await stack.start("circuit-ui");
+  await newSpec(page, stack);
+  await stack.commit([{ type: "create_entity", kind: "design", name: "Shared system" }]);
+  const saved = await stack.snapshot();
+  const originalBytes = readFileSync(stack.path());
+  const launched = await stack.json("/circuit-designer/launch", { entity_kind: "design", entity_id: saved.designs[0].ref.entity_id });
+  const circuit = await page.context().newPage(); await circuit.goto(launched.editor_url);
+  await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
+  await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await circuit.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
+  await circuit.getByRole("menuitem", { name: "Components", exact: true }).click();
+  await circuit.getByRole("menuitem", { name: "New local component", exact: true }).click();
+  await circuit.getByLabel("Name", { exact: true }).fill("Private child");
+  await circuit.getByRole("button", { name: "Create definition + instance", exact: true }).click();
+  await expect(circuit.locator(".react-flow__node")).toHaveCount(1);
+  const otherContext = await browser.newContext(); const other = await otherContext.newPage();
+  try {
+    await other.goto(`${stack.spec}/editor?owner_document_key=${saved.owner_document_key}`);
+    await expect(other.locator(".app-refresh-notice")).toContainText("read-only");
+    if (await other.locator("html").getAttribute("data-theme") !== theme) await other.getByRole("button", { name: /Switch theme/ }).click();
+    await other.getByRole("button", { name: "Resume editing", exact: true }).click();
+    await expect(other.locator(".app-error")).toContainText("still in use");
+    for (const selector of [".app-error", ".app-refresh-notice"]) {
+      const ratio = await other.locator(selector).evaluate(element => {
+        const style = getComputedStyle(element);
+        const rgb = (value: string) => (value.match(/[\d.]+/g) || []).slice(0, 3).map(Number).map(c => { c /= 255; return c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4; });
+        const luminance = (value: string) => { const [r,g,b] = rgb(value); return .2126*r + .7152*g + .0722*b; };
+        const a = luminance(style.color), b = luminance(style.backgroundColor); return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+      });
+      expect(ratio).toBeGreaterThanOrEqual(4.5);
+    }
+    await other.setViewportSize({ width: 540, height: 760 });
+    await other.screenshot({ path: `${stack.directory}/access-${theme}.png` });
+    await page.getByRole("menuitem", { name: "File", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Close Spec", exact: true }).click();
+    await expect(page.locator(".spec-paper")).toHaveCount(0);
+    expect(new URL(page.url()).searchParams.has("owner_document_key")).toBe(false);
+    expect(await page.evaluate(() => sessionStorage.getItem("spec2gds.spec.selection"))).toBeNull();
+    await expect(circuit.locator(".notice")).toContainText("Spec editing ended", { timeout: 12_000 });
+    await expect(circuit.getByRole("button", { name: "Save to Spec", exact: true })).toBeDisabled();
+    await expect(circuit.locator(".react-flow__node")).toHaveCount(1);
+    await other.getByRole("button", { name: "Resume editing", exact: true }).click();
+    await expect(other.locator(".app-refresh-notice")).toHaveCount(0);
+    expect(readFileSync(stack.path())).toEqual(originalBytes);
+    await page.reload(); await expect(page.locator(".spec-paper")).toHaveCount(0);
+  } finally { await circuit.close(); await otherContext.close(); }
+});
+
+
+test("Close Spec preserves inline drafts and retries uncertain closure", async ({ page, browser, stack }) => {
+  await newSpec(page, stack);
+  const component = await addComponent(page, stack);
+  const original = readFileSync(stack.path());
+  await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
+  await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+  const draft = component.locator(".spec-port-editor");
+  await draft.getByLabel("Port ID").fill("private_input");
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Close Spec", exact: true }).click();
+  await expect(page.locator(".app-error")).toContainText("Save or cancel your draft");
+  await expect(draft.getByLabel("Port ID")).toHaveValue("private_input");
+  expect(readFileSync(stack.path())).toEqual(original);
+  await draft.getByRole("button", { name: "Cancel", exact: true }).click();
+  let requests = 0;
+  await page.route("**/documents/edit-access/end-session?**", async route => { requests++; await route.fetch(); await route.abort("failed"); await page.unroute("**/documents/edit-access/end-session?**"); });
+  await page.getByRole("menuitem", { name: "File", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Close Spec", exact: true }).click();
+  await expect(page.locator(".app-error")).toContainText("Could not confirm closure");
+  await expect(component).toBeVisible();
+  expect(requests).toBe(1);
+  const otherContext = await browser.newContext(); const other = await otherContext.newPage();
+  try {
+    const saved = await stack.snapshot();
+    await other.goto(`${stack.spec}/editor?owner_document_key=${saved.owner_document_key}`);
+    await expect(other.locator(".spec-paper")).toBeVisible();
+    await expect(other.locator(".app-refresh-notice")).toHaveCount(0);
+    await page.getByRole("menuitem", { name: "File", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Close Spec", exact: true }).click();
+    await expect(page.locator(".spec-paper")).toHaveCount(0);
+    await expect(other.locator(".app-refresh-notice")).toHaveCount(0);
+    expect(readFileSync(stack.path())).toEqual(original);
+  } finally { await otherContext.close(); }
 });

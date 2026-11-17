@@ -1598,3 +1598,13 @@ button:disabled {
   .utility-sidebar, .utility-backdrop, .app-toast { display: none; }
   .editor-main--with-panel { padding-right: 0; }
 }
+
+/* Semantic banner colors remain readable in both application themes. */
+:root { --spec-warning-text: #fed7aa; --spec-warning-bg: #382315; --spec-warning-border: #b45309; --spec-error-text: #fecaca; --spec-error-bg: #391b20; --spec-error-border: #dc2626; }
+[data-theme="clean"] { --spec-warning-text: #713f12; --spec-warning-bg: #fff7ed; --spec-warning-border: #c2410c; --spec-error-text: #991b1b; --spec-error-bg: #fef2f2; --spec-error-border: #b91c1c; }
+.app-refresh-notice { color: var(--spec-warning-text); background: var(--spec-warning-bg); border-color: var(--spec-warning-border); }
+.app-error { color: var(--spec-error-text); background: var(--spec-error-bg); border-color: var(--spec-error-border); }
+.app-refresh-notice a, .app-error a { color: inherit; text-decoration: underline; }
+.app-refresh-notice button { color: #fff; background: #9a3412; border-color: #9a3412; }
+.app-error button { color: inherit; background: transparent; }
+.app-refresh-notice button:focus-visible, .app-error button:focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }

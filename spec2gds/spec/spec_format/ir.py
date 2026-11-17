@@ -109,6 +109,20 @@ class InstanceIR:
 
     name: str
     component_vlnv: str
+    parameter_values: tuple[tuple[str, str], ...] = ()
+
+    def __post_init__(self):
+        values = self.parameter_values
+        is_mapping = isinstance(values, dict)
+        if is_mapping:
+            values = tuple(values.items())
+        if not isinstance(values, (tuple, list)) or any(
+            not isinstance(pair, (tuple, list)) or len(pair) != 2
+            or not isinstance(pair[0], str) or not isinstance(pair[1], str) or not pair[1].strip()
+            for pair in values
+        ):
+            raise ValueError("Instance parameter values must be named expressions.")
+        object.__setattr__(self, "parameter_values", tuple(sorted(values)) if is_mapping else tuple(values))
 
 
 @dataclass(frozen=True)
@@ -167,6 +181,9 @@ class DesignIR:
     instances: tuple[InstanceIR, ...]
     connections: tuple[ConnectionIR, ...]
     display_name: str = ""
+    ports: tuple[PortIR, ...] = ()
+    parameters: tuple[ParameterIR, ...] = ()
+    interfaces: tuple[InterfaceIR, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -242,7 +259,14 @@ class SpecRevision:
             if entry.kind == "component":
                 components.append(_component_ir(ref, entry.vlnv, root))
             elif entry.kind == "design":
-                designs.append(_design_ir(ref, entry.vlnv, root))
+                from dataclasses import replace
+
+                from .design_interfaces import read_interface
+                interface = read_interface(package.files, ref)
+                designs.append(replace(_design_ir(ref, entry.vlnv, root),
+                    ports=tuple(PortIR(p.name, p.direction, "wire", f"[{p.range}]" if p.range else 1,
+                                      description=p.description, range=p.range) for p in interface.ports),
+                    parameters=tuple(ParameterIR(**p.model_dump()) for p in interface.parameters)))
             elif entry.kind == "bus_definition":
                 buses.append(BusDefinitionIR(ref=ref, vlnv=entry.vlnv, display_name=_text(root, "displayName")))
             else:
@@ -254,6 +278,28 @@ class SpecRevision:
                 abstractions.append(
                     AbstractionDefinitionIR(ref=ref, vlnv=entry.vlnv, bus_vlnv=_vlnv(bus_type), logical_ports=logical_ports, display_name=_text(root, "displayName"))
                 )
+
+        sections = load_entity_sections(manifest, package.files)
+        composites = {c.component.entity_id for c in manifest.component_compositions}
+        if any(s.parent.entity_id in composites and s.section_type == "sv" and s.usage != "reference" for s in sections):
+            raise SpecValidationError(["SV on a Component with an internal Design must be reference text."])
+
+        from dataclasses import replace
+        parameter_names = {}
+        for entry in manifest.documents:
+            if entry.kind == "component":
+                root = ipxact.parse_xml(package.files[entry.path])
+                parameter_names[entry.vlnv] = {p.get("parameterId"): _text(p, "name") for p in root.xpath("./*[local-name()='parameters']/*[local-name()='parameter']") if p.get("parameterId")}
+        normalized_designs = []
+        for design in designs:
+            instances = []
+            for instance in design.instances:
+                names = parameter_names.get(instance.component_vlnv, {})
+                if set(dict(instance.parameter_values)) - set(names):
+                    raise SpecValidationError([f"Instance {instance.name} references an unknown parameter ID."])
+                instances.append(replace(instance, parameter_values=tuple((names[k], v) for k, v in instance.parameter_values)))
+            normalized_designs.append(replace(design, instances=tuple(instances)))
+        designs = normalized_designs
 
         diagnostics = _semantic_diagnostics(
             manifest,
@@ -531,7 +577,8 @@ def _design_ir(ref: EntityRef, vlnv: str, root: etree._Element) -> DesignIR:
     instances: list[InstanceIR] = []
     for instance in root.xpath("./*[local-name()='componentInstances']/*[local-name()='componentInstance']"):
         component_ref = _first(instance.xpath("./*[local-name()='componentRef']"))
-        instances.append(InstanceIR(name=_text(instance, "instanceName"), component_vlnv=_vlnv(component_ref)))
+        values = tuple((str(node.get("referenceId", "")), str(node.text or "")) for node in instance.xpath("./*[local-name()='componentRef']/*[local-name()='configurableElementValues']/*[local-name()='configurableElementValue']"))
+        instances.append(InstanceIR(name=_text(instance, "instanceName"), component_vlnv=_vlnv(component_ref), parameter_values=values))
     connections: list[ConnectionIR] = []
     for connection in root.xpath("./*[local-name()='interconnections']/*[local-name()='interconnection']"):
         endpoints = tuple(
@@ -630,16 +677,20 @@ def _semantic_diagnostics(
         for instance in design.instances:
             if instance.component_vlnv not in component_by_vlnv:
                 diagnostics.append(f"Design {design.vlnv} instance {instance.name} references missing component {instance.component_vlnv}.")
-        owner_component = next((component for component in components if owner_by_design.get(design.ref.entity_id) == component.ref.entity_id), None)
+            else:
+                known = {p.name for p in component_by_vlnv[instance.component_vlnv].parameters}
+                if set(dict(instance.parameter_values)) - known or len(dict(instance.parameter_values)) != len(instance.parameter_values):
+                    diagnostics.append(f"Design {design.vlnv} instance {instance.name} has unknown or duplicate parameter overrides.")
+        owner_component = next((component for component in components if owner_by_design.get(design.ref.entity_id) == component.ref.entity_id), design)
         exported_interfaces = {name for connection in design.connections for name in connection.hierarchy_interfaces}
         external_ports = {endpoint.port_name for connection in design.connections for endpoint in connection.external_ports}
         if owner_component is not None:
             if exported_interfaces != {interface.name for interface in owner_component.interfaces}:
-                diagnostics.append(f"Internal design {design.vlnv} does not match component {owner_component.vlnv} interface boundary.")
+                diagnostics.append(f"Design {design.vlnv} does not match its declared interface boundary.")
             unknown_external_ports = external_ports - {port.name for port in owner_component.ports}
             if unknown_external_ports:
                 diagnostics.append(
-                    f"Internal design {design.vlnv} references unknown component boundary ports: "
+                    f"Design {design.vlnv} references unknown boundary ports: "
                     + ", ".join(sorted(unknown_external_ports))
                 )
         for connection in design.connections:

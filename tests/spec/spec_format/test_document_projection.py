@@ -12,7 +12,13 @@ from spec2gds.spec.spec_format.document import (
     build_a2ui_batch,
     build_document_projection,
 )
-from spec2gds.spec.spec_format.ir import ConnectionIR, EndpointSliceIR, ExternalPortEndpointIR, PortEndpointIR, SpecRevision
+from spec2gds.spec.spec_format.ir import (
+    ConnectionIR,
+    EndpointSliceIR,
+    ExternalPortEndpointIR,
+    PortEndpointIR,
+    SpecRevision,
+)
 from spec2gds.spec.spec_format.testing import build_test_package
 
 
@@ -49,7 +55,7 @@ def test_document_projection_has_stable_human_hierarchy_and_profile_tables() -> 
     assert projection.sections[0].title == "Overview"
     assert projection.sections[0].facts == []
     level_one_titles = [section.title for section in projection.sections if section.level == 1]
-    assert level_one_titles[:3] == ["Overview", "Designs", "Components"]
+    assert level_one_titles[:3] == ["Overview", "Top-level Designs", "Components"]
     assert "Protocols" not in level_one_titles
     assert projection.summary == "3 components · 3 designs"
     assert [entry.section_id for entry in projection.toc] == [

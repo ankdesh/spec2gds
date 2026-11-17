@@ -170,6 +170,10 @@ export class HttpCircuitDesignerBackend implements CircuitDesignerBackend {
     }) as CircuitSourceSyncResponse;
   }
 
+  async sourceAccess(documentId: string): Promise<{ mode: string }> {
+    return await this.sendJson(`${this.documentUrl(documentId)}/source/renew`, "POST", {}) as { mode: string };
+  }
+
   async reloadSource(documentId: string): Promise<CircuitSourceSyncResponse> {
     return await this.sendJson(`${this.documentUrl(documentId)}/source/reload`, "POST", {}) as CircuitSourceSyncResponse;
   }

@@ -23,6 +23,7 @@ class SpecEditAccess(_Database):
         with self.connection() as db:
             db.execute("CREATE TABLE IF NOT EXISTS edit_contexts (document_key TEXT PRIMARY KEY, context_id TEXT UNIQUE NOT NULL)")
             db.execute("CREATE TABLE IF NOT EXISTS edit_participants (context_id TEXT NOT NULL, participant_id TEXT NOT NULL, expires REAL NOT NULL, PRIMARY KEY(context_id,participant_id))")
+            db.execute("CREATE TABLE IF NOT EXISTS ended_edit_contexts (context_id TEXT PRIMARY KEY, document_key TEXT NOT NULL)")
 
     def _current(self, db, key: str):
         db.execute("DELETE FROM edit_participants WHERE expires<=?", (self.now(),))
@@ -33,6 +34,8 @@ class SpecEditAccess(_Database):
         participant_id = participant_id or uuid4().hex
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
+            if context_id and db.execute("SELECT 1 FROM ended_edit_contexts WHERE context_id=?", (context_id,)).fetchone():
+                return {"mode": "read_only"}
             current = self._current(db, key)
             if current and current[0] != context_id:
                 return {"mode": "read_only"}
@@ -77,3 +80,17 @@ class SpecEditAccess(_Database):
             if current and current[0] == context_id:
                 db.execute("DELETE FROM edit_participants WHERE context_id=? AND participant_id=?", (context_id, participant_id))
                 self._current(db, key)
+
+    def end_session(self, key: str, context_id: str, participant_id: str) -> None:
+        """Fence every participant; retries cannot revoke a successor context."""
+        with self.connection() as db:
+            db.execute("BEGIN IMMEDIATE")
+            current = self._current(db, key)
+            if not current or current[0] != context_id:
+                return
+            participant = db.execute("SELECT 1 FROM edit_participants WHERE context_id=? AND participant_id=?", (context_id, participant_id)).fetchone()
+            if not participant:
+                raise EditAccessError("Valid edit participation is required to close this editing session.")
+            db.execute("INSERT OR IGNORE INTO ended_edit_contexts VALUES (?,?)", (context_id, key))
+            db.execute("DELETE FROM edit_participants WHERE context_id=?", (context_id,))
+            db.execute("DELETE FROM edit_contexts WHERE context_id=?", (context_id,))

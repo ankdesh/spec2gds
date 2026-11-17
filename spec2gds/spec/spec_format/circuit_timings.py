@@ -136,7 +136,9 @@ def validate_timing_annotations(manifest: typing.Any, files: typing.Mapping[str,
             str(node.xpath("string(./*[local-name()='name'])")).strip()
             for node in design_root.xpath("./*[local-name()='adHocConnections']/*[local-name()='adHocConnection']")
         }
-        boundaries = component_ports.get(owner_vlnv_by_design.get(value.design.entity_id, ""), set())
+        from .design_interfaces import read_interface
+        boundaries = component_ports.get(owner_vlnv_by_design.get(value.design.entity_id, ""),
+                                        {p.name for p in read_interface(files, value.design).ports})
         known_subjects = {
             *(f"instance:{name}" for name in instances),
             *(f"boundary:{name}" for name in boundaries),

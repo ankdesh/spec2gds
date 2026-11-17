@@ -211,6 +211,22 @@ export function App({
   const actionBindings = preferences.action_bindings;
   const inspectorOpen = preferences.ui.inspector_open;
   const timingOverlayVisible = preferences.ui.timing_overlay_visible;
+  useEffect(() => {
+    if (!source?.checkAccess || !snapshot || !sourceBinding) return;
+    let active = true;
+    const documentId = snapshot.document.document_id;
+    const check = async () => {
+      try {
+        if (!await source.checkAccess!(documentId) && active) {
+          setSourceBinding(current => current ? { ...current, writable: false, capabilities: [], message: "Spec editing ended. Your private draft is preserved. Request new access from Spec Editor." } : current);
+          setMessage("Spec editing ended. Your private draft is preserved; saving is disabled.");
+        }
+      } catch { /* A network error does not discard the draft or claim revocation. */ }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 5000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, [source, snapshot?.document.document_id, sourceBinding?.id]);
   const canEditCircuit = Boolean(lease && (!sourceBinding || sourceBinding.writable) && !sourceBusy && !sourceSaveRef.current);
   const sourceIdentifierPattern = sourceBinding?.identifierPattern;
   const isSourceIdentifier = (value: string): boolean => !sourceIdentifierPattern || new RegExp(sourceIdentifierPattern).test(value);
@@ -1584,7 +1600,7 @@ export function App({
     switch (actionId) {
       case "new-document": return !lease && !draftRef.current && !openingFile;
       case "open-document": return Boolean(snapshot) && !lease && !draftRef.current && !openingFile;
-      case "save-document": return Boolean((canEditCircuit || sourceSaveRef.current) && !sourceBusy && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
+      case "save-document": return Boolean((canEditCircuit || (sourceSaveRef.current && sourceBinding?.writable)) && !sourceBusy && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
       case "cancel-changes": return Boolean(lease || draftRef.current) && !sourceBusy;
       case "download-json":
       case "export-svg":
@@ -1871,9 +1887,9 @@ export function App({
       >
         <span aria-hidden="true">{theme.id === "obsidian" ? "☀️" : "🌙"}</span>
       </button>
-      {sourceBinding?.writable && (lease || sourceSaveRef.current) && (draftRef.current?.dirty || sourceBinding.pendingInternalDesign) && <button
+      {sourceBinding && (lease || sourceSaveRef.current) && (draftRef.current?.dirty || sourceBinding.pendingInternalDesign) && <button
         className="source-save-button"
-        disabled={sourceBusy || !layout || layoutGraphRef.current !== graph}
+        disabled={!sourceBinding.writable || sourceBusy || !layout || layoutGraphRef.current !== graph}
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
         type="button"
       >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}

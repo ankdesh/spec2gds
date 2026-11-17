@@ -391,7 +391,16 @@ class UpsertCircuitTiming:
     timing: DesignCircuitTimingV1
 
 
+@dataclass(frozen=True)
+class SetDesignInterface:
+    design: EntityRef
+    ports: tuple[dict, ...]
+    parameters: tuple[dict, ...]
+    port_renames: tuple[tuple[str, str], ...] = ()
+
+
 EditOperation = typing.Union[
+    SetDesignInterface,
     ImportCatalogPackage,
     UpsertDocumentXml,
     DeleteDocument,
@@ -460,6 +469,29 @@ class SpecEditTransaction:
         except (KeyError, ValueError, SpecValidationError, etree.LxmlError) as exc:
             diagnostics = exc.diagnostics if isinstance(exc, SpecValidationError) else (str(exc),)
             return EditResult(revision=None, diagnostics=tuple(diagnostics))
+        interface_edits = (AddComponentPort, UpdateComponentPort, RenameComponentPort,
+                           DeleteComponentPort, UpdateParameter, DeleteParameter)
+        changed_components = {op.component.entity_id for op in self.operations if isinstance(op, interface_edits)}
+        changed_designs = {op.design.entity_id for op in self.operations
+                           if isinstance(op, (SetDesignInterface, UpsertInstance, UpsertConnection))}
+        if changed_components or changed_designs:
+            from .design_interfaces import (
+                boundary_interface,
+                resolve_ports,
+                validate_design_connections,
+            )
+            try:
+                for component in next_revision.components:
+                    if component.ref.entity_id in changed_components:
+                        resolve_ports(component)
+                for design in next_revision.designs:
+                    boundary = boundary_interface(next_revision, design)
+                    children = {component.ref.entity_id for component in next_revision.components
+                                if any(instance.component_vlnv == component.vlnv for instance in design.instances)}
+                    if design.ref.entity_id in changed_designs or changed_components & (children | {boundary.ref.entity_id}):
+                        validate_design_connections(next_revision, design)
+            except (ValueError, OSError) as exc:
+                return EditResult(revision=None, diagnostics=(str(exc),))
         if self.validation_mode == "authoring":
             return EditResult(revision=next_revision, diagnostics=())
         updated_owners = {
@@ -544,9 +576,19 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRe
     elif isinstance(operation, DeleteDocument):
         if operation.ref.entity_kind == "design":
             delete_design_layout(package, operation.ref.entity_id)
+            from .design_interfaces import interface_path
+            package.files.pop(interface_path(operation.ref.entity_id), None)
         _delete_document(package, operation.ref)
     elif isinstance(operation, CreateHardware):
         return _create_entity(package, operation)
+    elif isinstance(operation, SetDesignInterface):
+        from .design_interfaces import DesignInterfaceV1, read_interface, write_interface
+        _assert_local(package, operation.design)
+        previous_ports = {p.name for p in read_interface(package.files, operation.design).ports}
+        _rename_design_boundaries(package, operation)
+        write_interface(package, DesignInterfaceV1(design=operation.design, ports=operation.ports, parameters=operation.parameters))
+        removed = previous_ports - {p["name"] for p in operation.ports} - set(dict(operation.port_renames))
+        _prune_design_boundaries(package, operation.design, removed)
     elif isinstance(operation, SetDocumentTitle):
         if not operation.title.strip():
             raise ValueError("Spec name is required.")
@@ -581,7 +623,7 @@ def _apply_operation(package: SpecPackage, operation: EditOperation) -> EntityRe
         package.add_document("component", _serialize(root))
     elif isinstance(operation, UpsertInstance):
         root, entry = _design_root(package, operation.design)
-        _upsert_instance(root, operation.instance)
+        _upsert_instance(root, operation.instance, _instance_parameter_ids(package, operation.instance))
         package.add_document("design", _serialize(root))
     elif isinstance(operation, DeleteInstance):
         root, _ = _design_root(package, operation.design)
@@ -773,7 +815,7 @@ def _create_entity(package: SpecPackage, operation: CreateHardware) -> EntityRef
     ):
         etree.SubElement(root, _q(field)).text = value
     for instance in operation.instances:
-        _upsert_instance(root, instance)
+        _upsert_instance(root, instance, _instance_parameter_ids(package, instance))
     initial_port_names = [item.name for item in operation.ports]
     if len(initial_port_names) != len(set(initial_port_names)):
         raise ValueError("Initial component port names must be unique.")
@@ -1058,6 +1100,10 @@ def _set_composition(package: SpecPackage, component: EntityRef, internal_design
     mappings = [mapping for mapping in package.manifest.component_compositions if mapping.component.entity_id != component.entity_id]
     mappings.append(ComponentComposition(component=component, internal_design=internal_design))
     package.manifest = package.manifest.model_copy(update={"component_compositions": mappings})
+    from .sections import load_entity_sections
+    for section in load_entity_sections(package.manifest, package.files):
+        if section.parent == component and section.section_type == "sv":
+            set_section_usage(package, component, section.section_id, "reference")
 
 
 def _design_root(package: SpecPackage, ref: EntityRef) -> tuple[etree._Element, typing.Any]:
@@ -1130,7 +1176,7 @@ def _ensure_container(root: etree._Element, name: str) -> etree._Element:
     return container
 
 
-def _upsert_instance(root: etree._Element, instance: InstanceIR) -> None:
+def _upsert_instance(root: etree._Element, instance: InstanceIR, parameter_ids=None) -> None:
     """Replace an instance by name while preserving canonical document order."""
     container = _ensure_container(root, "componentInstances")
     existing = _named_child(container, "componentInstance", instance.name, "instanceName")
@@ -1140,6 +1186,10 @@ def _upsert_instance(root: etree._Element, instance: InstanceIR) -> None:
     etree.SubElement(component, _q("instanceName")).text = instance.name
     vendor, library, name, version = instance.component_vlnv.split(":", 3)
     etree.SubElement(component, _q("componentRef"), vendor=vendor, library=library, name=name, version=version)
+    if instance.parameter_values:
+        values = etree.SubElement(_required_child(component, "componentRef"), _q("configurableElementValues"))
+        for name, value in instance.parameter_values:
+            etree.SubElement(values, _q("configurableElementValue"), referenceId=(parameter_ids or {}).get(name, name)).text = value
     container.append(component)
 
 
@@ -1301,3 +1351,76 @@ def _remove_asset(package: SpecPackage, asset_id: str) -> None:
     package.manifest = package.manifest.model_copy(
         update={"assets": [item for item in package.manifest.assets if item.asset_id != asset_id]}
     )
+
+
+def _rename_design_boundaries(package, operation):
+    from .design_interfaces import read_interface
+    replacements = dict(operation.port_renames)
+    if not replacements:
+        return
+    old = {p.name for p in read_interface(package.files, operation.design).ports}
+    new = {p["name"] for p in operation.ports}
+    if set(replacements) - old or set(replacements.values()) - new or len(set(replacements.values())) != len(replacements):
+        raise ValueError("Design port renames must identify existing and distinct replacement ports.")
+    root, _ = _design_root(package, operation.design)
+    for node in root.xpath(".//*[local-name()='externalPortReference']"):
+        node.set("portRef", replacements.get(node.get("portRef"), node.get("portRef")))
+    package.add_document("design", _serialize(root))
+    keys = {f"boundary:{a}": f"boundary:{b}" for a, b in replacements.items()}
+    layout_data = package.files.get(f"annotations/circuit-layout/{operation.design.entity_id}.json")
+    if layout_data:
+        layout = DesignCircuitLayoutV1.model_validate_json(layout_data)
+        routes = copy.deepcopy(layout.net_routes)
+        for route in routes.values():
+            for vertex in route.get("vertices", []):
+                if vertex.get("terminal_id") in keys:
+                    vertex["terminal_id"] = keys[vertex["terminal_id"]]
+        upsert_design_layout(package, layout.model_copy(update={
+            "terminal_placements": {keys.get(k, k): v for k, v in layout.terminal_placements.items()},
+            "label_geometry": {keys.get(k, k): v for k, v in layout.label_geometry.items()}, "net_routes": routes}))
+    timing_data = package.files.get(f"annotations/circuit-timing/{operation.design.entity_id}.json")
+    if timing_data:
+        timing = DesignCircuitTimingV1.model_validate_json(timing_data)
+        domains = tuple(d.model_copy(update={"signal": d.signal.model_copy(update={"id": replacements.get(d.signal.id, d.signal.id)})})
+                        if d.signal and d.signal.kind == "boundary" else d for d in timing.clock_domains)
+        upsert_design_timing(package, timing.model_copy(update={"clock_domains": domains,
+            "subject_domain_overrides": {keys.get(k, k): v for k, v in timing.subject_domain_overrides.items()}}))
+
+
+def _prune_design_boundaries(package, design, removed):
+    if not removed:
+        return
+    keys = {f"boundary:{name}" for name in removed}
+    data = package.files.get(f"annotations/circuit-layout/{design.entity_id}.json")
+    if data:
+        layout = DesignCircuitLayoutV1.model_validate_json(data)
+        upsert_design_layout(package, layout.model_copy(update={
+            "terminal_placements": {k: v for k, v in layout.terminal_placements.items() if k not in keys},
+            "label_geometry": {k: v for k, v in layout.label_geometry.items() if k not in keys}}))
+    data = package.files.get(f"annotations/circuit-timing/{design.entity_id}.json")
+    if data:
+        timing = DesignCircuitTimingV1.model_validate_json(data)
+        domains = tuple(d.model_copy(update={"signal": None}) if d.signal and d.signal.kind == "boundary" and d.signal.id in removed else d for d in timing.clock_domains)
+        upsert_design_timing(package, timing.model_copy(update={"clock_domains": domains,
+            "subject_domain_overrides": {k: v for k, v in timing.subject_domain_overrides.items() if k not in keys}}))
+
+
+def _instance_parameter_ids(package, instance):
+    if not instance.parameter_values:
+        return {}
+    entry = next((e for e in package.manifest.documents if e.kind == "component" and e.vlnv == instance.component_vlnv), None)
+    if entry is None:
+        raise ValueError("Instance parameter overrides require a known Component.")
+    root = ipxact.parse_xml(package.files[entry.path])
+    result = {}
+    changed = False
+    for parameter in root.xpath("./*[local-name()='parameters']/*[local-name()='parameter']"):
+        name = _text(parameter, "name")
+        identity = parameter.get("parameterId") or name
+        if name in dict(instance.parameter_values) and not parameter.get("parameterId"):
+            parameter.set("parameterId", identity)
+            changed = True
+        result[name] = identity
+    if changed:
+        package.add_document("component", _serialize(root))
+    return result
