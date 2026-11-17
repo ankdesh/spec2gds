@@ -4,7 +4,7 @@ Signed/unsigned adder/subtractor with automatic saturation clamping
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:saturating_add_sub:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

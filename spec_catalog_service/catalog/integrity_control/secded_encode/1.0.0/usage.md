@@ -4,7 +4,7 @@ Shortened extended Hamming SECDED encoder with overall parity
 
 - **VLNV**: `spec2gds.local:integrity_control:secded_encode:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

@@ -4,7 +4,7 @@ Sticky fault accumulator with lowest first-fault index capture and hold
 
 - **VLNV**: `spec2gds.local:integrity_control:fault_collector:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

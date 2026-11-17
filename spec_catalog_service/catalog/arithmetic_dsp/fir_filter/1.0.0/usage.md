@@ -4,7 +4,7 @@ Pipelined streaming FIR filter with signed history and elastic output
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:fir_filter:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

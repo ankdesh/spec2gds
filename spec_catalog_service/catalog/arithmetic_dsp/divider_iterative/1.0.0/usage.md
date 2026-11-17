@@ -4,7 +4,7 @@ Multi-cycle restoring divider with quotient, remainder, div-zero, overflow
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:divider_iterative:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

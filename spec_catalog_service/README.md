@@ -16,6 +16,12 @@ In Spec Editor, open **Components → Options → Import from catalog…**. Sear
 
 The Component's **Catalog origin** details identify its source release. Published evidence and verification of the current Spec are separate records. **Options → Generate RTL** verifies the saved target before it starts the Activity. **Options → Verify Component** and **Verify Design** also remain available.
 
+Composite catalog Components use their assigned internal Designs. These Designs
+are not entry Designs. The Component remains the catalog root and the source of
+its boundary ports and parameters. Each child instance declares its parameter
+mappings explicitly; equal parameter names do not forward values automatically.
+Retained reference SV is excluded from implementation and hardware lint.
+
 ## Layout and commands
 
 - `src/spec_catalog_service/http/`: hosting, storage, indexing queries, and standalone UI.

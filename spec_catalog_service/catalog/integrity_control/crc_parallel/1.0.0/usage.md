@@ -4,7 +4,7 @@ Byte/word-parallel CRC generator with configurable lane count and polynomial
 
 - **VLNV**: `spec2gds.local:integrity_control:crc_parallel:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

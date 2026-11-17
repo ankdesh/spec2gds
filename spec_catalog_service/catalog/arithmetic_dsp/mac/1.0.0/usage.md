@@ -4,7 +4,7 @@ Multiply-accumulate unit with accumulator, clear, and elastic output
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:mac:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

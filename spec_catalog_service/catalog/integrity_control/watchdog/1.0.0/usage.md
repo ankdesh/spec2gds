@@ -4,7 +4,7 @@ Watchdog timer with pet/kick, sticky expiry flag, and runtime limit reduction su
 
 - **VLNV**: `spec2gds.local:integrity_control:watchdog:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

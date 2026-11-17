@@ -4,7 +4,7 @@ Linear feedback shift register with runtime seed load and zero rejection
 
 - **VLNV**: `spec2gds.local:integrity_control:lfsr:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

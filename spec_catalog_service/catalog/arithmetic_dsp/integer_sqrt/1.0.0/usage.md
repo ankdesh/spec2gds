@@ -4,7 +4,7 @@ Digit-pair restoring integer square root (W/2+1 latency, REQ protocol)
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:integer_sqrt:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

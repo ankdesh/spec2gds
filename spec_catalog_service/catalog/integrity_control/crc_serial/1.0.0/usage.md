@@ -4,7 +4,7 @@ Bit-serial CRC engine with programmable polynomial and initial/xorout values
 
 - **VLNV**: `spec2gds.local:integrity_control:crc_serial:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

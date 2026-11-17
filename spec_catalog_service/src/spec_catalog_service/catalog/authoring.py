@@ -131,7 +131,7 @@ def build_component_usage_markdown(comp_def: ComponentDef, saved_pkg: SpecPackag
 
 - **VLNV**: `spec2gds.local:{comp_def.category}:{comp_def.id}:{comp_def.version}`
 - **Category**: `{comp_def.category}`
-- **Implementation**: `body_sv`
+- **Implementation**: `{comp_def.implementation}`
 - **Licence**: `{comp_def.licence}`
 
 ## Interface Ports

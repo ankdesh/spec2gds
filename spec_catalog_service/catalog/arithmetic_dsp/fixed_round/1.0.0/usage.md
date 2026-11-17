@@ -4,7 +4,7 @@ Signed integer scaling by power of two with nearest-even rounding
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:fixed_round:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

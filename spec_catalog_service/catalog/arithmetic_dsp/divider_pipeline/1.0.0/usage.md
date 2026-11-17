@@ -4,7 +4,7 @@ Fully-staged restoring pipelined divider accepting 1 request per edge
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:divider_pipeline:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

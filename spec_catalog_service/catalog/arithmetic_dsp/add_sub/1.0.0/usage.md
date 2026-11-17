@@ -4,7 +4,7 @@ Parameterized adder/subtractor with carry-out, borrow flag, and signed overflow
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:add_sub:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

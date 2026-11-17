@@ -4,7 +4,7 @@ Maskable fixed-priority interrupt controller with lowest-index arbitration
 
 - **VLNV**: `spec2gds.local:integrity_control:interrupt_controller:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

@@ -4,7 +4,7 @@ Iterative signed vector dot product accumulator
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:dot_product:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

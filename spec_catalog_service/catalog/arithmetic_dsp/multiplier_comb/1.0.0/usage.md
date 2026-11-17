@@ -4,7 +4,7 @@ Combinational full-precision multiplier (signed or unsigned)
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:multiplier_comb:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

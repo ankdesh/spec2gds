@@ -4,7 +4,7 @@ Iterative circular CORDIC vector rotation with fixed-point angle turns
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:cordic_rotate:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

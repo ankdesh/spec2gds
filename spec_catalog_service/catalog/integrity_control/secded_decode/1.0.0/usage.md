@@ -4,7 +4,7 @@ Shortened extended Hamming SECDED decoder with single-error correction and doubl
 
 - **VLNV**: `spec2gds.local:integrity_control:secded_decode:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

@@ -4,7 +4,7 @@ Simultaneous minimum and maximum selector with tie-breaking and lane indication
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:min_max:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

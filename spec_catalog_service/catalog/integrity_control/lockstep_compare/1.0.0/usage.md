@@ -4,7 +4,7 @@ Dual-channel payload and valid lockstep comparison monitor with sticky flag
 
 - **VLNV**: `spec2gds.local:integrity_control:lockstep_compare:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

@@ -4,7 +4,7 @@ Signed/unsigned magnitude comparator with mutually exclusive lt, eq, and gt flag
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:comparator:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

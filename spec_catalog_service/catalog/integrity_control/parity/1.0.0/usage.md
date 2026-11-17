@@ -4,7 +4,7 @@ Configurable width parity generator and even-parity checker
 
 - **VLNV**: `spec2gds.local:integrity_control:parity:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

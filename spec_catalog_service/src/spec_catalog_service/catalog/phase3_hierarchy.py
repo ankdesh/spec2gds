@@ -1,8 +1,8 @@
 """Hierarchical 3-Tier Design Builder for Phase 3 Components.
 
 Constructs:
-- Level 1: Top-level structural Component and Design (wires boundary to Level 2 subsystems).
-- Level 2: Subsystem structural Components and Designs (wires subsystem boundaries to Level 3 leaf units).
+- Level 1: Root composite Component and its internal Design.
+- Level 2: Subsystem Components and their internal Designs.
 - Level 3: Leaf behavioral Components (SystemVerilog body sections with provenance metadata).
 """
 
@@ -38,22 +38,13 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
     # Common Level 3 leaf units with Phase 1 / Phase 2 provenance
     # MUX leaf (Provenance: Phase 1 logic/mux/1.0.0)
     mux_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_leaf_mux", entity_kind="component")
-    # Register leaf (Provenance: Phase 1 state/register_enable/1.0.0)
-    reg_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_leaf_reg", entity_kind="component")
-    # Counter leaf (Provenance: Phase 1 state/counter_up/1.0.0)
-    cnt_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_leaf_cnt", entity_kind="component")
 
     # Subsystem 0 (u_sub0)
     sub0_comp_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_sub0", entity_kind="component")
     sub0_des_ref = EntityRef(document_id=doc_id, entity_id=f"design_{comp_def.id}_sub0", entity_kind="design")
-    # Subsystem 1 (u_sub1)
-    sub1_comp_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_sub1", entity_kind="component")
-    sub1_des_ref = EntityRef(document_id=doc_id, entity_id=f"design_{comp_def.id}_sub1", entity_kind="design")
 
     # Level 3 Leaf 0 (for sub0)
     leaf0_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_leaf0", entity_kind="component")
-    # Level 3 Leaf 1 (for sub1)
-    leaf1_ref = EntityRef(document_id=doc_id, entity_id=f"component_{comp_def.id}_leaf1", entity_kind="component")
 
     ops: list[Any] = []
 
@@ -161,7 +152,8 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
     ops.append(
         UpsertInstance(
             sub0_des_ref,
-            InstanceIR(name="u_core", component_vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}_leaf0:{comp_def.version}"),
+            InstanceIR(name="u_core", component_vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}_leaf0:{comp_def.version}",
+                       parameter_values={p.name: p.name for p in comp_def.parameters}),
         )
     )
     # Wire sub0 boundary ports to leaf0 instance ports
@@ -186,7 +178,7 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
         )
     )
 
-    # 3. Author Level 1 Top Component and Design
+    # 3. Author the root Component and its internal Design
     ops.append(
         CreateHardware(
             kind="component",
@@ -215,14 +207,15 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
             name=f"{comp_def.id}_top_design",
             entity_id=top_des_ref.entity_id,
             vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}_top_design:{comp_def.version}",
-            entry_design=True,
+            entry_design=False,
         )
     )
     ops.append(SetInternalDesign(top_comp_ref, top_des_ref))
     ops.append(
         UpsertInstance(
             top_des_ref,
-            InstanceIR(name="u_calc_stage", component_vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}_sub0:{comp_def.version}"),
+            InstanceIR(name="u_calc_stage", component_vlnv=f"spec2gds.local:{comp_def.category}:{comp_def.id}_sub0:{comp_def.version}",
+                       parameter_values={p.name: p.name for p in comp_def.parameters}),
         )
     )
     # Connect top boundary to u_calc_stage
@@ -243,7 +236,7 @@ def build_phase3_hierarchy_ops(comp_def: ComponentDef, doc_id: str) -> list[Any]
             parent=top_comp_ref,
             section_type="text",
             type_version=1,
-            payload={"content": f"Level 1 Top-Level Structural Unit: {comp_def.summary}"},
+            payload={"content": f"Level 1 Root Composite Component: {comp_def.summary}"},
         )
     )
 

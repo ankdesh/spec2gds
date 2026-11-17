@@ -4,7 +4,7 @@ Two's-complement to unsigned magnitude converter with most-negative flag
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:absolute_value:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

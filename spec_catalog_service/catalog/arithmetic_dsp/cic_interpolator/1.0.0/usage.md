@@ -4,7 +4,7 @@ Cascaded Integrator-Comb (CIC) interpolation filter with differential delay 1
 
 - **VLNV**: `spec2gds.local:arithmetic_dsp:cic_interpolator:1.0.0`
 - **Category**: `arithmetic_dsp`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports

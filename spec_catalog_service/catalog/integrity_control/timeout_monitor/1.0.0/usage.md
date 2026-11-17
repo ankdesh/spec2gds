@@ -4,7 +4,7 @@ Transaction timeout monitor with cancel, complete, and restart priorities
 
 - **VLNV**: `spec2gds.local:integrity_control:timeout_monitor:1.0.0`
 - **Category**: `integrity_control`
-- **Implementation**: `body_sv`
+- **Implementation**: `composite`
 - **Licence**: `NOASSERTION`
 
 ## Interface Ports
