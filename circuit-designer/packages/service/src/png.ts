@@ -1,6 +1,6 @@
 import { deflateSync } from "node:zlib";
-import type { CircuitDocument, NetEndpoint, NodeGeometry, Point } from "@spec2gds/circuit-core";
-import { endpointTerminalKey, terminalDefaultPlacement } from "@spec2gds/circuit-core";
+import type { CircuitDocument, NetEndpoint, NodeGeometry, Point, TerminalPlacement } from "@spec2gds/circuit-core";
+import { endpointTerminalKey, reanchorCircuitFrameRoutes, circuitTerminalPoint, circuitFrameGeometry, effectiveCircuitTerminalPlacements, projectDocument, CIRCUIT_FRAME_HEADER_HEIGHT } from "@spec2gds/circuit-core";
 
 function crc32(data: Uint8Array): number {
   let value = 0xffffffff;
@@ -37,42 +37,36 @@ function materializedGeometry(document: CircuitDocument): Record<string, NodeGeo
   return result;
 }
 
-function terminalPoint(
-  document: CircuitDocument,
-  geometry: Record<string, NodeGeometry>,
-  endpoint: NetEndpoint,
-): Point | undefined {
-  if (endpoint.kind === "boundary") return undefined;
-  const instance = document.design.instances.find((item) => item.id === endpoint.instance_id);
-  const component = document.components.find((item) => item.id === instance?.component_id);
-  const terminal = component?.terminals.find((item) => item.id === endpoint.terminal_id);
-  const box = geometry[endpoint.instance_id];
-  if (!component || !terminal || !box) return undefined;
-  const siblings = component.terminals.filter((item) => item.direction === terminal.direction);
-  const order = Math.max(0, siblings.findIndex((item) => item.id === terminal.id));
+function terminalPoint(geometry: Record<string, NodeGeometry>, boundaryGeometry: Record<string, NodeGeometry>, placements: Record<string, TerminalPlacement>, endpoint: NetEndpoint): Point | undefined {
   const key = endpointTerminalKey(endpoint);
-  const placement = document.layout.terminal_placements[key];
-  const along = ((placement?.order ?? order) + 1) / (siblings.length + 1);
-  const side = placement?.side ?? terminalDefaultPlacement(terminal.direction, order).side;
-  if (side === "WEST") return { x: box.x, y: box.y + box.height * along };
-  if (side === "EAST") return { x: box.x + box.width, y: box.y + box.height * along };
-  if (side === "NORTH") return { x: box.x + box.width * along, y: box.y };
-  return { x: box.x + box.width * along, y: box.y + box.height };
+  const box = endpoint.kind === "boundary" ? boundaryGeometry[key] : geometry[endpoint.instance_id];
+  const placement = placements[key];
+  return box && placement ? circuitTerminalPoint(box, placement) : undefined;
 }
 
 /** Minimal deterministic Node rasterizer used by the reference service. */
-export function renderCircuitPngBytes(document: CircuitDocument, selection?: string[]): Uint8Array {
+export function renderCircuitPngBytes(document: CircuitDocument, selection?: string[], showContainer = true): Uint8Array {
   const geometry = materializedGeometry(document);
+  const graph = projectDocument(document);
+  const placements = effectiveCircuitTerminalPlacements(graph);
+  const frame = circuitFrameGeometry(graph, geometry, placements, document.layout.net_routes, document.layout.grid_size);
+  const routes = reanchorCircuitFrameRoutes(graph, geometry, frame.boundary_geometry, placements);
   const selected = selection ? new Set(selection) : undefined;
   const boxes = Object.entries(geometry).filter(([id]) => !selected || selected.has(id));
-  const scale = 1;
-  const width = Math.max(640, Math.ceil(Math.max(...boxes.map(([, box]) => box.x + box.width), 560) + 80));
-  const height = Math.max(480, Math.ceil(Math.max(...boxes.map(([, box]) => box.y + box.height), 400) + 80));
+  const visibleBoundaries = graph.terminals.filter(terminal => !terminal.node_id && (!selected || selected.has(terminal.id) || selected.has(terminal.id.slice(9))));
+  const terminalPoints = visibleBoundaries.map(terminal => circuitTerminalPoint(frame.boundary_geometry[terminal.id], placements[terminal.id]));
+  const allBoxes = [...boxes.map(([, box]) => box), ...(!selected && showContainer ? [frame.container_geometry] : [])];
+  const routePoints = Object.values(routes).flatMap(route => route.vertices.map(vertex => vertex.point));
+  const points = [...terminalPoints, ...routePoints];
+  const minX = Math.min(...allBoxes.map(box => box.x), ...points.map(point => point.x), 0) - 40;
+  const minY = Math.min(...allBoxes.map(box => box.y), ...points.map(point => point.y), 0) - 40;
+  const width = Math.max(640, Math.ceil(Math.max(...allBoxes.map(box => box.x + box.width), ...points.map(point => point.x), 560) - minX + 40));
+  const height = Math.max(480, Math.ceil(Math.max(...allBoxes.map(box => box.y + box.height), ...points.map(point => point.y), 400) - minY + 40));
   const pixels = new Uint8Array(width * height * 4);
   pixels.fill(255);
   const put = (x: number, y: number, color: [number, number, number, number]): void => {
-    const px = Math.round(x * scale);
-    const py = Math.round(y * scale);
+    const px = Math.round(x - minX);
+    const py = Math.round(y - minY);
     if (px < 0 || py < 0 || px >= width || py >= height) return;
     pixels.set(color, (py * width + px) * 4);
   };
@@ -86,9 +80,18 @@ export function renderCircuitPngBytes(document: CircuitDocument, selection?: str
       put(x + 1, y, color);
     }
   };
+  const border: [number, number, number, number] = [72, 96, 170, 255];
+  if (!selected && showContainer) {
+    const { x, y, width: w, height: h } = frame.container_geometry;
+    line({ x, y }, { x: x + w, y }, border);
+    line({ x: x + w, y }, { x: x + w, y: y + h }, border);
+    line({ x: x + w, y: y + h }, { x, y: y + h }, border);
+    line({ x, y: y + h }, { x, y }, border);
+    line({ x, y: y + CIRCUIT_FRAME_HEADER_HEIGHT }, { x: x + w, y: y + CIRCUIT_FRAME_HEADER_HEIGHT }, border);
+  }
   const netColor: [number, number, number, number] = [41, 146, 119, 255];
   for (const net of document.design.nets) {
-    const route = document.layout.net_routes[net.id];
+    const route = routes[net.id];
     if (route) {
       const vertices = new Map(route.vertices.map((item) => [item.id, item.point]));
       for (const segment of route.segments) {
@@ -99,7 +102,7 @@ export function renderCircuitPngBytes(document: CircuitDocument, selection?: str
       continue;
     }
     const points = net.endpoints.flatMap((endpoint) => {
-      const point = terminalPoint(document, geometry, endpoint);
+      const point = terminalPoint(geometry, frame.boundary_geometry, placements, endpoint);
       return point ? [point] : [];
     });
     const root = points[0];
@@ -110,7 +113,6 @@ export function renderCircuitPngBytes(document: CircuitDocument, selection?: str
       line({ x: middle.x, y: point.y }, point, netColor);
     }
   }
-  const border: [number, number, number, number] = [72, 96, 170, 255];
   const fill: [number, number, number, number] = [16, 27, 50, 255];
   for (const [, box] of boxes) {
     for (let y = Math.floor(box.y); y <= box.y + box.height; y += 1) {
@@ -119,6 +121,9 @@ export function renderCircuitPngBytes(document: CircuitDocument, selection?: str
         put(x, y, edge ? border : fill);
       }
     }
+  }
+  for (const point of terminalPoints) {
+    for (let y = -5; y <= 5; y += 1) for (let x = -5; x <= 5; x += 1) if (x * x + y * y <= 25) put(point.x + x, point.y + y, border);
   }
   const scanlines = Buffer.alloc((width * 4 + 1) * height);
   for (let y = 0; y < height; y += 1) {

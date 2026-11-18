@@ -94,12 +94,12 @@ async function capture(page: Page, name: string, area: string, target?: Locator)
 async function open(page: Page, key: string) { selected = await api('/documents/open', { path: join(starts, `${key}-start.spec`) }); await page.goto(`${spec}/editor?owner_document_key=${encodeURIComponent(selected.owner_document_key)}&edit_context_id=${encodeURIComponent(selected.edit_access.context_id)}`); await expect(page.locator('.spec-paper')).toBeVisible(); if (await page.locator('html').getAttribute('data-theme') !== 'obsidian')
     await page.getByRole('button', { name: /Switch theme/ }).click(); }
 const component = (page: Page, id = 'add16') => page.locator(`#component-${id.replaceAll('_', '-')}`);
-async function options(area: Locator, label: string) { await area.getByRole('button', { name: 'Options', exact: true }).click(); await area.getByRole('menuitem', { name: label, exact: true }).click(); }
+async function options(area: Locator, label: string) { await area.locator(':scope > header .spec-options-trigger').click(); await area.page().locator('.spec-options-menu--portal').getByRole('menuitem', { name: label, exact: true }).click(); }
 async function cmenu(page: Page, menu: string, label: string) { await page.getByRole('menuitem', { name: menu, exact: true }).click(); await page.getByRole('menuitem', { name: label, exact: true }).click(); }
 async function verify(page: Page, id = 'add16') { await options(component(page, id), 'Verify Component'); await expect(page.locator('.app-toast').last()).toContainText(/Lint (passed|failed)|Not verified/, { timeout: 60000 }); }
 async function closePanel(page: Page) { const close = page.getByRole('button', { name: 'Close side panel', exact: true }); if (await close.isVisible())
     await close.click(); }
-async function editSV(page: Page, text: string) { const section = component(page).locator('.spec-sv-section'); await section.getByRole('button', { name: 'Options for SystemVerilog', exact: true }).click(); await section.getByRole('menuitem', { name: 'Edit', exact: true }).click(); await section.locator('.cm-content').fill(text); await section.getByRole('button', { name: 'Save to Spec', exact: true }).click(); await expect(section.locator('.spec-sv-source')).toContainText(text); }
+async function editSV(page: Page, text: string) { const section = component(page).locator('.spec-sv-section'); await section.getByRole('button', { name: 'Options for SystemVerilog', exact: true }).click(); await page.locator('.spec-options-menu--portal').getByRole('menuitem', { name: 'Edit', exact: true }).click(); await section.locator('.cm-content').fill(text); await section.getByRole('button', { name: 'Save to Spec', exact: true }).click(); await expect(section.locator('.spec-sv-source')).toContainText(text); }
 const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
 const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 1, colorScheme: 'dark', acceptDownloads: true });
 await context.tracing.start({ screenshots: true, snapshots: true, sources: true });
@@ -143,7 +143,7 @@ try {
         await page.reload();
         const comp = component(page);
         await comp.getByRole('button', { name: 'Options for Ports', exact: true }).click();
-        await comp.getByRole('menuitem', { name: 'Add port', exact: true }).click();
+        await page.locator('.spec-options-menu--portal').getByRole('menuitem', { name: 'Add port', exact: true }).click();
         const draft = comp.locator('.spec-port-editor');
         await draft.getByLabel('Port ID', { exact: true }).fill('a');
         await draft.getByLabel('Range', { exact: true }).fill('15-0');
@@ -172,7 +172,7 @@ try {
         await open(page, '09');
         const editRow = component(page).locator('.spec-port-row').filter({ has: page.getByRole('rowheader', { name: 'a', exact: true }) });
         await editRow.getByRole('button', { name: 'Options for port a', exact: true }).click();
-        await component(page).getByRole('menuitem', { name: 'Edit', exact: true }).click();
+        await page.locator('.spec-options-menu--portal').getByRole('menuitem', { name: 'Edit', exact: true }).click();
         const challenge = component(page).locator('.spec-port-editor');
         await challenge.getByLabel('Description', { exact: true }).fill('First unsigned 16-bit operand.');
         await challenge.getByLabel('Range', { exact: true }).fill('15-0');
@@ -201,7 +201,7 @@ try {
         await expect(preview.locator('img')).toBeVisible();
         await capture(page, 'spec-preview', 'Spec Editor', preview);
         await preview.getByRole('button', { name: 'Options for circuit preview', exact: true }).click();
-        await preview.getByRole('menuitem', { name: 'Expand', exact: true }).click();
+        await page.locator('.spec-options-menu--portal').getByRole('menuitem', { name: 'Expand', exact: true }).click();
         await capture(page, 'spec-preview-expanded', 'Spec Editor');
         await page.keyboard.press('Escape');
         await editSV(page, 'assign y = ;');
@@ -282,7 +282,7 @@ try {
     await group('systemc', async () => {
         await open(page, 'systemc-cycle');
         const design = page.locator('#design-registered-adder-impl');
-        await design.getByRole('button', { name: 'Options', exact: true }).click();
+        await design.locator(':scope > header .spec-options-trigger').click();
         await capture(page, 'systemc-options', 'Spec Editor');
         await page.keyboard.press('Escape');
         await open(page, 'tlm');
@@ -336,14 +336,11 @@ try {
         for (const [name, driver, sink] of example.design.nets) {
             await cmenu(c, 'Connect', 'New connection');
             await c.getByLabel('Net label', { exact: true }).fill(name);
-            await c.getByLabel('Endpoint A', { exact: true }).selectOption(driver.startsWith('top.') ? `boundary:${driver.slice(4)}` : driver.replace('.', ':'));
-            await c.getByLabel('Endpoint B', { exact: true }).selectOption(sink.startsWith('top.') ? `boundary:${sink.slice(4)}` : sink.replace('.', ':'));
-            await c.getByLabel('LSB for A', { exact: true }).fill('0');
-            await c.getByLabel('LSB for B', { exact: true }).fill('0');
-            await c.getByLabel('Width (0=full)', { exact: true }).fill('0');
+            await c.getByLabel('From port', { exact: true }).selectOption(driver.startsWith('top.') ? `boundary:${driver.slice(4)}` : driver.replace('.', ':'));
+            await c.getByLabel('To port', { exact: true }).selectOption(sink.startsWith('top.') ? `boundary:${sink.slice(4)}` : sink.replace('.', ':'));
             if (name === 'operand_a')
                 await capture(c, 'circuit-connect-dialog', 'Circuit Designer');
-            await c.getByRole('button', { name: 'Create net', exact: true }).click();
+            await c.getByRole('button', { name: 'Connect', exact: true }).click();
             await expect(c.getByRole('dialog')).not.toBeVisible();
         }
         await c.getByRole('button', { name: 'Save to Spec', exact: true }).click();

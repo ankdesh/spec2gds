@@ -519,6 +519,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
     assert result["omitted_ports"] == []
     assert published[0]["protocol_version"] == "circuit-designer.v1"
     assert result["source_binding"]["writable"] is True
+    assert result["source_binding"]["enclosing_component"] == {"entity_id": "component_subsystem", "name": "subsystem"}
     base_source_revision_hash = result["source_binding"]["base_source_revision_hash"]
     candidate = json.loads(json.dumps(published[0]))
     preview = endpoints["preview_circuit_source"](
@@ -539,6 +540,7 @@ def test_editor_launches_a_design_through_the_circuit_adapter(tmp_path: Path, mo
         authorization=f"Bearer {registrations[0]['token']}",
     )
     assert committed["accepted"] is True
+    assert committed["binding"]["enclosing_component"] == result["source_binding"]["enclosing_component"]
     assert committed["source_revision_hash"] != base_source_revision_hash
     replayed = endpoints["commit_circuit_source"](
         CircuitSourceSyncRequest(

@@ -383,7 +383,7 @@ const SpecDocument = createComponentImplementation(
               <div className="spec-cover__title-row">
                 <h1>{props.title}</h1>
                 {coordinator.controller && (
-                  <OptionsMenu label="Spec" triggerRef={editButtonRef}><button role="menuitem"
+                  <OptionsMenu compact label="Spec" triggerRef={editButtonRef}><button role="menuitem"
                     className="spec-title-edit-button"
                     onClick={() => {
                       if (coordinator.requestEditor(editorId)) {
@@ -486,7 +486,7 @@ function SectionOptionsMenu({
     } finally { coordinator.finishEditor(id); }
   });
   return (
-    <OptionsMenu label={section.title} open={open} onOpenChange={setOpen} closeOnSelect={false}>
+    <OptionsMenu compact label={section.title} open={open} onOpenChange={setOpen} closeOnSelect={false}>
           {section.section_id === "components" && onCreate && (
             <button
               onClick={() => {
@@ -1120,8 +1120,8 @@ function HardwareControls({ state }: { state: SectionEditState }) {
     </details>
     {!component && !source?.component_compositions.some(c => c.internal_design.entity_id === ref.entity_id) && <section><h4>Ports</h4>{source?.designs.find(d => d.ref.entity_id === ref.entity_id)?.ports?.map(p => <p key={p.name}><code>{p.name}</code> · {p.direction} · {p.range || "scalar"}</p>)}<h4>Parameters</h4>{source?.designs.find(d => d.ref.entity_id === ref.entity_id)?.parameters?.map(p => <p key={p.name}><code>{p.name} = {p.value}</code></p>)}<button type="button" onClick={() => state.begin?.("design-interface")}>Edit Design interface…</button></section>}
     {component && <details><summary>Parameters</summary>
-      {(source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters ?? []).map(item => <div className="spec-edit-actions" key={item.name}><code>{item.name}: {item.rtl_type || "untyped"} = {item.value}</code><OptionsMenu label={`parameter ${item.name}`} triggerLabel={`Options for parameter ${item.name}`}><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(item.name); setParameter({ ...item, rtl_type: item.rtl_type || "", description: item.description || "" }); } }}>Edit</button><hr role="separator" /><button role="menuitem" className="spec-delete-button" type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete parameter ${item.name}?`)) void run(() => apply([{ type: "delete_parameter", component: ref, name: item.name }])); }}>Delete</button></OptionsMenu></div>)}
-      {!parameter && <OptionsMenu label="Parameters" triggerLabel="Options for Parameters"><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(""); setParameter({ name: "", rtl_type: "int unsigned", value: "1", description: "" }); } }}>Add parameter</button></OptionsMenu>}
+      {(source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters ?? []).map(item => <div className="spec-edit-actions" key={item.name}><code>{item.name}: {item.rtl_type || "untyped"} = {item.value}</code><OptionsMenu compact label={`parameter ${item.name}`} triggerLabel={`Options for parameter ${item.name}`}><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(item.name); setParameter({ ...item, rtl_type: item.rtl_type || "", description: item.description || "" }); } }}>Edit</button><hr role="separator" /><button role="menuitem" className="spec-delete-button" type="button" disabled={busy} onClick={() => { if (window.confirm(`Delete parameter ${item.name}?`)) void run(() => apply([{ type: "delete_parameter", component: ref, name: item.name }])); }}>Delete</button></OptionsMenu></div>)}
+      {!parameter && <OptionsMenu compact label="Parameters" triggerLabel="Options for Parameters"><button role="menuitem" type="button" disabled={busy} onClick={() => { if (coordinator.requestEditor(id)) { setOriginalParameter(""); setParameter({ name: "", rtl_type: "int unsigned", value: "1", description: "" }); } }}>Add parameter</button></OptionsMenu>}
       {parameter && <form className="spec-inline-editor" onSubmit={event => { event.preventDefault(); void run(async () => {
         if (!originalParameter && source?.components.find(item => item.ref.entity_id === ref.entity_id)?.parameters?.some(item => item.name === parameter.name)) throw new Error(`Parameter ${parameter.name} already exists.`);
         await apply([{ type: "update_parameter", component: ref, parameter }]);
@@ -1304,7 +1304,7 @@ function SystemVerilogSectionRenderer({ section }: { section: EntityContentSecti
           </span>}
         </div>
         {!editing && coordinator.controller && (
-          <OptionsMenu label={section.title} triggerLabel="Options for SystemVerilog"><button role="menuitem" onClick={() => {
+          <OptionsMenu compact label={section.title} triggerLabel="Options for SystemVerilog"><button role="menuitem" onClick={() => {
               if (coordinator.requestEditor(editorId)) {
                 setDraft(section.payload.content ?? "");
                 setEditing(true);
@@ -1464,7 +1464,7 @@ function InstanceActions({ row, state }: { row: DocumentTable["rows"][number]; s
   const name = rowText(row, "name");
   const [parametersOpen, setParametersOpen] = useState(false);
   const id = `${state.section.section_id}-instance-${name}`;
-  return <>{parametersOpen && <InstanceParameterForm state={state} name={name} cancel={() => { setParametersOpen(false); coordinator.finishEditor(id); }} />}<OptionsMenu label={`instance ${name}`} triggerLabel={`Options for instance ${name}`}>
+  return <>{parametersOpen && <InstanceParameterForm state={state} name={name} cancel={() => { setParametersOpen(false); coordinator.finishEditor(id); }} />}<OptionsMenu compact label={`instance ${name}`} triggerLabel={`Options for instance ${name}`}>
     <button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(id)) setParametersOpen(true); }}>Edit parameters…</button>
     <button role="menuitem" type="button" onClick={() => { const anchor = row.cells.component?.reference_anchor; if (anchor) document.getElementById(anchor)?.scrollIntoView({ block: "start" }); }}>View Component definition</button>
     <hr role="separator" /><button role="menuitem" className="spec-delete-button" type="button" onClick={() => {
@@ -1518,7 +1518,7 @@ function ComponentPortsTable({
       <div className="spec-table-block__heading">
         <h4 id={`${table.table_id}-title`}>Ports</h4>
         <span>{table.rows.length} {table.rows.length === 1 ? "port" : "ports"}</span>
-        {sectionEdit?.portAvailability.enabled && sectionEdit.controller && <OptionsMenu label="Ports" triggerLabel="Options for Ports"><button role="menuitem" type="button" onClick={() => sectionEdit.begin?.("add-wire-port")}>Add port</button>
+        {sectionEdit?.portAvailability.enabled && sectionEdit.controller && <OptionsMenu compact label="Ports" triggerLabel="Options for Ports"><button role="menuitem" type="button" onClick={() => sectionEdit.begin?.("add-wire-port")}>Add port</button>
         </OptionsMenu>}
       </div>
       {!sectionEdit?.portAvailability.enabled && internalDesign && <p className="spec-boundary-port-help">
@@ -1610,7 +1610,7 @@ function ComponentPortRow({
       <td className="spec-port-text">{description ? <><span className="spec-port-description">{description}</span><details className="spec-port-description-compact"><summary>Read description</summary><p>{description}</p></details></> : "—"}</td>
       <td className="spec-port-row-actions">
         {!canEdit && <small title={sectionEdit?.portAvailability.reason}>Read-only</small>}
-        {canEdit && sectionEdit && <OptionsMenu label={`port ${name}`} triggerLabel={`Options for port ${name}`} triggerRef={buttonRef}><button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(false); setEditing(true); } }}>Edit</button><button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(true); setEditing(true); } }}>Duplicate</button>
+        {canEdit && sectionEdit && <OptionsMenu compact label={`port ${name}`} triggerLabel={`Options for port ${name}`} triggerRef={buttonRef}><button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(false); setEditing(true); } }}>Edit</button><button role="menuitem" type="button" onClick={() => { if (coordinator.requestEditor(editorId)) { setDuplicating(true); setEditing(true); } }}>Duplicate</button>
           {sectionEdit.controller?.applyOperations && <button role="menuitem" className="spec-delete-button" type="button" onClick={async () => {
             if (!window.confirm(`Delete port ${name}? Connected or mapped ports cannot be deleted.`) || !coordinator.requestEditor(editorId)) return;
             try { await sectionEdit.controller!.applyOperations!([{ type: "delete_component_port", component: sectionEdit.section.entity_ref!, name }]); }
@@ -1826,7 +1826,7 @@ function RenameControl({ id, name, onSave }: { id: string; name: string; onSave:
   const coordinator = useContext(EditCoordinatorContext);
   const [editing, setEditing] = useState(false);
   const finish = () => { coordinator.finishEditor(id); setEditing(false); };
-  if (!editing) return <OptionsMenu label="Section" triggerLabel="Options for Section"><button role="menuitem" type="button" className="spec-text-edit" onClick={() => {
+  if (!editing) return <OptionsMenu compact label="Section" triggerLabel="Options for Section"><button role="menuitem" type="button" className="spec-text-edit" onClick={() => {
     if (coordinator.requestEditor(id)) setEditing(true);
   }}>Rename</button></OptionsMenu>;
   return <RenameForm id={id} name={name} onSave={onSave} finish={finish} />;
@@ -2046,7 +2046,7 @@ function NarrativeExploreButton({ block, documentId }: { block: NarrativeBlockDa
   const [error, setError] = useState("");
   if (!controller) return null;
   return <>
-    <OptionsMenu label="text Section" triggerLabel="Options for text Section"><button role="menuitem" className="spec-narrative-action" type="button" onClick={() => {
+    <OptionsMenu compact label="text Section" triggerLabel="Options for text Section"><button role="menuitem" className="spec-narrative-action" type="button" onClick={() => {
       void controller.explore({ document_id: documentId, entity_id: block.block_id, entity_kind: "narrative_block" })
         .catch(caught => setError(caught instanceof Error ? caught.message : String(caught)));
     }}>Explore with AI Assistant</button></OptionsMenu>

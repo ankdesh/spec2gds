@@ -676,7 +676,7 @@ async function mockEditorApi(page: Page, options: { topologyUnavailable?: boolea
 
 async function openCircuitPreview(card: Locator): Promise<void> {
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-  await card.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+  await card.page().getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
 }
 
 async function openSample(page: Page): Promise<void> {
@@ -868,7 +868,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
   await openSample(page);
 
   const timer = page.locator("#component-component_timer");
-  await timer.getByRole("button", { name: "Options", exact: true }).click();
+  await timer.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
   await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
   const newEditor = timer.locator(".cm-content");
   await expect(newEditor).toBeVisible();
@@ -885,7 +885,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
 
   const design = page.locator("#design-design_top");
   await design.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-  await design.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
   const savedEditor = design.locator(".cm-content");
   await savedEditor.fill("logic edited_marker;\n");
   await design.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -901,7 +901,7 @@ test("adds, edits, and deletes SystemVerilog sections with preserved typed opera
 
   page.once("dialog", (dialog) => dialog.accept());
   await design.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-  await design.getByRole("menuitem", { name: "Delete", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Delete", exact: true }).click();
   await expect.poll(() => state.transactions.length).toBe(3);
   expect(state.transactions[2]?.operations).toEqual([{
     type: "delete_entity_section",
@@ -915,8 +915,8 @@ test("edits the persisted specification name without changing the stable identit
   const state = await mockEditorApi(page);
   await openSample(page);
 
-  await page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
-  await page.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
+  await page.locator(".spec-cover").getByRole("button", { name: "Options for Spec", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit name", exact: true }).click();
   await page.getByLabel("Spec name").fill("Timer Platform Specification");
   await page.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(1);
@@ -925,10 +925,10 @@ test("edits the persisted specification name without changing the stable identit
   ]);
 
   const component = page.locator("#component-component_timer");
-  const options = component.getByRole("button", { name: "Options", exact: true });
+  const options = component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / });
   await options.click();
-  await expect(component.getByRole("menuitem", { name: "Edit text…" })).toBeVisible();
-  await component.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Edit text…" })).toBeVisible();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Rename", exact: true }).click();
   await expect(component.getByLabel("Name", { exact: true })).toBeFocused();
   await component.getByLabel("Name", { exact: true }).fill("Programmable Timer");
   await component.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -940,9 +940,9 @@ test("edits the persisted specification name without changing the stable identit
   await expect(options).toBeFocused();
 
   const design = page.locator("#design-design_top");
-  const designOptions = design.getByRole("button", { name: "Options", exact: true });
+  const designOptions = design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / });
   await designOptions.click();
-  await design.getByRole("menuitem", { name: "Rename", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Rename", exact: true }).click();
   await design.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(designOptions).toBeFocused();
   expect(state.transactions.length).toBe(2);
@@ -968,7 +968,7 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
 
   const firstImageUrl = await image.getAttribute("src");
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-  const expand = card.getByRole("menuitem", { name: "Expand", exact: true });
+  const expand = page.getByRole("menu").getByRole("menuitem", { name: "Expand", exact: true });
   await expand.click();
   const dialog = page.getByRole("dialog", { name: "Circuit topology" });
   await expect(dialog.getByRole("img", { name: "Circuit topology circuit diagram" })).toBeVisible();
@@ -979,7 +979,7 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
 
   const downloadPromise = page.waitForEvent("download");
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-  await card.getByRole("menuitem", { name: "Download SVG" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Download SVG" }).click();
   const downloadPath = await (await downloadPromise).path();
   expect(downloadPath).not.toBeNull();
   const svg = await readFile(downloadPath!, "utf8");
@@ -991,8 +991,8 @@ test("renders, expands, downloads, and refreshes the derived circuit SVG", async
   expect(svg).toContain("Execute edge");
   expect(svg).toContain("WRITEBACK");
 
-  await page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
-  await page.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
+  await page.locator(".spec-cover").getByRole("button", { name: "Options for Spec", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit name", exact: true }).click();
   await page.getByLabel("Spec name").fill("Updated topology source");
   await page.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(async () => image.getAttribute("src")).not.toBe(firstImageUrl);
@@ -1036,8 +1036,8 @@ test("opens leaf and composite Components from the menu and leaf previews with t
     await expect.poll(() => state.circuits.at(-1)).toEqual({ entity_kind: "component", entity_id: id });
   }
   const component = page.locator("#component-component_timer");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…", exact: true }).click();
   const draft = component.getByLabel("Component explanation");
   await draft.fill("Private explanation, not saved to Spec.");
   const leaf = component.locator(".spec-topology-card");
@@ -1045,7 +1045,7 @@ test("opens leaf and composite Components from the menu and leaf previews with t
   const button = leaf.getByRole("button", { name: "Options for circuit preview", exact: true });
   await button.focus();
   await page.keyboard.press("ArrowDown");
-  await expect(leaf.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true })).toBeFocused();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect.poll(() => state.circuits).toEqual([
     { entity_kind: "component", entity_id: "component_timer" },
@@ -1082,10 +1082,10 @@ test("adds an available top-level component instance to the entry design", async
   const state = await mockEditorApi(page);
   await openSample(page);
   const design = page.locator("#design-design_top");
-  const options = design.getByRole("button", { name: "Options", exact: true });
+  const options = design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / });
 
   await options.click();
-  await design.getByRole("menuitem", { name: "Add component instance…" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add component instance…" }).click();
   await design.getByLabel("Instance ID").fill("timer0");
   await expect(design.getByLabel("Component", { exact: true })).toContainText("Timer");
   await design.getByLabel("Component", { exact: true }).selectOption("acme:blocks:Timer:1.0");
@@ -1145,12 +1145,12 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   const overview = page.locator("#overview");
   await expect(overview.getByText("Document ID", { exact: true })).toHaveCount(0);
   await expect(overview.getByText("Source revision", { exact: true })).toHaveCount(0);
-  await overview.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(overview.getByRole("menuitem", { name: /Launch activity/ })).toHaveCount(0);
-  await expect(overview.getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
-  await expect(overview.getByRole("menuitem", { name: /More actions/ })).toHaveCount(0);
-  await expect(overview.getByRole("menuitem", { name: "Edit overview text…" })).toBeVisible();
-  await overview.getByRole("menuitem", { name: "Edit overview text…" }).click();
+  await overview.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Launch activity/ })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /More actions/ })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Edit overview text…" })).toBeVisible();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit overview text…" }).click();
   await expect(overview.getByLabel("Overview text")).toBeVisible();
   await overview.getByLabel("Overview text").fill("Top-level processor architecture overview.");
   await overview.getByRole("button", { name: "Save to Spec" }).click();
@@ -1161,10 +1161,10 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(page.locator(".spec-paper summary").filter({ hasText: "Technical details" })).toHaveCount(0);
 
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(design.getByRole("menuitem", { name: /Generate RTL/ })).toBeVisible();
-  await expect(design.getByText(/dut.clk is unconnected/)).toBeVisible();
-  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ })).toBeVisible();
+  await expect(page.getByRole("menu").getByText(/dut.clk is unconnected/)).toBeVisible();
+  await page.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
   expect(state.generatedTargets).toEqual([{ entity_kind: "design", entity_id: designRef.entity_id }]);
   await expect(page.locator(".utility-sidebar")).toHaveCount(0);
@@ -1172,16 +1172,16 @@ test("launches circuits and queues a compatible design Activity", async ({ page 
   await expect(page.getByText("Generate RTL", { exact: true })).toBeVisible();
   if (await page.getByRole("button", { name: "Close side panel", exact: true }).isVisible()) await page.getByRole("button", { name: "Close side panel", exact: true }).click();
 
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(design.getByRole("menuitem", { name: /More actions|Launch activity/ })).toHaveCount(0);
-  await expect(design.getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
-  await design.getByRole("menuitem", { name: "Open in Circuit Designer" }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /More actions|Launch activity/ })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer" }).click();
   await expect.poll(() => state.circuits.length).toBe(2);
 
   const bus = page.locator("#bus-definition-bus_control");
-  await bus.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(bus.getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
-  await expect(bus.getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
+  await bus.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer" })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Explore with AI Assistant" })).toBeVisible();
 });
 
 test("creates entities, edits wire ports, and keeps other port families read-only", async ({ page }) => {
@@ -1189,14 +1189,14 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await openSample(page);
 
   const composite = page.locator("#component-component_subsystem");
-  await composite.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(composite.getByRole("menuitem", { name: /Add wire port.*Composite/ })).toBeDisabled();
-  await expect(composite.getByRole("menuitem", { name: /Add transactional port/ })).toHaveCount(0);
-  await expect(composite.getByRole("menuitem", { name: /Add structured port/ })).toHaveCount(0);
+  await composite.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add wire port.*Composite/ })).toBeDisabled();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add transactional port/ })).toHaveCount(0);
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add structured port/ })).toHaveCount(0);
 
   const components = page.locator("#components");
-  await components.getByRole("button", { name: "Options", exact: true }).click();
-  await components.getByRole("menuitem", { name: "Add component…" }).click();
+  await components.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add component…" }).click();
   await page.getByLabel("Component name").fill("counter");
   await page.getByRole("button", { name: "Create component" }).click();
   await expect.poll(() => state.transactions.length).toBe(1);
@@ -1224,8 +1224,8 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await expect(structuredRow).toContainText("status_bundle");
   await expect(structuredRow).toContainText("Packed struct");
   await expect(structuredRow).toContainText("Packed status fields");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill("A programmable timer.");
   await component.getByRole("button", { name: "Save to Spec" }).click();
   await expect.poll(() => state.transactions.length).toBe(2);
@@ -1237,8 +1237,8 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
     description: "A programmable timer.",
   });
 
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add wire port…" }).click();
   const draftCard = component.locator(".spec-port-editor");
   await draftCard.getByLabel("Port ID").fill("count");
   await expect(draftCard.getByLabel("Port name (optional)")).toHaveCount(0);
@@ -1261,7 +1261,7 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
 
   const existingCard = component.locator(".spec-port-row", { hasText: "irq" });
   await existingCard.getByRole("button", { name: /^Options for port/ }).click();
-  await existingCard.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
   const editCard = component.locator(".spec-port-editor");
   await expect(editCard.getByLabel("Port ID")).toHaveCount(0);
   await expect(editCard.getByLabel("Port name (optional)")).toHaveCount(0);
@@ -1292,10 +1292,10 @@ test("validates port drafts, enforces one active editor, and restores focus", as
   await mockEditorApi(page);
   await openSample(page);
   const component = page.locator("#component-component_timer");
-  const options = component.getByRole("button", { name: "Options", exact: true });
+  const options = component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / });
 
   await options.click();
-  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add wire port…" }).click();
   const draft = component.locator(".spec-port-editor");
   await draft.getByLabel("Port ID").fill("invalid_range");
   await draft.getByLabel("Range").fill("31::0");
@@ -1303,7 +1303,7 @@ test("validates port drafts, enforces one active editor, and restores focus", as
   await expect(draft.getByRole("alert")).toContainText("left:right expression pair");
 
   await component.locator(".spec-port-row", { hasText: "irq" }).getByRole("button", { name: /^Options for port/ }).click();
-  await component.locator(".spec-port-row", { hasText: "irq" }).getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
   await expect(page.getByText("Save or cancel the current edit before starting another one.")).toBeVisible();
   await expect(draft).toBeVisible();
 
@@ -1316,8 +1316,8 @@ test("preserves an inline draft when the optimistic revision is stale", async ({
   const state = await mockEditorApi(page);
   await openSample(page);
   const component = page.locator("#component-component_timer");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill("Keep this draft after refresh.");
   state.staleNextTransaction = true;
   await component.getByRole("button", { name: "Save to Spec" }).click();
@@ -1467,7 +1467,7 @@ test("keeps mixed-family tables contained, IDs exact, and row actions readable",
   }
   await page.setViewportSize({ width: 390, height: 844 });
   await component.locator(".spec-port-row").first().getByRole("button", { name: /^Options for port/ }).click();
-  await component.locator(".spec-port-row").first().getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
   const draft = component.locator(".spec-port-editor");
   await expect(draft).toBeVisible();
   for (const control of [draft.getByLabel("Description"), draft.getByLabel("Direction"), draft.getByRole("button", { name: "Save to Spec", exact: true })]) {
@@ -1530,7 +1530,7 @@ test("keeps a long Spec name and its edit action reachable at narrow widths", as
   for (const width of [390, 720, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    const action = page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true });
+    const action = page.locator(".spec-cover").getByRole("button", { name: "Options for Spec", exact: true });
     await expect(action).toBeVisible();
     const box = await action.boundingBox();
     expect(box!.x + box!.width).toBeLessThanOrEqual(width);
@@ -1543,8 +1543,8 @@ test("Cut and Paste retain input and textarea selections and save their results"
   const state = await mockEditorApi(page);
   await openSample(page);
   const component = page.locator("#component-component_timer");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Add wire port…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add wire port…" }).click();
   const field = component.getByLabel("Port ID", { exact: true });
   await field.fill("abcdef");
   await field.evaluate((input: HTMLInputElement) => { input.setSelectionRange(3, 6); document.dispatchEvent(new Event("selectionchange")); });
@@ -1560,8 +1560,8 @@ test("Cut and Paste retain input and textarea selections and save their results"
   await component.getByRole("button", { name: "Save to Spec" }).click();
   expect(state.transactions[0]?.operations[0].port.name).toBe("abcxyz");
 
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…" }).click();
   const text = component.getByLabel("Component explanation");
   await text.fill("one two");
   await text.evaluate((input: HTMLTextAreaElement) => { input.setSelectionRange(4, 7); document.dispatchEvent(new Event("selectionchange")); });
@@ -1587,8 +1587,8 @@ test("clipboard denial preserves a draft and SystemVerilog uses its editor model
   const state = await mockEditorApi(page);
   await openSample(page);
   const component = page.locator("#component-component_timer");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
   const code = component.locator(".cm-content");
   await code.fill("// first\n// second");
   await code.press("ControlOrMeta+a");
@@ -1633,17 +1633,17 @@ test("does not reuse late commands from a closed menu and shows unavailable Acti
   }] } }));
   await openSample(page);
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(design.getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
   const component = page.locator("#component-component_timer");
-  await component.getByRole("button", { name: "Options", exact: true }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
   release();
-  const unavailable = component.getByRole("menuitem", { name: /Unavailable Activity/ });
+  const unavailable = page.getByRole("menu").getByRole("menuitem", { name: /Unavailable Activity/ });
   await expect(unavailable).toBeDisabled();
   await expect(unavailable).toContainText("Add a SystemVerilog section first.");
   await expect(page.getByRole("menuitem", { name: "Old target Activity" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(component.getByRole("button", { name: "Options", exact: true })).toBeFocused();
+  await expect(component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / })).toBeFocused();
 });
 
 test("ignores a command catalogue response from an earlier source revision", async ({ page }) => {
@@ -1661,29 +1661,29 @@ test("ignores a command catalogue response from an earlier source revision", asy
   });
   await openSample(page);
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(design.getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Checking available commands…" })).toBeVisible();
   await page.keyboard.press("Escape");
   state.currentRevision = `sha256:${"9".repeat(64)}`;
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
   await page.getByRole("menuitem", { name: "Refresh From Disk", exact: true }).click();
   await expect.poll(() => state.openedPaths.length).toBe(2);
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await expect(design.getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
   release();
   await expect(page.getByRole("menuitem", { name: "Earlier revision Activity", exact: true })).toHaveCount(0);
-  await expect(design.getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Current revision Activity", exact: true })).toBeVisible();
 });
 
 test("preserves an unsaved draft and selection while inspecting an Activity", async ({ page }) => {
   const state = await mockEditorApi(page);
   await openSample(page);
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await design.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…", exact: true }).click();
   await design.getByLabel("Design explanation").fill("Keep this private draft.");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect.poll(() => state.activityExecutions.length).toBe(1);
   await expect(page.locator(".utility-sidebar")).toHaveCount(0);
   await page.locator("#editor-activity-trigger").click();
@@ -1727,8 +1727,8 @@ test("refreshes artifacts after completion without requiring a source change or 
   await page.getByRole("menuitem", { name: "Refresh From Disk", exact: true }).click();
   await expect.poll(() => state.openedPaths.length).toBe(2);
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await design.getByRole("menuitem", { name: /Generate RTL/ }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ }).click();
   await expect(page.locator(".utility-sidebar")).toHaveCount(0);
   await page.locator("#editor-activity-trigger").click();
   await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
@@ -1754,8 +1754,8 @@ test("proposal review preserves a private draft and its authored revision", asyn
   await openSample(page);
   const authoredRevision = state.currentRevision;
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await design.getByRole("menuitem", { name: "Edit text…", exact: true }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit text…", exact: true }).click();
   await design.getByLabel("Design explanation").fill("Keep the authored draft.");
   state.proposals.push({ proposal_id: "proposal_draft_review", review_status: "pending", rationale: "Add a saved note", operations: [{ type: "upsert_narrative_block", block: { block_id: "review_note", type: "paragraph", text: "Saved source note" } }] });
   if (await page.locator("#editor-activity-trigger").getAttribute("aria-expanded") !== "true") await page.locator("#editor-activity-trigger").click();
@@ -1830,7 +1830,7 @@ test("renders SystemVerilog edit box with full width and aligns Section Options 
   await expect(narrativeBlock).toBeVisible();
   const exploreButton = narrativeBlock.getByRole("button", { name: "Options for text Section", exact: true });
   await expect(exploreButton).toBeVisible();
-  await expect(exploreButton).toHaveText(/Options/);
+  await expect(exploreButton).toHaveText("▾");
 
   // Verify exploreButton is aligned to the right edge of narrativeBlock
   const narrativeBox = await narrativeBlock.boundingBox();
@@ -1844,7 +1844,7 @@ test("renders SystemVerilog edit box with full width and aligns Section Options 
 
   // Open SystemVerilog editor
   const timer = page.locator("#component-component_timer");
-  await timer.getByRole("button", { name: "Options", exact: true }).click();
+  await timer.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
   await page.getByRole("menuitem", { name: "Add SystemVerilog section…" }).click();
 
   const svForm = timer.locator(".spec-sv-editor-form");
@@ -2023,7 +2023,7 @@ test("captures Spec Editor visual baselines across themes, viewports, and dialog
   const design = page.locator("#design-design_top");
   const card = design.locator(".spec-topology-card");
   await card.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-  const expand = card.getByRole("menuitem", { name: "Expand", exact: true });
+  const expand = page.getByRole("menu").getByRole("menuitem", { name: "Expand", exact: true });
   await expand.scrollIntoViewIfNeeded();
   await expand.click();
   const topologyDialog = page.getByRole("dialog", { name: "Circuit topology" });
@@ -2194,7 +2194,7 @@ async function openCatalogFixture(page: Page, options: { failResults?: boolean; 
     return route.fallback();
   });
   await openSample(page);
-  await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
+  await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
   await page.getByRole("menuitem", { name: "Import from catalog…", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "Component library", exact: true });
   await expect(dialog).toBeVisible();
@@ -2332,7 +2332,7 @@ test("Component library recovers list and detail failures and restores focus on 
   await expect(dialog.getByRole("button", { name: "Close Component library", exact: true })).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
-  await expect(page.locator("#components").getByRole("button", { name: "Options", exact: true })).toBeFocused();
+  await expect(page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / })).toBeFocused();
 });
 
 test("Component library keeps an import pending and prevents duplicate actions", async ({ page }) => {
@@ -2377,8 +2377,8 @@ for (const status of ["passed", "failed", "unverified", "stale"] as const) {
     await openSample(page);
     await page.clock.install();
     const design = page.locator("#design-design_top");
-    await design.getByRole("button", { name: "Options", exact: true }).click();
-    await design.getByRole("menuitem", { name: "Verify Design", exact: true }).click();
+    await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Verify Design", exact: true }).click();
     const label = { passed: "Lint passed", failed: "Lint failed", unverified: "Not verified", stale: "out of date" }[status];
     await expect(page.locator(".app-toast")).toContainText(label);
     await expect(page.locator(".utility-sidebar")).toHaveCount(0);
@@ -2395,8 +2395,8 @@ for (const status of ["passed", "failed", "unverified", "stale"] as const) {
     await page.getByRole("button", { name: "Close side panel" }).click();
     await expect(page.locator("#editor-diagnostics-trigger")).toBeFocused();
     // A second result expires without removing the persistent report or attention count.
-    await design.getByRole("button", { name: "Options", exact: true }).click();
-    await design.getByRole("menuitem", { name: "Verify Design", exact: true }).click();
+    await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Verify Design", exact: true }).click();
     await page.mouse.move(0, 0);
     await expect(page.locator(".app-toast")).toBeVisible();
     await page.clock.fastForward(5100);
@@ -2467,7 +2467,7 @@ test("side panel: saved source navigation, duplicate findings and separate Catal
   await page.getByRole("button", { name: "Close side panel" }).click();
   const section = page.locator(".spec-sv-section");
   await section.getByRole("button", { name: "Options for SystemVerilog" }).click();
-  await section.getByRole("menuitem", { name: "Edit", exact: true }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
   await section.locator(".cm-content").fill("logic private_draft;\n");
   await page.locator("#editor-diagnostics-trigger").click();
   await page.locator(".diagnostic-finding").getByRole("button", { name: "Go to source" }).click();
@@ -2510,8 +2510,8 @@ test("side panel: a late job response cannot reopen tools or notify for another 
   await openSample(page);
   await page.locator("#editor-diagnostics-trigger").click();
   const design = page.locator("#design-design_top");
-  await design.getByRole("button", { name: "Options", exact: true }).click();
-  await design.getByRole("menuitem", { name: /^Generate RTL/ }).click();
+  await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await page.getByRole("menu").getByRole("menuitem", { name: /^Generate RTL/ }).click();
   await expect.poll(() => launched).toBe(true);
   await expect(page.locator("#utility-tab-diagnostics")).toHaveAttribute("aria-selected", "true");
   await page.getByRole("menuitem", { name: "File", exact: true }).click();

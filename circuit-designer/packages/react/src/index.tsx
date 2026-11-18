@@ -25,6 +25,7 @@ import {
   Handle,
   getViewportForBounds,
   Position,
+  ViewportPortal,
   ReactFlow,
   SelectionMode,
   useReactFlow,
@@ -66,6 +67,9 @@ import {
   compactCircuitInstanceLabel,
   sortedCycleEdges,
   stageLabel,
+  circuitFrameGeometry,
+  CIRCUIT_FRAME_HEADER_HEIGHT,
+  type CircuitContainerPresentation,
 } from "@spec2gds/circuit-core";
 import { layoutCircuitDocument } from "@spec2gds/circuit-layout";
 
@@ -115,6 +119,11 @@ export interface CircuitDesignerCanvasProps {
   graph: CircuitGraphSnapshot;
   layout: DiagramLayout;
   boundaryGeometry?: Record<string, NodeGeometry>;
+  containerGeometry?: NodeGeometry;
+  container?: CircuitContainerPresentation | false;
+  onAddBoundaryPort?: () => void;
+  canAddBoundaryPort?: boolean;
+  addBoundaryPortDisabledReason?: string;
   componentLabels?: Record<string, string>;
   selection?: CircuitCanvasSelection;
   onSelectionChange?: (selection: CircuitCanvasSelection) => void;
@@ -597,10 +606,10 @@ function CanvasMeasurementStatus({ onReady }: { onReady: (ready: boolean) => voi
   return null;
 }
 
-function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, componentLabels = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
+function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry: suppliedBoundaryGeometry, containerGeometry: suppliedContainerGeometry, container, onAddBoundaryPort, canAddBoundaryPort = false, addBoundaryPortDisabledReason, componentLabels = {}, selection = [], onSelectionChange, editable = false, onNodeGeometryChanges, onConnectTerminals, onConnectionRejected, gridSize = 20, allowViewportNavigation = true, fitViewOnInit = true, onNetRouteChange, rendererRegistry, elementStatus, viewport, onViewportChange, showInlineViewportControls = true, viewportPanMouseButtons = [0], viewportPanActivationKeyCode = "Space", wheelZoomEnabled = true, useDefaultEscapeBinding = true, onContextMenuRequest, timing, showTimingOverlay = true, onCycleEdgeChange, onCanvasPointClick, timingAnalysis }: CircuitDesignerCanvasProps, forwardedRef: ForwardedRef<CircuitDesignerCanvasHandle>) {
   const canvasRef = useRef<HTMLDivElement>(null);
   const instanceRef = useRef<ReactFlowInstance<CircuitFlowNode, CircuitFlowEdge>>();
-  const [fitRequest, setFitRequest] = useState(0);
+  const [fitRequest, setFitRequest] = useState(fitViewOnInit ? 1 : 0);
   const completedFit = useRef(0);
   const [canvasReady, setCanvasReady] = useState(false);
   const [nodesInitialized, setNodesInitialized] = useState(false);
@@ -618,6 +627,13 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, comp
   const nodeGeometry = layout.node_geometry ?? {};
   const terminalPlacements = layout.terminal_placements ?? {};
   const netRoutes = layout.net_routes ?? {};
+  const derivedFrame = circuitFrameGeometry(graph, nodeGeometry, terminalPlacements, netRoutes, gridSize);
+  const boundaryGeometry = suppliedBoundaryGeometry ?? derivedFrame.boundary_geometry;
+  const containerGeometry = suppliedContainerGeometry ?? derivedFrame.container_geometry;
+  const containerPresentation = container === false ? undefined : container ?? {
+    label: graph.design.label,
+    description: `Design${graph.terminals.some(terminal => !terminal.node_id) ? "" : " · No ports defined"}`,
+  };
   const selectedKeys = useMemo(
     () => new Set(selection.map((item) => `${item.kind}:${item.id}`)),
     [selection],
@@ -749,7 +765,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, comp
     const canvas = canvasRef.current;
     const instance = instanceRef.current;
     if (!canvas || !instance || !canvas.clientWidth || !canvas.clientHeight) return;
-    const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry)];
+    const geometry = [...Object.values(nodeGeometry), ...Object.values(boundaryGeometry), ...(containerPresentation ? [containerGeometry] : [])];
     const points = [
       ...geometry.flatMap(box => [{ x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height }]),
       ...Object.values(netRoutes).flatMap(route => route.vertices.map(vertex => vertex.point)),
@@ -770,7 +786,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, comp
   // Fit after React Flow has committed and measured the accepted layout.
   // Consume each explicit request once; ordinary edits retain the manual view.
   useEffect(() => {
-    if (!canvasReady || !nodesInitialized || fitRequest === completedFit.current) return;
+    if (!canvasReady || (!nodesInitialized && nodes.length > 0) || fitRequest === completedFit.current) return;
     const frame = requestAnimationFrame(() => {
       fitCanvas();
       completedFit.current = fitRequest;
@@ -917,7 +933,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, comp
         edges={edges}
         nodeTypes={{ circuit: CircuitNodeView }}
         edgeTypes={{ circuit: CircuitEdgeView }}
-        fitView={fitViewOnInit}
+        fitView={false}
         onInit={(instance) => { instanceRef.current = instance; setCanvasReady(true); }}
         defaultViewport={{ x: gridSize, y: gridSize, zoom: 1 }}
         {...(viewport ? { viewport } : {})}
@@ -1004,6 +1020,18 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry = {}, comp
         }}
       >
         <CanvasMeasurementStatus onReady={setNodesInitialized} />
+        {containerPresentation && <ViewportPortal>
+          <div className="cd-design-frame" data-testid="circuit-design-frame" style={{ left: containerGeometry.x, top: containerGeometry.y, width: containerGeometry.width, height: containerGeometry.height }}>
+            <div className="cd-design-frame__header nopan nodrag" style={{ height: CIRCUIT_FRAME_HEADER_HEIGHT }}
+              onContextMenu={(event) => {
+                event.preventDefault(); event.stopPropagation();
+                emitContextMenu({ kind: "canvas" }, { clientPoint: { x: event.clientX, y: event.clientY }, focusTarget: event.currentTarget, keyboard: false });
+              }}>
+              <div className="cd-design-frame__heading"><strong title={containerPresentation.label}>{containerPresentation.label}</strong><span>{containerPresentation.description}</span></div>
+              {onAddBoundaryPort && <button type="button" className="nodrag nopan" disabled={!canAddBoundaryPort} title={!canAddBoundaryPort ? addBoundaryPortDisabledReason : undefined} onClick={onAddBoundaryPort}>Add port</button>}
+            </div>
+          </div>
+        </ViewportPortal>}
         <Background variant={BackgroundVariant.Dots} gap={20} size={1} />
         {showInlineViewportControls && <Controls showInteractive={false} />}
       </ReactFlow>

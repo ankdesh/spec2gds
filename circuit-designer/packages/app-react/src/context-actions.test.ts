@@ -9,7 +9,7 @@ function commandIds(entries: CircuitMenuEntry<CircuitCommandId>[]): CircuitComma
 describe("Circuit Designer context menu composition", () => {
   test("composes the empty canvas and selection-wide menus", () => {
     expect(commandIds(buildCircuitContextMenu({ target: { kind: "canvas" }, inspectorOpen: false }))).toEqual([
-      "begin-edit", "create-local-component", "open-connect", "add-cycle-edge", "select-all", "toggle-inspector", "fit-circuit",
+      "begin-edit", "add-boundary-port", "create-local-component", "open-connect", "add-cycle-edge", "select-all", "toggle-inspector", "fit-circuit",
     ]);
     expect(commandIds(buildCircuitContextMenu({ target: { kind: "node", nodeId: "a" }, inspectorOpen: false, selectionWide: true }))).toEqual([
       "center-selection", "delete-selection", "clear-selection",

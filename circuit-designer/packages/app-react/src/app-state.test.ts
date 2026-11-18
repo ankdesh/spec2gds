@@ -16,7 +16,7 @@ describe("standalone app state", () => {
     const second = projectDocument(createEmptyCircuitDocument("local_second"), "1");
     const staleLayout = {
       graphKey: graphLayoutKey(first),
-      result: { layout: { direction: "RIGHT" as const, node_geometry: {}, net_routes: {}, terminal_placements: {} }, boundary_geometry: {}, elapsed_ms: 1 },
+      result: { layout: { direction: "RIGHT" as const, node_geometry: {}, net_routes: {}, terminal_placements: {} }, boundary_geometry: {}, container_geometry: { x: 0, y: 0, width: 640, height: 360 }, elapsed_ms: 1 },
     };
 
     expect(matchingLayout(first, staleLayout)).toBe(staleLayout.result);

@@ -1725,3 +1725,71 @@
 
 .spec-edit-error, .spec-port-error-row td { color: var(--spec-error-text, #fecaca); }
 .spec-port-error-row td { background: var(--spec-error-bg, #450a0a); }
+
+/* Compact document menus keep the same target and alignment in every section. */
+.spec-document { --spec-options-size: 28px; }
+.spec-section-options--compact {
+  display: flex;
+  justify-content: flex-end;
+  margin-inline-start: auto;
+}
+.spec-cover__title-row:has(.spec-section-options--compact) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.spec-document .spec-options-trigger--compact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 var(--spec-options-size);
+  width: var(--spec-options-size);
+  height: var(--spec-options-size);
+  min-width: var(--spec-options-size);
+  min-height: var(--spec-options-size);
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--spec-line-strong);
+  border-radius: var(--spec-radius);
+  background: var(--spec-surface-subtle);
+  color: var(--spec-muted);
+  font-size: 12px;
+  line-height: 1;
+}
+.spec-document .spec-options-trigger--compact span { margin: 0; font-size: 12px; line-height: 1; }
+.spec-document .spec-options-trigger--compact:hover,
+.spec-document .spec-options-trigger--compact[aria-expanded="true"] {
+  color: var(--spec-text);
+  background: var(--spec-accent-subtle);
+  border-color: var(--spec-accent);
+}
+.spec-document .spec-options-trigger--compact:focus-visible {
+  outline: 2px solid var(--spec-accent-blue);
+  outline-offset: 2px;
+}
+.spec-ports-table thead th:last-child,
+.spec-port-row-actions {
+  width: calc(var(--spec-options-size) + 1.5rem);
+  min-width: calc(var(--spec-options-size) + 1.5rem);
+  text-align: right;
+}
+.spec-options-tooltip {
+  position: fixed;
+  z-index: 10001;
+  width: max-content;
+  max-width: min(18rem, calc(100vw - 2rem));
+  padding: .35rem .5rem;
+  border: 1px solid var(--spec-line-strong);
+  border-radius: var(--spec-radius);
+  background: var(--spec-paper);
+  color: var(--spec-text);
+  font-size: var(--spec-font-small);
+  line-height: 1.4;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.spec-options-menu--compact .spec-delete-button { color: var(--spec-danger, var(--spec-accent-orange, #f97316)); }
+@media (max-width: 620px), (any-pointer: coarse) {
+  .spec-document { --spec-options-size: 44px; }
+  .spec-options-menu--compact [role="menuitem"] { min-height: 44px; }
+}

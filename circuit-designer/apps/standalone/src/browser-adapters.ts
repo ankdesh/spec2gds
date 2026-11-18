@@ -79,6 +79,7 @@ export function createHttpSourceAdapter(backend: HttpCircuitDesignerBackend): Ci
     pendingInternalDesign: binding.pending_internal_design,
     svChoiceRequired: binding.sv_choice_required,
     interfacePreview: binding.source_entity.entity_kind === "component" && !binding.editable_design_id,
+    enclosingComponentName: binding.enclosing_component?.name ?? (binding.source_entity.entity_kind === "component" ? binding.source_entity_name : undefined),
     capabilities: binding.capabilities,
     message: binding.message,
     saveLabel: "Save to Spec",

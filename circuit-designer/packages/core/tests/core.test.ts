@@ -45,6 +45,8 @@ describe("independent circuit core", () => {
       omitted_ports: [],
     };
     expect(isCircuitSourceBindingV1(binding)).toBe(true);
+    expect(isCircuitSourceBindingV1({ ...binding, enclosing_component: { entity_id: "parent", name: "Parent Component" } })).toBe(true);
+    expect(isCircuitSourceBindingV1({ ...binding, enclosing_component: { entity_id: "parent" } })).toBe(false);
     expect(isCircuitSourceBindingV1({ ...binding, source_entity: { ...binding.source_entity, entity_kind: "asset" } })).toBe(false);
     expect(isCircuitSourceBindingV1({ ...binding, capabilities: "topology" })).toBe(false);
   });

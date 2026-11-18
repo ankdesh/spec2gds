@@ -22,6 +22,10 @@ import {
   availableHumanName,
   circuitTerminalLabel,
   circuitEndpointLabel,
+  cleanHumanName,
+  humanNameKey,
+  validateContractDefinition,
+  oppositeTerminalSide,
   planConnection,
   ConnectionChoiceRequired,
   type CircuitDocument,
@@ -62,11 +66,13 @@ import {
   parseCircuitDocumentJson,
   summarizeFileDiagnostics,
 } from "./circuit-files";
+import { parseBoundaryPortWidth } from "./boundary-port-input";
 import { browserRandomUuid } from "./browser-id";
 import { connectionEndpoint } from "./connection-input";
 import { ActionSettingsPage } from "./ActionSettingsPage";
+import { TimingPanel } from "./TimingPanel";
 import { CircuitMenuBar } from "./CircuitMenuBar";
-import { CircuitConfirmationDialog, CircuitSvDispositionDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
+import { CircuitBoundaryPortDialog, CircuitConfirmationDialog, CircuitSvDispositionDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
 import { CircuitContextMenu } from "./CircuitActionMenu";
 import {
   buildCircuitContextMenu,
@@ -157,7 +163,13 @@ export function App({
   const [recovering, setRecovering] = useState(false);
   const [sourceBinding, setSourceBinding] = useState<CircuitSourceState>();
   const [svChoiceOpen, setSvChoiceOpen] = useState(false);
+  const [portDialogOpen, setPortDialogOpen] = useState(false);
   const [sourceBusy, setSourceBusy] = useState(false);
+  const [editingBusy, setEditingBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [recoveryCollapsed, setRecoveryCollapsed] = useState(false);
+  const [portListOpen, setPortListOpen] = useState(false);
+  const [catalogComponentId, setCatalogComponentId] = useState<string>();
   const savingRef = useRef(false);
   const transitioningRef = useRef(false);
   const transitionRequestRef = useRef<string>();
@@ -170,7 +182,7 @@ export function App({
   const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
   const [message, setMessage] = useState("Ready. Unlock to make a private draft.");
   const [saveError, setSaveError] = useState("");
-  useEffect(() => setSaveError(""), [snapshot?.document.document_id]);
+  useEffect(() => { setSaveError(""); setSaved(false); setPortListOpen(false); }, [snapshot?.document.document_id]);
   const [componentName, setComponentName] = useState("");
   const [endpointA, setEndpointA] = useState("");
   const [endpointB, setEndpointB] = useState("");
@@ -228,6 +240,15 @@ export function App({
     return () => { active = false; window.clearInterval(timer); };
   }, [source, snapshot?.document.document_id, sourceBinding?.id]);
   const canEditCircuit = Boolean(lease && (!sourceBinding || sourceBinding.writable) && !sourceBusy && !sourceSaveRef.current);
+  const boundaryPortsAvailable = !sourceBinding || sourceBinding.capabilities.includes("boundary-ports");
+  const canAddBoundaryPort = canEditCircuit && boundaryPortsAvailable;
+  const addPortDisabledReason = !lease ? "Select Begin editing first."
+    : !canEditCircuit ? sourceBinding?.message ?? "Wait for the current action or request edit access."
+      : !boundaryPortsAvailable ? "Boundary ports cannot be edited in this view." : undefined;
+  const containerPresentation = sourceBinding?.interfacePreview ? false as const : {
+    label: sourceBinding?.enclosingComponentName ?? document?.design.label ?? "Design",
+    description: `${sourceBinding?.enclosingComponentName ? "Internal Design" : "Design"}${document?.design.boundary_terminals.length ? "" : " · No ports defined"}`,
+  };
   const sourceIdentifierPattern = sourceBinding?.identifierPattern;
   const isSourceIdentifier = (value: string): boolean => !sourceIdentifierPattern || new RegExp(sourceIdentifierPattern).test(value);
 
@@ -299,12 +320,14 @@ export function App({
           setStagedProposalId(undefined);
           setSourceBinding(binding);
           setSourceConflict(false);
-          setSourceDescription(binding?.writable
+          const previewHint = binding?.capabilities.includes("create-internal-design")
+            ? "This Component has no internal Design. Select Create internal Design to start." : undefined;
+          setSourceDescription(previewHint ?? (binding?.writable
             ? binding.message ?? `Bound to ${binding.label}. Save commits topology and layout back to its authoritative source.`
-            : binding?.message ?? `Read-only projection managed by ${binding?.label ?? "an external source"}.`);
-          setMessage(binding?.writable
+            : binding?.message ?? (binding ? `Read-only projection managed by ${binding.label}.` : "Independent circuit document. Begin editing to change its topology and ports.")));
+          setMessage(previewHint ?? (binding?.writable
             ? `Opened ${next.document.label} for source editing.`
-            : binding?.message ?? `Opened ${next.document.label}.`);
+            : binding?.message ?? `Opened ${next.document.label}.`));
           draftRef.current = undefined;
           return;
         }
@@ -407,7 +430,6 @@ export function App({
   useEffect(() => {
     if (!graph) return;
     const key = `${graph.document_id}:${graph.design.id}`;
-    if (!graph.nodes.length && !graph.terminals.length) { fittedDocumentRef.current = key; return; }
     if (!layout || layoutGraphRef.current !== graph) return;
     const pending = pendingArrangeFitRef.current;
     const arrangeFit = pending?.documentId === graph.document_id
@@ -546,6 +568,8 @@ export function App({
     if (!snapshot || !backend || lease || acquiringRef.current) return;
     if (draftRef.current || recovering) { setMessage("Download or discard the preserved draft before starting another draft."); return; }
     acquiringRef.current = true;
+    setEditingBusy(true);
+    setSaved(false);
     try {
       const nextLease = await backend.acquireLease(snapshot.document.document_id, clientId);
       const latest = await backend.get(snapshot.document.document_id);
@@ -553,6 +577,7 @@ export function App({
         await backend.releaseLease(latest.document.document_id, nextLease.lease_id);
         return;
       }
+      currentSnapshotRef.current = latest;
       setSnapshot(latest);
       draftRef.current = new CircuitDraft(latest.document, latest.revision);
       setLease(nextLease);
@@ -564,7 +589,7 @@ export function App({
     } catch (reason) {
       setMessage(reason instanceof Error ? reason.message : String(reason));
       await inspectLease(snapshot.document.document_id).catch(() => undefined);
-    } finally { acquiringRef.current = false; }
+    } finally { acquiringRef.current = false; setEditingBusy(false); }
   }
 
   function confirmTakeover(): void {
@@ -609,14 +634,18 @@ export function App({
     });
   }
 
-  async function createInternalDesign(): Promise<void> {
-    if (!snapshot || !lease || !source?.prepareInternalDesign || sourceBusy) return;
+  async function createInternalDesign(acquire = false): Promise<void> {
+    if (!snapshot || !source?.prepareInternalDesign || !sourceBinding?.capabilities.includes("create-internal-design") || sourceBusy || transitioningRef.current || acquiringRef.current) return;
+    if (acquire && !currentLeaseRef.current) await unlock();
+    const activeLease = currentLeaseRef.current;
+    const activeSnapshot = currentSnapshotRef.current;
+    if (!activeLease || !activeSnapshot || activeSnapshot.document.document_id !== snapshot.document.document_id) return;
     transitionRequestRef.current ??= operationId("prepare_design");
-    creationLeaseRef.current = lease.lease_id;
+    creationLeaseRef.current = activeLease.lease_id;
     setSourceBusy(true);
     transitioningRef.current = true;
     try {
-      const result = await source.prepareInternalDesign(snapshot.document.document_id, lease.lease_id, transitionRequestRef.current);
+      const result = await source.prepareInternalDesign(activeSnapshot.document.document_id, activeLease.lease_id, transitionRequestRef.current);
       if (!result.accepted || !result.snapshot || !result.lease || !result.state) throw new Error(result.diagnostics.map(item => item.message).join(" · ") || "Could not prepare the internal Design.");
       currentSnapshotRef.current = result.snapshot;
       setSnapshot(result.snapshot);
@@ -735,6 +764,7 @@ export function App({
         setSaveError(result.diagnostics.map((item) => item.message).join(" · ") || "The Spec service rejected the save.");
         const conflict = result.diagnostics.some((item) => item.code === "source_revision_conflict");
         setSourceConflict(conflict);
+        setRecoveryCollapsed(false);
         setMessage(result.diagnostics.map((item) => item.message).join(" · ") || "Source save was rejected.");
         return;
       }
@@ -754,6 +784,7 @@ export function App({
       setSelection([]);
       setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
       setSourceConflict(false);
+      setSaved(true);
       setMessage("Changes saved to the source. Edit mode closed.");
       void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
       return;
@@ -778,6 +809,7 @@ export function App({
     setRemoteLease(null);
     setSnapshot(result.snapshot);
     setDocument(result.snapshot.document);
+    setSaved(true);
     await downloadCircuitDocument(result.snapshot.document);
     setMessage(`Saved and downloaded ${circuitDocumentFilename(result.snapshot.document)}.`);
   }
@@ -785,24 +817,35 @@ export function App({
   async function reopenLatestSource(): Promise<void> {
     if (!snapshot || !sourceBinding || !source) return;
     if (sourceBinding.pendingInternalDesign) { await cancel(); return; }
-    if (lease) await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
-    draftRef.current?.cancel();
-    draftRef.current = undefined;
-    setLease(undefined);
-    setStagedProposalId(undefined);
-    const result = await source.reload(snapshot.document.document_id);
-    if (!result.accepted || !result.snapshot) {
-      setMessage(result.diagnostics.map((item) => item.message).join(" · "));
-      return;
-    }
-    setSnapshot(result.snapshot);
-    setDocument(result.snapshot.document);
-    setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
-    setSelection([]);
-    setSourceConflict(false);
-    setSaveError("");
-    void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
-    setMessage("Reopened the latest source revision. The previous unsaved draft was discarded.");
+    if (sourceBusy || transitioningRef.current) return;
+    transitioningRef.current = true;
+    setSourceBusy(true);
+    try {
+      if (lease) await backend.releaseLease(snapshot.document.document_id, lease.lease_id);
+      currentLeaseRef.current = undefined;
+      setLease(undefined);
+      // Retain the private draft until the replacement snapshot is confirmed.
+      const result = await source.reload(snapshot.document.document_id);
+      if (!result.accepted || !result.snapshot) throw new Error(result.diagnostics.map(item => item.message).join(" · ") || "Could not open the latest Spec.");
+      draftRef.current?.cancel();
+      draftRef.current = undefined;
+      sourceSaveRef.current = undefined;
+      currentSnapshotRef.current = result.snapshot;
+      setStagedProposalId(undefined);
+      setSnapshot(result.snapshot);
+      setDocument(result.snapshot.document);
+      setSourceBinding(result.state ?? { ...sourceBinding, revision: result.revision });
+      setSelection([]);
+      setSourceConflict(false);
+      setSaveError("");
+      setLeaseLost(false);
+      setRemoteLease(null);
+      void backend.listProposals(snapshot.document.document_id).then(setProposals).catch(() => undefined);
+      setMessage("Reopened the latest source revision. The previous unsaved draft was discarded.");
+    } catch (reason) {
+      setSaveError(`Could not open the latest Spec. Your draft is preserved for download. ${reason instanceof Error ? reason.message : String(reason)}`);
+      setLeaseLost(true);
+    } finally { transitioningRef.current = false; setSourceBusy(false); }
   }
 
   async function cancel(): Promise<void> {
@@ -914,8 +957,11 @@ export function App({
     setMessage(direction === "undo" ? "Draft change undone." : "Draft change redone.");
   }
 
-  function addLocalComponent(): void {
-    if (!document || !componentName.trim()) return;
+  function addLocalComponent(rawWidth: string): boolean {
+    if (!document || !componentName.trim()) return false;
+    let width: number | string;
+    try { width = parseBoundaryPortWidth(rawWidth); }
+    catch (error) { setMessage(error instanceof Error ? error.message : String(error)); return false; }
     const componentId = uniqueSlug(componentName, document.components.map((item) => item.id));
     const instanceId = uniqueSlug(componentName, document.design.instances.map((item) => item.id));
     const component: ComponentDefinition = {
@@ -924,8 +970,8 @@ export function App({
       origin: "local",
       editable: true,
       terminals: [
-        { id: "input", label: "input", direction: "input", width: 1, category: "port" },
-        { id: "output", label: "output", direction: "output", width: 1, category: "port" },
+        { id: "input", label: "input", direction: "input", width, category: "port" },
+        { id: "output", label: "output", direction: "output", width, category: "port" },
       ],
       parameters: [],
       appearance: { renderer_key: "generic", properties: {} },
@@ -953,10 +999,11 @@ export function App({
         },
       });
     }
-    if (!mutateBatch(operations, "Local component and first instance created.")) return;
+    if (!mutateBatch(operations, "Local component and first instance created.")) return false;
     setSelection([{ kind: "node", id: instanceId }]);
     setComponentName("");
     setComponentCreationPoint(undefined);
+    return true;
   }
 
   function placeCatalogComponent(componentId: string, requestedName?: string): boolean {
@@ -975,14 +1022,20 @@ export function App({
     return false;
   }
 
-  function addBoundaryPort(): void {
-    if (!document || !lease || !sourceBinding?.capabilities.includes("boundary-ports")) return;
-    const id = uniqueSlug("port", document.design.boundary_terminals.map((item) => item.id));
-    if (mutate({
-      operation_id: operationId("boundary"),
-      type: "add_boundary_terminal",
-      terminal: { id, label: id, direction: "inout", width: 1, category: "port" },
-    }, `Added boundary port ${id}.`)) setSelection([{ kind: "boundary", id }]);
+  function addBoundaryPort(name: string, direction: "input" | "output" | "inout", rawWidth: string): string | undefined {
+    if (!document || !canAddBoundaryPort) return addPortDisabledReason ?? "Port creation is unavailable.";
+    try {
+      const label = cleanHumanName(name);
+      if (!isSourceIdentifier(label)) return sourceBinding?.identifierHint ?? "Use a source-compatible port name.";
+      if (document.design.boundary_terminals.some(port => humanNameKey(port.label) === humanNameKey(label))) return "A port with this name already exists.";
+      const id = uniqueSlug(label, document.design.boundary_terminals.map(item => item.id));
+      const terminal = { id, label, direction, width: parseBoundaryPortWidth(rawWidth), category: "port" as const };
+      const validation = validateContractDefinition("TerminalDefinition", terminal);
+      if (!validation.valid) return "Enter a valid port name, direction, and wire width or range.";
+      if (!mutate({ operation_id: operationId("boundary"), type: "add_boundary_terminal", terminal }, `Added boundary port ${label}.`)) return "The port could not be added. Check the circuit status and edit access.";
+      setSelection([{ kind: "boundary", id }]);
+      return undefined;
+    } catch (error) { return error instanceof Error ? error.message : String(error); }
   }
 
   function updateBoundaryPort(value: CircuitDocument["design"]["boundary_terminals"][number] | undefined): void {
@@ -1207,7 +1260,7 @@ export function App({
           net_routes: structuredClone(layout.layout.net_routes),
         },
       };
-      const options = { boundaryGeometry: layout.boundary_geometry, theme };
+      const options = { boundaryGeometry: layout.boundary_geometry, containerGeometry: layout.container_geometry, container: containerPresentation, theme };
       const stem = publicFilenameStem(snapshot.document.label || snapshot.document.design.label || "Circuit");
       if (format === "svg") {
         await files.write({ suggestedName: `${stem}.svg`, mediaType: "image/svg+xml", data: renderCircuitSvg(exportDocument, options) });
@@ -1411,7 +1464,7 @@ export function App({
     selectionWide: contextSelectionWide,
     inspectorOpen,
     terminalConnected: Boolean(contextNet),
-    terminalSide: contextPlacement?.side,
+    terminalSide: contextPlacement && contextTerminalKey?.startsWith("boundary:") ? oppositeTerminalSide(contextPlacement.side) : contextPlacement?.side,
     terminalPlacementLocked: contextPlacement?.locked,
     routeLocked: contextRouteLocked,
     cycleEdgeLocked: contextCycleEdgeId ? timing.cycle_edges.find((edge) => edge.id === contextCycleEdgeId)?.locked : undefined,
@@ -1506,6 +1559,8 @@ export function App({
   function setTerminalSide(target: CircuitCanvasContextTarget | undefined, side: TerminalPlacement["side"]): boolean {
     const context = terminalContext(target);
     if (!context) return false;
+    const physicalSide = side;
+    if (!context.terminal.node_id) side = oppositeTerminalSide(side);
     const orders = context.parentTerminals
       .map((terminal) => layout?.layout.terminal_placements[terminal.id])
       .filter((placement): placement is TerminalPlacement => placement?.side === side)
@@ -1515,7 +1570,7 @@ export function App({
       type: "set_terminal_placement",
       terminal_key: context.terminalKey,
       placement: { side, order: (orders.length ? Math.max(...orders) : -1) + 1, locked: context.placement?.locked ?? false },
-    }, `Moved ${context.terminalKey} to the ${side.toLowerCase()} side.`);
+    }, `Moved ${context.terminalKey} to the ${physicalSide.toLowerCase()} side.`);
   }
 
   function moveTerminalInOrder(target: CircuitCanvasContextTarget | undefined, delta: -1 | 1): boolean {
@@ -1600,12 +1655,12 @@ export function App({
     switch (actionId) {
       case "new-document": return !lease && !draftRef.current && !openingFile;
       case "open-document": return Boolean(snapshot) && !lease && !draftRef.current && !openingFile;
-      case "save-document": return Boolean((canEditCircuit || (sourceSaveRef.current && sourceBinding?.writable)) && !sourceBusy && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
+      case "save-document": return !sourceConflict && Boolean((canEditCircuit || (sourceSaveRef.current && sourceBinding?.writable)) && !sourceBusy && (!sourceBinding || (layout && layoutGraphRef.current === graph)));
       case "cancel-changes": return Boolean(lease || draftRef.current) && !sourceBusy;
       case "download-json":
       case "export-svg":
       case "export-png": return Boolean(snapshot && layout && layoutGraphRef.current === graph) && !lease;
-      case "begin-edit": return Boolean(snapshot) && !lease && !draftRef.current && Boolean(!linkedDocumentId || sourceBinding?.writable || sourceBinding?.capabilities.includes("create-internal-design")) && !sourceBusy;
+      case "begin-edit": return Boolean(snapshot) && !lease && !draftRef.current && Boolean(!sourceBinding || sourceBinding.writable || sourceBinding.capabilities.includes("create-internal-design")) && !sourceBusy && !editingBusy;
       case "create-internal-design": return Boolean(lease && source?.prepareInternalDesign && sourceBinding?.capabilities.includes("create-internal-design") && !sourceBinding.pendingInternalDesign && !sourceBusy);
       case "undo": return Boolean(canEditCircuit && draftRef.current?.canUndo);
       case "redo": return Boolean(canEditCircuit && draftRef.current?.canRedo);
@@ -1653,6 +1708,7 @@ export function App({
       }
       case "select-connected-net": return Boolean(contextualNetId);
       case "disconnect-port": return Boolean(canEditCircuit && contextualNetId && terminal);
+      case "add-boundary-port": return canAddBoundaryPort;
       case "delete-boundary-terminal": return Boolean(canEditCircuit && invocation.target && selectionItemForTarget(invocation.target)?.kind === "boundary");
       case "terminal-side-north":
       case "terminal-side-east":
@@ -1694,7 +1750,7 @@ export function App({
         invocation.source === "context-menu" ? contextRequest?.selection : undefined,
       );
       case "open-preferences": setActivePage("actions"); return true;
-      case "open-component-catalog": setDialog("catalog"); return true;
+      case "open-component-catalog": setCatalogComponentId(undefined); setDialog("catalog"); return true;
       case "create-local-component":
         setComponentCreationPoint(invocation.source === "context-menu" && invocation.target?.kind === "canvas" ? invocation.circuitPoint : undefined);
         setDialog("new-component");
@@ -1719,6 +1775,7 @@ export function App({
       case "open-connect":
         setEndpointA(targetTerminalKey(invocation.target) ?? "");
         setEndpointB("");
+        setSliceLsb(0); setSliceLsbB(0); setSliceWidth(0);
         setExistingNetId(undefined);
         setConnectionError("");
         setDialog("connect");
@@ -1780,6 +1837,7 @@ export function App({
         setSelection([{ kind: "net", id: contextualNetId }]);
         return true;
       case "disconnect-port": return disconnectContextTerminal(invocation.target);
+      case "add-boundary-port": setPortDialogOpen(true); return true;
       case "delete-boundary-terminal": return deleteBoundaryTarget(invocation.target);
       case "terminal-side-north": return setTerminalSide(invocation.target, "NORTH");
       case "terminal-side-east": return setTerminalSide(invocation.target, "EAST");
@@ -1796,7 +1854,7 @@ export function App({
   actionExecutorRef.current = executeCircuitAction;
 
   useEffect(() => {
-    if (activePage !== "canvas" || dialog) return;
+    if (activePage !== "canvas" || dialog || portDialogOpen) return;
     const runShortcut = (event: KeyboardEvent) => {
       const target = event.target;
       if (target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement
@@ -1808,7 +1866,7 @@ export function App({
     };
     window.addEventListener("keydown", runShortcut);
     return () => window.removeEventListener("keydown", runShortcut);
-  }, [actionBindings, activePage, dialog]);
+  }, [actionBindings, activePage, dialog, portDialogOpen]);
 
   function actionForMouseShortcut(mouse: MouseShortcut): CircuitActionId | undefined {
     return circuitActionDefinitions.find((action) => actionBindings[action.id].mouse === mouse)?.id;
@@ -1839,6 +1897,21 @@ export function App({
     return value.replace(/sha256:[a-f0-9]{16,}/gi, "source revision")
       .replace(/\b[a-f0-9]{24,}\b/gi, "internal reference");
   })();
+  const hasChanges = Boolean(draftRef.current?.dirty || sourceBinding?.pendingInternalDesign);
+  const saveLabel = sourceBinding ? sourceBinding.saveLabel ?? "Save to Spec" : "Save circuit";
+  const saveState = sourceBusy ? savingRef.current ? "Saving…" : "Preparing…" : editingBusy ? "Starting editing…"
+    : saveError || sourceConflict ? draftRef.current ? "Save failed · Draft preserved" : "Saved · Download failed"
+    : leaseLost ? "Editing access lost · Draft preserved"
+    : sourceBinding?.pendingInternalDesign ? "Unsaved Design"
+    : hasChanges ? "Unsaved changes"
+    : lease ? sourceBinding?.interfacePreview ? "Editing · Component preview" : "Editing · No changes"
+    : saved ? "Saved" : sourceBinding?.interfacePreview ? "Component preview" : sourceBinding && !sourceBinding.writable ? "Viewing · Read-only" : "Viewing";
+  const canCreateInternalDesign = Boolean(sourceBinding?.capabilities.includes("create-internal-design") && source?.prepareInternalDesign && !sourceBinding.pendingInternalDesign);
+  const startDisabledReason = editingBusy || sourceBusy ? "Wait for the current action to finish."
+    : draftRef.current && !lease ? "Download or discard the preserved draft first."
+    : remoteLease && !lease ? "This circuit is in use. Select Take over editing to continue."
+    : !isCommandEnabled({ commandId: "begin-edit", source: "menubar" }) && !lease ? sourceBinding?.message ?? "Request edit access from Spec Editor." : undefined;
+  const showTiming = dialog === "timing-analysis";
   const themeStyle = { ...circuitThemeCssProperties(theme), colorScheme: theme.color_scheme } as CSSProperties;
 
   return <main className="cd-app standalone-shell" data-theme={theme.id} ref={appRef} style={themeStyle}>
@@ -1864,13 +1937,13 @@ export function App({
         toolsEnabled={Boolean(snapshot) && !lease && !draftRef.current && !recovering}
         onRunTool={runTool}
       />
-      <div className="document-status" title={sourceDescription}>
+      <div className="document-status" title={sourceBinding ? sourceDescription : `${document?.components.length ?? 0} Components · ${document?.design.instances.length ?? 0} instances · ${document?.design.nets.length ?? 0} nets`}>
         <strong>{document?.label ?? "Loading…"}</strong>
         {!sourceBinding && lease && document && <button type="button" onClick={() => {
           const name = window.prompt("Document name", document.label);
           if (name?.trim()) mutate({ operation_id: operationId("rename_document"), type: "set_document_label", label: name }, "Document renamed.");
         }}>Rename</button>}
-        <small>{sourceBinding ? sourceBinding.writable ? lease ? sourceBinding.draftLabel ?? "source draft" : sourceBinding.boundLabel ?? "source bound" : "source read-only" : lease ? "private draft" : "saved circuit"}</small>
+        <small role="status" aria-label="Circuit save state">{saveState}</small>
       </div>
       <button
         aria-label={`Switch theme (currently ${theme.id === "obsidian" ? "Dark" : "Light"})`}
@@ -1887,35 +1960,44 @@ export function App({
       >
         <span aria-hidden="true">{theme.id === "obsidian" ? "☀️" : "🌙"}</span>
       </button>
-      {sourceBinding && (lease || sourceSaveRef.current) && (draftRef.current?.dirty || sourceBinding.pendingInternalDesign) && <button
+      <button
         className="source-save-button"
-        disabled={!sourceBinding.writable || sourceBusy || !layout || layoutGraphRef.current !== graph}
+        disabled={!hasChanges || !isCommandEnabled({ commandId: "save-document", source: "menubar" })}
+        aria-describedby="save-destination"
         onClick={() => executeCircuitAction({ commandId: "save-document", source: "menubar" })}
         type="button"
-      >{sourceBinding.saveLabel ?? "Save to Spec"}</button>}
+      >{savingRef.current ? "Saving…" : saveLabel}</button>
+      <span id="save-destination" className="sr-only">{sourceBinding ? "Save this draft to the linked Spec." : "Commit changes and download the circuit file."}</span>
     </header>
     <div className="circuit-feedback">
     <div className="notice">
       <span className="local-dot" />
-      {activePage === "actions" ? "Actions & shortcuts" : sourceBinding?.writable ? sourceBinding.label : linkedDocumentId ? "Source projection" : "Independent document"}
+      {activePage === "actions" ? "Actions & shortcuts" : sourceBinding?.writable ? sourceBinding.label : sourceBinding ? "Source projection" : "Independent document"}
       <span>{activePage === "actions"
         ? `Shared preference file · ${preferenceStatus === "loading" ? "loading…" : preferenceStatus === "saving" ? "saving…" : preferenceStatus === "saved" ? "saved" : "save failed"}`
-        : layoutProgress || readableMessage}</span>
+        : sourceConflict ? "Review the save conflict below before saving." : layoutProgress || readableMessage}</span>
       {readableMessage !== message && <details><summary>Technical details</summary><pre>{message}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(message)}>Copy details</button></details>}
-      {sourceConflict && <span className="source-recovery">
-        <button onClick={() => void reopenLatestSource()} type="button">Reopen Latest</button>
-        <button onClick={() => { if (document) void downloadCircuitDocument(document); }} type="button">Download Draft JSON</button>
-      </span>}
       {!lease && remoteLease && !leaseLost && !draftRef.current && <button disabled={recovering} onClick={confirmTakeover} type="button">{recovering ? "Recovering…" : "Take over editing"}</button>}
       {leaseLost && <span className="source-recovery">
         <button onClick={() => { if (document) void downloadCircuitDocument(document); }} type="button">Download Draft JSON</button>
         <button onClick={() => void cancel()} type="button">Discard preserved draft</button>
       </span>}
     </div>
-    {saveError && <div className="save-error" role="alert">
-      <strong>{draftRef.current ? "Save failed. Your draft is still open." : "The saved Circuit could not be downloaded."}</strong>
-      <p>{saveError}</p>
-      {draftRef.current && <p>Save or cancel the draft before exporting the saved Circuit.</p>}
+    {(saveError || sourceConflict) && <div className="save-error" role="alert">
+      <strong>{sourceConflict ? "The Spec changed. Your draft is safe." : draftRef.current ? "Save failed. Your draft is still open." : "The saved Circuit could not be downloaded."}</strong>
+      {recoveryCollapsed && sourceConflict ? <button type="button" onClick={() => setRecoveryCollapsed(false)}>Review save conflict</button> : <>
+        <p>{saveError}</p>
+        {draftRef.current && <p>Save or cancel the draft before exporting the saved Circuit.</p>}
+        {sourceConflict && <div className="recovery-actions">
+          <button type="button" onClick={() => { setRecoveryCollapsed(true); canvasRef.current?.centerSelection(); }}>Keep editing draft</button>
+          <button type="button" onClick={() => { if (document) void downloadCircuitDocument(document); }}>Download draft</button>
+          <button type="button" disabled={sourceBusy} onClick={() => setConfirmation({
+            title: "Open the latest Spec?", message: "This discards your unsaved draft and opens the latest Spec. Download the draft first if you need to keep it.", confirmLabel: "Discard draft and open latest",
+            onConfirm: () => { setConfirmation(undefined); void reopenLatestSource(); },
+          })}>Open latest Spec</button>
+        </div>}
+        {!draftRef.current && document && <button type="button" onClick={() => { void downloadCircuitDocument(document).then(() => setSaveError("")).catch(reason => setSaveError(String(reason))); }}>Retry download</button>}
+      </>}
     </div>}
     </div>
     {activePage === "actions" ? <ActionSettingsPage
@@ -1923,12 +2005,34 @@ export function App({
       onPreferencesChange={setPreferences}
       preferences={preferences}
       preferenceStatus={preferenceStatus}
-    /> : <section className={`workspace${inspectorOpen ? " workspace--inspector-open" : ""}`}>
+    /> : <section className={`workspace${inspectorOpen || showTiming ? " workspace--inspector-open" : ""}${showTiming ? " workspace--timing-open" : ""}`}>
       <div className="stage">
+        <div className="stage-tools">
         <div className="canvas-actions" aria-label="Circuit view controls">
+          {canCreateInternalDesign ? <button className="primary" type="button" disabled={!!startDisabledReason} aria-describedby="editing-guidance" onClick={() => void createInternalDesign(true)}>{sourceBusy ? "Preparing…" : "Create internal Design"}</button>
+            : !lease && <button className="primary" type="button" disabled={!!startDisabledReason} aria-describedby="editing-guidance" onClick={() => void unlock()}>{editingBusy ? "Starting…" : "Begin editing"}</button>}
+          {lease && !sourceBinding?.interfacePreview && <>
+            <button className="primary" type="button" disabled={!canEditCircuit} onClick={() => { setCatalogComponentId(undefined); setDialog("catalog"); }}>Add component</button>
+            {boundaryPortsAvailable && <button type="button" aria-label="Add port to Design" disabled={!canAddBoundaryPort} onClick={() => setPortDialogOpen(true)}>Add port</button>}
+            <button type="button" disabled={!canEditCircuit || terminals.length < 2} onClick={() => executeCircuitAction({ commandId: "open-connect", source: "menubar" })}>Connect ports</button>
+            <button type="button" disabled={sourceBusy} onClick={() => void cancel()}>Cancel changes</button>
+          </>}
           <button type="button" disabled={!layout} onClick={() => executeCircuitAction({ commandId: "fit-circuit", source: "menubar" })}>Fit circuit</button>
           <button type="button" disabled={!canEditCircuit || !layout || Boolean(layoutProgress)} onClick={() => executeCircuitAction({ commandId: "arrange-all", source: "menubar" })}>Arrange</button>
-          <button type="button" aria-pressed={inspectorOpen} onClick={() => executeCircuitAction({ commandId: "toggle-inspector", source: "menubar" })}>{inspectorOpen ? "Hide Inspector" : "Show Inspector"}</button>
+          <button type="button" aria-pressed={inspectorOpen && !showTiming} onClick={() => { if (showTiming) setDialog(undefined); else executeCircuitAction({ commandId: "toggle-inspector", source: "menubar" }); }}>{inspectorOpen && !showTiming ? "Hide Inspector" : "Show Inspector"}</button>
+          <button type="button" aria-expanded={portListOpen} onClick={() => setPortListOpen(!portListOpen)}>Port list</button>
+        </div>
+        {startDisabledReason && !lease && <p className="editing-guidance" id="editing-guidance">{startDisabledReason}</p>}
+        {canCreateInternalDesign && !startDisabledReason && <p className="editing-guidance" id="editing-guidance">Create a private Design inside this Component. Use Save to Spec to keep it.</p>}
+        {lease && !sourceBinding?.interfacePreview && !document?.design.instances.length && <p className="editing-guidance">Add your first Component, or add a port to this Design.</p>}
+        {portListOpen && <section className="port-list" aria-label="Circuit ports">
+          <div className="details-heading"><h2>Ports</h2><button type="button" onClick={() => setPortListOpen(false)}>Close port list</button></div>
+          {!terminals.length && <p>No ports yet. Add a Design port or a Component.</p>}
+          {terminals.map(terminal => <div key={terminal.id} className="port-list-row"><button type="button" onClick={() => {
+            setSelection([terminal.node_id ? { kind: "node", id: terminal.node_id } : { kind: "boundary", id: terminal.id.slice(9) }]);
+            setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: true } })); setPortListOpen(false);
+          }}>{document ? circuitTerminalLabel(document, terminal.id) : terminal.id} · {terminal.width} bits</button><button type="button" disabled={!canEditCircuit} onClick={() => { setEndpointA(terminal.id); setEndpointB(""); setSliceLsb(0); setSliceLsbB(0); setSliceWidth(0); setExistingNetId(undefined); setConnectionError(""); setDialog("connect"); setPortListOpen(false); }}>Connect from port</button></div>)}
+        </section>}
         </div>
         <div
           className={`canvas-surface${placingCycleEdge ? " canvas-surface--placing-cycle-edge" : ""}`}
@@ -1953,6 +2057,11 @@ export function App({
             componentLabels={Object.fromEntries(document?.components.map(component => [component.id, component.label]) ?? [])}
             layout={layout.layout}
             boundaryGeometry={layout.boundary_geometry}
+            containerGeometry={layout.container_geometry}
+            container={containerPresentation}
+            onAddBoundaryPort={() => setPortDialogOpen(true)}
+            canAddBoundaryPort={canAddBoundaryPort}
+            addBoundaryPortDisabledReason={addPortDisabledReason}
             editable={canEditCircuit}
             selection={selection}
             onSelectionChange={setSelection}
@@ -1981,17 +2090,15 @@ export function App({
           {layout && <details className="layout-time"><summary>Layout diagnostics</summary>Grid router · {layout.elapsed_ms} ms</details>}
         </div>
       </div>
-      {inspectorOpen && <aside className="inspector">
-        <p className="eyebrow">Inspector</p>
-        {sourceBinding?.capabilities.includes("boundary-ports") && <button
-          disabled={!canEditCircuit}
-          onClick={addBoundaryPort}
-          type="button"
-        >New Boundary Port</button>}
+      {showTiming && document && <TimingPanel document={document} timing={timing} analysis={timingAnalysis} onClose={() => setDialog(undefined)} onSelect={netId => {
+        setSelection([{ kind: "net", id: netId }]); requestAnimationFrame(() => canvasRef.current?.centerSelection());
+      }} />}
+      {inspectorOpen && !showTiming && <aside className="inspector" aria-label="Inspector" onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: false } })); } }}>
+        <div className="details-heading"><h2>Inspector</h2><button type="button" onClick={() => setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: false } }))} aria-label="Close Inspector">×</button></div>
         {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net to inspect its properties.</p></div>}
         {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p></div>}
         {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2>
-          <label>{sourceBinding ? "Instance name" : "Label"}<input pattern={sourceIdentifierPattern} value={selectedInstance.label} onChange={(event) => {
+          <label>Instance name<input pattern={sourceIdentifierPattern} value={selectedInstance.label} onChange={(event) => {
             const label = event.target.value || selectedInstance.id;
             if (!isSourceIdentifier(label)) {
               setMessage(sourceBinding?.identifierHint ?? "Use a source-compatible instance name.");
@@ -1999,9 +2106,12 @@ export function App({
             }
             mutate({ operation_id: operationId("label"), type: "update_instance", instance: { ...selectedInstance, label } }, "Instance name updated.");
           }} disabled={!canEditCircuit} /></label>
+          <p className="draw-hint">Component: {document.components.find(component => component.id === selectedInstance.component_id)?.label}</p>
+          <button type="button" onClick={() => { setCatalogComponentId(selectedInstance.component_id); setDialog("catalog"); }}>Component details</button>
+          <p className="draw-hint">The instance name applies to this placement. The Component interface applies to every instance.</p>
           <details><summary>Technical details</summary><pre>{JSON.stringify(selectedInstance, null, 2)}</pre></details>
         </>}
-        {selectedBoundary && <><span className="kind">boundary terminal</span><h2>{selectedBoundary.label}</h2>
+        {selectedBoundary && <><span className="kind">Design port</span><h2>{selectedBoundary.label}</h2>
           <label>Name<input
             disabled={!canEditCircuit}
             pattern={sourceIdentifierPattern}
@@ -2026,10 +2136,8 @@ export function App({
             onChange={(event) => {
               const raw = event.target.value.trim();
               if (!raw) return;
-              const width = /^\d+$/.test(raw)
-                ? Math.max(1, Number(raw))
-                : raw.startsWith("[") || !raw.includes(":") ? raw : `[${raw}]`;
-              updateBoundaryPort({ ...selectedBoundary, width });
+              try { updateBoundaryPort({ ...selectedBoundary, width: parseBoundaryPortWidth(raw) }); }
+              catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
             }}
           /></label>
           <p className="draw-hint">Width reductions that invalidate connected slices are rejected.</p>
@@ -2057,16 +2165,22 @@ export function App({
       onClose={() => { setDialog(undefined); setComponentCreationPoint(undefined); }}
       onComponentNameChange={setComponentName}
       onCreateComponent={addLocalComponent}
-      onRenameComponent={lease ? (id, name) => { const component = document?.components.find(item => item.id === id); if (component) mutate({ operation_id: operationId("rename_component"), type: "update_component", component: { ...component, label: name } }, "Component renamed."); } : undefined}
+      editable={canEditCircuit}
+      canBeginEditing={isCommandEnabled({ commandId: "begin-edit", source: "menubar" })}
+      editHint={sourceBinding?.interfacePreview ? "Close this dialog and create an internal Design to add Components." : startDisabledReason}
+      catalogComponentId={catalogComponentId}
+      onNewComponent={() => setDialog("new-component")}
+      onBeginEditing={() => { setDialog(undefined); void unlock(); }}
+      onRenameComponent={canEditCircuit ? (id, name) => { const component = document?.components.find(item => item.id === id); if (component) mutate({ operation_id: operationId("rename_component"), type: "update_component", component: { ...component, label: name } }, "Component renamed."); } : undefined}
       onPlaceComponent={placeCatalogComponent}
       onCreateConnection={createConnectionFromDialog}
       onDecideProposal={(proposalId, decision) => void decideProposal(proposalId, decision)}
-      onEndpointAChange={setEndpointA}
-      onEndpointBChange={setEndpointB}
-      onNetNameChange={setNetName}
-      onSliceLsbChange={setSliceLsb}
-      onSliceLsbBChange={setSliceLsbB}
-      onSliceWidthChange={setSliceWidth}
+      onEndpointAChange={value => { setEndpointA(value); setConnectionError(""); } }
+      onEndpointBChange={value => { setEndpointB(value); setConnectionError(""); } }
+      onNetNameChange={value => { setNetName(value); setConnectionError(""); } }
+      onSliceLsbChange={value => { setSliceLsb(value); setConnectionError(""); } }
+      onSliceLsbBChange={value => { setSliceLsbB(value); setConnectionError(""); } }
+      onSliceWidthChange={value => { setSliceWidth(value); setConnectionError(""); } }
       proposals={proposals}
       sliceLsb={sliceLsb}
       sliceLsbB={sliceLsbB}
@@ -2079,13 +2193,7 @@ export function App({
       onExistingNetChange={(id) => {
         setExistingNetId(id);
         setConnectionError("");
-        if (id && document) {
-          const net = document.design.nets.find(item => item.id === id);
-          const endpoint = net?.endpoints[0];
-          const terminal = endpoint && graph?.terminals.find(item => item.id === endpointTerminalKey(endpoint));
-          setSliceWidth(endpoint?.slice?.width ?? (typeof terminal?.width === "number" ? terminal.width : 0));
-          setSliceLsbB(0);
-        }
+        setSliceWidth(0); setSliceLsb(0); setSliceLsbB(0);
       }}
       terminals={terminals.map(terminal => ({ ...terminal, label: document ? circuitTerminalLabel(document, terminal.id) : "Port" }))}
       timing={timing}
@@ -2120,6 +2228,12 @@ export function App({
         && actionBindings[commandId as CircuitActionId].keyboard
         ? formatKeyboardShortcut(actionBindings[commandId as CircuitActionId].keyboard)
         : undefined}
+    />}
+    {portDialogOpen && <CircuitBoundaryPortDialog
+      defaultName={uniqueSlug("port", document?.design.boundary_terminals.flatMap(item => [item.id, item.label]) ?? [])}
+      identifierPattern={sourceIdentifierPattern}
+      onCancel={() => setPortDialogOpen(false)}
+      onCreate={addBoundaryPort}
     />}
     {svChoiceOpen && <CircuitSvDispositionDialog onCancel={() => setSvChoiceOpen(false)} onSave={(choice) => void save(choice)} />}
     {confirmation && <CircuitConfirmationDialog

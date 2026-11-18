@@ -278,21 +278,84 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 .timing-analysis-list article[data-status="cdc"], .timing-analysis-list article[data-status="backward"] { border-color: var(--cd-warning); background: var(--cd-warning-surface); }
 
+/* Common actions stay outside the zoomed circuit. */
+.workspace { grid-template-rows: auto minmax(0, 1fr); }
+.stage { display: contents; }
+.stage-tools { grid-column: 1 / -1; grid-row: 1; min-width: 0; }
+.canvas-surface { grid-column: 1; grid-row: 2; }
+.inspector { grid-column: 2; grid-row: 2; min-height: 0; }
+.canvas-actions { position: static; inset: auto; display: flex; flex-wrap: wrap; padding: 10px; gap: 6px; pointer-events: auto; background: var(--cd-surface); border-bottom: 1px solid var(--cd-border); }
+.canvas-actions button.primary { background: var(--cd-primary); border-color: var(--cd-primary); color: var(--cd-primary-foreground); }
+.editing-guidance { margin: 0; padding: 8px 12px; background: var(--cd-surface-subtle); color: var(--cd-text); font-size: 13px; line-height: 1.5; }
+.document-status { min-width: 0; }
+.document-status strong { font-size: 12px; }
+.document-status small { font-family: inherit; font-size: 11px; line-height: 1.4; text-transform: none; }
+.source-save-button { font-size: 13px; }
+.circuit-command-list { display: flex; }
+.compact-command-toggle { display: none; }
+.canvas-actions button, .circuit-dialog button, .inspector button, .circuit-menu button, .compact-command-toggle, .source-save-button, .theme-quick-toggle, .recovery-actions button, .port-list button, .save-error > button { min-height: 44px; min-width: 44px; }
+.theme-quick-toggle { width: 44px; height: 44px; }
+.circuit-dialog input, .circuit-dialog select, .inspector input, .inspector select { min-height: 44px; font-size: 14px; }
+.circuit-dialog__form > label, .slice-row label, .inspector label { font-size: 13px; }
+.circuit-dialog__form p, .catalog-dialog p, .component-ports { margin: 0; font-size: 13px; line-height: 1.5; }
+.circuit-dialog__actions { position: sticky; z-index: 2; bottom: 0; padding: 12px 16px 16px; background: var(--cd-surface); }
+.circuit-dialog__actions button { flex: 0 1 auto; }
+.connection-advanced { margin: 0; padding: 8px 0; }
+.connection-advanced summary { padding: 10px 0; font-size: 14px; }
+.connection-advanced p { margin-bottom: 10px; }
+.details-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.details-heading h2 { margin: 0; font-size: 17px; }
+.details-heading button { flex: none; }
+.recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.recovery-actions button, .save-error > button { border: 1px solid var(--cd-border-strong); border-radius: 4px; color: var(--cd-text); background: var(--cd-surface); padding: 8px 12px; }
+.port-list { max-height: 40vh; overflow: auto; padding: 12px; background: var(--cd-surface); color: var(--cd-text); border-bottom: 1px solid var(--cd-border); }
+.port-list-row { display: flex; align-items: stretch; gap: 8px; margin-top: 8px; }
+.port-list-row button { border: 1px solid var(--cd-border); background: var(--cd-surface); color: var(--cd-text); border-radius: 4px; padding: 8px; overflow-wrap: anywhere; }
+.port-list-row button:first-child { flex: 1; text-align: left; }
+.workspace--timing-open { grid-template-columns: minmax(0, 1fr) 360px; }
+.timing-analysis-list { display: grid; gap: 8px; }
+.inspector .timing-path { display: grid; gap: 6px; width: 100%; margin: 0; padding: 12px; text-align: left; overflow-wrap: anywhere; }
+.timing-path span, .timing-path small { font-size: 13px; line-height: 1.5; }
+.inspector .timing-path[aria-pressed="true"] { border-color: var(--cd-primary); box-shadow: inset 3px 0 var(--cd-primary); }
+.inspector .timing-path[data-status="cdc"], .inspector .timing-path[data-status="backward"] { border-color: var(--cd-warning); }
+.canvas-actions button:focus-visible, .circuit-menu button:focus-visible, .compact-command-toggle:focus-visible, .source-save-button:focus-visible, .circuit-dialog :is(button, input, select, summary):focus-visible, .inspector :is(button, input, select):focus-visible { outline: 3px solid var(--cd-primary); outline-offset: 2px; }
+.source-save-button:disabled, .circuit-dialog button:disabled, .inspector button:disabled { opacity: .55; cursor: default; }
+.notice button { min-height: 44px; min-width: 44px; padding: 8px; }
+
+@container circuit-app (max-width: 1200px) {
+  .circuit-menubar { align-self: center; }
+  .compact-command-toggle { display: block; border: 1px solid var(--cd-border-strong); border-radius: 4px; background: var(--cd-chrome); color: var(--cd-chrome-foreground); padding: 8px 12px; }
+  .circuit-command-list { display: none; }
+  .circuit-menubar--expanded .circuit-command-list { display: grid; position: absolute; top: 100%; left: 8px; max-width: calc(100% - 16px); width: 330px; max-height: 65vh; overflow: auto; background: var(--cd-surface); border: 1px solid var(--cd-border-strong); box-shadow: 0 8px 24px #0003; padding: 8px; }
+  .circuit-menu { display: block; }
+  .circuit-menu > button { width: 100%; text-align: left; color: var(--cd-text); font-size: 14px; }
+  .circuit-menu__panel { position: static; min-width: 0; width: 100%; box-shadow: none; }
+  .circuit-menu__panel--nested { position: static; transform: none !important; }
+  .circuit-menu__panel > button, .circuit-submenu > button { font-size: 13px; gap: 8px; }
+}
 @container circuit-app (max-width: 960px) {
   .workspace--inspector-open { position: relative; grid-template-columns: minmax(0, 1fr); }
-  .workspace--inspector-open .inspector { position: absolute; z-index: 20; inset: 0 0 0 auto; width: min(320px, 86%); box-shadow: -12px 0 30px rgb(8 31 51 / 28%); }
-  .document-status { display: none; }
+  .workspace--inspector-open .inspector { position: absolute; grid-column: 1; grid-row: 2; z-index: 20; inset: 0 0 0 auto; width: min(360px, 92%); box-shadow: -12px 0 30px rgb(8 31 51 / 28%); }
 }
-
 @container circuit-app (max-width: 720px) {
-  .topbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 8px; padding-block: 6px; }
+  .topbar { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 6px; padding: 6px 10px; }
   .brand { grid-column: 1; grid-row: 1; }
-  .theme-quick-toggle { grid-column: 2; grid-row: 1; justify-self: end; }
-  .source-save-button { grid-column: 3; grid-row: 1; }
-  .circuit-menubar { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
   .brand h1 { display: none; }
-  .circuit-menu > button { padding-inline: 5px; font-size: 11px; }
-  .notice { flex-wrap: wrap; padding-block: 6px; }
+  .document-status { display: grid; grid-column: 2; grid-row: 1; justify-items: start; max-width: none; padding-left: 0; }
+  .theme-quick-toggle { grid-column: 3; grid-row: 1; justify-self: end; }
+  .source-save-button { grid-column: 3; grid-row: 2; }
+  .circuit-menubar { grid-column: 1 / 3; grid-row: 2; }
+  .notice { flex-wrap: wrap; padding: 8px 12px; }
   .notice > span:last-child { max-width: 100%; margin-left: 0; white-space: normal; }
+  .canvas-actions { padding: 8px; }
+  .canvas-actions button { font-size: 13px; }
+  .catalog-dialog__grid { grid-template-columns: minmax(0, 1fr); }
+  .catalog-dialog__details { border-left: 0; padding-left: 0; }
+  .catalog-dialog__details label { display: grid; gap: 6px; }
+  .circuit-dialog-backdrop { padding: 16px 12px; }
+  .circuit-dialog { width: 100%; max-height: calc(100dvh - 32px); }
+  .circuit-dialog__actions { position: sticky; bottom: 0; margin-top: 0; padding-top: 12px; background: var(--cd-surface); }
+  .port-list-row { flex-wrap: wrap; }
+  .save-error { max-height: 36vh; }
 }
 }

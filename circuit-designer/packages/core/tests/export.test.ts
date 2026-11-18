@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compactCircuitInstanceLabel, compactCircuitTerminalLabel, hierarchyDocumentFixture, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
+import { compactCircuitInstanceLabel, compactCircuitTerminalLabel, hierarchyDocumentFixture, circuitFrameGeometry, effectiveCircuitTerminalPlacements, projectDocument, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
 
 describe("Circuit Designer visual export", () => {
   it("keeps repeated instance numbers visible in compact names and exports", () => {
@@ -52,7 +52,7 @@ describe("Circuit Designer visual export", () => {
 
     const svg = renderCircuitSvg(document);
 
-    expect(svg).toMatch(/^<svg[^>]+width="560"[^>]+height="180"/);
+    expect(svg).toMatch(/^<svg[^>]+width="1000"[^>]+height="440"/);
     expect(svg).toContain(".canvas-background{fill:#f7f9fc}");
     expect(svg).toContain('pattern id="canvas-grid" width="20" height="20"');
     expect(svg).toContain('fill="url(#canvas-grid)"');
@@ -63,7 +63,7 @@ describe("Circuit Designer visual export", () => {
     expect(svg).toContain(">producer_0<");
   });
 
-  it("includes boundary boxes and their visible terminals from effective canvas geometry", () => {
+  it("includes the Design frame and its visible boundary terminals from effective canvas geometry", () => {
     const document = hierarchyDocumentFixture();
     document.layout.instance_geometry.pipeline_0 = { x: 100, y: 100, width: 180, height: 100 };
     document.layout.terminal_placements = {
@@ -72,22 +72,20 @@ describe("Circuit Designer visual export", () => {
       "boundary:request": { side: "EAST", order: 0 },
       "boundary:response": { side: "WEST", order: 0 },
     };
-    const svg = renderCircuitSvg(document, {
-      boundaryGeometry: {
-        "boundary:request": { x: -40, y: 100, width: 20, height: 40 },
-        "boundary:response": { x: 400, y: 100, width: 20, height: 40 },
-      },
-    });
+    const graph = projectDocument(document);
+    const frame = circuitFrameGeometry(graph, graph.layout.node_geometry, effectiveCircuitTerminalPlacements(graph));
+    const svg = renderCircuitSvg(document, { boundaryGeometry: frame.boundary_geometry, containerGeometry: frame.container_geometry });
 
     expect(svg).toContain('data-boundary-id="request"');
     expect(svg).toContain('data-boundary-id="response"');
     expect(svg).toContain('data-terminal-id="boundary:request"');
     expect(svg).toContain('data-terminal-id="boundary:response"');
     expect(svg).not.toContain('<title>boundary</title>');
-    // Outside pin labels fit in the exported view instead of being cut by it.
+    expect(svg).toContain('data-design-frame=');
+    expect(svg).not.toMatch(/<g data-boundary-id="[^"]+"><rect/);
     const view = svg.match(/viewBox="([\d.-]+) ([\d.-]+) ([\d.-]+) ([\d.-]+)"/)!;
-    expect(Number(view[1])).toBeLessThan(-40 - 156);
-    expect(Number(view[1]) + Number(view[3])).toBeGreaterThan(420 + 156);
+    expect(Number(view[1])).toBeLessThan(frame.container_geometry.x);
+    expect(Number(view[1]) + Number(view[3])).toBeGreaterThan(frame.container_geometry.x + frame.container_geometry.width);
   });
 
   it("renders human-readable component labels in SVG eyebrow and preserves internal ID in diagnostics (UI-CIRCUIT-007)", () => {

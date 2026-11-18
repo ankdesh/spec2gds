@@ -10,8 +10,8 @@ async function getComponent(page: any, stack: Stack): Promise<Locator> {
 }
 
 async function editText(component: Locator, text: string): Promise<void> {
-  await component.getByRole("button", { name: "Options", exact: true }).click();
-  await component.getByRole("menuitem", { name: "Edit text…" }).click();
+  await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+  await component.page().getByRole("menu").getByRole("menuitem", { name: "Edit text…" }).click();
   await component.getByLabel("Component explanation").fill(text);
 }
 
@@ -34,7 +34,7 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     await parameters.locator("summary").click();
     const wRow = parameters.locator(".spec-edit-actions").filter({ hasText: "W:" });
     await wRow.getByRole("button", { name: "Options for parameter W", exact: true }).click();
-    await wRow.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
 
     await parameters.getByLabel("Default expression", { exact: true }).fill("7");
     await parameters.getByRole("button", { name: "Save parameter to Spec", exact: true }).click();
@@ -53,9 +53,9 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
 
     // Produce RTL through Generate RTL
     const reopenedComp = await getComponent(page, stack);
-    await reopenedComp.getByRole("button", { name: "Options", exact: true }).click();
-    await expect(reopenedComp.getByRole("menuitem", { name: "Generate RTL", exact: true })).toBeEnabled();
-    await reopenedComp.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+    await reopenedComp.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+    await expect(page.getByRole("menu").getByRole("menuitem", { name: "Generate RTL", exact: true })).toBeEnabled();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
     await expect(page.locator(".utility-sidebar")).toHaveCount(0);
     await page.locator("#editor-activity-trigger").click();
     await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();
@@ -72,7 +72,7 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
 
     // Add a harmless explanatory comment
     await svSection.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-    await svSection.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
 
     const originalContent = (await stack.snapshot()).entity_sections[0].content;
     const comment = "// Phase 2 Spec Editor verified explanatory comment\n";
@@ -88,7 +88,7 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     const reopenedComp = await getComponent(page, stack);
     const reopenedSv = reopenedComp.locator(".spec-sv-section");
     await reopenedSv.getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-    await reopenedSv.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
     await reopenedComp.locator(".cm-content").fill("module nested_illegal();\nendmodule\n");
     await reopenedSv.getByRole("button", { name: "Save to Spec", exact: true }).click();
 
@@ -113,7 +113,7 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     await parameters.locator("summary").click();
     const depthRow = parameters.locator(".spec-edit-actions").filter({ hasText: "DEPTH:" });
     await depthRow.getByRole("button", { name: "Options for parameter DEPTH", exact: true }).click();
-    await depthRow.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
 
     await parameters.getByLabel("Default expression", { exact: true }).fill("0");
     await parameters.getByRole("button", { name: "Save parameter to Spec", exact: true }).click();
@@ -136,7 +136,7 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
 
     const wRow = parameters.locator(".spec-edit-actions").filter({ hasText: "W:" });
     await wRow.getByRole("button", { name: "Options for parameter W", exact: true }).click();
-    await wRow.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
 
     await parameters.getByLabel("Default expression", { exact: true }).fill("99");
     await parameters.getByRole("button", { name: "Cancel parameter", exact: true }).click();
@@ -160,13 +160,13 @@ test.describe("Phase 2 Spec Editor Stress Scenarios", () => {
     await parameters.locator("summary").click();
     const stagesRow = parameters.locator(".spec-edit-actions").filter({ hasText: "STAGES:" });
     await stagesRow.getByRole("button", { name: "Options for parameter STAGES", exact: true }).click();
-    await stagesRow.getByRole("menuitem", { name: "Edit", exact: true }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
     await parameters.getByLabel("Default expression", { exact: true }).fill("3");
     await parameters.getByRole("button", { name: "Save parameter to Spec", exact: true }).click();
 
     // Generate RTL and check activity execution
-    await component.getByRole("button", { name: "Options", exact: true }).click();
-    await component.getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
+    await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Generate RTL", exact: true }).click();
     await expect(page.locator(".utility-sidebar")).toHaveCount(0);
     await page.locator("#editor-activity-trigger").click();
     await expect(page.getByRole("heading", { name: "Activity", exact: true })).toBeVisible();

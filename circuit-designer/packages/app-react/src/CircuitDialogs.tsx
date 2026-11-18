@@ -1,18 +1,24 @@
 /* Reusable Circuit Designer application shell. */
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { DEFAULT_CLOCK_DOMAIN_ID, circuitEndpointLabel, endpointTerminalKey, type CircuitDocument, type CircuitProposal, type CircuitTimingAnalysis, type CircuitTimingV1, type ClockDomainV1, type CycleEdgeMarkerV1 } from "@spec2gds/circuit-core";
-import { connectionSelectionLabel } from "./connection-input";
+import { connectionSelectionLabel, connectionIssue } from "./connection-input";
 
 export type CircuitDialogId = "connect" | "catalog" | "new-component" | "proposals" | "clock-settings" | "timing-analysis" | "cycle-edge" | "getting-started" | "about";
 
 function CircuitModal({ children, onClose, title }: { children: ReactNode; onClose: () => void; title: string }) {
   const dialogRef = useRef<HTMLElement>(null);
+  const openerRef = useRef(document.activeElement as HTMLElement | null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
-    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousFocus = openerRef.current;
     const menuTrigger = previousFocus?.closest(".circuit-menu")?.querySelector<HTMLElement>(":scope > button");
+    const app = dialogRef.current?.closest(".cd-app");
+    const siblings = Array.from(app?.children ?? [])
+      .filter((element): element is HTMLElement => element instanceof HTMLElement && !element.contains(dialogRef.current))
+      .map(element => ({ element, inert: element.inert }));
+    siblings.forEach(({ element }) => { element.inert = true; });
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault(); onCloseRef.current(); return;
@@ -20,7 +26,7 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
       if (event.key !== "Tab") return;
       const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
         "button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex='-1'])",
-      ) ?? []);
+      ) ?? []).filter(element => element.checkVisibility());
       if (!focusable.length) return;
       const first = focusable[0];
       const last = focusable.at(-1);
@@ -31,13 +37,20 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
       }
     };
     document.addEventListener("keydown", onKeyDown);
-    requestAnimationFrame(() => dialogRef.current?.querySelector<HTMLElement>("[autofocus], button, input, select")?.focus());
+    requestAnimationFrame(() => {
+      if (!dialogRef.current?.contains(document.activeElement)) dialogRef.current?.querySelector<HTMLElement>("[autofocus], button, input, select")?.focus();
+    });
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      if (previousFocus?.isConnected && previousFocus !== document.body) {
+      siblings.forEach(({ element, inert }) => { element.inert = inert; });
+      if (previousFocus?.isConnected && previousFocus !== document.body && previousFocus.checkVisibility()) {
         previousFocus.focus();
-      } else if (menuTrigger?.isConnected) {
+      } else if (menuTrigger?.isConnected && menuTrigger.checkVisibility()) {
         menuTrigger.focus();
+      } else {
+        const commands = app?.querySelector<HTMLElement>(".compact-command-toggle");
+        if (commands?.checkVisibility()) commands.focus();
+        else app?.querySelector<HTMLElement>("[data-testid=circuit-canvas]")?.focus();
       }
     };
   }, []);
@@ -93,6 +106,34 @@ export function CircuitSvDispositionDialog({ onCancel, onSave }: {
   </CircuitModal>;
 }
 
+export function CircuitBoundaryPortDialog({ defaultName, identifierPattern, onCancel, onCreate }: {
+  defaultName: string;
+  identifierPattern?: string;
+  onCancel: () => void;
+  onCreate: (name: string, direction: "input" | "output" | "inout", width: string) => string | undefined;
+}) {
+  const [name, setName] = useState(defaultName);
+  const [direction, setDirection] = useState<"input" | "output" | "inout">("input");
+  const [width, setWidth] = useState("1");
+  const [error, setError] = useState("");
+  return <CircuitModal onClose={onCancel} title="Add port">
+    <form onSubmit={(event) => {
+      event.preventDefault();
+      const failure = onCreate(name, direction, width);
+      if (failure) setError(failure);
+      else onCancel();
+    }}>
+      <div className="circuit-dialog__form">
+        <label>Name<input autoFocus required value={name} pattern={identifierPattern} onChange={event => setName(event.target.value)} /></label>
+        <label>Direction<select value={direction} onChange={event => setDirection(event.target.value as typeof direction)}><option value="input">Input</option><option value="output">Output</option><option value="inout">In/out</option></select></label>
+        <label>Wire width or range<input required value={width} onChange={event => setWidth(event.target.value)} /></label>
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <div className="circuit-dialog__actions"><button type="button" onClick={onCancel}>Cancel</button><button type="submit">Add port</button></div>
+    </form>
+  </CircuitModal>;
+}
+
 export interface CircuitDialogsProps {
   dialog?: CircuitDialogId;
   document?: CircuitDocument;
@@ -121,7 +162,13 @@ export interface CircuitDialogsProps {
   onSliceWidthChange: (value: number) => void;
   onCreateConnection: () => boolean;
   onComponentNameChange: (value: string) => void;
-  onCreateComponent: () => void;
+  onCreateComponent: (width: string) => boolean;
+  editable: boolean;
+  canBeginEditing: boolean;
+  editHint?: string;
+  onNewComponent: () => void;
+  onBeginEditing: () => void;
+  catalogComponentId?: string;
   onPlaceComponent: (componentId: string, instanceName?: string) => boolean;
   onDecideProposal: (proposalId: string, decision: "accept" | "reject") => void;
   timing: CircuitTimingV1;
@@ -136,6 +183,11 @@ export interface CircuitDialogsProps {
 
 export function CircuitDialogs(props: CircuitDialogsProps) {
   const [selectedComponentId, setSelectedComponentId] = useState<string>();
+  const [advanced, setAdvanced] = useState(false);
+  const [componentWidth, setComponentWidth] = useState("1");
+  const [componentError, setComponentError] = useState("");
+  useEffect(() => { setSelectedComponentId(props.catalogComponentId); }, [props.dialog, props.catalogComponentId]);
+  useEffect(() => { setAdvanced(false); setComponentWidth("1"); setComponentError(""); }, [props.dialog]);
   const [instanceName, setInstanceName] = useState("");
   useEffect(() => setInstanceName(""), [props.dialog, selectedComponentId]);
   const [clockLabel, setClockLabel] = useState("clk");
@@ -154,7 +206,7 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     setStageLabel(props.selectedCycleEdge?.next_stage_label ?? "");
     setEdgeX(props.selectedCycleEdge?.x ?? 0);
   }, [props.dialog, props.selectedCycleEdge]);
-  if (!props.dialog) return null;
+  if (!props.dialog || props.dialog === "timing-analysis") return null;
 
   if (props.dialog === "connect") {
     const existing = props.existingNetId !== undefined;
@@ -166,18 +218,25 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
     const width = props.sliceWidth || (existing ? netWidth : a?.width === b?.width ? a?.width : undefined);
     const from = existing ? net?.label || net?.id : a && connectionSelectionLabel(a.label || a.id, a.width, props.sliceLsb, props.sliceWidth);
     const to = b && connectionSelectionLabel(b.label || b.id, b.width, props.sliceLsbB, props.sliceWidth);
-    const driver = (terminal: typeof a) => Boolean(terminal && terminal.direction === (terminal.id.startsWith("boundary:") ? "in" : "out"));
-    const selectionIssue = !existing && a && b && driver(a) && driver(b)
-      ? "Both endpoints drive the signal. Choose one driver and one sink."
-      : a && b && !props.sliceWidth && typeof a.width === "number" && typeof b.width === "number" && a.width !== b.width
-        ? "These port widths differ. Set the offsets and width to select compatible slices." : "";
+    const selectionIssue = connectionIssue(props.document, props.terminals, props.endpointA, props.endpointB, props.sliceLsb, props.sliceLsbB, props.sliceWidth, props.existingNetId);
+    // Rank choices cheaply. Run the full planner only for the selected mapping.
+    const driver = (port: typeof a) => Boolean(port && port.direction === (port.id.startsWith("boundary:") ? "in" : "out"));
+    const targetIssue = (port: NonNullable<typeof a>) => {
+      const sourceWidth = props.sliceWidth || (existing ? netWidth : a?.width);
+      const targetWidth = props.sliceWidth || port.width;
+      if (typeof sourceWidth === "number" && typeof targetWidth === "number" && sourceWidth !== targetWidth) return "different width";
+      const hasDriver = existing ? net?.endpoints.some(endpoint => driver(props.terminals.find(item => item.id === endpointTerminalKey(endpoint)))) : driver(a);
+      return hasDriver && driver(port) ? "already has a driver" : undefined;
+    };
+    const targets = props.terminals.filter(terminal => existing || terminal.id !== props.endpointA)
+      .map(terminal => ({ terminal, issue: targetIssue(terminal) })).sort((a, b) => Number(!!a.issue) - Number(!!b.issue));
     const terminalLabel = (terminal: typeof b) => terminal
       ? `${terminal.label || "Port"} · ${terminal.direction === "in" ? "input" : terminal.direction === "out" ? "output" : terminal.direction === "inout" ? "bidirectional" : terminal.direction ?? "port"} · ${typeof terminal.width === "number" ? `${terminal.width} ${terminal.width === 1 ? "bit" : "bits"}` : terminal.width ?? "unresolved width"}` : "Port";
     const submit = (event: FormEvent) => {
       event.preventDefault();
-      if (props.onCreateConnection()) props.onClose();
+      if (!selectionIssue && props.onCreateConnection()) props.onClose();
     };
-    return <CircuitModal onClose={props.onClose} title="Create connection">
+    return <CircuitModal onClose={props.onClose} title="Connect ports">
       <form className="circuit-dialog__form" onSubmit={submit}>
         <label>Connection action<select autoFocus value={existing ? "existing" : "new"} onChange={(event) => props.onExistingNetChange(event.target.value === "existing" ? "" : undefined)}><option value="new">New net</option><option value="existing">Add endpoint to existing net</option></select></label>
         {existing ? <>
@@ -190,14 +249,21 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
           }).join(", ")}</p>}
         </> : <>
           <label>Net label<input value={props.netName} onChange={(event) => props.onNetNameChange(event.target.value)} /></label>
-          <label>Endpoint A<select aria-label="Endpoint A" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}</option>)}</select></label>
+          <label>From port<select aria-label="From port" value={props.endpointA} onChange={(event) => props.onEndpointAChange(event.target.value)}><option value="">Choose…</option>{props.terminals.map((terminal) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}</option>)}</select></label>
         </>}
-        <label>Endpoint B<select aria-label="Endpoint B" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{props.terminals.filter((terminal) => terminal.id !== props.endpointA).map((terminal) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}</option>)}</select></label>
-        <div className="slice-row">{!existing && <label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label>}<label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>
+        <label>To port<select aria-label="To port" value={props.endpointB} onChange={(event) => props.onEndpointBChange(event.target.value)}><option value="">Choose…</option>{targets.map(({ terminal, issue }) => <option key={terminal.id} value={terminal.id}>{terminalLabel(terminal)}{issue ? ` · ${issue}` : ""}</option>)}</select></label>
+        <details className="connection-advanced" open={advanced} onToggle={event => {
+          const open = event.currentTarget.open;
+          setAdvanced(open);
+          if (!open) { props.onSliceLsbChange(0); props.onSliceLsbBChange(0); props.onSliceWidthChange(0); }
+        }}><summary>Advanced: connect selected bits</summary>
+          <p>Offsets start at bit 0. Use width 0 for whole ports. Bit selections must have the same width.</p>
+          {advanced && <div className="slice-row">{!existing && <label>LSB for A<input min="0" type="number" value={props.sliceLsb} onChange={(event) => props.onSliceLsbChange(Number(event.target.value))} /></label>}<label>LSB for B<input min="0" type="number" value={props.sliceLsbB} onChange={(event) => props.onSliceLsbBChange(Number(event.target.value))} /></label><label>Width (0=full)<input min="0" type="number" value={props.sliceWidth} onChange={(event) => props.onSliceWidthChange(Number(event.target.value))} /></label></div>}
+        </details>
         {from && to && <output aria-label="Connection mapping" aria-live="polite">{from} → {to} · {typeof width === "number" ? `${width} ${width === 1 ? "bit" : "bits"}` : "whole ports"}</output>}
         {selectionIssue && <p role="status" aria-label="Connection guidance">{selectionIssue}</p>}
-        {props.connectionError && <p role="alert">{props.connectionError}</p>}
-        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={(!existing && !props.endpointA) || !props.endpointB || (existing && !net)} type="submit">{existing ? "Add endpoint" : "Create net"}</button></div>
+        {props.connectionError && !selectionIssue && <p role="alert">{props.connectionError}</p>}
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={(!existing && !props.endpointA) || !props.endpointB || (existing && !net) || !!selectionIssue} type="submit">{existing ? "Add endpoint" : "Connect"}</button></div>
       </form>
     </CircuitModal>;
   }
@@ -208,12 +274,16 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
       <form className="circuit-dialog__form" onSubmit={(event) => {
         event.preventDefault();
         if (!props.componentName.trim()) return;
-        props.onCreateComponent(); props.onClose();
+        if (props.onCreateComponent(componentWidth)) props.onClose();
+        else setComponentError("The Component could not be added. Check its width and edit access.");
       }}>
-        <p>Create a local two-terminal component definition and its first instance.</p>
+        <p>Create a local Component and place its first instance in this Design.</p>
         <label>Name<input autoFocus maxLength={200} value={props.componentName} onChange={(event) => props.onComponentNameChange(event.target.value)} placeholder="Arithmetic unit" /></label>
+        <label>Port width or range<input required value={componentWidth} onChange={event => setComponentWidth(event.target.value)} /></label>
+        <p>Ports: input → output. Both ports use the width above. Default: 1 bit.</p>
+        {componentError && <p role="alert">{componentError}</p>}
         {props.sourceIdentifierPattern && !sourceNameValid && <p role="alert">{props.sourceIdentifierHint ?? "Use a source-compatible name."}</p>}
-        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim() || !sourceNameValid} type="submit">Create definition + instance</button></div>
+        <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" disabled={!props.componentName.trim() || !sourceNameValid} type="submit">Add to Design</button></div>
       </form>
     </CircuitModal>;
   }
@@ -227,11 +297,12 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         ? "An instance with this name already exists." : "";
     return <CircuitModal onClose={props.onClose} title="Component catalog">
       <div className="catalog-dialog">
-        <p>{props.sourceDescription}</p>
+        <p>{props.document?.components.length ? "Choose a Component to review its ports, then place an instance." : "No Components yet. Create a local Component to start."}</p>
+        {props.editable ? <button type="button" onClick={props.onNewComponent}>Create local Component</button> : <p>{props.editHint ?? "Begin editing to add Components."} <button type="button" disabled={!props.canBeginEditing} onClick={props.onBeginEditing}>Begin editing</button></p>}
         <div className="metrics"><div><b>{props.document?.design.instances.length ?? 0}</b><span>Instances</span></div><div><b>{props.document?.design.nets.length ?? 0}</b><span>Nets</span></div></div>
         <div className="catalog-dialog__grid">
           <div className="catalog-list">{props.document?.components.map((component) => <button className={component.id === selectedComponentId ? "active" : ""} key={component.id} onClick={() => setSelectedComponentId(component.id)} type="button"><b>{component.label}</b><small>{component.origin}</small></button>)}</div>
-          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3>{selected.editable && props.onRenameComponent && <button type="button" onClick={() => { const name = window.prompt("Component name", selected.label); if (name?.trim()) props.onRenameComponent?.(selected.id, name); }}>Rename</button>}<p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source-defined"}</p><details><summary>Technical details</summary><code>{selected.id}</code></details><label>Instance name (optional)<input value={instanceName} maxLength={200} placeholder="Automatic name" onChange={event => setInstanceName(event.target.value)} aria-invalid={!!nameError} aria-describedby={nameError ? "catalog-name-error" : undefined} /></label>{nameError && <p id="catalog-name-error" role="alert">{nameError}</p>}<button className="primary" disabled={!!nameError} onClick={() => { if (props.onPlaceComponent(selected.id, name)) props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
+          <div className="catalog-dialog__details">{selected ? <><h3>{selected.label}</h3>{selected.editable && props.onRenameComponent && <button type="button" onClick={() => { const name = window.prompt("Component name", selected.label); if (name?.trim()) props.onRenameComponent?.(selected.id, name); }}>Rename</button>}<p>{selected.terminals.length} terminals · {selected.parameters.length} parameters · {selected.editable ? "editable" : "source-defined"}</p><ul className="component-ports">{selected.terminals.map(port => <li key={port.id}>{port.label} · {port.direction} · {port.width} {typeof port.width === "number" ? "bits" : ""}</li>)}</ul><details><summary>Technical details</summary><code>{selected.id}</code></details><label>Instance name (optional)<input value={instanceName} maxLength={200} placeholder="Automatic name" onChange={event => setInstanceName(event.target.value)} aria-invalid={!!nameError} aria-describedby={nameError ? "catalog-name-error" : undefined} /></label>{nameError && <p id="catalog-name-error" role="alert">{nameError}</p>}<button className="primary" disabled={!!nameError || !props.editable} onClick={() => { if (props.onPlaceComponent(selected.id, name)) props.onClose(); }} type="button">Place instance</button></> : <p>Select a component to inspect its definition summary.</p>}</div>
         </div>
         {!props.document?.components.length && <p className="empty-copy">No component definitions are available yet.</p>}
       </div>
@@ -271,16 +342,6 @@ export function CircuitDialogs(props: CircuitDialogsProps) {
         </details>
         <div className="circuit-dialog__actions"><button type="button" onClick={props.onClose}>Cancel</button><button className="primary" type="submit">Apply</button></div>
       </form>
-    </CircuitModal>;
-  }
-
-  if (props.dialog === "timing-analysis") {
-    return <CircuitModal onClose={props.onClose} title="Timing analysis">
-      <div className="circuit-dialog__copy"><p>{props.timing.cycle_edges.length} cycle edges · {props.timingAnalysis.subjects.length} placed timing subjects</p>
-        <div className="timing-analysis-list">{props.timingAnalysis.paths.map((path) => <article data-status={path.status} key={`${path.net_id}:${path.source}:${path.target}`}><b>{path.net_id}</b><span>{path.source} → {path.target}</span><strong>{path.status === "ready" ? `${path.cycles ?? 0} cycle${path.cycles === 1 ? "" : "s"}` : path.status.toUpperCase()}</strong>{path.message && <small>{path.message}</small>}</article>)}</div>
-        {!props.timingAnalysis.paths.length && <p className="empty-copy">No directed timing paths are available.</p>}
-      </div>
-      <div className="circuit-dialog__actions"><button autoFocus className="primary" onClick={props.onClose} type="button">Close</button></div>
     </CircuitModal>;
   }
 

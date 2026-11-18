@@ -1212,6 +1212,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                 "source_name": session.revision.narrative.title,
                 "source_entity_name": reference_name(session.revision, EntityRef(document_id=session.revision.document_id,
                     entity_kind=projection.source_entity_kind, entity_id=projection.source_entity_id)),
+                **circuit_container_metadata(session.revision, projection),
                 "source_owner_document_key": session.service_document_key,
                 "source_service_url": service_urls()["spec_editor"]["service_url"],
                 "source_entity": {
@@ -1269,6 +1270,10 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "source_binding": binding,
             **({"recovery": recovered} if recovered is not None else {}),
         }
+
+    def circuit_container_metadata(revision: SpecRevision, projection: typing.Any) -> dict[str, typing.Any]:
+        component = next((item for item in revision.components if item.ref.entity_id == projection.parent_component_id), None)
+        return {"enclosing_component": {"entity_id": component.ref.entity_id, "name": reference_name(revision, component.ref)}} if component else {}
 
     def circuit_source_session(record: dict[str, typing.Any]) -> V1Session:
         """Keep a Circuit binding attached to its exact package, across other opens."""
@@ -1375,6 +1380,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
                     message="Opened the latest saved internal Design.")
             elif not has_circuit_edit_access(record, session):
                 record["binding"].update(writable=False, capabilities=[], message="This Component has no internal Design. Acquire Spec edit access before creating one.")
+            record["binding"].pop("enclosing_component", None)
+            record["binding"].update(circuit_container_metadata(session.revision, projection))
             record["binding"]["base_source_revision_hash"] = session.revision.source_revision_hash
             return {"accepted": True, "source_revision_hash": session.revision.source_revision_hash,
                 "document": projection.document, "binding": record["binding"], "diagnostics": []}
@@ -1391,6 +1398,8 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             projection = circuit_source_projection(record)
         except CircuitAdapterError as exc:
             return sync_failure("source_projection_failed", str(exc), session.revision.source_revision_hash)
+        record["binding"].pop("enclosing_component", None)
+        record["binding"].update(circuit_container_metadata(session.revision, projection))
         record["binding"]["base_source_revision_hash"] = session.revision.source_revision_hash
         return {
             "accepted": True,
@@ -1435,7 +1444,7 @@ def create_app(require_designer_approval: bool | None = None, *, require_human_a
             "source_revision_hash": result.revision.source_revision_hash,
             "document": authoritative.document,
             "diagnostics": [],
-            "binding": {**record["binding"], "base_source_revision_hash": result.revision.source_revision_hash,
+            "binding": {**{key: value for key, value in record["binding"].items() if key != "enclosing_component"}, **circuit_container_metadata(result.revision, authoritative), "base_source_revision_hash": result.revision.source_revision_hash,
                 **({"pending_internal_design": False, "sv_choice_required": False,
                     "message": "Internal Design saved to Spec."} if pending else {})},
             "impact": {

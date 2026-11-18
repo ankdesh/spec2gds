@@ -40,6 +40,45 @@ function dataflowFixture(edges: Array<[string, string]>) {
 }
 
 describe("deterministic circuit layout", () => {
+  test("keeps framed routes inside the content area across save and reopen", async () => {
+    const document = dataflowFixture([["input", "output"]]);
+    const original = structuredClone(document.layout.instance_geometry);
+    const first = await layoutCircuitDocument(document);
+    const second = await layoutCircuitDocument(first.document);
+    expect(first.document.layout.instance_geometry).toEqual(original);
+    expect(second.container_geometry).toEqual(first.container_geometry);
+    expect(second.boundary_geometry).toEqual(first.boundary_geometry);
+    const frame = first.container_geometry;
+    for (const route of Object.values(first.layout.net_routes)) for (const vertex of route.vertices) {
+      expect(vertex.point.x).toBeGreaterThanOrEqual(frame.x);
+      expect(vertex.point.x).toBeLessThanOrEqual(frame.x + frame.width);
+      expect(vertex.point.y).toBeGreaterThanOrEqual(frame.y + 60);
+      expect(vertex.point.y).toBeLessThanOrEqual(frame.y + frame.height);
+    }
+  });
+
+  test("expands the frame after an instance moves without moving its peers", async () => {
+    const document = simpleDocumentFixture();
+    const first = await layoutCircuitDocument(document);
+    const moved = structuredClone(first.document);
+    moved.layout.instance_geometry.consumer_0.x += 2000;
+    moved.layout.net_routes = {};
+    const next = await layoutCircuitDocument(moved);
+    expect(next.layout.node_geometry.consumer_0.x).toBe(moved.layout.instance_geometry.consumer_0.x);
+    expect(next.layout.node_geometry.producer_0).toEqual(first.layout.node_geometry.producer_0);
+    expect(next.container_geometry.width).toBeGreaterThan(first.container_geometry.width);
+  });
+
+  test("places a new disconnected instance clear of saved coordinates", async () => {
+    const document = simpleDocumentFixture();
+    document.design.nets = [];
+    document.layout.instance_geometry = { producer_0: { x: 80, y: 80, width: 180, height: 100, pinned: true } };
+    const result = await layoutCircuitDocument(document);
+    const producer = result.layout.node_geometry.producer_0, consumer = result.layout.node_geometry.consumer_0;
+    expect(producer).toEqual(document.layout.instance_geometry.producer_0);
+    expect(consumer.y).toBeGreaterThanOrEqual(producer.y + producer.height);
+  });
+
   test("arranges data flow despite reverse-ordered shared boundary fan-out", async () => {
     const document = dataflowFixture([["z_input", "m_add"], ["m_add", "a_output"]]);
     const result = await layoutCircuitDocument(document, { preserveNodeGeometry: "pinned" });
@@ -213,6 +252,7 @@ describe("deterministic circuit layout", () => {
     const pinned = structuredClone(initial.document.layout.instance_geometry.producer_0);
     const arranged = await layoutCircuitDocument(initial.document, { preserveNodeGeometry: "pinned" });
     expect(arranged.document.layout.instance_geometry.producer_0).toEqual(pinned);
+    expect(arranged.document.layout.instance_geometry.consumer_0).toEqual(initial.document.layout.instance_geometry.consumer_0);
     expect(arranged.document.timing!.cycle_edges).toEqual(document.timing.cycle_edges);
     for (const segment of initial.document.layout.net_routes.data.segments) {
       expect(arranged.document.layout.net_routes.data.segments.find(item => item.id === segment.id)?.locked).toBe(true);

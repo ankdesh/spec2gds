@@ -119,7 +119,7 @@ export function DesignTopologyLiveView({
   const entityName = ref ? block.entity_labels?.[`${ref.entity_kind}:${ref.entity_id}`]?.name || "Design" : "Design";
   const launchOptions = onOpenCircuit && (
     <div className="spec-topology-card__actions">
-      <OptionsMenu label={label} triggerLabel="Options for circuit preview">
+      <OptionsMenu compact label={label} triggerLabel="Options for circuit preview">
         <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>
       </OptionsMenu>
     </div>
@@ -142,13 +142,13 @@ export function DesignTopologyLiveView({
     setRendered(undefined);
     setRenderError("");
     if (options?.status !== "ready" || !options.circuit_document) return () => { active = false; };
-    void renderDesignTopology(options.circuit_document, themeId).then((value) => {
+    void renderDesignTopology(options.circuit_document, themeId, options.read_only ? false : compact ? { label: entityName, description: "Internal Design" } : undefined).then((value) => {
       if (active) setRendered(value);
     }).catch((reason) => {
       if (active) setRenderError(reason instanceof Error ? reason.message : String(reason));
     });
     return () => { active = false; };
-  }, [options, themeId]);
+  }, [options, themeId, compact, entityName]);
 
   useEffect(() => {
     if (!rendered) {
@@ -193,7 +193,7 @@ export function DesignTopologyLiveView({
           <span>Derived from the current specification revision</span>
         </div>
         <div className="spec-topology-card__actions">
-          <OptionsMenu label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
+          <OptionsMenu compact label={label} triggerLabel="Options for circuit preview" triggerRef={expandRef}>
             {onOpenCircuit && <button role="menuitem" onClick={onOpenCircuit} type="button">Open in Circuit Designer</button>}
             <button role="menuitem" disabled={!imageUrl} onClick={() => setExpanded(true)} type="button">Expand</button>
             <a role="menuitem"

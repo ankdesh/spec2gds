@@ -8,8 +8,8 @@ import type {
   Point,
   TerminalPlacement,
 } from "@spec2gds/circuit-core";
-import { clone, effectiveCircuitTiming, projectDocument, reanchorRouteEndpoints, simplifyRoute, sortedCycleEdges, stageForHorizontalSpan, type EndpointAnchor } from "@spec2gds/circuit-core";
-import { routeOrthogonalNets, type RouteObstacle, type RouteRequest } from "./router";
+import { clone, effectiveCircuitTiming, projectDocument, reanchorRouteEndpoints, simplifyRoute, sortedCycleEdges, stageForHorizontalSpan, type EndpointAnchor, circuitTerminalSide, effectiveCircuitTerminalPlacements, circuitFrameGeometry, circuitTerminalPoint, circuitTerminalStubPoint, circuitFrameRoutingBounds } from "@spec2gds/circuit-core";
+import { routeOrthogonalNets, routeIntersectsGeometry, type RouteObstacle, type RouteRequest } from "./router";
 
 export * from "./router";
 export * from "./worker-protocol";
@@ -27,6 +27,7 @@ export interface LayoutOptions {
 export interface LayoutResult {
   layout: DiagramLayout;
   boundary_geometry: Record<string, NodeGeometry>;
+  container_geometry: NodeGeometry;
   elapsed_ms: number;
 }
 
@@ -37,15 +38,7 @@ export interface CircuitDocumentLayoutResult extends LayoutResult {
 const round = (value: number) => Math.round(value * 100) / 100;
 const snap = (value: number, grid: number) => Math.round(value / grid) * grid;
 
-export function terminalSide(terminal: CircuitTerminal): TerminalPlacement["side"] {
-  if (!terminal.node_id) {
-    if (terminal.role === "initiator" || terminal.direction === "in") return "EAST";
-    if (terminal.role === "target" || terminal.direction === "out") return "WEST";
-  }
-  if (terminal.role === "initiator" || terminal.direction === "out") return "EAST";
-  if (terminal.role === "target" || terminal.direction === "in") return "WEST";
-  return "SOUTH";
-}
+export const terminalSide = circuitTerminalSide;
 
 export function terminalOffset(placement: TerminalPlacement): number {
   return 60 + placement.order * 20;
@@ -56,34 +49,12 @@ export function terminalPoint(
   geometry: NodeGeometry,
   placement: TerminalPlacement,
 ): Point {
-  const inset = terminalOffset(placement);
-  if (placement.side === "EAST") return { x: round(geometry.x + geometry.width), y: round(geometry.y + Math.min(inset, geometry.height - 20)) };
-  if (placement.side === "WEST") return { x: round(geometry.x), y: round(geometry.y + Math.min(inset, geometry.height - 20)) };
-  if (placement.side === "NORTH") return { x: round(geometry.x + Math.min(inset, geometry.width - 20)), y: round(geometry.y) };
-  return { x: round(geometry.x + Math.min(inset, geometry.width - 20)), y: round(geometry.y + geometry.height) };
+  return circuitTerminalPoint(geometry, placement);
 }
 
-export function terminalStubPoint(point: Point, placement: TerminalPlacement, distance = 20): Point {
-  if (placement.side === "EAST") return { x: round(point.x + distance), y: point.y };
-  if (placement.side === "WEST") return { x: round(point.x - distance), y: point.y };
-  if (placement.side === "NORTH") return { x: point.x, y: round(point.y - distance) };
-  return { x: point.x, y: round(point.y + distance) };
-}
+export const terminalStubPoint = circuitTerminalStubPoint;
 
-function effectivePlacements(graph: CircuitGraphSnapshot): Record<string, TerminalPlacement> {
-  const placements: Record<string, TerminalPlacement> = {};
-  const nextOrder = new Map<string, number>();
-  for (const terminal of [...graph.terminals].sort((a, b) => a.id.localeCompare(b.id))) {
-    const saved = graph.layout?.terminal_placements?.[terminal.id];
-    const side = saved?.side ?? terminalSide(terminal);
-    const owner = terminal.node_id ?? `boundary:${side}`;
-    const key = `${owner}:${side}`;
-    const order = saved?.order ?? nextOrder.get(key) ?? 0;
-    placements[terminal.id] = saved ?? { side, order, locked: false };
-    nextOrder.set(key, Math.max(nextOrder.get(key) ?? 0, order + 1));
-  }
-  return placements;
-}
+const effectivePlacements = effectiveCircuitTerminalPlacements;
 
 function nodeDimensions(
   graph: CircuitGraphSnapshot,
@@ -149,6 +120,12 @@ function weakComponents(nodeIds: string[], adjacency: Map<string, Set<string>>):
   return result;
 }
 
+function lockedRouteNodeIds(graph: CircuitGraphSnapshot): Set<string> {
+  const nodeByTerminal = new Map(graph.terminals.map(terminal => [terminal.id, terminal.node_id]));
+  return new Set(graph.nets.filter(net => hasLocks(graph.layout.net_routes[net.id])).flatMap(net =>
+    net.endpoints.flatMap(endpoint => nodeByTerminal.get(endpoint.terminal_id) ? [nodeByTerminal.get(endpoint.terminal_id)!] : [])));
+}
+
 function placeNodes(
   graph: CircuitGraphSnapshot,
   placements: Record<string, TerminalPlacement>,
@@ -196,37 +173,33 @@ function placeNodes(
     componentOffset = snap(componentExtent + options.spacing + 80, options.gridSize);
   }
   const preserve = options.preserveNodeGeometry;
+  const routeLockedNodes = lockedRouteNodeIds(graph);
+  const preservedIds = new Set<string>();
   for (const [nodeId, geometry] of Object.entries(graph.layout?.node_geometry ?? {})) {
-    if (preserve === "none" || (preserve === "pinned" && !geometry.pinned)) continue;
+    if (!routeLockedNodes.has(nodeId) && (preserve === "none" || (preserve === "pinned" && !geometry.pinned))) continue;
+    preservedIds.add(nodeId);
     result[nodeId] = {
       ...geometry,
       x: snap(geometry.x, options.gridSize),
       y: snap(geometry.y, options.gridSize),
     };
   }
-  return result;
-}
-
-function placeBoundaries(
-  graph: CircuitGraphSnapshot,
-  geometry: Record<string, NodeGeometry>,
-  placements: Record<string, TerminalPlacement>,
-  grid: number,
-): Record<string, NodeGeometry> {
-  const values = Object.values(geometry);
-  const minX = Math.min(...values.map((item) => item.x), 80);
-  const minY = Math.min(...values.map((item) => item.y), 80);
-  const maxX = Math.max(...values.map((item) => item.x + item.width), 260);
-  const maxY = Math.max(...values.map((item) => item.y + item.height), 180);
-  const result: Record<string, NodeGeometry> = {};
-  const sideOrders: Record<TerminalPlacement["side"], number> = { NORTH: 0, EAST: 0, SOUTH: 0, WEST: 0 };
-  for (const terminal of graph.terminals.filter((item) => !item.node_id).sort((a, b) => a.id.localeCompare(b.id))) {
-    const side = placements[terminal.id].side;
-    const order = sideOrders[side]++;
-    if (side === "EAST") result[terminal.id] = { x: snap(minX - 120, grid), y: snap(minY + order * 80, grid), width: 20, height: 40, pinned: false };
-    else if (side === "WEST") result[terminal.id] = { x: snap(maxX + 100, grid), y: snap(minY + order * 80, grid), width: 20, height: 40, pinned: false };
-    else if (side === "SOUTH") result[terminal.id] = { x: snap(minX + order * 80, grid), y: snap(minY - 100, grid), width: 40, height: 20, pinned: false };
-    else result[terminal.id] = { x: snap(minX + order * 80, grid), y: snap(maxY + 80, grid), width: 40, height: 20, pinned: false };
+  // New instances must not cover saved instances after those positions are
+  // restored. Keep every saved coordinate and move only automatic placements.
+  const occupied = [...preservedIds].map(id => result[id]);
+  for (const [id, geometry] of Object.entries(result)) {
+    if (preservedIds.has(id)) continue;
+    let collisions: NodeGeometry[];
+    do {
+      collisions = occupied.filter(box => geometry.x < box.x + box.width && geometry.x + geometry.width > box.x
+        && geometry.y < box.y + box.height && geometry.y + geometry.height > box.y);
+      if (collisions.length) {
+        const field = options.direction === "RIGHT" ? "y" : "x";
+        const dimension = options.direction === "RIGHT" ? "height" : "width";
+        geometry[field] = Math.ceil((Math.max(...collisions.map(box => box[field] + box[dimension])) + options.spacing) / options.gridSize) * options.gridSize;
+      }
+    } while (collisions.length);
+    occupied.push(geometry);
   }
   return result;
 }
@@ -314,6 +287,7 @@ export function routeCircuitNets(
     ...routeOrthogonalNets(routeRequests(graph, reroute, nodeGeometry, boundaryGeometry, placements), obstacles(nodeGeometry, boundaryGeometry), {
       gridSize: 20,
       fixedRoutes,
+      bounds: circuitFrameRoutingBounds(circuitFrameGeometry(graph, nodeGeometry, placements, { ...layout.net_routes, ...fixedRoutes }).container_geometry),
     }),
   };
 }
@@ -358,31 +332,45 @@ export async function layoutCircuitGraph(graph: CircuitGraphSnapshot, options: L
     preserveNodeGeometry: options.preserveNodeGeometry ?? "all",
   } as const;
   const nodeGeometry = placeNodes(graph, placements, resolved);
-  const boundaryGeometry = placeBoundaries(graph, nodeGeometry, placements, resolved.gridSize);
-  const savedRoutes: Record<string, NetRoute> = {};
-  const terminals = new Map(graph.terminals.map((terminal) => [terminal.id, terminal]));
-  for (const net of graph.nets) {
-    const saved = graph.layout?.net_routes?.[net.id];
-    if (!saved) continue;
-    if (resolved.preserveNodeGeometry !== "all" && !hasLocks(saved)) continue;
-    const ids = net.endpoints.map((endpoint) => endpoint.terminal_id);
-    savedRoutes[net.id] = reanchorRouteEndpoints(saved, terminalAnchors(ids, terminals, nodeGeometry, boundaryGeometry, placements));
+  // A failed attempt can enlarge drawing space, but never change connectivity.
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const frame = circuitFrameGeometry(graph, nodeGeometry, placements, graph.layout.net_routes, resolved.gridSize, attempt * 80);
+    const boundaryGeometry = frame.boundary_geometry;
+    const savedRoutes: Record<string, NetRoute> = {};
+    const terminals = new Map(graph.terminals.map((terminal) => [terminal.id, terminal]));
+    try {
+      for (const net of graph.nets) {
+        const saved = graph.layout?.net_routes?.[net.id];
+        if (!saved) continue;
+        if (resolved.preserveNodeGeometry !== "all" && !hasLocks(saved)) continue;
+        const ids = net.endpoints.map((endpoint) => endpoint.terminal_id);
+        const anchored = reanchorRouteEndpoints(saved, terminalAnchors(ids, terminals, nodeGeometry, boundaryGeometry, placements));
+        if (Object.values(nodeGeometry).some(box => routeIntersectsGeometry(anchored, box))) {
+          if (hasLocks(saved)) throw new Error(`Locked route ${net.id} intersects an instance. Unlock or move its route before continuing.`);
+          continue;
+        }
+        savedRoutes[net.id] = anchored;
+      }
+      const missing = new Set(graph.nets.filter((net) => !savedRoutes[net.id]).map((net) => net.id));
+      const automatic = routeOrthogonalNets(routeRequests(graph, missing, nodeGeometry, boundaryGeometry, placements), obstacles(nodeGeometry, boundaryGeometry), {
+        gridSize: resolved.gridSize,
+        fixedRoutes: savedRoutes,
+        bounds: circuitFrameRoutingBounds(frame.container_geometry),
+      });
+      return {
+        layout: {
+          direction: resolved.direction,
+          node_geometry: nodeGeometry,
+          terminal_placements: placements,
+          net_routes: { ...savedRoutes, ...automatic },
+        },
+        ...frame,
+        elapsed_ms: round(performance.now() - started),
+      };
+    } catch (error) { lastError = error; }
   }
-  const missing = new Set(graph.nets.filter((net) => !savedRoutes[net.id]).map((net) => net.id));
-  const automatic = routeOrthogonalNets(routeRequests(graph, missing, nodeGeometry, boundaryGeometry, placements), obstacles(nodeGeometry, boundaryGeometry), {
-    gridSize: resolved.gridSize,
-    fixedRoutes: savedRoutes,
-  });
-  return {
-    layout: {
-      direction: resolved.direction,
-      node_geometry: nodeGeometry,
-      terminal_placements: placements,
-      net_routes: { ...savedRoutes, ...automatic },
-    },
-    boundary_geometry: boundaryGeometry,
-    elapsed_ms: round(performance.now() - started),
-  };
+  throw lastError;
 }
 
 /** Layout a canonical document through its flattened renderer projection. */
@@ -393,6 +381,7 @@ export async function layoutCircuitDocument(
   let result = await layoutCircuitGraph(projectDocument(document, "layout"), options);
   const updated = clone(document);
   if (document.timing?.cycle_edges.length) {
+    const routeLockedNodes = lockedRouteNodeIds(projectDocument(document));
     const timing = effectiveCircuitTiming(document);
     const edges = sortedCycleEdges(timing);
     const byStage = new Map<number, string[]>();
@@ -428,7 +417,7 @@ export async function layoutCircuitDocument(
       for (const id of ids) {
         const original = document.layout.instance_geometry[id];
         const preserve = options.preserveNodeGeometry ?? "all";
-        if (original && (preserve === "all" || (preserve === "pinned" && original.pinned))) continue;
+        if (original && (routeLockedNodes.has(id) || preserve === "all" || (preserve === "pinned" && original.pinned))) continue;
         result.layout.node_geometry[id].x = snap(left + (result.layout.node_geometry[id].x - minGenerated), options.gridSize ?? document.layout.grid_size);
       }
     }

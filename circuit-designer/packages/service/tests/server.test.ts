@@ -533,4 +533,34 @@ describe("Circuit Designer REST service", () => {
     expect([...new Uint8Array(await response.arrayBuffer()).slice(0, 8)])
       .toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
   });
+
+  it("uses the enclosing Component title in source exports and keeps interface previews frameless", async () => {
+    const documents = ["preview", "internal"].map(id => ({ ...simpleDocumentFixture(), document_id: id }));
+    service = new CircuitDesignerService({ backend: new EphemeralCircuitSessionBackend({ documents }) });
+    const port = await service.listen();
+    const base = `http://127.0.0.1:${port}/api/circuit-designer/v1/documents`;
+    for (const document of documents) {
+      const internal = document.document_id === "internal";
+      const registered = await fetch(`${base}/${document.document_id}/source-binding`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ callback_url: `http://127.0.0.1:${port}/source/`, token: "export-test", binding: {
+          schema_version: 1, binding_id: document.document_id, source_document_id: "spec",
+          source_entity: { document_id: "spec", entity_id: "component", entity_kind: "component" },
+          source_entity_name: "Arithmetic block", base_source_revision_hash: "base", writable: false,
+          capabilities: [], omitted_bus_items: [], omitted_ports: [],
+          ...(internal ? { editable_design_id: "internal", enclosing_component: { entity_id: "component", name: "Arithmetic block" } } : {}),
+        } }),
+      });
+      expect(registered.status).toBe(200);
+      const exported = await fetch(`${base}/${document.document_id}/exports`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ format: "svg" }),
+      });
+      expect(exported.status).toBe(200);
+      const svg = await exported.text();
+      if (internal) {
+        expect(svg).toContain('data-design-frame=');
+        expect(svg).toContain('<title>Arithmetic block</title>');
+      } else expect(svg).not.toContain('data-design-frame=');
+    }
+  });
 });

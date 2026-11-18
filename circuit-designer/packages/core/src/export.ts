@@ -6,7 +6,8 @@ import type {
   TerminalDefinition,
   TerminalPlacement,
 } from "./types.generated";
-import { endpointTerminalKey, terminalDefaultPlacement } from "./model";
+import { endpointTerminalKey, terminalDefaultPlacement, projectDocument } from "./model";
+import { circuitFrameGeometry, reanchorCircuitFrameRoutes, circuitTerminalPoint, effectiveCircuitTerminalPlacements, CIRCUIT_FRAME_HEADER_HEIGHT, type CircuitContainerPresentation } from "./frame";
 import { analyzeCircuitTiming, effectiveCircuitTiming, sortedCycleEdges, stageLabel, type TimingPathAnalysis } from "./timing";
 import { blueprintSlateTheme, type CircuitThemeDefinition } from "./theme";
 
@@ -64,6 +65,9 @@ export interface SvgExportOptions {
   registry?: RendererRegistry;
   /** Effective boundary boxes from the same layout pass used by the canvas. */
   boundaryGeometry?: Record<string, NodeGeometry>;
+  containerGeometry?: NodeGeometry;
+  /** False for a Component interface preview or an explicitly frameless embed. */
+  container?: CircuitContainerPresentation | false;
   /** Explicit render profile. Defaults to the Blueprint Slate canvas palette. */
   theme?: CircuitThemeDefinition;
 }
@@ -96,12 +100,7 @@ export function compactCircuitTerminalLabel(terminal: Pick<TerminalDefinition, "
 }
 
 function terminalPoint(terminal: ExportTerminal): Point {
-  const { geometry, placement } = terminal;
-  const inset = 60 + placement.order * 20;
-  if (placement.side === "EAST") return { x: geometry.x + geometry.width, y: geometry.y + Math.min(inset, geometry.height - 20) };
-  if (placement.side === "WEST") return { x: geometry.x, y: geometry.y + Math.min(inset, geometry.height - 20) };
-  if (placement.side === "NORTH") return { x: geometry.x + Math.min(inset, geometry.width - 20), y: geometry.y };
-  return { x: geometry.x + Math.min(inset, geometry.width - 20), y: geometry.y + geometry.height };
+  return circuitTerminalPoint(terminal.geometry, terminal.placement);
 }
 
 function materializeInstanceGeometry(document: CircuitDocument): Record<string, NodeGeometry> {
@@ -117,34 +116,6 @@ function materializeInstanceGeometry(document: CircuitDocument): Record<string, 
       pinned: false,
     };
     placementIndex += 1;
-  }
-  return result;
-}
-
-function materializeBoundaryGeometry(
-  document: CircuitDocument,
-  instanceGeometry: Record<string, NodeGeometry>,
-  supplied: Record<string, NodeGeometry> = {},
-): Record<string, NodeGeometry> {
-  const result = structuredClone(supplied);
-  const boxes = Object.values(instanceGeometry);
-  const minX = Math.min(...boxes.map((box) => box.x), 80);
-  const minY = Math.min(...boxes.map((box) => box.y), 80);
-  const maxX = Math.max(...boxes.map((box) => box.x + box.width), 260);
-  const sideOrder = { NORTH: 0, EAST: 0, SOUTH: 0, WEST: 0 };
-  for (const terminal of document.design.boundary_terminals) {
-    const key = `boundary:${terminal.id}`;
-    if (result[key] || result[terminal.id]) continue;
-    const placement = document.layout.terminal_placements[key]
-      ?? { side: terminal.direction === "input" ? "EAST" : terminal.direction === "output" ? "WEST" : "SOUTH", order: 0 } as TerminalPlacement;
-    const order = sideOrder[placement.side]++;
-    result[key] = placement.side === "EAST"
-      ? { x: minX - 120, y: minY + order * 80, width: 20, height: 40, pinned: false }
-      : placement.side === "WEST"
-        ? { x: maxX + 100, y: minY + order * 80, width: 20, height: 40, pinned: false }
-        : placement.side === "SOUTH"
-          ? { x: minX + order * 80, y: minY - 100, width: 40, height: 20, pinned: false }
-          : { x: minX + order * 80, y: Math.max(...boxes.map((box) => box.y + box.height), 180) + 80, width: 40, height: 20, pinned: false };
   }
   return result;
 }
@@ -191,12 +162,16 @@ function terminalMarkup(terminal: ExportTerminal): string {
   const limit = terminal.key.startsWith("boundary:") ? 26 : 13;
   const label = escapeXml(compactCircuitTerminalLabel(terminal.definition, limit));
   const side = terminal.placement.side;
-  const labelPosition = side === "WEST" ? { x: box.x + 8, y: point.y + 3, anchor: "start" }
+  const labelPosition = terminal.key.startsWith("boundary:")
+    ? side === "EAST" ? { x: point.x + 40, y: point.y - 8, anchor: "start" }
+      : side === "WEST" ? { x: point.x - 40, y: point.y - 8, anchor: "end" }
+        : { x: point.x + 12, y: point.y + (side === "SOUTH" ? 17 : -6), anchor: "start" }
+    : side === "WEST" ? { x: box.x + 8, y: point.y + 3, anchor: "start" }
     : side === "EAST" ? { x: box.x + box.width - 8, y: point.y + 3, anchor: "end" }
       : side === "NORTH" ? { x: point.x, y: box.y + 12, anchor: "middle" }
         : { x: point.x, y: box.y + box.height - 5, anchor: "middle" };
   return [
-    `<text x="${labelPosition.x}" y="${labelPosition.y}" text-anchor="${labelPosition.anchor}" class="port-label"><title>${escapeXml(fullLabel)}</title>${label}</text>`,
+    `<text x="${labelPosition.x}" y="${labelPosition.y}" text-anchor="${labelPosition.anchor}" class="port-label${terminal.key.startsWith("boundary:") ? " boundary-port-label" : ""}"><title>${escapeXml(fullLabel)}</title>${label}</text>`,
     `<circle cx="${point.x}" cy="${point.y}" r="5" class="port" data-terminal-id="${escapeXml(terminal.key)}"/>`,
   ].join("");
 }
@@ -236,7 +211,16 @@ function routeMarkup(document: CircuitDocument, terminalPoints: Map<string, Poin
 /** Deterministic SVG export using the same effective geometry and visual language as the React canvas. */
 export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOptions = {}): string {
   const instanceGeometry = materializeInstanceGeometry(document);
-  const boundaryGeometry = materializeBoundaryGeometry(document, instanceGeometry, options.boundaryGeometry);
+  const graph = projectDocument(document);
+  const placements = effectiveCircuitTerminalPlacements(graph);
+  document = { ...document, layout: { ...document.layout, terminal_placements: placements } };
+  const frame = circuitFrameGeometry(graph, instanceGeometry, placements, document.layout.net_routes, document.layout.grid_size);
+  const boundaryGeometry = options.boundaryGeometry ?? frame.boundary_geometry;
+  const containerGeometry = options.containerGeometry ?? frame.container_geometry;
+  document = { ...document, layout: { ...document.layout, net_routes: reanchorCircuitFrameRoutes(graph, instanceGeometry, boundaryGeometry, placements) } };
+  const container = options.container === false || options.selection ? undefined : options.container ?? {
+    label: document.design.label, description: `Design${document.design.boundary_terminals.length ? "" : " · No ports defined"}`,
+  };
   const selected = options.selection ? new Set(options.selection) : undefined;
   const instances = document.design.instances.filter((instance) => !selected || selected.has(instance.id));
   const boundaries = document.design.boundary_terminals.filter((terminal) => !selected || selected.has(terminal.id) || selected.has(`boundary:${terminal.id}`));
@@ -245,6 +229,7 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
     ...boundaries.map((terminal) => `boundary:${terminal.id}`),
   ]);
   const boxes = [
+    ...(container ? [containerGeometry] : []),
     ...instances.flatMap((instance) => instanceGeometry[instance.id] ? [instanceGeometry[instance.id]] : []),
     ...boundaries.flatMap((terminal) => boundaryGeometry[`boundary:${terminal.id}`] ?? boundaryGeometry[terminal.id]
       ? [boundaryGeometry[`boundary:${terminal.id}`] ?? boundaryGeometry[terminal.id]]
@@ -263,8 +248,8 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   const timing = effectiveCircuitTiming(document);
   const cycleEdges = document.timing ? sortedCycleEdges(timing) : [];
   const padding = options.padding ?? 40;
-  const boundaryLabelExtents = terminals.filter(terminal => terminal.key.startsWith("boundary:")).flatMap(terminal => [terminal.geometry.x - 156, terminal.geometry.x + terminal.geometry.width + 156]);
-  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...boundaryLabelExtents, ...routePoints.map((point) => point.x), ...cycleEdges.map((edge) => edge.x)];
+
+  const xs = [...boxes.flatMap((box) => [box.x, box.x + box.width]), ...routePoints.map((point) => point.x), ...cycleEdges.map((edge) => edge.x)];
   const ys = [...boxes.flatMap((box) => [box.y, box.y + box.height]), ...routePoints.map((point) => point.y)];
   const minX = (xs.length ? Math.min(...xs) : 0) - padding;
   const minY = (ys.length ? Math.min(...ys) : 0) - padding;
@@ -281,11 +266,14 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
     if (!component || !geometry) return [];
     return [`<g data-instance-id="${escapeXml(instance.id)}">${registry.svg(component.appearance.renderer_key)({ component, geometry, label: instance.label })}</g>`];
   }).join("");
-  const boundaryMarkup = boundaries.flatMap((terminal) => {
-    const geometry = boundaryGeometry[`boundary:${terminal.id}`] ?? boundaryGeometry[terminal.id];
-    if (!geometry) return [];
-    return [`<g data-boundary-id="${escapeXml(terminal.id)}"><rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component"/></g>`];
-  }).join("");
+  const boundaryMarkup = boundaries.map(terminal => `<g data-boundary-id="${escapeXml(terminal.id)}"/>`).join("");
+  const frameMarkup = container ? [
+    `<g class="design-frame" data-design-frame="${escapeXml(document.design.id)}">`,
+    `<rect x="${containerGeometry.x}" y="${containerGeometry.y}" width="${containerGeometry.width}" height="${containerGeometry.height}" rx="5" class="design-frame-border"/>`,
+    `<rect x="${containerGeometry.x}" y="${containerGeometry.y}" width="${containerGeometry.width}" height="${CIRCUIT_FRAME_HEADER_HEIGHT}" class="design-frame-header"/>`,
+    `<text x="${containerGeometry.x + 16}" y="${containerGeometry.y + 25}" class="component-label"><title>${escapeXml(container.label)}</title>${escapeXml(compactCircuitInstanceLabel(container.label, Math.floor((containerGeometry.width - 32) / 9)))}</text>`,
+    `<text x="${containerGeometry.x + 16}" y="${containerGeometry.y + 45}" class="design-frame-description">${escapeXml(container.description)}</text></g>`,
+  ].join("") : "";
   const portMarkup = terminals.map(terminalMarkup).join("");
   const cycleEdgeMarkup = [
     ...(cycleEdges.length
@@ -325,10 +313,10 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minY} ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeXml(document.label)}">`,
     `<defs><pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${color.grid}"/></pattern><filter id="component-shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="${color.chrome}" flood-opacity="0.12"/></filter></defs>`,
-    `<style>.canvas-background{fill:${color.canvas}}.component{fill:${color.surface};stroke:${color.border_strong};stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow{fill:${color.text_muted};font:11px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:${color.text};font:600 16px Inter,system-ui,sans-serif}.component-symbol{fill:${color.primary};font:12px ui-monospace,monospace}.net{fill:none;stroke:${color.net};stroke-width:1.8}.net--locked{stroke:${color.net};stroke-width:2;stroke-dasharray:7 3}.junction{fill:${color.net}}.port{fill:${color.primary};stroke:${color.surface};stroke-width:2}.port-label{fill:${color.text_muted};font:10px ui-monospace,monospace}.cycle-edge{stroke:${color.net};stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:${color.net};stroke-width:2.5}.cycle-edge-label{fill:${color.net};font:600 10px Inter,system-ui,sans-serif}.stage-label{fill:${color.text_muted};font:600 10px Inter,system-ui,sans-serif}.latency-label rect{fill:${color.surface};stroke:${color.border_strong}}.latency-label text{fill:${color.text};font:600 10px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:${color.warning_surface};stroke:${color.warning}}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:${color.warning}}</style>`,
+    `<style>.design-frame-border{fill:none;stroke:${color.border_strong};stroke-width:1.5}.design-frame-header{fill:${color.surface};stroke:${color.border_strong};stroke-width:1}.canvas-background{fill:${color.canvas}}.component{fill:${color.surface};stroke:${color.border_strong};stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow,.design-frame-description{fill:${color.text_muted};font:11px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:${color.text};font:600 16px Inter,system-ui,sans-serif}.component-symbol{fill:${color.primary};font:12px ui-monospace,monospace}.net{fill:none;stroke:${color.net};stroke-width:1.8}.net--locked{stroke:${color.net};stroke-width:2;stroke-dasharray:7 3}.junction{fill:${color.net}}.port{fill:${color.primary};stroke:${color.surface};stroke-width:2}.port-label{fill:${color.text_muted};font:10px ui-monospace,monospace}.boundary-port-label{font-size:11px}.cycle-edge{stroke:${color.net};stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:${color.net};stroke-width:2.5}.cycle-edge-label{fill:${color.net};font:600 10px Inter,system-ui,sans-serif}.stage-label{fill:${color.text_muted};font:600 10px Inter,system-ui,sans-serif}.latency-label rect{fill:${color.surface};stroke:${color.border_strong}}.latency-label text{fill:${color.text};font:600 10px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:${color.warning_surface};stroke:${color.warning}}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:${color.warning}}</style>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" class="canvas-background"/>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="url(#canvas-grid)"/>`,
-    `<g class="cycle-edges">${cycleEdgeMarkup}</g><g class="nets">${netMarkup}</g><g class="instances">${instanceMarkup}${boundaryMarkup}</g><g class="ports">${portMarkup}</g><g class="latencies">${latencyMarkup}</g>`,
+    `${frameMarkup}<g class="cycle-edges">${cycleEdgeMarkup}</g><g class="nets">${netMarkup}</g><g class="instances">${instanceMarkup}${boundaryMarkup}</g><g class="ports">${portMarkup}</g><g class="latencies">${latencyMarkup}</g>`,
     "</svg>",
   ].join("");
 }

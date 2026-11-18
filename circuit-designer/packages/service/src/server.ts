@@ -7,6 +7,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import {
   CircuitBackendError,
   humanNameKey,
+  renderCircuitSvg,
   assistantCircuitOperationSchema,
   createEmptyCircuitDocument,
   isCircuitSourceBindingV1,
@@ -22,6 +23,7 @@ import {
   type ServiceEvent,
 } from "@spec2gds/circuit-core";
 import { HttpCallbackProvider, validateCallbackUrl } from "./provider";
+import { renderCircuitPngBytes } from "./png";
 import { EphemeralCircuitSessionBackend } from "./session-backend";
 import type { PublicServiceDirectory } from "./service-registry";
 import { StructuredLogger, loadObservabilityConfig } from "@spec2gds/observability/node";
@@ -364,6 +366,19 @@ export class CircuitDesignerService {
       if (matchesAssistantAction("export_svg", method, url.pathname.slice(prefix.length))) {
         const exportOptions = await this.json(request) as { format: "json" | "svg" | "png"; selection?: string[] };
         const exported = await this.backend.export(documentId, exportOptions);
+        const binding = this.sourceBindings.get(documentId)?.binding;
+        if (binding && exportOptions.format !== "json") {
+          const document = (await this.backend.get(documentId)).document;
+          const preview = binding.source_entity.entity_kind === "component" && !binding.editable_design_id;
+          const componentName = binding.enclosing_component?.name ?? (binding.source_entity.entity_kind === "component" ? binding.source_entity_name : undefined);
+          const container = preview ? false as const : {
+            label: componentName ?? document.design.label,
+            description: componentName ? "Internal Design" : "Design",
+          };
+          exported.data = exportOptions.format === "svg"
+            ? renderCircuitSvg(document, { selection: exportOptions.selection, container })
+            : renderCircuitPngBytes(document, exportOptions.selection, !preview);
+        }
         response.statusCode = 200;
         response.setHeader("Content-Type", exported.media_type);
         response.setHeader("Content-Disposition", `attachment; filename="${exported.filename}"`);

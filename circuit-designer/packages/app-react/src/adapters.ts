@@ -55,6 +55,7 @@ export interface CircuitSourceState {
   pendingInternalDesign?: boolean;
   svChoiceRequired?: boolean;
   interfacePreview?: boolean;
+  enclosingComponentName?: string;
   capabilities: string[];
   message?: string;
   saveLabel?: string;

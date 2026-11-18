@@ -33,11 +33,13 @@ test("extends one net by connected-pin drag and dialog with local recovery", asy
   await menuAction(page, "Connect", "New connection");
   await page.getByLabel("Connection action").selectOption("existing");
   await page.getByLabel("Existing net", { exact: true }).selectOption("data");
-  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_2:data");
+  await page.getByLabel("To port", { exact: true }).selectOption("consumer_2:data");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)").fill("17");
-  await page.getByRole("button", { name: "Add endpoint", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width/i);
-  await expect(page.getByLabel("Endpoint B", { exact: true })).toHaveValue("consumer_2:data");
+  await expect(page.getByRole("button", { name: "Add endpoint", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText(/width/i);
+  await expect(page.getByLabel("To port", { exact: true })).toHaveValue("consumer_2:data");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)").fill("16");
   await expect(page.getByLabel("Connection mapping")).toContainText("16 bits");
   await page.getByRole("button", { name: "Add endpoint", exact: true }).click();
@@ -69,16 +71,19 @@ test("previews a scalar to high bus bit and preserves independent endpoint mappi
   await page.goto(`/?document_id=${document.document_id}`);
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Connect", "New connection");
-  await page.getByLabel("Endpoint A", { exact: true }).selectOption("boundary:cin");
-  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("From port", { exact: true }).selectOption("boundary:cin");
+  await page.getByLabel("To port", { exact: true }).selectOption("consumer_0:data");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("LSB for B", { exact: true }).fill("64");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)").fill("2");
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width|range|slice/i);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText(/width|range|slice/i);
   await expect(page.getByLabel("LSB for B", { exact: true })).toHaveValue("64");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)").fill("1");
   await expect(page.getByLabel("Connection mapping")).toContainText(/cin.*→.*data\[64\].*1 bit/);
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(page.locator(".notice")).toContainText("Changes saved to the source");
   const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
@@ -89,7 +94,7 @@ test("previews a scalar to high bus bit and preserves independent endpoint mappi
   expect(saved.document.components[1].terminals[0].width).toBe(65);
 });
 
-test("rejects submitted multiple drivers and out-of-bounds slices without losing the draft", async ({ page, request }) => {
+test("prevents multiple drivers and out-of-bounds slices before submission without losing the draft", async ({ page, request }) => {
   const document = simpleDocumentFixture();
   document.document_id = `invalid_connection_${Date.now()}`;
   document.label = document.document_id;
@@ -100,17 +105,18 @@ test("rejects submitted multiple drivers and out-of-bounds slices without losing
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Connect", "New connection");
   await page.getByLabel("Net label", { exact: true }).fill("invalid_drivers");
-  await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
-  await page.getByLabel("Endpoint B", { exact: true }).selectOption("producer_1:data");
-  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText("Both endpoints drive");
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/driver/i);
+  await page.getByLabel("From port", { exact: true }).selectOption("producer_0:data");
+  await page.getByLabel("To port", { exact: true }).selectOption("producer_1:data");
+  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText(/source|driver/i);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
   await expect(page.getByLabel("Net label", { exact: true })).toHaveValue("invalid_drivers");
-  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("To port", { exact: true }).selectOption("consumer_0:data");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("LSB for B").fill("40");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)").fill("1");
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(/width|range|slice/i);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+  await expect(page.getByRole("status", { name: "Connection guidance" })).toContainText(/width|range|slice/i);
   await expect(page.getByLabel("LSB for B")).toHaveValue("40");
   for (const theme of ["blueprint-slate", "obsidian"]) {
     if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) {
@@ -118,14 +124,14 @@ test("rejects submitted multiple drivers and out-of-bounds slices without losing
       await page.keyboard.press("Escape");
       await page.getByRole("button", { name: /Switch theme/ }).click();
       await menuAction(page, "Connect", "New connection");
-      await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
-      await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+      await page.getByLabel("From port", { exact: true }).selectOption("producer_0:data");
+      await page.getByLabel("To port", { exact: true }).selectOption("consumer_0:data");
     }
     await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
     for (const [width, height] of [[1440, 900], [1024, 768], [560, 760]]) {
       await page.setViewportSize({ width, height });
       await expect(page.getByRole("dialog")).toBeInViewport();
-      await expect(page.getByRole("dialog").getByRole("button", { name: "Create net", exact: true })).toBeInViewport();
+      await expect(page.getByRole("dialog").getByRole("button", { name: "Connect", exact: true })).toBeInViewport();
       const colors = await page.locator(".circuit-dialog input").first().evaluate(element => ({
         background: getComputedStyle(element).backgroundColor,
         expected: getComputedStyle(element.closest(".cd-app")!).getPropertyValue("--cd-surface").trim(),
@@ -137,8 +143,9 @@ test("rejects submitted multiple drivers and out-of-bounds slices without losing
   await page.setViewportSize({ width: 1440, height: 900 });
   const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
   expect(saved.document.design.nets).toEqual([]);
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("LSB for B").fill("0");
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
@@ -179,6 +186,7 @@ test.afterAll(async () => {
 });
 
 async function menuAction(page: Page, menu: string, action: string | RegExp): Promise<void> {
+  if (!await page.getByRole("menuitem", { name: menu, exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
   await page.getByRole("menuitem", { name: menu, exact: true }).click();
   await page.getByRole("menuitem", typeof action === "string" ? { name: action, exact: true } : { name: action }).click();
 }
@@ -407,7 +415,7 @@ test("ignores an Arrange result after another draft edit", async ({ page, reques
   await expect.poll(() => page.evaluate(() => !!(window as Window & { releaseArrange?: () => void }).releaseArrange)).toBe(true);
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Late edit");
-  await page.getByRole("button", { name: "Create definition + instance", exact: true }).click();
+  await page.getByRole("button", { name: "Add to Design", exact: true }).click();
   await expect(viewport).toHaveAttribute("style", manualViewport!);
   await page.evaluate(() => (window as Window & { releaseArrange?: () => void }).releaseArrange!());
   await expect(page.locator(".notice")).toContainText("Local component and first instance created");
@@ -487,19 +495,21 @@ test("launches former sidebar and action-strip workflows from menus", async ({ p
   await page.getByRole("button", { name: "Close" }).click();
 
   await menuAction(page, "Edit", "Begin editing");
-  await expect(page.locator(".document-status")).toContainText("private draft");
+  await expect(page.locator(".document-status")).toContainText("Editing · No changes");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Producer");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Consumer");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
 
   await menuAction(page, "Selection", /Select all/);
   await page.getByRole("menuitem", { name: "View", exact: true }).click();
   await page.getByRole("menuitemcheckbox", { name: /Show Inspector/ }).click();
   await expect(page.locator(".inspector")).toContainText("2 items selected");
   await menuAction(page, "Selection", /Clear selection/);
+  // The automatic frame keeps the current viewport while content grows.
+  await menuAction(page, "View", "Fit circuit");
 
   const source = page.locator('.react-flow__handle[data-handleid="producer:output"]');
   const target = page.locator('.react-flow__handle[data-handleid="consumer:input"]');
@@ -507,9 +517,9 @@ test("launches former sidebar and action-strip workflows from menus", async ({ p
   await expect(page.locator(".notice")).toContainText("Created net");
 
   await menuAction(page, "Connect", "New connection");
-  await page.getByLabel("Endpoint A").selectOption("producer:input");
-  await page.getByLabel("Endpoint B").selectOption("consumer:output");
-  await page.getByRole("button", { name: "Create net" }).click();
+  await page.getByLabel("From port").selectOption("producer:input");
+  await page.getByLabel("To port").selectOption("consumer:output");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator(".notice")).toContainText("Created net");
 });
 
@@ -544,9 +554,9 @@ test("edits a writable specification binding and saves it through source preview
   expect(registered.ok()).toBe(true);
 
   await page.goto(`/?document_id=${document.document_id}`);
-  await expect(page.locator(".document-status")).toContainText("Specification bound");
+  await expect(page.locator(".document-status")).toContainText("Viewing");
   await menuAction(page, "Edit", "Begin editing");
-  await expect(page.locator(".document-status")).toContainText("Specification draft");
+  await expect(page.locator(".document-status")).toContainText("Editing · No changes");
 
   const pane = page.locator(".react-flow__pane");
   const emptyPoint = await pane.evaluate(element => {
@@ -562,12 +572,12 @@ test("edits a writable specification binding and saves it through source preview
   await createLocal.click();
   await page.getByLabel("Name", { exact: true }).fill("spec_block");
   await expect(page.getByText("VLNV: spec2gds.local:work:spec_block:1.0")).not.toBeVisible();
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
 
   const save = page.getByRole("button", { name: "Save to Spec", exact: true });
   await expect(save).toBeVisible();
   await save.click();
-  await expect(page.locator(".document-status")).toContainText("Specification bound");
+  await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Saved");
   await expect(page.locator(".notice")).toContainText("Changes saved to the source");
   expect(sourceProviderCalls).toEqual(["/source/preview", "/source/commit"]);
 });
@@ -588,16 +598,19 @@ test("preserves independent endpoint offsets when creating a bus connection", as
   } });
   expect(binding.ok()).toBe(true);
   await page.goto(`/?document_id=${document.document_id}`);
-  await expect(page.locator(".document-status")).toContainText("Specification bound");
+  await expect(page.locator(".document-status")).toContainText("Viewing");
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Connect", "New connection");
   await page.getByLabel("Net label", { exact: true }).fill("upper_to_lower");
-  await page.getByLabel("Endpoint A", { exact: true }).selectOption("producer_0:data");
-  await page.getByLabel("Endpoint B", { exact: true }).selectOption("consumer_0:data");
+  await page.getByLabel("From port", { exact: true }).selectOption("producer_0:data");
+  await page.getByLabel("To port", { exact: true }).selectOption("consumer_0:data");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("LSB for A", { exact: true }).fill("8");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("LSB for B", { exact: true }).fill("0");
+  if (await page.locator(".connection-advanced").getAttribute("open") === null) await page.getByText("Advanced: connect selected bits", { exact: true }).click();
   await page.getByLabel("Width (0=full)", { exact: true }).fill("8");
-  await page.getByRole("button", { name: "Create net", exact: true }).click();
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.locator(".react-flow__edge")).toHaveCount(1);
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(page.locator(".notice")).toContainText("Changes saved to the source");
@@ -651,16 +664,16 @@ test("saves shortcuts and Inspector visibility in the browser", async ({ page, r
   await page.keyboard.press("c");
   await page.getByRole("checkbox", { name: /Show Inspector/ }).check();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("spec2gds.circuit.preferences.v1") || "null")?.ui.inspector_open)).toBe(true);
-  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.locator(".action-settings").getByRole("status")).toContainText("Saved");
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.locator(".inspector")).toBeVisible();
 
   await page.reload();
   await expect(page.locator(".inspector")).toBeVisible();
   await menuAction(page, "Edit", "Begin editing");
-  await expect(page.locator(".document-status")).toContainText("private draft");
+  await expect(page.locator(".document-status")).toContainText("Editing · No changes");
   await page.keyboard.press("c");
-  await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Connect ports" })).toBeVisible();
 
   const preferences = await page.evaluate(() => JSON.parse(localStorage.getItem("spec2gds.circuit.preferences.v1")!));
   expect(preferences.ui.inspector_open).toBe(true);
@@ -692,10 +705,10 @@ test("pans with left drag while Shift+left-drag remains selection gesture", asyn
   await expect(viewport).toHaveAttribute("style", afterPan ?? "");
 
   await menuAction(page, "Edit", "Begin editing");
-  await expect(page.locator(".document-status")).toContainText("private draft");
+  await expect(page.locator(".document-status")).toContainText("Editing · No changes");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Marquee target");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   const node = page.locator(".react-flow__node").first();
   await expect(node).toBeVisible();
   const nodeBounds = await node.boundingBox();
@@ -714,7 +727,7 @@ test("keeps controlled component selection stable after click and Escape", async
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Stable selection");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   const node = page.locator(".react-flow__node[data-id='stable_selection']");
   await expect(node).toHaveClass(/selected/);
 
@@ -766,7 +779,7 @@ test("opens clamped semantic context menus from pointer and keyboard", async ({ 
   await pane.click({ button: "right", position: createPoint });
   await page.getByRole("menuitem", { name: "New local component…", exact: true }).click();
   await page.getByLabel("Name", { exact: true }).fill("Pointer block");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   const node = page.locator(".react-flow__node[data-id='pointer_block']");
   await expect(node).toBeVisible();
   const nodeBounds = await node.boundingBox();
@@ -787,17 +800,17 @@ test("opens clamped semantic context menus from pointer and keyboard", async ({ 
   await port.click({ button: "right", force: true });
   await expect(page.getByRole("menuitem", { name: "Placement", exact: true })).toBeVisible();
   await page.getByRole("menuitem", { name: "New connection…", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Create connection" })).toBeVisible();
-  await expect(page.getByLabel("Endpoint A")).toHaveValue("pointer_block:input");
+  await expect(page.getByRole("dialog", { name: "Connect ports" })).toBeVisible();
+  await expect(page.getByLabel("From port")).toHaveValue("pointer_block:input");
   await page.getByRole("button", { name: "Close" }).click();
 
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Context sink");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   await menuAction(page, "Connect", "New connection");
-  await page.getByLabel("Endpoint A").selectOption("pointer_block:output");
-  await page.getByLabel("Endpoint B").selectOption("context_sink:input");
-  await page.getByRole("button", { name: "Create net" }).click();
+  await page.getByLabel("From port").selectOption("pointer_block:output");
+  await page.getByLabel("To port").selectOption("context_sink:input");
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
   const connectedPort = page.locator('.react-flow__handle[data-handleid="pointer_block:output"]');
   await connectedPort.click({ button: "right", force: true });
   await expect(page.getByRole("menuitem", { name: "Select connected net", exact: true })).toBeVisible();
@@ -873,7 +886,7 @@ test("downloads and reopens a portable circuit file from File commands", async (
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Inspection block");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
 
   const downloadPromise = page.waitForEvent("download");
   await menuAction(page, "File", /Save changes/);
@@ -901,7 +914,7 @@ test("exports the visible canvas layout consistently to SVG and PNG", async ({ p
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Visual export");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   const node = page.locator(".react-flow__node[data-id='visual_export']");
   await expect(node).toBeVisible();
   const nodeTransform = await node.evaluate((element) => (element as HTMLElement).style.transform);
@@ -994,7 +1007,7 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
 
   // Switch back to Blueprint Slate in preferences
   await page.locator(".action-settings__theme-card").filter({ hasText: "Blueprint Slate" }).click();
-  await expect(page.getByRole("status")).toContainText("Saved");
+  await expect(page.locator(".action-settings").getByRole("status")).toContainText("Saved");
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "blueprint-slate");
 
   // Done closes settings
@@ -1019,7 +1032,7 @@ test("captures Circuit Designer visual baselines across canvas, menus, dialogs, 
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill("Baseline block");
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
   await saveBaseline("circuit_designer_blueprint_slate_1440x900.png");
 

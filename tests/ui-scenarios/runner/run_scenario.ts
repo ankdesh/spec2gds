@@ -435,11 +435,11 @@ async function run(): Promise<void> {
         const targetId = roots[0].ref.entity_id;
         await openEditor(editor, owner, generatedPackage);
         const section = editor.locator(`#component-${targetId.replaceAll("_", "-")}`);
-        await section.getByRole("button", { name: "Options", exact: true }).click();
-        await section.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+        await section.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+        await editor.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
         await expect(editor.locator(".app-toast")).toContainText("Lint passed");
-        await section.getByRole("button", { name: "Options", exact: true }).click();
-        await section.getByRole("menuitem", { name: /Generate RTL/ }).click();
+        await section.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+        await editor.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ }).click();
         let execution: any;
         await expect.poll(async () => {
           execution = (await json(`${owner}/executions?owner_document_key=${encodeURIComponent(generatedKey)}`)).executions.filter((item: any) => item.activity_id === "rtl.generate").at(-1);
@@ -597,8 +597,8 @@ async function run(): Promise<void> {
       } else {
         if (scenario === "live") {
           const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
-          await component.getByRole("button", { name: "Options", exact: true }).click();
-          await component.getByRole("menuitem", { name: "Edit text…" }).click();
+          await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+          await editor.getByRole("menu").getByRole("menuitem", { name: "Edit text…" }).click();
           await component.getByLabel("Component explanation").fill("Preserve this exact draft.");
         }
         let bKey: string | undefined;
@@ -640,8 +640,8 @@ async function run(): Promise<void> {
           await designCard.scrollIntoViewIfNeeded();
           await capture(editor, "06_spec_editor_topology.png", "Spec Editor", "Spec Editor derives a circuit preview from two instances and the declared bit-zero connection.");
           const popup = context.waitForEvent("page");
-          await designCard.getByRole("button", { name: "Options", exact: true }).click();
-          await designCard.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+          await designCard.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+          await editor.getByRole("menu").getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
           const circuit = await popup;
           observePage(circuit);
           await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
@@ -660,7 +660,7 @@ async function run(): Promise<void> {
           await capture(circuit, "07_circuit_designer_bound_design.png", "Circuit Designer", "Circuit Designer opens the exact Design from the Spec, including two Component instances and the selected wire connection.");
           await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
           await circuit.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
-          await expect(circuit.locator(".document-status")).toContainText("Specification draft");
+          await expect(circuit.getByRole("status", { name: "Circuit save state" })).toHaveText("Editing · No changes");
           await capture(circuit, "08_circuit_designer_private_draft.png", "Circuit Designer", "Begin editing creates a private Circuit draft while keeping the saved Spec as its source.");
         }
         if (scenario === "repeated") {
@@ -683,12 +683,12 @@ async function run(): Promise<void> {
       // Capture the execution queued by the UI; never substitute a CLI run.
       await openEditor(editor, owner, packagePath);
       const component = editor.locator(`#component-${componentId.replaceAll("_", "-")}`);
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await editor.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await expect(editor.locator(".app-toast")).toContainText("Lint passed");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
       await capture(editor, "09_spec_editor_activity.png", "Spec Editor", "Launch the registered rtl.generate Activity for the approved Component.");
-      await component.getByRole("menuitem", { name: /Generate RTL/ }).click();
+      await editor.getByRole("menu").getByRole("menuitem", { name: /Generate RTL/ }).click();
       let launched: any;
       await expect.poll(async () => {
         const executions = (await json(scoped("/executions"))).executions;

@@ -292,8 +292,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add Component Definition");
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("Registered adder");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -302,7 +302,7 @@ async function main() {
       const component = page.locator("[id^='component-']").first();
       await expect(component).toBeVisible({ timeout: 15_000 });
       await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add port", exact: true }).click();
 
       const portDraft = component.locator(".spec-port-editor");
       // Add 'a' port
@@ -338,8 +338,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add SystemVerilog section");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
       await component.locator(".cm-content").fill(
         "always_ff @(posedge clk) begin\n  sum <= a + b;\nend"
       );
@@ -347,8 +347,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Verify Component Lint");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await page.waitForTimeout(3000);
 
       recordAction("Inspect Interface Preview & Handoff");
@@ -392,15 +392,15 @@ async function main() {
       await page.waitForTimeout(1500);
 
       recordAction("Rename Spec Document");
-      await page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
+      await page.locator(".spec-cover").getByRole("button", { name: "Options for Spec", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Edit name", exact: true }).click();
       await page.getByLabel("Spec name", { exact: true }).fill("Released Spec 1.0");
       await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
       await page.waitForTimeout(2500);
 
       recordAction("Demonstrate Draft State and Discarding Edits");
-      await page.locator(".spec-cover").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator(".spec-cover").getByRole("menuitem", { name: "Edit name", exact: true }).click();
+      await page.locator(".spec-cover").getByRole("button", { name: "Options for Spec", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Edit name", exact: true }).click();
       await page.getByLabel("Spec name", { exact: true }).fill("Temporary Draft Unsaved");
       await page.waitForTimeout(1500);
       await page.getByRole("button", { name: "Cancel", exact: true }).click();
@@ -419,8 +419,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add Component Definition");
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("Arithmetic Logic Unit");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -429,7 +429,7 @@ async function main() {
       await expect(component).toBeVisible({ timeout: 15_000 });
 
       recordAction("Edit Component Definition");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
       if (await page.getByRole("menuitem", { name: "Rename", exact: true }).isVisible()) {
         await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
         await component.getByLabel("Name", { exact: true }).fill("ALU 16-Bit Core");
@@ -446,7 +446,7 @@ async function main() {
 
       recordAction("Add Ports with Explicit Range and Save and Add Another");
       await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add port", exact: true }).click();
 
       const portDraft = component.locator(".spec-port-editor");
       // data_a (vector 15:0)
@@ -484,7 +484,7 @@ async function main() {
       recordAction("Edit Port Definition");
       const resRow = component.locator(".spec-port-row").filter({ has: page.getByRole("rowheader", { name: "result", exact: true }) });
       await resRow.getByRole("button", { name: "Options for port result", exact: true }).click();
-      await resRow.getByRole("menuitem", { name: "Edit", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
       const editPortDraft = component.locator(".spec-port-editor");
       await editPortDraft.getByLabel("Description", { exact: true }).fill("16-bit ALU output result");
       await editPortDraft.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -523,8 +523,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add Component with Ports");
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("Barrel Shifter");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -533,7 +533,7 @@ async function main() {
       await expect(component).toBeVisible({ timeout: 15_000 });
 
       await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add port", exact: true }).click();
       const portDraft = component.locator(".spec-port-editor");
       await portDraft.getByLabel("Port ID", { exact: true }).fill("data_in");
       await portDraft.getByLabel("Direction", { exact: true }).selectOption("in");
@@ -550,7 +550,7 @@ async function main() {
       await page.waitForTimeout(1500);
 
       recordAction("Author Narrative & Details");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
       if (await page.getByRole("menuitem", { name: "Edit text…" }).isVisible()) {
         await page.getByRole("menuitem", { name: "Edit text…" }).click();
         const descField = component.getByLabel("Component explanation");
@@ -571,8 +571,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add SystemVerilog Implementation Section");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
       await component.locator(".cm-content").fill(
         "always_comb begin\n  data_out = data_in << 1;\nend"
       );
@@ -618,8 +618,8 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add Component with SystemVerilog");
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("Adder Unit");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -628,7 +628,7 @@ async function main() {
       await expect(component).toBeVisible({ timeout: 15_000 });
 
       await component.getByRole("button", { name: "Options for Ports", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add port", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add port", exact: true }).click();
       const portDraft = component.locator(".spec-port-editor");
       await portDraft.getByLabel("Port ID", { exact: true }).fill("a");
       await portDraft.getByLabel("Direction", { exact: true }).selectOption("in");
@@ -648,8 +648,8 @@ async function main() {
       await portDraft.getByRole("button", { name: "Save to Spec", exact: true }).click();
       await page.waitForTimeout(1500);
 
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add SystemVerilog section…", exact: true }).click();
       await component.locator(".cm-content").fill(
         "always_comb begin\n  sum = a + b;\nend"
       );
@@ -657,20 +657,20 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Verify Component Lint: Passed");
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await expect(page.locator(".app-toast")).toContainText("Lint passed", { timeout: 15_000 });
       await page.waitForTimeout(2500);
 
       recordAction("Induce Lint Failure and Observe Draft Preservation");
       await component.locator(".spec-sv-section").getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-      await component.locator(".spec-sv-section").getByRole("menuitem", { name: "Edit", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
       await component.locator(".cm-content").fill("always_comb begin\n  sum = a + ;\nend");
       await component.locator(".spec-sv-section").getByRole("button", { name: "Save to Spec", exact: true }).click();
       await page.waitForTimeout(1500);
 
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await expect(page.locator(".app-toast")).toContainText("Lint failed. Your saved text is preserved.", { timeout: 15_000 });
       await page.waitForTimeout(2500);
 
@@ -697,13 +697,13 @@ async function main() {
 
       recordAction("Correct Syntax and Re-verify Clean");
       await component.locator(".spec-sv-section").getByRole("button", { name: "Options for SystemVerilog", exact: true }).click();
-      await component.locator(".spec-sv-section").getByRole("menuitem", { name: "Edit", exact: true }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Edit", exact: true }).click();
       await component.locator(".cm-content").fill("always_comb begin\n  sum = a + b;\nend");
       await component.locator(".spec-sv-section").getByRole("button", { name: "Save to Spec", exact: true }).click();
       await page.waitForTimeout(1500);
 
-      await component.getByRole("button", { name: "Options", exact: true }).click();
-      await component.getByRole("menuitem", { name: "Verify Component", exact: true }).click();
+      await component.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Verify Component", exact: true }).click();
       await expect(page.locator(".app-toast")).toContainText("Lint passed", { timeout: 15_000 });
       await page.waitForTimeout(2500);
 
@@ -732,7 +732,7 @@ async function main() {
       await createNewSpec(page, "Catalog IP Reuse Spec");
       await page.waitForTimeout(2000);
 
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
       await page.getByRole("menuitem", { name: "Import from catalog…", exact: true }).click();
 
       const dialog = page.getByRole("dialog", { name: "Component library", exact: true });
@@ -773,14 +773,14 @@ async function main() {
       await page.waitForTimeout(2000);
 
       recordAction("Add Definitions for Adder and Register");
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("adder_block");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(1500);
 
-      await page.locator("#components").getByRole("button", { name: "Options", exact: true }).click();
-      await page.locator("#components").getByRole("menuitem", { name: "Add component…", exact: true }).click();
+      await page.locator("#components").locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component…", exact: true }).click();
       await page.getByLabel("Component name").fill("register_stage");
       await page.getByRole("button", { name: "Create component", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -788,8 +788,8 @@ async function main() {
       recordAction("Create Composite Design");
       const designsSection = page.locator("#designs");
       await designsSection.scrollIntoViewIfNeeded();
-      await designsSection.getByRole("button", { name: "Options", exact: true }).click();
-      await designsSection.getByRole("menuitem", { name: "Add design…", exact: true }).click();
+      await designsSection.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add design…", exact: true }).click();
       await page.getByLabel("Design name").fill("soc_top");
       await page.getByRole("button", { name: "Create design", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -798,14 +798,14 @@ async function main() {
       const design = page.locator("[id^='design-']").first();
       await expect(design).toBeVisible({ timeout: 15_000 });
 
-      await design.getByRole("button", { name: "Options", exact: true }).click();
-      await design.getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
+      await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
       await design.getByLabel("Instance ID").fill("u_adder");
       await design.getByRole("button", { name: "Add instance", exact: true }).click();
       await page.waitForTimeout(1500);
 
-      await design.getByRole("button", { name: "Options", exact: true }).click();
-      await design.getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
+      await design.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();
+      await page.getByRole("menu").getByRole("menuitem", { name: "Add component instance…", exact: true }).click();
       await design.getByLabel("Instance ID").fill("u_reg");
       await design.getByRole("button", { name: "Add instance", exact: true }).click();
       await page.waitForTimeout(2000);
@@ -845,7 +845,7 @@ async function main() {
       await page.getByRole("menuitem", { name: "Components", exact: true }).click();
       await page.getByRole("menuitem", { name: "New local component", exact: true }).click();
       await page.getByLabel("Name", { exact: true }).fill("alu_stage");
-      await page.getByRole("button", { name: "Create definition + instance" }).click();
+      await page.getByRole("button", { name: "Add to Design" }).click();
       await expect(page.locator(".react-flow__node")).toHaveCount(1, { timeout: 10_000 });
       await page.waitForTimeout(2000);
 
@@ -861,7 +861,7 @@ async function main() {
       await page.getByRole("menuitem", { name: "Components", exact: true }).click();
       await page.getByRole("menuitem", { name: "New local component", exact: true }).click();
       await page.getByLabel("Name", { exact: true }).fill("reg_stage");
-      await page.getByRole("button", { name: "Create definition + instance" }).click();
+      await page.getByRole("button", { name: "Add to Design" }).click();
       await expect(page.locator(".react-flow__node")).toHaveCount(2, { timeout: 10_000 });
       await page.waitForTimeout(2000);
 
@@ -869,9 +869,10 @@ async function main() {
       await page.getByRole("menuitem", { name: "View", exact: true }).click();
       await page.getByRole("menuitemcheckbox", { name: /Show Inspector/ }).click();
       await page.waitForTimeout(1500);
-      const addBoundaryBtn = page.getByRole("button", { name: "New Boundary Port" });
+      const addBoundaryBtn = page.getByRole("button", { name: "Add port to Design" });
       if (await addBoundaryBtn.isVisible()) {
         await addBoundaryBtn.click();
+        await page.getByRole("dialog", { name: "Add port", exact: true }).getByRole("button", { name: "Add port", exact: true }).click();
         await page.waitForTimeout(1500);
       }
 
@@ -910,7 +911,7 @@ async function main() {
       await page.getByRole("menuitem", { name: "Components", exact: true }).click();
       await page.getByRole("menuitem", { name: /New local component/ }).click();
       await page.getByLabel("Name", { exact: true }).fill("committed_alu");
-      await page.getByRole("button", { name: "Create definition + instance" }).click();
+      await page.getByRole("button", { name: "Add to Design" }).click();
       await page.waitForTimeout(1500);
 
       const saveBtn = page.getByRole("button", { name: /Save to Spec|Save changes/ });
@@ -936,13 +937,13 @@ async function main() {
       await page.getByRole("menuitem", { name: "Components", exact: true }).click();
       await page.getByRole("menuitem", { name: /New local component/ }).click();
       await page.getByLabel("Name", { exact: true }).fill("stage_a");
-      await page.getByRole("button", { name: "Create definition + instance" }).click();
+      await page.getByRole("button", { name: "Add to Design" }).click();
       await page.waitForTimeout(1500);
 
       await page.getByRole("menuitem", { name: "Components", exact: true }).click();
       await page.getByRole("menuitem", { name: /New local component/ }).click();
       await page.getByLabel("Name", { exact: true }).fill("stage_b");
-      await page.getByRole("button", { name: "Create definition + instance" }).click();
+      await page.getByRole("button", { name: "Add to Design" }).click();
       await page.waitForTimeout(1500);
 
       recordAction("Connect Net between Instances for Routing");

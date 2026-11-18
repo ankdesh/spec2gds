@@ -4,6 +4,7 @@ import type { CircuitActionId } from "./action-bindings";
 import type { CircuitMenuEntry } from "./CircuitActionMenu";
 
 export type CircuitContextCommandId =
+  | "add-boundary-port"
   | "add-bend-here"
   | "remove-bend"
   | "select-connected-net"
@@ -31,6 +32,7 @@ export interface CircuitActionInvocation {
 }
 
 const labels: Record<CircuitContextCommandId, string> = {
+  "add-boundary-port": "Add port…",
   "add-bend-here": "Add bend here",
   "remove-bend": "Remove bend",
   "select-connected-net": "Select connected net",
@@ -104,6 +106,7 @@ export function buildCircuitContextMenu(options: CircuitContextMenuOptions): Cir
   if (target.kind === "canvas") return [
     action("begin-edit", "Begin editing"),
     separator,
+    contextAction("add-boundary-port"),
     action("create-local-component", "New local component…"),
     action("open-connect", "New connection…"),
     action("add-cycle-edge", "Add cycle edge here"),

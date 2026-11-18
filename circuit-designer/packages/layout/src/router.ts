@@ -25,6 +25,8 @@ export interface OrthogonalRouterOptions {
   gridSize?: number;
   clearance?: number;
   fixedRoutes?: Record<string, NetRoute>;
+  /** Optional drawing boundary; it does not act as a filled obstacle. */
+  bounds?: { minX: number; minY: number; maxX: number; maxY: number };
 }
 
 interface SearchBounds { minX: number; minY: number; maxX: number; maxY: number }
@@ -288,7 +290,7 @@ export function routeOrthogonalNets(
   const grid = options.gridSize ?? 20;
   const clearance = options.clearance ?? grid / 2;
   const fixedRoutes = options.fixedRoutes ?? {};
-  const bounds = searchBounds(requests, obstacles, fixedRoutes, grid);
+  const bounds = options.bounds ?? searchBounds(requests, obstacles, fixedRoutes, grid);
   const blocked = blockedGridPoints(obstacles, bounds, grid, clearance);
   const occupiedPoints = new Set<string>();
   const occupiedEdges = new Set<string>();

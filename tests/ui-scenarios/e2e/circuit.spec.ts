@@ -3,13 +3,14 @@ import { test, expect, openSpec, type Stack } from "./fixtures.js";
 import type { Page } from "@playwright/test";
 
 async function menu(page: Page, name: string, action: string | RegExp): Promise<void> {
+  if (!await page.getByRole("menuitem", { name, exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
   await page.getByRole("menuitem", typeof action === "string" ? { name: action, exact: true } : { name: action }).click();
 }
 async function localComponent(page: Page, name: string): Promise<void> {
   await menu(page, "Components", "New local component");
   await page.getByLabel("Name", { exact: true }).fill(name);
-  await page.getByRole("button", { name: "Create definition + instance" }).click();
+  await page.getByRole("button", { name: "Add to Design" }).click();
   await expect(page.locator(".react-flow__node")).toHaveCount(1);
 }
 async function sourceDesign(stack: Stack): Promise<any> {
@@ -23,6 +24,212 @@ async function launch(page: Page, stack: Stack, kind: string, id: string): Promi
   await expect(page.getByTestId("circuit-canvas")).toBeVisible();
   return launched;
 }
+
+for (const theme of ["blueprint-slate", "obsidian"]) test(`visible Circuit actions connect, inspect timing and save in ${theme}`, async ({ page, stack }, info) => {
+  await page.goto(stack.circuitUI);
+  await expect(page.getByTestId("circuit-canvas")).toBeVisible();
+  if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /^Switch theme/ }).click();
+  await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Viewing");
+  await expect(page.getByRole("button", { name: "Save circuit", exact: true })).toBeDisabled();
+  await page.screenshot({ path: info.outputPath(`ux-start-${theme}.png`) });
+  await page.getByRole("button", { name: "Begin editing", exact: true }).click();
+  await page.getByRole("button", { name: "Add component", exact: true }).click();
+  await page.getByRole("button", { name: "Create local Component", exact: true }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Arithmetic unit");
+  await page.getByLabel("Port width or range", { exact: true }).fill("16");
+  await page.getByRole("button", { name: "Add to Design", exact: true }).click();
+  await page.getByRole("button", { name: "Add port to Design", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "Add port", exact: true });
+  await expect(dialog.getByLabel("Wire width or range", { exact: true })).toHaveValue("1");
+  await dialog.getByLabel("Name", { exact: true }).fill("data_in");
+  await dialog.getByLabel("Wire width or range", { exact: true }).fill("8");
+  await dialog.getByRole("button", { name: "Add port", exact: true }).click();
+  await page.getByRole("button", { name: "Connect ports", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Connect ports", exact: true });
+  await expect(dialog.getByLabel("LSB for A")).toHaveCount(0);
+  await dialog.getByLabel("From port", { exact: true }).selectOption("boundary:data_in");
+  await dialog.getByLabel("To port", { exact: true }).selectOption("arithmetic_unit:input");
+  await expect(dialog.getByRole("button", { name: "Connect", exact: true })).toBeDisabled();
+  await expect(dialog.getByRole("status", { name: "Connection guidance" })).toContainText("8 bits → 16 bits");
+  await page.screenshot({ path: info.outputPath(`ux-width-guidance-${theme}.png`) });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
+  await page.getByRole("complementary", { name: "Inspector", exact: true }).getByLabel("Wire width or range").fill("16");
+  await page.getByRole("button", { name: "Connect ports", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Connect ports", exact: true });
+  await dialog.getByLabel("From port", { exact: true }).selectOption("boundary:data_in");
+  await dialog.getByLabel("To port", { exact: true }).selectOption("arithmetic_unit:input");
+  await dialog.getByLabel("Net label", { exact: true }).fill("operand");
+  await expect(dialog.getByRole("status", { name: "Connection mapping" })).toContainText("16 bits");
+  await dialog.getByRole("button", { name: "Connect", exact: true }).click();
+  await menu(page, "Timing", "Timing analysis");
+  const timing = page.getByRole("complementary", { name: "Timing analysis", exact: true });
+  await expect(timing).toContainText("Arithmetic unit.input");
+  await expect(timing.locator(".timing-path")).not.toContainText("instance:arithmetic_unit");
+  await timing.getByRole("button", { name: /operand/ }).click();
+  await expect(page.locator(".react-flow__edge")).toHaveClass(/selected/);
+  await page.screenshot({ path: info.outputPath(`ux-timing-${theme}.png`) });
+  await timing.getByRole("button", { name: "Close timing analysis", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Unsaved changes");
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Save circuit", exact: true }).click();
+  const saved = JSON.parse(readFileSync((await (await downloading).path())!, "utf8"));
+  expect(saved.design.nets[0]).toMatchObject({ label: "operand" });
+  expect(saved.design.nets[0].endpoints.every((endpoint: any) => !endpoint.slice)).toBe(true);
+  expect(saved.components[0].terminals.map((port: any) => port.width)).toEqual([16, 16]);
+  await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Saved");
+  for (const [width, height] of [[1440, 1000], [1024, 768], [390, 844]]) {
+    await page.setViewportSize({ width, height });
+    await expect(page.locator(".document-status")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save circuit", exact: true })).toBeInViewport();
+    await page.getByRole("button", { name: "Port list", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Circuit ports", exact: true })).toContainText("data_in");
+    await expect(page.getByRole("button", { name: "Connect from port" }).first()).toBeDisabled();
+    await page.getByRole("button", { name: "Close port list", exact: true }).click();
+    const geometry = await page.locator(".canvas-actions button").evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().height));
+    expect(Math.min(...geometry)).toBeGreaterThanOrEqual(44);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+    await page.screenshot({ path: info.outputPath(`ux-saved-${theme}-${width}.png`) });
+  }
+  await menu(page, "Help", "About Circuit Designer");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menuitem", { name: "Commands", exact: true })).toBeFocused();
+});
+
+test("Spec Editor launches expose direct actions for a Design and a blank Component", async ({ page: specPage, stack }, info) => {
+  const created = await stack.json("/documents/create", { path: stack.path(), document_id: "ux_launch" });
+  await stack.commit([{ type: "create_entity", kind: "design", name: "Visible Design" }, { type: "create_entity", kind: "component", name: "Visible Component" }], created);
+  await specPage.goto(`${stack.spec}/editor?owner_document_key=${encodeURIComponent(created.owner_document_key)}&edit_context_id=${encodeURIComponent(created.edit_access.context_id)}`);
+  await expect(specPage.locator(".spec-paper")).toBeVisible();
+  for (const name of ["Visible Design", "Visible Component"]) {
+    const popup = specPage.waitForEvent("popup");
+    await specPage.getByRole("menuitem", { name: "Circuit Designer", exact: true }).click();
+    await specPage.getByRole("menu", { name: "Circuit Designer", exact: true }).getByRole("menuitem").filter({ hasText: name }).click();
+    const page = await popup;
+    await expect(page.getByTestId("circuit-canvas")).toBeVisible();
+    const before = stack.archive(stack.path());
+    if (name === "Visible Component") {
+      await page.getByRole("button", { name: "Create internal Design", exact: true }).click();
+      await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Unsaved Design");
+      await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toBeEnabled();
+    } else await page.getByRole("button", { name: "Begin editing", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Add component", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add port to Design", exact: true })).toBeEnabled();
+    await page.screenshot({ path: info.outputPath(`ux-spec-launch-${name.replaceAll(" ", "-")}.png`) });
+    expect(stack.archive(stack.path())).toEqual(before);
+    await page.getByRole("button", { name: "Cancel changes", exact: true }).click();
+    expect(stack.archive(stack.path())).toEqual(before);
+    if (name === "Visible Component") await expect(page.getByRole("button", { name: "Create internal Design", exact: true })).toBeVisible();
+    await page.close();
+  }
+});
+
+for (const mode of ["ports", "instances", "empty"] as const) test(`encloses ${mode} in a Design frame and adds ports without the Inspector`, async ({ page, stack, request }, testInfo) => {
+  const documentId = `frame_${mode}_${Date.now()}`;
+  const terminal = (id: string, direction: string, width = 16) => ({ id, label: id, direction, width, category: "port" });
+  const document = {
+    protocol_version: "circuit-designer.v1", document_id: documentId, label: "Frame check",
+    components: [{ id: "adder", label: "16-bit modulo adder", origin: "local", editable: true, parameters: [], appearance: { renderer_key: "generic", properties: {} }, terminals: [terminal("a", "input"), terminal("b", "input"), terminal("y", "output")] }],
+    design: { id: "top", label: "Frame check", nets: [],
+      boundary_terminals: mode === "ports" ? [terminal("a", "input"), terminal("b", "input"), terminal("clk", "input", 1), terminal("enable", "input", 1), terminal("rst_n", "input", 1), terminal("y", "output")] : [],
+      instances: mode === "instances" ? ["a1", "a2"].map(id => ({ id, label: id, component_id: "adder", parameter_values: {} })) : [],
+    },
+    layout: { grid_size: 20, direction: "RIGHT", instance_geometry: mode === "instances" ? { a1: { x: 80, y: 80, width: 180, height: 120 }, a2: { x: 80, y: 360, width: 180, height: 120 } } : {}, terminal_placements: {}, net_routes: {}, label_geometry: {} },
+  };
+  const api = `${stack.circuit}/api/circuit-designer/v1/documents`;
+  expect((await request.post(api, { data: { request_id: documentId, document } })).ok()).toBe(true);
+  await page.goto(`${stack.circuitUI}/?document_id=${documentId}`);
+  const frame = page.getByTestId("circuit-design-frame");
+  await expect(frame).toBeVisible();
+  await expect(frame.getByRole("button", { name: "Add port", exact: true })).toBeDisabled();
+  if (await page.getByRole("button", { name: "Hide Inspector", exact: true }).isVisible()) await page.getByRole("button", { name: "Hide Inspector", exact: true }).click();
+  for (const appearance of ["initial", "alternate"]) {
+    await page.getByRole("button", { name: "Fit circuit", exact: true }).click();
+    await expect(frame).toBeInViewport({ ratio: .99 });
+    await page.screenshot({ path: testInfo.outputPath(`frame-${mode}-${appearance}.png`) });
+    if (appearance === "initial") await page.getByRole("button", { name: /^Switch theme/ }).click();
+  }
+  if (mode === "ports") {
+    const bounds = (await frame.boundingBox())!;
+    const a = (await page.locator('.react-flow__handle[data-terminal-id="boundary:a"]').boundingBox())!;
+    const y = (await page.locator('.react-flow__handle[data-terminal-id="boundary:y"]').boundingBox())!;
+    expect(Math.abs(a.x + a.width / 2 - bounds.x)).toBeLessThan(3);
+    expect(Math.abs(y.x + y.width / 2 - bounds.x - bounds.width)).toBeLessThan(3);
+    expect(await page.locator(".cd-node--boundary").first().evaluate(element => getComputedStyle(element).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  }
+  await menu(page, "Edit", "Begin editing");
+  await frame.getByRole("button", { name: "Add port", exact: true }).click();
+  let dialog = page.getByRole("dialog", { name: "Add port", exact: true });
+  await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator('.react-flow__handle[data-terminal-id="boundary:port"]')).toHaveCount(0);
+  if (mode === "instances") {
+    await frame.locator(".cd-design-frame__header").click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Add port…", exact: true }).click();
+  } else await frame.getByRole("button", { name: "Add port", exact: true }).click();
+  dialog = page.getByRole("dialog", { name: "Add port", exact: true });
+  await dialog.getByLabel("Name", { exact: true }).fill("result");
+  await dialog.getByRole("combobox", { name: "Direction", exact: true }).selectOption("output");
+  await dialog.getByLabel("Wire width or range", { exact: true }).fill("0");
+  await dialog.getByRole("button", { name: "Add port", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText("positive whole number");
+  await dialog.getByLabel("Wire width or range", { exact: true }).fill("16");
+  await dialog.getByRole("button", { name: "Add port", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const result = page.locator('.react-flow__handle[data-terminal-id="boundary:result"]');
+  await expect(result).toBeVisible();
+  await menu(page, "Edit", /Undo/);
+  await expect(result).toHaveCount(0);
+  await menu(page, "Edit", /Redo/);
+  await expect(result).toBeVisible();
+  if (mode === "empty") {
+    await result.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Placement", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Side", exact: true }).click();
+    await page.getByRole("menuitemradio", { name: "South", exact: true }).click();
+    await expect(result).toHaveClass(/react-flow__handle-top/);
+    const bounds = (await frame.boundingBox())!, pin = (await result.boundingBox())!;
+    expect(Math.abs(pin.y + pin.height / 2 - bounds.y - bounds.height)).toBeLessThan(3);
+  }
+  if (mode === "instances") {
+    await page.locator('.react-flow__handle[data-terminal-id="a1:y"]').dragTo(result);
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+  }
+  await menu(page, "File", /^Save changes/);
+  await expect(page.locator(".notice")).toContainText(/saved/i);
+  const saved = await (await request.get(`${api}/${documentId}`)).json();
+  expect(saved.document.design.boundary_terminals.at(-1)).toMatchObject({ label: "result", direction: "output", width: 16 });
+  expect(saved.document.layout.instance_geometry).toEqual(document.layout.instance_geometry);
+  await page.reload();
+  await expect(frame).toBeVisible();
+  await expect(result).toBeVisible();
+  if (mode === "instances") {
+    await expect(page.locator(".react-flow__edge")).toHaveCount(1);
+    const label = (await page.locator('.react-flow__node[data-id="boundary:result"] .cd-node__port-label').boundingBox())!;
+    const pin = (await result.boundingBox())!;
+    expect(label.y + label.height).toBeLessThanOrEqual(pin.y + 1);
+  }
+  if (mode === "empty") {
+    expect(saved.document.layout.terminal_placements["boundary:result"].side).toBe("NORTH");
+    await page.setViewportSize({ width: 1000, height: 740 });
+    await page.getByRole("button", { name: "Fit circuit", exact: true }).click();
+    await expect(frame).toBeInViewport({ ratio: .99 });
+  }
+  if (mode === "ports") for (const format of ["SVG", "PNG"]) {
+    const downloading = page.waitForEvent("download");
+    await menu(page, "File", "Download");
+    await page.getByRole("menuitem", { name: new RegExp(format) }).click();
+    const downloaded = await downloading;
+    const path = testInfo.outputPath(`frame.${format.toLowerCase()}`);
+    await downloaded.saveAs(path);
+    const bytes = readFileSync(path);
+    if (format === "SVG") {
+      expect(bytes.toString()).toContain('data-design-frame="top"');
+      expect(bytes.toString()).toContain('data-terminal-id="boundary:result"');
+      expect(bytes.toString()).not.toMatch(/<g data-boundary-id="[^"]+"><rect/);
+    } else expect([...bytes.subarray(0, 8)]).toEqual([137, 80, 78, 71, 13, 10, 26, 10]);
+  }
+  await page.screenshot({ path: testInfo.outputPath(`frame-${mode}-saved.png`) });
+});
 
 test("opens exact Spec targets from the Circuit Designer menu and embedded previews without changing the Spec", async ({ page, stack }) => {
   stack.seedSample();
@@ -49,7 +256,7 @@ test("opens exact Spec targets from the Circuit Designer menu and embedded previ
         const anchor = `${ref.entity_kind}-${ref.entity_id.replaceAll("_", "-")}`;
         const preview = page.locator(`#${anchor} .spec-topology-card`);
         await preview.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-        await preview.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+        await preview.page().getByRole("menu", { name: /^Options for / }).getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
       }
       const circuit = await launched;
       await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
@@ -62,7 +269,11 @@ test("opens exact Spec targets from the Circuit Designer menu and embedded previ
       expect(binding.base_source_revision_hash).toBe(snapshot.source_revision_hash);
       expect(binding.source_owner_document_key).toBe(snapshot.owner_document_key);
       expect(binding.writable).toBe(target !== leaf);
-      if (target === component) expect(binding.editable_design_id).toBe(composite.internal_design.entity_id);
+      if (target === component) {
+        expect(binding.editable_design_id).toBe(composite.internal_design.entity_id);
+        await expect(circuit.getByTestId("circuit-design-frame")).toContainText(component.display_name || component.vlnv.split(":")[2]);
+      }
+      if (target === leaf) await expect(circuit.getByTestId("circuit-design-frame")).toHaveCount(0);
       if (target === leaf) {
         await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
         await expect(circuit.getByRole("menuitem", { name: "Begin editing", exact: true })).toBeEnabled();
@@ -198,11 +409,25 @@ test("a stale Circuit save cannot replace a later Spec edit", async ({ page, sta
   const saved = await stack.snapshot();
   const source = stack.archive(stack.path());
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
-  await expect(page.locator(".notice")).toContainText(/stale|changed|revision/i);
-  await expect(page.locator(".save-error")).toContainText("Save failed. Your draft is still open.");
+  await expect(page.locator(".notice")).toContainText("Review the save conflict");
+  await expect(page.locator(".save-error")).toContainText("The Spec changed. Your draft is safe.");
   await expect(page.locator(".save-error")).toContainText("before exporting");
   await page.screenshot({ path: test.info().outputPath("save-rejected.png") });
   expect((await stack.snapshot()).source_revision_hash).toBe(saved.source_revision_hash);
+  expect(stack.archive(stack.path())).toEqual(source);
+  await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toBeDisabled();
+  await page.getByRole("button", { name: "Open latest Spec", exact: true }).click();
+  await page.getByRole("dialog", { name: "Open the latest Spec?", exact: true }).getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  await page.route("**/source/reload", route => route.abort("failed"), { times: 1 });
+  await page.getByRole("button", { name: "Open latest Spec", exact: true }).click();
+  await page.getByRole("button", { name: "Discard draft and open latest", exact: true }).click();
+  await expect(page.locator(".save-error")).toContainText("Could not open the latest Spec. Your draft is preserved");
+  await expect(page.locator(".react-flow__node")).toHaveCount(1);
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download draft", exact: true }).click();
+  const preserved = JSON.parse(readFileSync((await (await downloading).path())!, "utf8"));
+  expect(preserved.design.instances).toHaveLength(1);
   expect(stack.archive(stack.path())).toEqual(source);
   await menu(page, "File", "Cancel changes");
   await expect(page.locator(".save-error")).toHaveCount(0);
@@ -222,20 +447,23 @@ for (const theme of ["blueprint-slate", "obsidian"]) {
     } else {
       const preview = specPage.locator(".spec-topology-card");
       await preview.getByRole("button", { name: "Options for circuit preview", exact: true }).click();
-      await preview.getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
+      await preview.page().getByRole("menu", { name: /^Options for / }).getByRole("menuitem", { name: "Open in Circuit Designer", exact: true }).click();
     }
     const page = await opened;
     await expect(page.getByTestId("circuit-canvas")).toBeVisible();
     if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /^Switch theme/ }).click();
     await page.setViewportSize({ width: 540, height: 820 });
+    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toHaveAttribute("title", "Select Begin editing first.");
     await page.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
+    if (!await page.getByRole("menuitem", { name: "Components", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Components", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "New local component", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
     const before = stack.archive(stack.path());
+    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).focus();
     await page.keyboard.press("Enter");
     await page.getByRole("menuitem", { name: "Create internal Design", exact: true }).focus();
@@ -279,6 +507,7 @@ for (const theme of ["blueprint-slate", "obsidian"]) {
     await expect(specPage.locator(".spec-topology-card")).not.toContainText("Interface preview (read-only)");
     await page.reload();
     await menu(page, "Edit", "Begin editing");
+    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
@@ -300,7 +529,8 @@ for (const choice of ["Retain SV", "Remove SV"]) {
     await menu(page, "Edit", "Create internal Design");
     const before = stack.archive(stack.path());
     await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
-    await page.getByRole("button", { name: "New Boundary Port", exact: true }).click();
+    await page.getByRole("button", { name: "Add port to Design", exact: true }).click();
+    await page.getByRole("dialog", { name: "Add port", exact: true }).getByRole("button", { name: "Add port", exact: true }).click();
     await page.setViewportSize({ width: 540, height: 820 });
     if (choice === "Remove SV") await page.getByRole("button", { name: /^Switch theme/ }).click();
     await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
@@ -395,7 +625,8 @@ test("dialogs trap focus and Escape returns focus to triggering menu", async ({ 
   await expect(closeButton).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page.locator("#circuit-help-menu-trigger")).toBeFocused();
+  const trigger = page.locator("#circuit-help-menu-trigger");
+  await expect(await trigger.isVisible() ? trigger : page.getByRole("menuitem", { name: "Commands", exact: true })).toBeFocused();
 });
 
 test("Circuit preferences stay in each browser and leave service defaults unchanged", async ({ page, browser, stack }) => {
