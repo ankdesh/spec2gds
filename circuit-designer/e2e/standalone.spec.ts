@@ -128,7 +128,7 @@ test("prevents multiple drivers and out-of-bounds slices before submission witho
       await page.getByLabel("To port", { exact: true }).selectOption("consumer_0:data");
     }
     await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
-    for (const [width, height] of [[1440, 900], [1024, 768], [560, 760]]) {
+    for (const [width, height] of [[1280, 720], [1440, 900], [1920, 1080]]) {
       await page.setViewportSize({ width, height });
       await expect(page.getByRole("dialog")).toBeInViewport();
       await expect(page.getByRole("dialog").getByRole("button", { name: "Connect", exact: true })).toBeInViewport();
@@ -186,7 +186,6 @@ test.afterAll(async () => {
 });
 
 async function menuAction(page: Page, menu: string, action: string | RegExp): Promise<void> {
-  if (!await page.getByRole("menuitem", { name: menu, exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
   await page.getByRole("menuitem", { name: menu, exact: true }).click();
   await page.getByRole("menuitem", typeof action === "string" ? { name: action, exact: true } : { name: action }).click();
 }
@@ -267,7 +266,7 @@ test("fits loaded circuits in both themes and saves the accepted Arrange geometr
     const preferences = createDefaultCircuitDesignerPreferences();
     preferences.ui.theme_id = theme;
     expect((await request.put(`${circuitApiUrl}/preferences`, { data: preferences })).ok()).toBe(true);
-    for (const size of [{ width: 1440, height: 900 }, { width: 1024, height: 768 }, { width: 560, height: 760 }]) {
+    for (const size of [{ width: 1280, height: 720 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 }]) {
       await page.setViewportSize(size);
       await page.goto(`/?document_id=${document.document_id}`);
       await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", theme);
@@ -329,13 +328,13 @@ test("places named instances with local duplicate validation and preserves numbe
   await publishEditableFixture(request, document);
   await page.goto(`/?document_id=${document.document_id}`);
   const node = page.locator('.react-flow__node[data-id="consumer_0"]');
-  await expect(node.locator(".cd-node__eyebrow")).toHaveText("Enabled eight-bit register");
-  await expect(node.locator(".cd-node__title")).toContainText(/…_12$/);
+  await expect(node.locator(".cd-node__title")).toHaveCount(1);
+  await expect(node.locator(".cd-node__component-name")).toHaveText("Enabled eight-bit register");
+  await expect(node.locator(".cd-node__eyebrow, .cd-node__instance-suffix")).toHaveCount(0);
   await node.locator(".cd-node__title").focus();
-  await expect(node.locator(".cd-node__title")).toHaveAttribute("title", "enabled_eight_bit_register_12");
-  const titleBounds = (await node.locator(".cd-node__title").boundingBox())!;
-  const suffixBounds = (await node.locator(".cd-node__instance-suffix").boundingBox())!;
-  expect(suffixBounds.x + suffixBounds.width).toBeLessThanOrEqual(titleBounds.x + titleBounds.width + 0.5);
+  await expect(node.locator(".cd-node__title")).toHaveAttribute("title", /Instance enabled_eight_bit_register_12/);
+  await expect(node.locator(".cd-node__name-tooltip")).toBeVisible();
+  await expect(node.locator(".cd-node__name-tooltip")).toContainText("Enabled eight-bit register · Instance enabled_eight_bit_register_12");
   await menuAction(page, "Edit", "Begin editing");
   await menuAction(page, "Components", "Component catalog");
   await page.locator(".catalog-list").getByRole("button", { name: /Enabled eight-bit register/ }).click();
@@ -346,13 +345,13 @@ test("places named instances with local duplicate validation and preserves numbe
   await name.fill("u_lane4");
   await page.getByRole("button", { name: "Place instance", exact: true }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__title')).toHaveText("u_lane4");
+  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__component-name')).toHaveText("Enabled eight-bit register");
   await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
   await expect(page.locator(".notice")).toContainText("Changes saved to the source");
   const saved = await (await request.get(`${circuitApiUrl}/documents/${document.document_id}`)).json();
   expect(saved.document.design.instances.at(-1)).toMatchObject({ id: "u_lane4", label: "u_lane4", component_id: document.components[1].id });
   await page.reload();
-  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__title')).toHaveText("u_lane4");
+  await expect(page.locator('.react-flow__node[data-id="u_lane4"] .cd-node__component-name')).toHaveText("Enabled eight-bit register");
   await expect(page.locator('.react-flow__node[data-id="consumer_0"]')).toBeInViewport({ ratio: 0.999999 });
   await expect(page.locator('.cd-node__port-label[aria-label="shared_clock"]')).toBeInViewport({ ratio: 0.999999 });
   await page.screenshot({ path: testInfo.outputPath("named-instances.png") });
@@ -439,7 +438,7 @@ test("uses a compact menubar and the reclaimed full-width canvas", async ({ page
   await expect(page.locator(".react-flow__node")).toHaveCount(0);
   await expect(page.locator(".library")).toHaveCount(0);
   await expect(page.locator(".canvas-action-bar")).toHaveCount(0);
-  await expect(page.locator(".inspector")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Inspector", exact: true, includeHidden: true })).toBeHidden();
   for (const name of ["File", "Edit", "Components", "Selection", "Connect", "Route", "Timing", "View", "Tools", "Help"]) {
     await expect(page.getByRole("menuitem", { name, exact: true })).toBeVisible();
   }
@@ -505,8 +504,8 @@ test("launches former sidebar and action-strip workflows from menus", async ({ p
 
   await menuAction(page, "Selection", /Select all/);
   await page.getByRole("menuitem", { name: "View", exact: true }).click();
-  await page.getByRole("menuitemcheckbox", { name: /Show Inspector/ }).click();
-  await expect(page.locator(".inspector")).toContainText("2 items selected");
+  await page.getByRole("menuitemcheckbox", { name: /Show sidebar/ }).click();
+  await expect(page.getByRole("region", { name: "Inspector", exact: true, includeHidden: true })).toContainText("2 items selected");
   await menuAction(page, "Selection", /Clear selection/);
   // The automatic frame keeps the current viewport while content grows.
   await menuAction(page, "View", "Fit circuit");
@@ -662,14 +661,14 @@ test("saves shortcuts and Inspector visibility in the browser", async ({ page, r
   await page.keyboard.press("f");
   await page.getByLabel("New connection keyboard shortcut").focus();
   await page.keyboard.press("c");
-  await page.getByRole("checkbox", { name: /Show Inspector/ }).check();
+  await page.getByRole("checkbox", { name: /Show sidebar/ }).check();
   await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("spec2gds.circuit.preferences.v1") || "null")?.ui.inspector_open)).toBe(true);
   await expect(page.locator(".action-settings").getByRole("status")).toContainText("Saved");
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Inspector", exact: true, includeHidden: true })).toBeVisible();
 
   await page.reload();
-  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Inspector", exact: true, includeHidden: true })).toBeVisible();
   await menuAction(page, "Edit", "Begin editing");
   await expect(page.locator(".document-status")).toContainText("Editing · No changes");
   await page.keyboard.press("c");
@@ -940,6 +939,16 @@ test("exports the visible canvas layout consistently to SVG and PNG", async ({ p
   expect(svg).toContain('fill="url(#canvas-grid)"');
   expect(svg).toContain('data-terminal-id="visual_export:input"');
   expect(svg).toContain('data-terminal-id="visual_export:output"');
+  const exportedNode = svg.match(/<g data-instance-id="visual_export">[\s\S]*?<\/g>/)![0];
+  expect(exportedNode.match(/class="component-label"/g)).toHaveLength(1);
+  expect(exportedNode).toContain(">Visual export</text>");
+  expect(exportedNode).not.toContain(">visual_export</text>");
+  await menuAction(page, "View", "Zoom out");
+  await menuAction(page, "View", "Zoom out");
+  const zoomedSvgDownload = page.waitForEvent("download");
+  await menuAction(page, "File", "Download");
+  await page.getByRole("menuitem", { name: "Export SVG", exact: true }).click();
+  expect(await readFile((await (await zoomedSvgDownload).path())!, "utf8")).toBe(svg);
 
   const pngDownloadPromise = page.waitForEvent("download");
   await page.getByRole("menuitem", { name: "File", exact: true }).click();
@@ -1020,7 +1029,7 @@ test("toggles visual theme via quick toggle and preferences page", async ({ page
 });
 
 test("captures Circuit Designer visual baselines across canvas, menus, dialogs, and viewports", async ({ page }) => {
-  const outputDir = process.env.UI_BASELINE_DIR || join(process.cwd(), "tmp/visual-baselines");
+  const outputDir = process.env.UI_BASELINE_DIR || test.info().outputPath("visual-baselines");
   mkdirSync(outputDir, { recursive: true });
   const saveBaseline = async (filename: string) => {
     await page.screenshot({ path: join(outputDir, filename) });
@@ -1042,9 +1051,9 @@ test("captures Circuit Designer visual baselines across canvas, menus, dialogs, 
   await expect(page.locator(".cd-app")).toHaveAttribute("data-theme", "obsidian");
   await saveBaseline("circuit_designer_obsidian_1440x900.png");
 
-  // 3. Compact 1024x768
-  await page.setViewportSize({ width: 1024, height: 768 });
-  await saveBaseline("circuit_designer_compact_1024x768.png");
+  // 3. Supported desktop minimum
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await saveBaseline("circuit_designer_compact_1280x720.png");
 
   // Restore desktop size
   await page.setViewportSize({ width: 1440, height: 900 });

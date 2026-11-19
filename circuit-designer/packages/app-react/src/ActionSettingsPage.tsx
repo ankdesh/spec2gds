@@ -107,7 +107,7 @@ export function ActionSettingsPage({ preferences, preferenceStatus, onPreference
           onChange={(event) => onPreferencesChange({ ...preferences, ui: { ...preferences.ui, inspector_open: event.target.checked } })}
           type="checkbox"
         />
-        <span><strong>Show Inspector</strong><small>Keep selection properties visible on the right side of the canvas.</small></span>
+        <span><strong>Show sidebar</strong><small>Keep Inspector, Ports, and Timing available beside the canvas.</small></span>
       </label>
       <label className="preference-toggle">
         <input

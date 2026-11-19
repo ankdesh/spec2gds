@@ -29,6 +29,7 @@ import {
   ReactFlow,
   SelectionMode,
   useReactFlow,
+  useViewport,
   useNodesInitialized,
   useUpdateNodeInternals,
   type Edge,
@@ -64,7 +65,7 @@ import {
   projectDocument,
   circuitTerminalDisplayLabel,
   compactCircuitTerminalLabel,
-  compactCircuitInstanceLabel,
+  componentTitlePresentation,
   sortedCycleEdges,
   stageLabel,
   circuitFrameGeometry,
@@ -214,24 +215,29 @@ export class CircuitCanvasRendererRegistry {
 
 export const defaultCircuitCanvasRenderers = new CircuitCanvasRendererRegistry();
 for (const key of ["and", "nand", "or", "nor", "xor", "xnor", "not", "buffer", "mux", "register", "constant", "splitter", "combiner"]) {
-  defaultCircuitCanvasRenderers.register(key, ({ node }) => <span className={`cd-node__symbol cd-node__symbol--${key}`}>{node.label}</span>);
+  defaultCircuitCanvasRenderers.register(key, () => <span aria-hidden="true" className={`cd-node__symbol cd-node__symbol--${key}`} />);
 }
 
 function CircuitNodeView({ data, id, selected }: NodeProps<CircuitFlowNode>) {
   const updateNodeInternals = useUpdateNodeInternals();
   useEffect(() => updateNodeInternals(id), [id, selected, data.terminals, data.placements, data.geometry.width, data.geometry.height, updateNodeInternals]);
   const rendererKey = data.circuitNode.component_vlnv ?? "generic";
-  const customRenderer = data.rendererRegistry?.renderer(rendererKey)
-    ?? defaultCircuitCanvasRenderers.renderer(rendererKey);
-  const fullTitle = data.circuitNode.display_name ?? data.circuitNode.label;
-  const shortTitle = compactCircuitInstanceLabel(fullTitle, Math.max(4, Math.floor((data.geometry.width - 30) / 8)));
-  const instanceSuffix = fullTitle.match(/_\d+$/)?.[0] ?? "";
+  const customRenderer = data.rendererRegistry?.renderer(rendererKey);
+  const symbolRenderer = defaultCircuitCanvasRenderers.renderer(rendererKey);
+  const fullTitle = data.componentLabel || data.circuitNode.component_id;
+  const description = `${fullTitle} · Instance ${data.circuitNode.label}`;
+  const { zoom } = useViewport();
+  const title = componentTitlePresentation(data.geometry.width, data.geometry.height, zoom);
   return (
-    <div className={data.contextTarget.kind === "boundary" ? "cd-node cd-node--boundary" : "cd-node"}>
-      {data.contextTarget.kind !== "boundary" && <><div className="cd-node__eyebrow" title={data.componentLabel}>{data.componentLabel || "Component"}</div>
-      <div className="cd-node__title" tabIndex={0} title={fullTitle}>{customRenderer
-        ? customRenderer({ node: data.circuitNode })
-        : <><span className="cd-node__instance-name">{instanceSuffix ? shortTitle.slice(0, -instanceSuffix.length) : shortTitle}</span>{instanceSuffix && <span className="cd-node__instance-suffix">{instanceSuffix}</span>}</>}</div></>}
+    <div className={data.contextTarget.kind === "boundary" ? "cd-node cd-node--boundary" : "cd-node"} title={data.contextTarget.kind === "boundary" ? undefined : description}>
+      {data.contextTarget.kind !== "boundary" && <>
+        <div className="cd-node__title" tabIndex={0} aria-label={description} title={description}
+          data-caption-visible={title.visible} style={{ fontSize: title.fontSize, visibility: title.visible ? "visible" : "hidden" }}>
+          {!customRenderer && symbolRenderer?.({ node: data.circuitNode })}<span className="cd-node__component-name">{fullTitle}</span>
+        </div>
+        <span className="cd-node__name-tooltip" aria-hidden="true" style={{ fontSize: title.fontSize, maxWidth: 320 / zoom }}>{description}</span>
+        {customRenderer?.({ node: data.circuitNode })}
+      </>}
       {data.terminals.map((terminal) => {
         const placement = data.placements[terminal.id];
         const side = placement?.side ?? "SOUTH";
@@ -694,6 +700,7 @@ function CircuitDesignerCanvasInner({ graph, layout, boundaryGeometry: suppliedB
     return [{
       id: node.id,
       type: "circuit",
+      ariaLabel: `${componentLabels[node.component_id] || node.component_id} · Instance ${node.label}`,
       position: { x: geometry.x, y: geometry.y },
       width: geometry.width,
       height: geometry.height,
@@ -1123,6 +1130,7 @@ export function CircuitProposalDiffViewer({
           {beforeState ? (
             <CircuitDesignerCanvas
               graph={beforeState.graph}
+              componentLabels={Object.fromEntries(before.components.map(component => [component.id, component.label]))}
               layout={beforeState.layout}
               boundaryGeometry={beforeState.boundaryGeometry}
               elementStatus={beforeStatus}
@@ -1139,6 +1147,7 @@ export function CircuitProposalDiffViewer({
           {afterState ? (
             <CircuitDesignerCanvas
               graph={afterState.graph}
+              componentLabels={Object.fromEntries(after.components.map(component => [component.id, component.label]))}
               layout={afterState.layout}
               boundaryGeometry={afterState.boundaryGeometry}
               elementStatus={afterStatus}

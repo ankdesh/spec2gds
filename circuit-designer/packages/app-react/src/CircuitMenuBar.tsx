@@ -45,7 +45,6 @@ export interface CircuitMenuBarProps {
 
 export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, proposalCount, isActionEnabled, onAction, dismissVersion, onOpenChange, sourceBound, sourceSaveLabel, createInternalDesignHint, tools, toolsEnabled, onRunTool }: CircuitMenuBarProps) {
   const [openMenu, setOpenMenu] = useState<string>();
-  const [compactOpen, setCompactOpen] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
   const effectiveMenus = useMemo(() => menus.filter((menu) => menu.id !== "tools" || tools.length).map((menu) => ({
     ...menu,
@@ -61,7 +60,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
         ? { ...entry, status: proposalCount ? String(proposalCount) : undefined }
         : entry),
   })), [inspectorOpen, timingOverlayVisible, proposalCount, sourceBound, sourceSaveLabel, createInternalDesignHint, tools]);
-  const close = () => { setOpenMenu(undefined); setCompactOpen(false); onOpenChange?.(false); };
+  const close = () => { setOpenMenu(undefined); onOpenChange?.(false); };
   const setOpen = (id: string | undefined) => { setOpenMenu(id); onOpenChange?.(Boolean(id)); };
 
   useEffect(() => close(), [dismissVersion]);
@@ -81,11 +80,7 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
     requestAnimationFrame(() => document.getElementById(`circuit-${next.id}-menu-trigger`)?.focus());
   };
 
-  return <nav aria-label="Circuit Designer menu" className={`circuit-menubar${compactOpen ? " circuit-menubar--expanded" : ""}`} ref={rootRef} role="menubar"
-    onKeyDown={event => { if (event.key === "Escape") { close(); rootRef.current?.querySelector<HTMLButtonElement>(".compact-command-toggle")?.focus(); } }}>
-    <button className="compact-command-toggle" aria-expanded={compactOpen} aria-controls="circuit-command-list" aria-haspopup="true" type="button" role="menuitem"
-      onClick={() => { setCompactOpen(!compactOpen); setOpenMenu(undefined); }}
-      onKeyDown={event => { if (event.key === "ArrowDown") { event.preventDefault(); setCompactOpen(true); requestAnimationFrame(() => document.getElementById(`circuit-${effectiveMenus[0]?.id}-menu-trigger`)?.focus()); } }}>Commands</button>
+  return <nav aria-label="Circuit Designer menu" className="circuit-menubar" ref={rootRef} role="menubar">
     <div className="circuit-command-list" id="circuit-command-list" role="none">
     {effectiveMenus.map((menu) => {
       const open = openMenu === menu.id;
@@ -126,7 +121,6 @@ export function CircuitMenuBar({ bindings, inspectorOpen, timingOverlayVisible, 
               if (rootRef.current?.closest(".cd-app")?.querySelector("[role=dialog]")) return;
               const trigger = document.getElementById(`circuit-${menu.id}-menu-trigger`);
               if (trigger?.checkVisibility()) trigger.focus();
-              else rootRef.current?.querySelector<HTMLButtonElement>(".compact-command-toggle")?.focus();
             });
           }}
           onMoveTop={(delta) => moveTop(menu.id, delta, true)}

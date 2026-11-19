@@ -12,8 +12,8 @@ Circuit Designer uses the **Blueprint Slate** visual profile.
 ### Design Principles
 - High-contrast slate and dark navy surfaces prevent visual fatigue.
 - Signal routes and boundary terminals use crisp cyan and amber accents.
-- Monospace labels display hardware identifiers and timing stage numbers.
-- Canvas layouts, SVG vector exports, and PNG raster exports share identical coordinate models and styling.
+- Each node shows its Component name once. Instance names remain available in Inspector and tooltips. Monospace labels display port identifiers and timing stage numbers.
+- Canvas layouts, SVG vector exports, and PNG raster exports share coordinate models, theme colors, and Component-name presentation.
 - A quick theme toggle allows the designer to switch between dark and light themes. Theme preferences persist in local storage.
 
 ---
@@ -30,7 +30,7 @@ bidirectional ports to the bottom. Saved side and order choices are preserved.
 Component interface previews remain a single block.
 
 Select the visible **Begin editing** button, then **Add port** in the toolbar, frame header, or context menu.
-Enter the name, direction, and wire width or range. **Port list** provides a readable alternative to small canvas terminals. Select a port to inspect it or start a connection from it. This also works for
+Enter the name, direction, and wire width or range. **Panels → Ports** provides a readable alternative to small canvas terminals. Select a port to select and center its object. Use its Connect action to start a connection. This also works for
 independent circuit files. Port creation is one undoable change; Cancel does not
 create a port. The frame adjusts to the content without moving instances or
 changing the current viewport.
@@ -64,7 +64,7 @@ The toolbar shows common actions: **Begin editing**, **Add component**, **Add po
 
 **Add component** opens the existing Component catalog and an explicit **Create local Component** action. Review the port summary before placing an instance. A new local Component has input and output ports with an explicit width or range; the default is 1 bit.
 
-The menubar retains all operations. At smaller widths, open **Commands** to access it:
+The menubar retains all operations on desktop and laptop browsers:
 
 - **File**: Document creation, opening, draft save/cancel, and JSON/SVG/PNG exports.
 - **Edit**: **Begin editing**, **Create internal Design**, undo, redo, object deletion, and preferences.
@@ -82,6 +82,19 @@ An empty first save is allowed. **Cancel changes** restores the interface previe
 If implementation SV exists, choose **Retain SV**, **Remove SV**, or **Cancel saving**.
 Retained SV becomes reference text and is excluded from hardware generation and lint.
 See the [Spec Editor guide](spec-editor.md#create-an-internal-design-for-a-blank-component).
+
+The **Panels** button opens a 320 px right sidebar with **Inspector**, **Ports**,
+and **Timing** tabs. Each tab keeps its selection and scroll position. Opening
+**Timing analysis** selects Timing. Collapse the sidebar with its arrow button
+or press Escape while focus is inside it. Focus returns to Panels.
+
+Circuit Designer supports standalone desktop windows of at least 1280 × 720 px.
+Controls remain compact as the window changes size. Keyboard access, browser
+zoom, trackpad zoom, and embedded desktop panes remain supported. Component
+names use 12–20 screen pixels and truncate with an ellipsis. Hover or focus a
+name to read the full Component and instance names. Captions are hidden when
+the projected node height is below 16 px. SVG and PNG exports use intrinsic
+geometry, independent of canvas zoom.
 
 ---
 
@@ -115,11 +128,11 @@ Open **Edit → Preferences → Actions and shortcuts** to adjust keybindings:
 - Preferences save in browser-local storage. The Circuit service preference file supplies initial defaults. Changes in one browser do not change another browser’s settings.
 - **Reset defaults** restores standard factory shortcuts.
 
-### Save conflicts and narrow screens
+### Save conflicts and desktop controls
 
 A stale Spec save preserves the draft and shows one recovery panel. **Keep editing draft** collapses the panel. **Download draft** preserves a local copy. **Open latest Spec** asks before discarding unsaved changes. A failed reload keeps the draft available for download or discard. Transport retries keep the existing request identity.
 
-Primary toolbar controls remain outside the zoomed canvas. **Port list** supports terminal selection and connections without precision taps. The Inspector has a close action and opens below the toolbar as a drawer on narrow screens. Save state remains visible at all widths.
+Primary toolbar controls remain outside the zoomed canvas. **Panels → Ports** supports terminal selection and connections. Inspector, Ports, and Timing share the right sidebar. Save state remains visible at the supported desktop sizes.
 
 ### Error Handling and Session Recovery
 The application shell catches rendering errors and projection faults.

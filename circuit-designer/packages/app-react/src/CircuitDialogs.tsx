@@ -48,9 +48,7 @@ function CircuitModal({ children, onClose, title }: { children: ReactNode; onClo
       } else if (menuTrigger?.isConnected && menuTrigger.checkVisibility()) {
         menuTrigger.focus();
       } else {
-        const commands = app?.querySelector<HTMLElement>(".compact-command-toggle");
-        if (commands?.checkVisibility()) commands.focus();
-        else app?.querySelector<HTMLElement>("[data-testid=circuit-canvas]")?.focus();
+        app?.querySelector<HTMLElement>("[data-testid=circuit-canvas]")?.focus();
       }
     };
   }, []);

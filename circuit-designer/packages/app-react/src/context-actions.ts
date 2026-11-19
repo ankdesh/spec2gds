@@ -112,7 +112,7 @@ export function buildCircuitContextMenu(options: CircuitContextMenuOptions): Cir
     action("add-cycle-edge", "Add cycle edge here"),
     separator,
     action("select-all", "Select all"),
-    { ...action("toggle-inspector", "Show Inspector"), checked: options.inspectorOpen, checkType: "checkbox" },
+    { ...action("toggle-inspector", "Show sidebar"), checked: options.inspectorOpen, checkType: "checkbox" },
     action("fit-circuit", "Fit circuit"),
   ];
   if (target.kind === "cycle-edge") return [

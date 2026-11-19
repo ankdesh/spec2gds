@@ -1005,7 +1005,7 @@ test("top-level interface and instance parameter mappings survive circuit saves"
   await expect(circuit.getByTestId("circuit-canvas")).toBeVisible();
   await circuit.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await circuit.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
-  if (await circuit.getByRole("button", { name: "Show Inspector", exact: true }).isVisible()) await circuit.getByRole("button", { name: "Show Inspector", exact: true }).click();
+  if (await circuit.getByRole("button", { name: "Panels", exact: true }).getAttribute("aria-expanded") === "false") await circuit.getByRole("button", { name: "Panels", exact: true }).click();
   await circuit.getByRole("button", { name: "Add port to Design", exact: true }).click();
   await circuit.getByRole("dialog", { name: "Add port", exact: true }).getByRole("button", { name: "Add port", exact: true }).click();
   await circuit.getByRole("button", { name: "Save to Spec", exact: true }).click();

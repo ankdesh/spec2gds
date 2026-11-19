@@ -1193,6 +1193,7 @@ test("creates entities, edits wire ports, and keeps other port families read-onl
   await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add wire port.*Composite/ })).toBeDisabled();
   await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add transactional port/ })).toHaveCount(0);
   await expect(page.getByRole("menu").getByRole("menuitem", { name: /Add structured port/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   const components = page.locator("#components");
   await components.locator(":scope > .spec-section__header").getByRole("button", { name: /^Options for / }).click();

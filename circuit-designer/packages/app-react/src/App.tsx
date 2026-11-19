@@ -71,6 +71,8 @@ import { browserRandomUuid } from "./browser-id";
 import { connectionEndpoint } from "./connection-input";
 import { ActionSettingsPage } from "./ActionSettingsPage";
 import { TimingPanel } from "./TimingPanel";
+import { CircuitSidebar, type CircuitPanel } from "./CircuitSidebar";
+import { CircuitPortsPanel } from "./CircuitPortsPanel";
 import { CircuitMenuBar } from "./CircuitMenuBar";
 import { CircuitBoundaryPortDialog, CircuitConfirmationDialog, CircuitSvDispositionDialog, CircuitDialogs, type CircuitDialogId } from "./CircuitDialogs";
 import { CircuitContextMenu } from "./CircuitActionMenu";
@@ -168,7 +170,7 @@ export function App({
   const [editingBusy, setEditingBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [recoveryCollapsed, setRecoveryCollapsed] = useState(false);
-  const [portListOpen, setPortListOpen] = useState(false);
+  const [activePanel, setActivePanel] = useState<CircuitPanel>("inspector");
   const [catalogComponentId, setCatalogComponentId] = useState<string>();
   const savingRef = useRef(false);
   const transitioningRef = useRef(false);
@@ -182,7 +184,7 @@ export function App({
   const [selection, setSelection] = useState<CircuitCanvasSelection>([]);
   const [message, setMessage] = useState("Ready. Unlock to make a private draft.");
   const [saveError, setSaveError] = useState("");
-  useEffect(() => { setSaveError(""); setSaved(false); setPortListOpen(false); }, [snapshot?.document.document_id]);
+  useEffect(() => { setSaveError(""); setSaved(false); setActivePanel("inspector"); }, [snapshot?.document.document_id]);
   const [componentName, setComponentName] = useState("");
   const [endpointA, setEndpointA] = useState("");
   const [endpointB, setEndpointB] = useState("");
@@ -1796,7 +1798,7 @@ export function App({
         if (invocation.source === "context-menu" && invocation.circuitPoint) return addCycleEdgeAt(invocation.circuitPoint.x);
         setPlacingCycleEdge(true); setMessage("Click empty canvas to place a cycle edge. Press Escape to cancel."); return true;
       case "open-clock-settings": setDialog("clock-settings"); return true;
-      case "open-timing-analysis": setDialog("timing-analysis"); return true;
+      case "open-timing-analysis": setActivePanel("timing"); setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: true } })); return true;
       case "edit-cycle-edge":
         if (!contextualCycleEdge) return false;
         setSelection([{ kind: "cycle-edge", id: contextualCycleEdge.id }]); setDialog("cycle-edge"); return true;
@@ -1911,7 +1913,10 @@ export function App({
     : draftRef.current && !lease ? "Download or discard the preserved draft first."
     : remoteLease && !lease ? "This circuit is in use. Select Take over editing to continue."
     : !isCommandEnabled({ commandId: "begin-edit", source: "menubar" }) && !lease ? sourceBinding?.message ?? "Request edit access from Spec Editor." : undefined;
-  const showTiming = dialog === "timing-analysis";
+  const closeSidebar = () => {
+    setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: false } }));
+    requestAnimationFrame(() => appRef.current?.querySelector<HTMLButtonElement>('[aria-label="Panels"]')?.focus());
+  };
   const themeStyle = { ...circuitThemeCssProperties(theme), colorScheme: theme.color_scheme } as CSSProperties;
 
   return <main className="cd-app standalone-shell" data-theme={theme.id} ref={appRef} style={themeStyle}>
@@ -1939,10 +1944,10 @@ export function App({
       />
       <div className="document-status" title={sourceBinding ? sourceDescription : `${document?.components.length ?? 0} Components · ${document?.design.instances.length ?? 0} instances · ${document?.design.nets.length ?? 0} nets`}>
         <strong>{document?.label ?? "Loading…"}</strong>
-        {!sourceBinding && lease && document && <button type="button" onClick={() => {
+        {!sourceBinding && lease && document && <button type="button" className="document-rename" aria-label="Rename circuit" title="Rename circuit" onClick={() => {
           const name = window.prompt("Document name", document.label);
           if (name?.trim()) mutate({ operation_id: operationId("rename_document"), type: "set_document_label", label: name }, "Document renamed.");
-        }}>Rename</button>}
+        }}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="m10.5 2.5 3 3-7.5 7.5-4 1 1-4zM9 4l3 3" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" /></svg></button>}
         <small role="status" aria-label="Circuit save state">{saveState}</small>
       </div>
       <button
@@ -2005,7 +2010,7 @@ export function App({
       onPreferencesChange={setPreferences}
       preferences={preferences}
       preferenceStatus={preferenceStatus}
-    /> : <section className={`workspace${inspectorOpen || showTiming ? " workspace--inspector-open" : ""}${showTiming ? " workspace--timing-open" : ""}`}>
+    /> : <section className={`workspace${inspectorOpen ? " workspace--inspector-open" : ""}`}>
       <div className="stage">
         <div className="stage-tools">
         <div className="canvas-actions" aria-label="Circuit view controls">
@@ -2017,22 +2022,17 @@ export function App({
             <button type="button" disabled={!canEditCircuit || terminals.length < 2} onClick={() => executeCircuitAction({ commandId: "open-connect", source: "menubar" })}>Connect ports</button>
             <button type="button" disabled={sourceBusy} onClick={() => void cancel()}>Cancel changes</button>
           </>}
-          <button type="button" disabled={!layout} onClick={() => executeCircuitAction({ commandId: "fit-circuit", source: "menubar" })}>Fit circuit</button>
+          <button className="canvas-actions__view-start" type="button" disabled={!layout} onClick={() => executeCircuitAction({ commandId: "fit-circuit", source: "menubar" })}>Fit circuit</button>
           <button type="button" disabled={!canEditCircuit || !layout || Boolean(layoutProgress)} onClick={() => executeCircuitAction({ commandId: "arrange-all", source: "menubar" })}>Arrange</button>
-          <button type="button" aria-pressed={inspectorOpen && !showTiming} onClick={() => { if (showTiming) setDialog(undefined); else executeCircuitAction({ commandId: "toggle-inspector", source: "menubar" }); }}>{inspectorOpen && !showTiming ? "Hide Inspector" : "Show Inspector"}</button>
-          <button type="button" aria-expanded={portListOpen} onClick={() => setPortListOpen(!portListOpen)}>Port list</button>
+          <button type="button" aria-label="Panels" aria-expanded={inspectorOpen} onClick={() => {
+            if (inspectorOpen) closeSidebar();
+            else setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: true } }));
+          }}>Panels</button>
         </div>
         {startDisabledReason && !lease && <p className="editing-guidance" id="editing-guidance">{startDisabledReason}</p>}
         {canCreateInternalDesign && !startDisabledReason && <p className="editing-guidance" id="editing-guidance">Create a private Design inside this Component. Use Save to Spec to keep it.</p>}
         {lease && !sourceBinding?.interfacePreview && !document?.design.instances.length && <p className="editing-guidance">Add your first Component, or add a port to this Design.</p>}
-        {portListOpen && <section className="port-list" aria-label="Circuit ports">
-          <div className="details-heading"><h2>Ports</h2><button type="button" onClick={() => setPortListOpen(false)}>Close port list</button></div>
-          {!terminals.length && <p>No ports yet. Add a Design port or a Component.</p>}
-          {terminals.map(terminal => <div key={terminal.id} className="port-list-row"><button type="button" onClick={() => {
-            setSelection([terminal.node_id ? { kind: "node", id: terminal.node_id } : { kind: "boundary", id: terminal.id.slice(9) }]);
-            setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: true } })); setPortListOpen(false);
-          }}>{document ? circuitTerminalLabel(document, terminal.id) : terminal.id} · {terminal.width} bits</button><button type="button" disabled={!canEditCircuit} onClick={() => { setEndpointA(terminal.id); setEndpointB(""); setSliceLsb(0); setSliceLsbB(0); setSliceWidth(0); setExistingNetId(undefined); setConnectionError(""); setDialog("connect"); setPortListOpen(false); }}>Connect from port</button></div>)}
-        </section>}
+
         </div>
         <div
           className={`canvas-surface${placingCycleEdge ? " canvas-surface--placing-cycle-edge" : ""}`}
@@ -2090,11 +2090,8 @@ export function App({
           {layout && <details className="layout-time"><summary>Layout diagnostics</summary>Grid router · {layout.elapsed_ms} ms</details>}
         </div>
       </div>
-      {showTiming && document && <TimingPanel document={document} timing={timing} analysis={timingAnalysis} onClose={() => setDialog(undefined)} onSelect={netId => {
-        setSelection([{ kind: "net", id: netId }]); requestAnimationFrame(() => canvasRef.current?.centerSelection());
-      }} />}
-      {inspectorOpen && !showTiming && <aside className="inspector" aria-label="Inspector" onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: false } })); } }}>
-        <div className="details-heading"><h2>Inspector</h2><button type="button" onClick={() => setPreferences(current => ({ ...current, ui: { ...current.ui, inspector_open: false } }))} aria-label="Close Inspector">×</button></div>
+      <CircuitSidebar open={inspectorOpen} active={activePanel} onSelect={setActivePanel} onClose={closeSidebar}
+        inspector={<section className="inspector" aria-label="Inspector">
         {selection.length === 0 && <div className="empty-inspector"><span>⌁</span><p>Select an instance, boundary terminal, or net to inspect its properties.</p></div>}
         {selection.length > 1 && <div className="multi-inspector"><span className="kind">selection</span><h2>{selection.length} items selected</h2><p>{selection.filter((item) => item.kind === "node").length} instances · {selection.filter((item) => item.kind === "boundary").length} boundary terminals · {selection.filter((item) => item.kind === "net").length} nets</p></div>}
         {selectedInstance && document && <><span className="kind">instance</span><h2>{selectedInstance.label}</h2>
@@ -2153,7 +2150,18 @@ export function App({
           <button disabled={!canEditCircuit} onClick={() => setDialog("cycle-edge")} type="button">Edit edge</button>
           <button disabled={!canEditCircuit} onClick={() => updateCycleEdge({ ...selectedCycleEdge, locked: !selectedCycleEdge.locked })} type="button">{selectedCycleEdge.locked ? "Unlock edge" : "Lock edge"}</button>
         </>}
-      </aside>}
+      </section>}
+        ports={document && <CircuitPortsPanel document={document} terminals={terminals} editable={canEditCircuit} onSelect={terminal => {
+          setSelection([terminal.node_id ? { kind: "node", id: terminal.node_id } : { kind: "boundary", id: terminal.id.slice(9) }]);
+          requestAnimationFrame(() => canvasRef.current?.centerSelection());
+        }} onConnect={id => {
+          setEndpointA(id); setEndpointB(""); setSliceLsb(0); setSliceLsbB(0); setSliceWidth(0);
+          setExistingNetId(undefined); setConnectionError(""); setDialog("connect");
+        }} />}
+        timing={document && <TimingPanel document={document} timing={timing} analysis={timingAnalysis} onSelect={netId => {
+          setSelection([{ kind: "net", id: netId }]); requestAnimationFrame(() => canvasRef.current?.centerSelection());
+        }} />}
+      />
     </section>}
     <CircuitDialogs
       componentName={componentName}

@@ -10,6 +10,7 @@ import { endpointTerminalKey, terminalDefaultPlacement, projectDocument } from "
 import { circuitFrameGeometry, reanchorCircuitFrameRoutes, circuitTerminalPoint, effectiveCircuitTerminalPlacements, CIRCUIT_FRAME_HEADER_HEIGHT, type CircuitContainerPresentation } from "./frame";
 import { analyzeCircuitTiming, effectiveCircuitTiming, sortedCycleEdges, stageLabel, type TimingPathAnalysis } from "./timing";
 import { blueprintSlateTheme, type CircuitThemeDefinition } from "./theme";
+import { componentTitlePresentation } from "./presentation";
 
 export interface SvgRendererContext {
   component: ComponentDefinition;
@@ -42,15 +43,13 @@ function escapeXml(value: string): string {
 
 const genericSvgRenderer: SvgComponentRenderer = ({ geometry, label, component }) => {
   const displayName = component.label || component.id;
-  const maxChars = Math.max(4, Math.floor((geometry.width - 26) / 7.2));
-  const eyebrow = displayName.length > maxChars ? `${displayName.slice(0, maxChars - 1)}…` : displayName;
-  const titleChars = Math.max(4, Math.floor((geometry.width - 44) / 8));
-  const shortLabel = compactCircuitInstanceLabel(label, titleChars);
+  const title = componentTitlePresentation(geometry.width, geometry.height);
+  const maxChars = Math.max(1, Math.floor((geometry.width - 24) / (title.fontSize * .58)));
+  const caption = displayName.length > maxChars ? `${displayName.slice(0, Math.max(0, maxChars - 1))}…` : displayName;
   return [
-    `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="2" class="component" data-component-id="${escapeXml(component.id)}"/>`,
-    ...(displayName === label ? [] : [`<text x="${geometry.x + 13}" y="${geometry.y + 23}" class="component-eyebrow" data-component-id="${escapeXml(component.id)}"><title>${escapeXml(component.id)}</title>${escapeXml(eyebrow)}</text>`]),
-    `<text x="${geometry.x + 13}" y="${geometry.y + 49}" class="component-symbol">${component.appearance.renderer_key === "register" ? "▣" : component.appearance.renderer_key === "constant" ? "1" : component.appearance.renderer_key === "not" ? "▷○" : "◈"}</text>`,
-    `<text x="${geometry.x + 31}" y="${geometry.y + 49}" class="component-label"><title>${escapeXml(label)}</title>${escapeXml(shortLabel)}</text>`,
+    `<rect x="${geometry.x}" y="${geometry.y}" width="${geometry.width}" height="${geometry.height}" rx="5" class="component" data-component-id="${escapeXml(component.id)}"/>`,
+    `<title>${escapeXml(displayName)} · Instance ${escapeXml(label)}</title>`,
+    ...(title.visible ? [`<text x="${geometry.x + 12}" y="${geometry.y + 12 + title.fontSize}" class="component-label" style="font-size:${title.fontSize}px">${escapeXml(caption)}</text>`] : []),
   ].join("");
 };
 
@@ -271,7 +270,7 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
     `<g class="design-frame" data-design-frame="${escapeXml(document.design.id)}">`,
     `<rect x="${containerGeometry.x}" y="${containerGeometry.y}" width="${containerGeometry.width}" height="${containerGeometry.height}" rx="5" class="design-frame-border"/>`,
     `<rect x="${containerGeometry.x}" y="${containerGeometry.y}" width="${containerGeometry.width}" height="${CIRCUIT_FRAME_HEADER_HEIGHT}" class="design-frame-header"/>`,
-    `<text x="${containerGeometry.x + 16}" y="${containerGeometry.y + 25}" class="component-label"><title>${escapeXml(container.label)}</title>${escapeXml(compactCircuitInstanceLabel(container.label, Math.floor((containerGeometry.width - 32) / 9)))}</text>`,
+    `<text x="${containerGeometry.x + 16}" y="${containerGeometry.y + 25}" class="component-label" style="font-size:14px"><title>${escapeXml(container.label)}</title>${escapeXml(compactCircuitInstanceLabel(container.label, Math.floor((containerGeometry.width - 32) / 9)))}</text>`,
     `<text x="${containerGeometry.x + 16}" y="${containerGeometry.y + 45}" class="design-frame-description">${escapeXml(container.description)}</text></g>`,
   ].join("") : "";
   const portMarkup = terminals.map(terminalMarkup).join("");
@@ -312,7 +311,7 @@ export function renderCircuitSvg(document: CircuitDocument, options: SvgExportOp
   }).join("");
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width)}" height="${Math.ceil(height)}" viewBox="${minX} ${minY} ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${escapeXml(document.label)}">`,
-    `<defs><pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${color.grid}"/></pattern><filter id="component-shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="${color.chrome}" flood-opacity="0.12"/></filter></defs>`,
+    `<defs><pattern id="canvas-grid" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="${color.grid}"/></pattern><filter id="component-shadow" x="-20%" y="-20%" width="140%" height="160%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="${color.chrome}" flood-opacity="0.08"/></filter></defs>`,
     `<style>.design-frame-border{fill:none;stroke:${color.border_strong};stroke-width:1.5}.design-frame-header{fill:${color.surface};stroke:${color.border_strong};stroke-width:1}.canvas-background{fill:${color.canvas}}.component{fill:${color.surface};stroke:${color.border_strong};stroke-width:1.5;filter:url(#component-shadow)}.component-eyebrow,.design-frame-description{fill:${color.text_muted};font:11px ui-monospace,SFMono-Regular,Consolas,monospace}.component-label{fill:${color.text};font:600 16px Inter,system-ui,sans-serif}.component-symbol{fill:${color.primary};font:12px ui-monospace,monospace}.net{fill:none;stroke:${color.net};stroke-width:1.8}.net--locked{stroke:${color.net};stroke-width:2;stroke-dasharray:7 3}.junction{fill:${color.net}}.port{fill:${color.primary};stroke:${color.surface};stroke-width:2}.port-label{fill:${color.text_muted};font:10px ui-monospace,monospace}.boundary-port-label{font-size:11px}.cycle-edge{stroke:${color.net};stroke-width:2;stroke-dasharray:8 7}.cycle-edge--locked{stroke:${color.net};stroke-width:2.5}.cycle-edge-label{fill:${color.net};font:600 10px Inter,system-ui,sans-serif}.stage-label{fill:${color.text_muted};font:600 10px Inter,system-ui,sans-serif}.latency-label rect{fill:${color.surface};stroke:${color.border_strong}}.latency-label text{fill:${color.text};font:600 10px Inter,system-ui,sans-serif}.latency-label--cdc rect,.latency-label--backward rect,.latency-label--unavailable rect{fill:${color.warning_surface};stroke:${color.warning}}.latency-label--cdc text,.latency-label--backward text,.latency-label--unavailable text{fill:${color.warning}}</style>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" class="canvas-background"/>`,
     `<rect x="${minX}" y="${minY}" width="${width}" height="${height}" fill="url(#canvas-grid)"/>`,

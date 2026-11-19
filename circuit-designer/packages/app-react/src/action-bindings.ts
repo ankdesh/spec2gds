@@ -60,7 +60,7 @@ export const circuitActionDefinitions: CircuitActionDefinition[] = [
   command("lock-cycle-edge", "Timing", "Lock selected edge", "Prevent the selected cycle edge from being dragged."),
   command("unlock-cycle-edge", "Timing", "Unlock selected edge", "Allow the selected cycle edge to be dragged."),
   command("delete-cycle-edge", "Timing", "Delete selected edge", "Remove the selected cycle edge."),
-  command("toggle-inspector", "View", "Show Inspector", "Show or hide the circuit selection Inspector."),
+  command("toggle-inspector", "View", "Show sidebar", "Show or hide the circuit panels sidebar."),
   command("toggle-timing-overlay", "View", "Show timing overlay", "Show or hide cycle edges and latency labels on the interactive canvas."),
   { id: "pan-canvas", group: "View", label: "Drag canvas", description: "Pan by dragging empty canvas.", mouseOptions: ["none", "primary-drag", "middle-drag", "secondary-drag"] },
   command("pan-up", "View", "Pan up", "Move the viewport upward by one step."),

@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { compactCircuitInstanceLabel, compactCircuitTerminalLabel, hierarchyDocumentFixture, circuitFrameGeometry, effectiveCircuitTerminalPlacements, projectDocument, renderCircuitSvg, simpleDocumentFixture } from "../src/index";
 
 describe("Circuit Designer visual export", () => {
-  it("keeps repeated instance numbers visible in compact names and exports", () => {
+  it("keeps instance identification in metadata and one Component title in exports", () => {
     const document = simpleDocumentFixture();
     document.design.instances[0].label = "enabled_eight_bit_register_12";
     const compact = compactCircuitInstanceLabel(document.design.instances[0].label, 17);
     expect(compact).toHaveLength(17);
     expect(compact).toMatch(/…_12$/);
     const svg = renderCircuitSvg(document);
-    expect(svg).toContain("<title>enabled_eight_bit_register_12</title>");
-    expect(svg).toMatch(/…_12<\/text>/);
+    expect(svg).toContain(" · Instance enabled_eight_bit_register_12</title>");
+    expect(svg).not.toMatch(/>enabled_eight_bit_register_12<\/text>/);
     expect(compactCircuitInstanceLabel("u_lane0", 17)).toBe("u_lane0");
   });
   it("preserves width suffixes and full inspection labels when names are shortened", () => {
@@ -60,7 +60,7 @@ describe("Circuit Designer visual export", () => {
     expect(svg).toContain('data-instance-id="producer_0"');
     expect(svg).toContain('data-terminal-id="producer_0:data"');
     expect(svg).toContain('class="net net--locked"');
-    expect(svg).toContain(">producer_0<");
+    expect(svg).toContain(" · Instance producer_0</title>");
   });
 
   it("includes the Design frame and its visible boundary terminals from effective canvas geometry", () => {
@@ -88,7 +88,7 @@ describe("Circuit Designer visual export", () => {
     expect(Number(view[1]) + Number(view[3])).toBeGreaterThan(frame.container_geometry.x + frame.container_geometry.width);
   });
 
-  it("renders human-readable component labels in SVG eyebrow and preserves internal ID in diagnostics (UI-CIRCUIT-007)", () => {
+  it("renders human-readable component labels in SVG title and preserves internal ID in diagnostics (UI-CIRCUIT-007)", () => {
     const document = simpleDocumentFixture();
     document.layout.instance_geometry = {
       producer_0: { x: 20, y: 40, width: 140, height: 100, pinned: true },
@@ -100,11 +100,11 @@ describe("Circuit Designer visual export", () => {
       document.design.instances[0].component_id = comp.id;
     }
     const svg = renderCircuitSvg(document);
-    // Eyebrow should prefer the readable label rather than raw long ID as visible text
+    // Use the Component display name for the visible title.
     expect(svg).toContain("Sensor Stream");
     expect(svg).not.toMatch(/class="component-eyebrow"[^>]*>long_internal_uuid/);
-    // Internal ID should be preserved in diagnostics (<title> and data-component-id)
+    // Preserve the Component ID in metadata and the instance name in the tooltip.
     expect(svg).toContain('data-component-id="long_internal_uuid_producer_hw_block_1234567890"');
-    expect(svg).toContain("<title>long_internal_uuid_producer_hw_block_1234567890</title>");
+    expect(svg).toContain("<title>Sensor Stream Producer · Instance producer_0</title>");
   });
 });

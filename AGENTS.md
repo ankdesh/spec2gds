@@ -40,3 +40,7 @@ We have strict terminology rules to disambiguate overloaded terms (e.g., never u
   - Temporary documents, plans, roadmaps, and audit notes (e.g., `docs/TEMP_spec_library_plan/`, `docs/TEMP_plan.md`, `docs/TEMP_*.md`) MUST be created inside `docs/` with the `TEMP_` prefix.
 - Ensure all temporary folders used for outputs are listed in `.gitignore` (specifically `temp/`, `**/temp/`, `TEMP_*`, `**/TEMP_*`, etc.) to prevent them from being tracked or added to git.
 
+
+## 5. Desktop UI Target
+
+spec2hw targets desktop and laptop browsers with keyboard, mouse, and trackpad input. Do not add mobile/tablet-specific layouts, touch-sized control overrides, or device-specific navigation. Desktop window resizing, browser zoom, keyboard accessibility, and embedded desktop panes remain supported.

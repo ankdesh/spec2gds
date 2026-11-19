@@ -867,7 +867,7 @@ async function main() {
 
       recordAction("Configure Boundary Port in Inspector");
       await page.getByRole("menuitem", { name: "View", exact: true }).click();
-      await page.getByRole("menuitemcheckbox", { name: /Show Inspector/ }).click();
+      await page.getByRole("menuitemcheckbox", { name: /Show sidebar/ }).click();
       await page.waitForTimeout(1500);
       const addBoundaryBtn = page.getByRole("button", { name: "Add port to Design" });
       if (await addBoundaryBtn.isVisible()) {
@@ -965,9 +965,9 @@ async function main() {
       await page.getByRole("menuitem", { name: /Fit circuit/ }).click();
       await page.waitForTimeout(2000);
 
-      recordAction("Inspect Properties with Show Inspector");
+      recordAction("Inspect Properties with Show sidebar");
       await page.getByRole("menuitem", { name: "View", exact: true }).click();
-      await page.getByRole("menuitemcheckbox", { name: /Show Inspector/ }).click();
+      await page.getByRole("menuitemcheckbox", { name: /Show sidebar/ }).click();
       await page.waitForTimeout(2000);
 
       recordAction("Demonstrate Route Locking and Rerouting");

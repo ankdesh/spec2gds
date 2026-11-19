@@ -26,6 +26,7 @@ export * from "./theme";
 export * from "./naming";
 export * from "./connections";
 export * from "./frame";
+export * from "./presentation";
 
 const ajv = new Ajv2020({ allErrors: true, strict: false });
 const definitions = (protocolSchema as { $defs?: Record<string, unknown> }).$defs ?? {};

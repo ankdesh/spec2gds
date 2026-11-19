@@ -43,12 +43,17 @@ remain aligned.
 
 ## Menus and canvas interactions
 
-The compact desktop-style menubar contains File, Edit, Components, Selection,
-Connect, Route, View, Tools, and Help. The former component sidebar and canvas
-action strip are dialogs and menu commands, so the canvas uses the complete
-width when the optional Inspector is closed. Use **Edit → Begin editing**
-before making circuit changes; **View → Show Inspector** controls the
-properties-only Inspector.
+The desktop menubar contains File, Edit, Components, Selection, Connect, Route,
+Timing, View, Tools, and Help. The compact toolbar keeps common actions visible.
+Use **Edit → Begin editing** before changing the circuit. **Panels** or
+**View → Show sidebar** opens Inspector, Ports, and Timing in one 320 px sidebar.
+Each tab keeps its scroll position and selection. Ports selects and centers an
+object without changing tabs. Collapse the sidebar to use the full canvas width.
+
+Standalone Circuit Designer supports desktop windows of at least 1280 × 720 px.
+Each node shows one Component name, with the instance name in Inspector,
+tooltips, and accessible labels. The visible name uses 12–20 screen pixels as
+canvas zoom changes. SVG and PNG exports use intrinsic geometry.
 
 The canvas has no separate tool modes. Direct gestures remain available:
 

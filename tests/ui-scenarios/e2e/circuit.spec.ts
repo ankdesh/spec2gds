@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
+import { simpleDocumentFixture } from "../../../circuit-designer/packages/core/src/fixtures.js";
 import { test, expect, openSpec, type Stack } from "./fixtures.js";
 import type { Page } from "@playwright/test";
 
 async function menu(page: Page, name: string, action: string | RegExp): Promise<void> {
-  if (!await page.getByRole("menuitem", { name, exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
   await page.getByRole("menuitem", { name, exact: true }).click();
   await page.getByRole("menuitem", typeof action === "string" ? { name: action, exact: true } : { name: action }).click();
 }
@@ -53,8 +53,8 @@ for (const theme of ["blueprint-slate", "obsidian"]) test(`visible Circuit actio
   await expect(dialog.getByRole("status", { name: "Connection guidance" })).toContainText("8 bits → 16 bits");
   await page.screenshot({ path: info.outputPath(`ux-width-guidance-${theme}.png`) });
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
-  await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
-  await page.getByRole("complementary", { name: "Inspector", exact: true }).getByLabel("Wire width or range").fill("16");
+  await page.getByRole("button", { name: "Panels", exact: true }).click();
+  await page.getByRole("region", { name: "Inspector", exact: true }).getByLabel("Wire width or range").fill("16");
   await page.getByRole("button", { name: "Connect ports", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "Connect ports", exact: true });
   await dialog.getByLabel("From port", { exact: true }).selectOption("boundary:data_in");
@@ -63,13 +63,13 @@ for (const theme of ["blueprint-slate", "obsidian"]) test(`visible Circuit actio
   await expect(dialog.getByRole("status", { name: "Connection mapping" })).toContainText("16 bits");
   await dialog.getByRole("button", { name: "Connect", exact: true }).click();
   await menu(page, "Timing", "Timing analysis");
-  const timing = page.getByRole("complementary", { name: "Timing analysis", exact: true });
+  const timing = page.getByRole("region", { name: "Timing analysis", exact: true });
   await expect(timing).toContainText("Arithmetic unit.input");
   await expect(timing.locator(".timing-path")).not.toContainText("instance:arithmetic_unit");
   await timing.getByRole("button", { name: /operand/ }).click();
   await expect(page.locator(".react-flow__edge")).toHaveClass(/selected/);
   await page.screenshot({ path: info.outputPath(`ux-timing-${theme}.png`) });
-  await timing.getByRole("button", { name: "Close timing analysis", exact: true }).click();
+  await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
   await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Unsaved changes");
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: "Save circuit", exact: true }).click();
@@ -78,22 +78,24 @@ for (const theme of ["blueprint-slate", "obsidian"]) test(`visible Circuit actio
   expect(saved.design.nets[0].endpoints.every((endpoint: any) => !endpoint.slice)).toBe(true);
   expect(saved.components[0].terminals.map((port: any) => port.width)).toEqual([16, 16]);
   await expect(page.getByRole("status", { name: "Circuit save state" })).toHaveText("Saved");
-  for (const [width, height] of [[1440, 1000], [1024, 768], [390, 844]]) {
+  for (const [width, height] of [[1280, 720], [1440, 900], [1920, 1080]]) {
     await page.setViewportSize({ width, height });
     await expect(page.locator(".document-status")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save circuit", exact: true })).toBeInViewport();
-    await page.getByRole("button", { name: "Port list", exact: true }).click();
+    await page.getByRole("button", { name: "Panels", exact: true }).click();
+    await page.getByRole("tab", { name: "Ports", exact: true }).click();
     await expect(page.getByRole("region", { name: "Circuit ports", exact: true })).toContainText("data_in");
-    await expect(page.getByRole("button", { name: "Connect from port" }).first()).toBeDisabled();
-    await page.getByRole("button", { name: "Close port list", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Connect from / }).first()).toBeDisabled();
+    await page.getByRole("button", { name: "Collapse sidebar", exact: true }).click();
     const geometry = await page.locator(".canvas-actions button").evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().height));
-    expect(Math.min(...geometry)).toBeGreaterThanOrEqual(44);
+    expect(new Set(geometry)).toEqual(new Set([28]));
+    expect((await page.locator(".canvas-actions").boundingBox())!.height).toBe(38);
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
     await page.screenshot({ path: info.outputPath(`ux-saved-${theme}-${width}.png`) });
   }
   await menu(page, "Help", "About Circuit Designer");
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("menuitem", { name: "Commands", exact: true })).toBeFocused();
+  await expect(page.getByRole("menuitem", { name: "Help", exact: true })).toBeFocused();
 });
 
 test("Spec Editor launches expose direct actions for a Design and a blank Component", async ({ page: specPage, stack }, info) => {
@@ -142,7 +144,7 @@ for (const mode of ["ports", "instances", "empty"] as const) test(`encloses ${mo
   const frame = page.getByTestId("circuit-design-frame");
   await expect(frame).toBeVisible();
   await expect(frame.getByRole("button", { name: "Add port", exact: true })).toBeDisabled();
-  if (await page.getByRole("button", { name: "Hide Inspector", exact: true }).isVisible()) await page.getByRole("button", { name: "Hide Inspector", exact: true }).click();
+  if (await page.getByRole("button", { name: "Panels", exact: true }).getAttribute("aria-expanded") === "true") await page.getByRole("button", { name: "Panels", exact: true }).click();
   for (const appearance of ["initial", "alternate"]) {
     await page.getByRole("button", { name: "Fit circuit", exact: true }).click();
     await expect(frame).toBeInViewport({ ratio: .99 });
@@ -210,7 +212,7 @@ for (const mode of ["ports", "instances", "empty"] as const) test(`encloses ${mo
   }
   if (mode === "empty") {
     expect(saved.document.layout.terminal_placements["boundary:result"].side).toBe("NORTH");
-    await page.setViewportSize({ width: 1000, height: 740 });
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole("button", { name: "Fit circuit", exact: true }).click();
     await expect(frame).toBeInViewport({ ratio: .99 });
   }
@@ -452,18 +454,15 @@ for (const theme of ["blueprint-slate", "obsidian"]) {
     const page = await opened;
     await expect(page.getByTestId("circuit-canvas")).toBeVisible();
     if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /^Switch theme/ }).click();
-    await page.setViewportSize({ width: 540, height: 820 });
-    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
+    await page.setViewportSize({ width: 1280, height: 720 });
     await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toHaveAttribute("title", "Select Begin editing first.");
     await page.getByRole("menuitem", { name: "Begin editing", exact: true }).click();
-    if (!await page.getByRole("menuitem", { name: "Components", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Components", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "New local component", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
     const before = stack.archive(stack.path());
-    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).focus();
     await page.keyboard.press("Enter");
     await page.getByRole("menuitem", { name: "Create internal Design", exact: true }).focus();
@@ -488,7 +487,7 @@ for (const theme of ["blueprint-slate", "obsidian"]) {
     await menu(page, "Edit", "Create internal Design");
     await expect(page.getByRole("button", { name: "Save to Spec", exact: true })).toBeEnabled();
     const saveBounds = await page.getByRole("button", { name: "Save to Spec", exact: true }).boundingBox();
-    expect(saveBounds!.x + saveBounds!.width).toBeLessThanOrEqual(540);
+    expect(saveBounds!.x + saveBounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page.screenshot({ path: test.info().outputPath(`pending-design-${theme}.png`) });
     expect(stack.archive(stack.path())).toEqual(before);
     await menu(page, "File", "Cancel changes");
@@ -507,7 +506,6 @@ for (const theme of ["blueprint-slate", "obsidian"]) {
     await expect(specPage.locator(".spec-topology-card")).not.toContainText("Interface preview (read-only)");
     await page.reload();
     await menu(page, "Edit", "Begin editing");
-    if (!await page.getByRole("menuitem", { name: "Edit", exact: true }).isVisible()) await page.getByRole("menuitem", { name: "Commands", exact: true }).click();
     await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: "Create internal Design", exact: true })).toBeDisabled();
     await page.keyboard.press("Escape");
@@ -528,10 +526,10 @@ for (const choice of ["Retain SV", "Remove SV"]) {
     await menu(page, "Edit", "Begin editing");
     await menu(page, "Edit", "Create internal Design");
     const before = stack.archive(stack.path());
-    await page.getByRole("button", { name: "Show Inspector", exact: true }).click();
+    await page.getByRole("button", { name: "Panels", exact: true }).click();
     await page.getByRole("button", { name: "Add port to Design", exact: true }).click();
     await page.getByRole("dialog", { name: "Add port", exact: true }).getByRole("button", { name: "Add port", exact: true }).click();
-    await page.setViewportSize({ width: 540, height: 820 });
+    await page.setViewportSize({ width: 1280, height: 720 });
     if (choice === "Remove SV") await page.getByRole("button", { name: /^Switch theme/ }).click();
     await page.getByRole("button", { name: "Save to Spec", exact: true }).click();
     await expect(page.getByRole("dialog", { name: "Save the internal Design" })).toBeVisible();
@@ -626,7 +624,7 @@ test("dialogs trap focus and Escape returns focus to triggering menu", async ({ 
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   const trigger = page.locator("#circuit-help-menu-trigger");
-  await expect(await trigger.isVisible() ? trigger : page.getByRole("menuitem", { name: "Commands", exact: true })).toBeFocused();
+  await expect(trigger).toBeFocused();
 });
 
 test("Circuit preferences stay in each browser and leave service defaults unchanged", async ({ page, browser, stack }) => {
@@ -650,4 +648,85 @@ test("Circuit preferences stay in each browser and leave service defaults unchan
     const defaultsAfter = await (await fetch(`${stack.circuit}/api/circuit-designer/v1/preferences`)).json();
     expect(defaultsAfter).toEqual(defaultsBefore);
   } finally { await otherContext.close(); }
+});
+
+
+for (const theme of ["blueprint-slate", "obsidian"]) test(`compact desktop panels preserve canvas height, selection and title scale in ${theme}`, async ({ page, stack, request }, info) => {
+  const document = simpleDocumentFixture();
+  document.document_id = `compact_${theme}`;
+  document.components[0].label = "16-bit modulo adder with a long Component display name";
+  document.design.boundary_terminals = [{ id: "bidirectional", label: "bidirectional", direction: "inout", width: 16, category: "port" }];
+  document.design.instances[0].label = "u_adder_first";
+  document.design.instances[1].component_id = document.components[0].id;
+  document.design.instances[1].label = "u_adder_second";
+  document.components[0].terminals = Array.from({ length: 40 }, (_, i) => ({ id: i === 0 ? "data" : `port_${i}`, label: `data_${i}`, direction: "output", width: 16, category: "port" }));
+  const api = `${stack.circuit}/api/circuit-designer/v1/documents`;
+  expect((await request.post(api, { data: { request_id: document.document_id, document } })).ok()).toBe(true);
+  await page.goto(`${stack.circuitUI}/?document_id=${document.document_id}`);
+  await expect(page.getByTestId("circuit-canvas")).toBeVisible();
+  if (await page.locator(".cd-app").getAttribute("data-theme") !== theme) await page.getByRole("button", { name: /^Switch theme/ }).click();
+  const panels = page.getByRole("button", { name: "Panels", exact: true });
+  const canvas = page.getByTestId("circuit-canvas");
+  for (const [width, height] of [[1280, 720], [1440, 900], [1920, 1080]]) {
+    await page.setViewportSize({ width, height });
+    const closed = (await canvas.boundingBox())!;
+    await panels.click();
+    await page.getByRole("tab", { name: "Ports", exact: true }).click();
+    const opened = (await canvas.boundingBox())!;
+    expect(opened.y).toBe(closed.y);
+    expect(opened.height).toBe(closed.height);
+    expect(closed.width - opened.width).toBe(320);
+    expect((await page.locator(".circuit-sidebar").boundingBox())!.width).toBe(320);
+    expect((await page.locator(".topbar").boundingBox())!.height).toBe(40);
+    expect((await page.locator(".notice").boundingBox())!.height).toBe(24);
+    expect((await page.locator(".canvas-actions").boundingBox())!.height).toBe(38);
+    expect((await page.getByRole("button", { name: "Collapse sidebar" }).boundingBox())!.height).toBe(24);
+    const ports = page.getByRole("tabpanel", { name: "Ports", exact: true });
+    const direction = ports.getByRole("button", { name: /^Select .*bidirectional/ }).locator("small").first();
+    await expect(direction).toHaveText("inout");
+    expect(await direction.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await ports.getByRole("button", { name: /^Select / }).last().click();
+    await expect(page.locator('.react-flow__node[data-id="consumer_0"]')).toHaveClass(/selected/);
+    const scroll = await ports.evaluate(element => ({ top: element.scrollTop, height: element.clientHeight, total: element.scrollHeight }));
+    expect(scroll.total).toBeGreaterThan(scroll.height);
+    expect(scroll.top).toBeGreaterThan(0);
+    await page.getByRole("tab", { name: "Inspector", exact: true }).click();
+    await expect(page.getByLabel("Instance name", { exact: true })).toHaveValue("u_adder_second");
+    await page.getByRole("tab", { name: "Ports", exact: true }).click();
+    expect(await ports.evaluate(element => element.scrollTop)).toBe(scroll.top);
+    await page.screenshot({ path: info.outputPath(`compact-ports-${theme}-${width}.png`) });
+    await expect(page.locator('.react-flow__node[data-id="consumer_0"]')).toHaveClass(/selected/);
+    await page.getByRole("tab", { name: "Ports", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Timing", exact: true })).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Timing", exact: true })).toHaveAttribute("aria-selected", "true");
+    await page.keyboard.press("Escape");
+    await expect(panels).toBeFocused();
+    await expect(page.locator(".circuit-sidebar")).toBeHidden();
+    await expect(page.getByRole("menuitem", { name: "Commands", exact: true })).toHaveCount(0);
+    await page.screenshot({ path: info.outputPath(`compact-${theme}-${width}.png`) });
+  }
+  const titles = page.locator(".react-flow__node .cd-node__title");
+  await expect(titles).toHaveCount(2);
+  await expect(page.locator(".cd-node__eyebrow, .cd-node__instance-suffix")).toHaveCount(0);
+  await expect(titles.first()).toHaveAttribute("title", /u_adder_first/);
+  await titles.first().focus();
+  await expect(page.locator(".cd-node__name-tooltip").first()).toBeVisible();
+  await expect(page.locator(".cd-node__name-tooltip").first()).toContainText("u_adder_first");
+  await page.screenshot({ path: info.outputPath(`name-focus-${theme}.png`) });
+  for (let i = 0; i < 8; i++) {
+    await menu(page, "View", "Zoom out");
+    await expect.poll(async () => titles.first().evaluate(element => {
+      const node = element.closest(".react-flow__node")!.getBoundingClientRect();
+      const zoom = new DOMMatrix(getComputedStyle(document.querySelector(".react-flow__viewport")!).transform).a;
+      const screen = parseFloat(getComputedStyle(element).fontSize) * zoom;
+      return Math.abs(screen - Math.min(20, Math.max(12, node.width / 14))) < .05;
+    })).toBe(true);
+  }
+  const sizes = await titles.evaluateAll(elements => elements.map(element => ({ visible: getComputedStyle(element).visibility, nodeHeight: element.closest(".react-flow__node")!.getBoundingClientRect().height })));
+  for (const size of sizes) expect(size.visible).toBe(size.nodeHeight < 16 ? "hidden" : "visible");
+  await expect(page.locator('.react-flow__node[data-id="producer_0"]')).toHaveAttribute("aria-label", /u_adder_first/);
+  const saved = await (await request.get(`${api}/${document.document_id}`)).json();
+  expect(saved.document.design).toEqual(document.design);
+  expect(saved.document.layout).toEqual(document.layout);
 });
