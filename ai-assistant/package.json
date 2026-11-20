@@ -41,7 +41,8 @@
     "install:profile": "node scripts/install-profile.mjs",
     "check:harness": "node scripts/check-harness-packages.mjs",
     "pretest:harness": "npm run check:harness",
-    "pretest:ui": "npm run check:harness"
+    "pretest:ui": "npm run check:harness",
+    "install:packages": "node scripts/install-harness-packages.mjs"
   },
   "dependencies": {
     "@ankdesh/cordis": "4.0.2-ankdesh.2",

@@ -37,7 +37,7 @@ Use the [canonical terminology](TERMINOLOGY.md). Write in clear, concise languag
 - [AI Assistant Contract](ai-assistant.md): Core behavioral contract, approval gating, document tokens, and boundary invariants.
 - [AI Assistant Operations](ai-assistant-operations.md): Setup, configuration, execution commands, diagnostics, and acceptance matrix.
 - [Reusable Flows](ai-assistant-flows.md): Published flow tools (`flow_create_empty_spec`, `flow_create_spec_with_component`, `flow_add_component`, `flow_edit_spec`) and execution lifecycles.
-- [Harness Package Releases](harness-packages.md): Private GitHub Packages registry, release adoption, and production lockfiles.
+- [Harness Package Releases](harness-packages.md): Committed Harness archives, release adoption, and production lockfiles.
 
 ## 6. Activities, RTL, and SystemC
 

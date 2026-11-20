@@ -72,7 +72,6 @@ Install these tools before setting up the repository:
 - Python 3.12 or newer and [`uv`](https://docs.astral.sh/uv/);
 - Node.js 24.2+ for the combined stack (Circuit alone requires 24+;
   Assistant alone also supports 22.19+ in the 22.x line);
-- A GitHub Personal Access Token with `read:packages` permission, exported as `NODE_AUTH_TOKEN`;
 - `setsid`, which the combined launcher uses to manage process groups;
 - `lsof`, which the launcher uses when stopping untracked default-port
   listeners; and
@@ -86,12 +85,10 @@ uses `setsid` and other Unix process-management commands.
 ## Set up and run everything
 
 Install the root Python project and the JavaScript workspaces from a clean checkout.
-Setup installs locked `@ankdesh` packages from GitHub Packages and compiles the Assistant bundles.
+Setup installs the committed `@ankdesh` package archives and compiles the Assistant bundles.
+GitHub package credentials are not required. Public npm dependencies still need network access.
 
 ```bash
-# Set your GitHub token for package access
-export NODE_AUTH_TOKEN="ghp_..."
-
 # Run the complete environment setup (Python, Circuit Designer, and AI Assistant)
 scripts/setup-all.sh
 ```

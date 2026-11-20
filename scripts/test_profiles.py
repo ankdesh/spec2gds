@@ -226,7 +226,7 @@ def prerequisite_errors(requirements: tuple[str, ...], env: dict[str, str]) -> l
         if requirement == "harness":
             runtime = ROOT / "ai-assistant/node_modules/@ankdesh/dsh/lib/bin.js"
             if not runtime.exists():
-                errors.append("Harness packages are unavailable; run npm ci in ai-assistant with GitHub Packages read access.")
+                errors.append("Harness packages are unavailable; run npm run install:packages in ai-assistant.")
         if requirement == "browser":
             if env.get("SPEC2GDS_TEST_PORT_ERROR"):
                 errors.append(env["SPEC2GDS_TEST_PORT_ERROR"])

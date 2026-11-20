@@ -7,12 +7,12 @@ It does not redefine product behavior.
 ## Setup and package release
 
 Use Node.js 24.2+ for the complete environment. Assistant alone also supports
-Node.js 22.19+ in the 22.x line. Set `NODE_AUTH_TOKEN` with GitHub Packages read
-access, then run `scripts/setup-all.sh`. Setup installs locked packages and builds
-the application. It does not clone Harness or require pnpm.
+Node.js 22.19+ in the 22.x line. Run `scripts/setup-all.sh`. Setup verifies and
+installs committed Harness archives, downloads public npm dependencies, and builds
+the application. It does not require a GitHub package token, a Harness checkout, or pnpm.
 
 See [Harness package releases](harness-packages.md) for the published release,
-production locks, registry access, and release adoption.
+production locks, local archives, and release adoption.
 The [beginner guide](harness-packages/index.html) explains the package terms.
 
 ## Start and use the browser

@@ -5,7 +5,7 @@
 # Sets up the complete spec2hw development environment:
 # 1. Root Python workspace (Spec Editor server & runtime via uv)
 # 2. Circuit Designer workspace (npm dependencies, build & Playwright browsers)
-# 3. AI Assistant packages from GitHub Packages
+# 3. AI Assistant packages from repository archives
 # 4. AI Assistant server and browser builds
 # ==============================================================================
 
@@ -59,13 +59,9 @@ PLAYWRIGHT_BROWSERS_PATH="${PROJECT_ROOT}/circuit-designer/.playwright-browsers"
 echo "Circuit Designer setup completed."
 
 # --- Step 3: AI Assistant packages ---
-echo ">>> Installing AI Assistant dependencies from GitHub Packages..."
+echo ">>> Installing AI Assistant dependencies from repository archives..."
 cd "${PROJECT_ROOT}/ai-assistant"
-if [[ -z "${NODE_AUTH_TOKEN:-}" ]]; then
-  echo "Set NODE_AUTH_TOKEN to a GitHub token with read:packages permission." >&2
-  exit 1
-fi
-npm ci --no-audit --no-fund
+npm run install:packages
 
 # Compile server and client bundles
 npm run build

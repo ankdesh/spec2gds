@@ -111,10 +111,9 @@ Open `http://<SERVER_IP>:6014` to inspect and filter live events.
 ## 4. Environment Setup and Service Launcher
 
 ### Complete First-Time Setup
-Export a GitHub Personal Access Token with package read permissions, then install Python packages and build Node workspaces:
+Install Python packages and build Node workspaces. Harness archives are included in the repository; no GitHub package token is required:
 
 ```bash
-export NODE_AUTH_TOKEN="ghp_..."
 scripts/setup-all.sh
 ```
 

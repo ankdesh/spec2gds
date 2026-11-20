@@ -13,12 +13,17 @@ function fixture(t: TestContext) {
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const product = join(directory, "product");
   const name = "@ankdesh/dsh", version = "0.1.6-ankdesh.2";
-  const entry = { name, version, integrity: "sha512-published", tarball: "https://npm.pkg.github.com/download/@ankdesh/dsh/0.1.6-ankdesh.2/archive" };
+  const archive = Buffer.from("fixture published archive");
+  const entry = { name, version, file: "ankdesh-dsh-0.1.6-ankdesh.2.tgz",
+    sha256: createHash("sha256").update(archive).digest("hex"),
+    integrity: `sha512-${createHash("sha512").update(archive).digest("base64")}` };
+  mkdirSync(join(product, "vendor/harness"), { recursive: true });
+  writeFileSync(join(product, "vendor/harness", entry.file), archive);
   const bytes = JSON.stringify({ releaseId: version, packages: [entry] });
   const write = (path: string, value: unknown) => { mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, JSON.stringify(value)); };
   write(join(product, "harness.lock.json"), { releaseId: version, releaseManifestSha256: createHash("sha256").update(bytes).digest("hex") });
   mkdirSync(join(product, "releases")); writeFileSync(join(product, "releases/harness-release-manifest.json"), bytes);
-  const lock = { packages: { [`node_modules/${name}`]: { version, integrity: entry.integrity, resolved: entry.tarball } } };
+  const lock = { packages: { [`node_modules/${name}`]: { version, integrity: entry.integrity, resolved: `file:vendor/harness/${entry.file}` } } };
   write(join(product, "package-lock.json"), lock);
   write(join(product, "node_modules", name, "package.json"), { name, version });
   return { directory, product, name, lock, write };
@@ -46,30 +51,28 @@ test("candidate archive checksums cannot replace the published package", t => {
   assert.throws(() => checkHarnessPackages(f.product), /published archive/);
 });
 
-test("promoted manifests retain their checksum and validate registry archive identity", t => {
+test("registry URLs and paths outside the vendor directory are rejected", t => {
   const f = fixture(t);
-  const manifestPath = join(f.product, "releases/harness-release-manifest.json");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  delete manifest.packages[0].tarball;
-  manifest.packages[0].file = "ankdesh-dsh-0.1.6-ankdesh.2.tgz";
-  manifest.profiles = {};
-  const bytes = JSON.stringify(manifest);
-  writeFileSync(manifestPath, bytes);
-  f.write(join(f.product, "harness.lock.json"), {
-    status: "promoted", releaseId: manifest.releaseId,
-    releaseManifestSha256: createHash("sha256").update(bytes).digest("hex"),
-  });
-  const archive = `https://npm.pkg.github.com/download/${f.name}/${manifest.releaseId}/${"a".repeat(40)}`;
-  f.lock.packages[`node_modules/${f.name}`]!.resolved = archive;
-  f.write(join(f.product, "package-lock.json"), f.lock);
-  assert.equal(checkHarnessPackages(f.product).installedPackages, 1);
-  assert.equal(readFileSync(manifestPath, "utf8"), bytes);
-  for (const invalid of [archive.replace("npm.pkg.github.com", "example.com"),
-    archive.replace(manifest.releaseId, "0.1.6-ankdesh.1"), `${archive}?unexpected=1`]) {
+  for (const invalid of ["https://npm.pkg.github.com/archive.tgz", "file:../archive.tgz", "file:vendor/harness/../archive.tgz"]) {
     f.lock.packages[`node_modules/${f.name}`]!.resolved = invalid;
     f.write(join(f.product, "package-lock.json"), f.lock);
-    assert.throws(() => checkHarnessPackages(f.product), /published archive/);
+    assert.throws(() => checkHarnessPackages(f.product), /vendored published archive/);
   }
+});
+
+test("missing and modified archives fail even when installed package versions match", t => {
+  const f = fixture(t);
+  const archive = join(f.product, "vendor/harness/ankdesh-dsh-0.1.6-ankdesh.2.tgz");
+  writeFileSync(archive, "modified bytes");
+  assert.throws(() => checkHarnessPackages(f.product), /archive checksum differs/);
+  rmSync(archive);
+  assert.throws(() => checkHarnessPackages(f.product), /ENOENT/);
+});
+
+test("release inventory changes require the pinned checksum", t => {
+  const f = fixture(t);
+  f.write(join(f.product, "releases/harness-release-manifest.json"), { packages: [] });
+  assert.throws(() => checkHarnessPackages(f.product), /inventory differs/);
 });
 
 test("normal commands do not provide a source-development path", () => {
