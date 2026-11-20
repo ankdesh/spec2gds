@@ -10,7 +10,7 @@ import pytest
 from scripts import test_profiles as runner
 
 
-@pytest.mark.parametrize("profile", ["fast", "regression"])
+@pytest.mark.parametrize("profile", ["live-smoke", "regression"])
 def test_profiles_have_exactly_three_short_live_checks_and_no_duplicate_suites(profile):
     suites = runner.select_suites(profile, runner.SCOPES)
     ids = [suite.id for suite in suites]
@@ -19,6 +19,8 @@ def test_profiles_have_exactly_three_short_live_checks_and_no_duplicate_suites(p
     assert len(smoke) == 3
     assert all(suite.timeout == 180 and "--live-model" in suite.command for suite in smoke)
     assert ("live-generalization" in ids) == (profile == "regression")
+    if profile == "live-smoke":
+        assert set(ids) == {suite.id for suite in smoke} | {"build-assistant", "build-circuit"}
     for suite in suites:
         assert all(ids.index(dependency) < ids.index(suite.id) for dependency in suite.dependencies)
 
@@ -43,13 +45,27 @@ def test_combined_scope_is_the_union_without_duplicate_builds():
     assert len(combined) == len(expected)
 
 
-def test_new_browser_projects_and_fast_smoke_are_selected_without_duplicate_execution():
-    fast = {suite.id for suite in runner.select_suites("fast", runner.SCOPES)}
+def test_fast_selects_only_the_deterministic_baseline():
+    suites = {suite.id: suite for suite in runner.select_suites("fast", runner.SCOPES)}
+    assert set(suites) == {"python-baseline", "circuit-units", "assistant-units", "scenario-units", "schema-check"}
+    assert {path for path in suites["python-baseline"].command if path.endswith(".py")} == {
+        "tests/spec/spec_format/test_http_contracts.py",
+        "spec_catalog_service/tests/test_source_contracts.py",
+        "tests/spec/activities/test_activity_sdk.py",
+        "testplan-service/tests/test_layer1_acceptance.py",
+        "tests/test_service_config.py",
+    }
+    assert all(not suite.dependencies for suite in suites.values())
+
+
+def test_browser_smoke_and_full_projects_are_selected_without_duplicate_execution():
+    smoke = [suite.id for suite in runner.select_suites("browser-smoke", runner.SCOPES)]
+    assert smoke == ["build-circuit", "spec-smoke", "circuit-smoke"]
     regression = {suite.id for suite in runner.select_suites("regression", runner.SCOPES)}
-    assert "spec-smoke" in fast and "e2e-spec" not in fast
-    assert "circuit-smoke" in fast and "e2e-circuit" not in fast
     assert "spec-smoke" not in regression
     assert "circuit-smoke" not in regression
+    assert "python-fast" in regression and "python-baseline" not in regression
+    assert "--ignore=tests/test_tutorials.py" in runner.suite_catalogue()["python-fast"].command
     assert {"e2e-spec", "e2e-circuit", "e2e-assistant", "e2e-verification"} <= regression
     ordered = [suite.id for suite in runner.select_suites("regression", runner.SCOPES)]
     assert all(ordered.index(f"e2e-{project}") < ordered.index("live-generalization")
@@ -67,7 +83,7 @@ def test_coverage_dry_run_preserves_selection_and_does_not_write(tmp_path, monke
     output = tmp_path / "coverage"
     assert runner.main(["fast", "--coverage", "--dry-run", "--output", str(output)]) == 0
     assert not output.exists()
-    assert "spec-smoke" in capsys.readouterr().out
+    assert "python-baseline" in capsys.readouterr().out
 
 
 def test_junit_failed_case_cannot_be_hidden_by_a_successful_process(tmp_path):
@@ -93,8 +109,9 @@ def test_browser_skipped_cases_are_unverified_and_recorded_per_case(tmp_path):
     assert "Explanation" in page
 
 
-def test_browser_success_requires_nonempty_evidence(tmp_path):
-    result = runner.run_suite(command_suite("e2e-spec", "pass"), tmp_path, dict(os.environ))
+@pytest.mark.parametrize("suite_id", ["e2e-spec", "spec-smoke", "circuit-smoke"])
+def test_browser_success_requires_nonempty_evidence(tmp_path, suite_id):
+    result = runner.run_suite(command_suite(suite_id, "pass"), tmp_path, dict(os.environ))
     assert result["status"] == "failed"
     assert "evidence report" in result["reason"]
 

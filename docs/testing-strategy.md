@@ -45,27 +45,38 @@ coverage across implemented flows, local rules, conditional checks, and known fa
 
 ## 2. Test Execution Profiles
 
-Run tests through the unified test runner:
+Before finalizing a plan, get the developer's selection of test groups.
+Recommend Fast for routine changes. Offer focused checks for local changes or
+no automated tests for suitable documentation changes. Run the selected groups
+after implementation and ask before expanding the selection.
 
-```bash
-# 1. Fast profile: Unit tests, schemas, builds, smoke UI, and 3 live model checks
-scripts/test-all.sh fast
+| Command | Select for |
+| --- | --- |
+| `scripts/test-all.sh fast` | Routine deterministic checks. Runs selected Python tests, Circuit Designer and AI Assistant unit tests, scenario fixture tests, and the schema check. Target less than five minutes after setup. |
+| `scripts/test-all.sh browser-smoke` | Tagged Spec Editor and Circuit Designer browser cases with real local services. |
+| `scripts/test-all.sh live-smoke` | Three live model cases for Component description, wire range, and restricted approval. |
+| `scripts/test-all.sh integration --scope spec,assistant` | Wider checks for affected subsystems and their consumers. |
+| `scripts/test-all.sh regression` | Broad Python, browser, hardware, and live model checks after several changes, before a release, or on an unchanged revision. |
 
-# 2. Integration profile: Real service interactions for specific scopes
-scripts/test-all.sh integration --scope spec,assistant
-# Available scopes: spec, circuit, assistant, verification, activities, shared
+Integration scopes are `spec`, `circuit`, `assistant`, `verification`,
+`activities`, and `shared`. Combine scopes with commas. Shared includes all
+consumers. Full regression covers the tagged browser cases within the full
+browser projects and includes the three live model cases and wider live evaluation.
 
-# 3. Regression profile: Full suite including broad browser scenarios
-scripts/test-all.sh regression
+Use `--dry-run` to inspect suite commands and declared prerequisites. Find
+`summary.html` and `summary.json` under the fresh `temp/TEMP_tests-*`
+directory or the selected output directory. Report executed commands, outcomes,
+coverage limits, and the evidence directory. Required prerequisites that are
+unavailable produce an incomplete result and a nonzero exit status.
 
-# 4. Dry-run inspection: Inspect selected commands without executing
-scripts/test-all.sh fast --dry-run
-```
+Select tutorial work separately through the
+[tutorial maintenance guide](tutorial-maintenance.md).
 
 ### Execution Prerequisites
 - Python 3.12+ with root `uv` virtual environment.
 - Node.js 24.2+ (or 22.19+ for Assistant alone).
-- Playwright Chromium browser binaries (`npx playwright install chromium`).
+- Configured `OPENAI_API_KEY` for Live model smoke and Full regression.
+- Playwright Chromium browser binaries for browser checks (`npx playwright install chromium`).
 - Verilator 5.x and GNU Make for RTL Activity verification.
 
 ---

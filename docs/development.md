@@ -138,8 +138,12 @@ scripts/serve-all.sh stop
 Follow the testing guidelines in [Software Testing Strategy](testing-strategy.md).
 
 ```bash
-# Fast test suite (Python units, frontend units, and live checks)
+# Routine deterministic checks
 scripts/test-all.sh fast
+
+# Short browser checks and live model checks
+scripts/test-all.sh browser-smoke
+scripts/test-all.sh live-smoke
 
 # Integration test suite for specific scopes
 scripts/test-all.sh integration --scope spec,assistant

@@ -32,6 +32,7 @@ else:
 
 ROOT = Path(__file__).resolve().parents[1]
 SCOPES = {"spec", "circuit", "assistant", "verification", "activities", "shared"}
+PROFILES = ("fast", "browser-smoke", "live-smoke", "integration", "regression")
 SMOKE_CASES = ("description", "wire-range", "restricted-description")
 SCENARIOS = ("automatic", "restricted", "live", "binding", "repeated", "architecture")
 
@@ -72,7 +73,15 @@ def suite_catalogue() -> dict[str, Suite]:
                  "--junitxml={output}/pytest.xml"], scopes, "service/API", "isolated",
             dependencies=dependencies, requirements=("python", *tools))
 
-    python("python-fast", ["tests", "testplan-service/tests", "spec_catalog_service/tests"], sorted(SCOPES))
+    python("python-baseline", [
+        "tests/spec/spec_format/test_http_contracts.py",
+        "spec_catalog_service/tests/test_source_contracts.py",
+        "tests/spec/activities/test_activity_sdk.py",
+        "testplan-service/tests/test_layer1_acceptance.py",
+        "tests/test_service_config.py",
+    ], sorted(SCOPES))
+    python("python-fast", ["tests", "testplan-service/tests", "spec_catalog_service/tests",
+                           "--ignore=tests/test_tutorials.py"], sorted(SCOPES))
     add("circuit-units", ["npm", "test"], ["spec", "circuit", "shared"],
         "unit/component/API", "isolated", cwd="circuit-designer", requirements=("circuit",))
     add("assistant-units", ["npm", "test"], ["assistant"], "unit/contract", "isolated",
@@ -163,13 +172,17 @@ def suite_catalogue() -> dict[str, Suite]:
 def select_suites(profile: str, scopes: set[str]) -> list[Suite]:
     """Expand prerequisites once; integration includes consumers of Spec contracts."""
     catalogue = suite_catalogue()
-    fundamentals = ["python-fast", "circuit-units", "assistant-units", "scenario-units", "schema-check"]
+    fundamentals = ["circuit-units", "assistant-units", "scenario-units", "schema-check"]
     live = [f"live-{case}" for case in SMOKE_CASES]
     if profile == "fast":
-        selected = fundamentals + ["spec-smoke", "circuit-smoke"] + live
+        selected = ["python-baseline", *fundamentals]
+    elif profile == "browser-smoke":
+        selected = ["spec-smoke", "circuit-smoke"]
+    elif profile == "live-smoke":
+        selected = live
     elif profile == "regression":
-        selected = fundamentals + ["python-extensive", "hardware-extensive", "harness", "spec-browser", "circuit-browser",
-                                   "assistant-browser", "evaluation-catalogue", "spec-circuit-flow"]
+        selected = ["python-fast", *fundamentals, "python-extensive", "hardware-extensive", "harness", "spec-browser", "circuit-browser",
+                    "assistant-browser", "evaluation-catalogue", "spec-circuit-flow"]
         selected += [f"scenario-{scenario}" for scenario in SCENARIOS]
         selected += [f"e2e-{project}" for project in ("spec", "circuit", "assistant", "verification")]
         selected += live + ["live-generalization"]
@@ -404,7 +417,7 @@ def run_suite(suite: Suite, destination: Path, env: dict[str, str]) -> dict:
             result["skipped"] = [{"message": case["name"]} for case in result["cases"] if case["status"] == "unverified"]
         except (ValueError, KeyError, TypeError):
             result.update(status="failed", reason="The browser evidence report is incomplete or malformed.")
-    if suite.id.startswith("e2e-") or suite.id == "spec-smoke":
+    if suite.id.startswith("e2e-") or suite.id in {"spec-smoke", "circuit-smoke"}:
         if not result.get("cases") and result["status"] == "passed":
             result.update(status="failed", reason="The browser evidence report is incomplete or malformed.")
     if result["status"] == "passed" and any(case["status"] == "failed" for case in result.get("cases", [])):
@@ -460,7 +473,7 @@ def write_reports(report: dict, output: Path, env: dict[str, str]) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("profile", choices=("fast", "integration", "regression"))
+    parser.add_argument("profile", choices=PROFILES)
     parser.add_argument("--scope", default="all", help="Comma-separated integration scopes; default: all.")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--rtl-cases", help="Limit regression live RTL evaluation to a comma-separated list; retain all other suites.")
@@ -473,6 +486,10 @@ def main(argv: list[str] | None = None) -> int:
     if args.profile != "integration" and args.scope != "all":
         parser.error("--scope is only supported by integration.")
     scopes = SCOPES.copy() if scopes == {"all"} else scopes
+    if args.profile == "browser-smoke":
+        scopes = {"spec", "circuit"}
+    elif args.profile == "live-smoke":
+        scopes = {"spec", "assistant"}
     suites = select_suites(args.profile, scopes)
     rtl_cases = None
     if args.rtl_cases is not None:
@@ -531,6 +548,10 @@ def main(argv: list[str] | None = None) -> int:
               ],
               "coverage_gaps": ["automated visual baselines",
                                 "system-wide performance and accessibility thresholds"], "suites": []}
+    if args.profile == "fast":
+        report["coverage_gaps"].append(
+            "Fast samples unit and contract checks. Browser, wider service, hardware, and live model checks are separate."
+        )
     if rtl_cases is not None:
         report["profile"] = "regression (selected live RTL cases)"
         report["rtl_cases"] = rtl_cases

@@ -14,16 +14,36 @@ We have strict terminology rules to disambiguate overloaded terms (e.g., never u
 ## 3. Local Test and Regression Rules
 
 - Follow `docs/testing-strategy.md` for suite selection and evidence rules.
-- After implementation, run `scripts/test-all.sh fast` and
-  `scripts/test-all.sh integration --scope <affected-scopes>`.
-- Scopes are `spec`, `circuit`, `assistant`, `verification`, `activities`, and
-  `shared`. Combine scopes with commas. Shared changes include all consumers.
-- Run `scripts/test-all.sh regression` for broad or high-risk changes to
-  cross-application contracts, persistence, shared runtime, the Activity SDK,
-  model/prompt releases, and release preparation.
-- Use `--dry-run` to inspect selection and prerequisites. Profiles run locally.
-- Fast includes exactly three short live model checks. Use configured
-  credentials. Do not replace live checks with fixtures or silently omit them.
+- Before finalizing every implementation plan, ask the developer which test
+  groups to run after implementation. Recommend Fast for routine changes and
+  name focused checks when they suffice. Use any selection the developer already
+  gave for the change. Wait for the selection before finalizing the plan.
+- Offer the applicable choices. The developer can combine them.
+  - **No automated tests** for changes such as documentation-only edits.
+  - **Focused checks** for a local change. Name the affected tests or commands.
+  - **Fast** (`scripts/test-all.sh fast`) for a routine deterministic baseline.
+  - **Browser smoke** (`scripts/test-all.sh browser-smoke`) for short Spec Editor
+    and Circuit Designer checks with real local services.
+  - **Live model smoke** (`scripts/test-all.sh live-smoke`) for three short live
+    model checks.
+  - **Scoped integration** (`scripts/test-all.sh integration --scope <scopes>`)
+    for service, browser, or cross-application changes. Scopes are `spec`,
+    `circuit`, `assistant`, `verification`, `activities`, and `shared`. Combine
+    scopes with commas. The `shared` scope includes all consumers.
+  - **Full regression** (`scripts/test-all.sh regression`) for batches of
+    changes, release preparation, or broad, high-risk changes. The developer can
+    also select it on an unchanged revision.
+- If the change affects tutorials, ask separately whether to skip tutorial work,
+  validate the tutorials, rebuild the HTML, or capture selected screenshot groups.
+  Get an explicit selection for capture and for publication. Record deferred
+  tutorial work for a later update. See `docs/tutorial-maintenance.md`.
+- Record the selected test groups, scopes, commands, and tutorial updates in the
+  plan. Run that selection after implementation. Ask before expanding it.
+- For a change without a plan, follow the developer's test selection. If there is
+  no selection, run the smallest checks that cover the change.
+- Use `--dry-run` to inspect selection and declared prerequisites. Profiles run
+  locally. Live model smoke and Full regression include three short live model
+  checks. Use configured credentials. Do not substitute fixtures or omit live checks.
 - Missing required credentials or tools makes a profile incomplete. Continue
   independent checks, report the missing prerequisites, and do not claim a pass.
 - Report executed commands, outcomes, coverage limits, and the evidence directory.

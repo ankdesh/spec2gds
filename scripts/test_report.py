@@ -12,7 +12,8 @@ else:
     from test_capabilities import capability_results
 
 CHECK_NAMES = {
-    "python-fast": "Spec service and Verification Planner checks",
+    "python-baseline": "Selected Python service and contract checks",
+    "python-fast": "Broad Python service and contract checks",
     "circuit-units": "Circuit Designer package checks",
     "assistant-units": "AI Assistant package checks",
     "scenario-units": "Test runner checks",
@@ -43,7 +44,8 @@ CHECK_NAMES = {
     "live-restricted-description": "Live model: save after restricted approval",
     "live-generalization": "Live model: hardware behaviour evaluation",
     "evaluation-catalogue": "Evaluation catalogue consistency",
-    "spec-smoke": "Spec Editor: two deterministic smoke flows",
+    "spec-smoke": "Spec Editor browser smoke checks",
+    "circuit-smoke": "Circuit Designer browser smoke checks",
     "e2e-spec": "Spec Editor with the real Spec service",
     "e2e-circuit": "Circuit Designer with real Spec and Circuit services",
     "e2e-assistant": "AI Assistant: large native proposals",
@@ -138,15 +140,17 @@ def outcome_details(suite: dict, output: Path) -> str:
 def render_report(report: dict, output: Path) -> str:
     """Build escaped, accessible tables with no scripts or external resources."""
     suites = report.get("suites", [])
-    profile = {"fast": "Fast", "integration": "Integration", "regression": "Full regression"}.get(
-        report.get("profile"), "Test")
+    profile = {
+        "fast": "Fast", "browser-smoke": "Browser smoke", "live-smoke": "Live model smoke",
+        "integration": "Integration", "regression": "Full regression",
+    }.get(report.get("profile"), "Test")
     status = report.get("status", "running")
     status_name = STATUS_NAMES.get(status, "Unknown")
     counts = {state: sum(suite.get("status") == state for suite in suites)
               for state in ("passed", "failed", "unverified")}
     elapsed = sum(suite.get("duration_seconds", 0) for suite in suites)
     scopes = report.get("scopes", [])
-    coverage = "Full environment" if set(scopes) == set(SCOPE_NAMES) else ", ".join(
+    coverage = "All subsystem scopes" if set(scopes) == set(SCOPE_NAMES) else ", ".join(
         SCOPE_NAMES.get(scope, scope.replace("-", " ").capitalize()) for scope in scopes)
     summary = [("Overall result", status_name), ("Check groups listed", str(len(suites))),
                ("Passed groups", str(counts["passed"])), ("Failed groups", str(counts["failed"])),

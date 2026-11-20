@@ -16,10 +16,10 @@ CAPABILITIES = [
     ("SVG preview without Circuit service", ("e2e-spec",), ("renders and downloads a source-derived SVG",)),
     ("Activity success, failure and cancellation", ("e2e-spec",), tuple(f"Activity {title} reaches" for title in ("Source proof", "Controlled failure", "Controlled barrier"))),
     ("Activity immutable source after restart", ("e2e-spec",), ("an Activity retains its enqueued source",)),
-    ("HTTP request validation and serialized errors", ("python-fast", "spec-api"), ("test_http_request_validation",)),
-    ("HTTP document selection", ("python-fast", "spec-api"), ("test_http_document_selection",)),
-    ("Atomic HTTP changes and stale writer rejection", ("python-fast", "spec-api"), ("test_http_invalid_batch", "test_http_stale_writer")),
-    ("Proposal preview and exact-once replay", ("python-fast", "spec-api"), ("test_http_proposal_preview_replay",)),
+    ("HTTP request validation and serialized errors", ("python-baseline", "python-fast", "spec-api"), ("test_http_request_validation",)),
+    ("HTTP document selection", ("python-baseline", "python-fast", "spec-api"), ("test_http_document_selection",)),
+    ("Atomic HTTP changes and stale writer rejection", ("python-baseline", "python-fast", "spec-api"), ("test_http_invalid_batch", "test_http_stale_writer")),
+    ("Proposal preview and exact-once replay", ("python-baseline", "python-fast", "spec-api"), ("test_http_proposal_preview_replay",)),
     ("Circuit saving into real Spec source", ("e2e-circuit",), ("saves Circuit topology",)),
     ("Circuit cancel, stale save and read-only previews", ("e2e-circuit",), ("cancel discards", "a stale Circuit save", "leaf Component Circuit previews")),
     ("Portable circuit files and invalid input", ("e2e-circuit",), ("standalone circuit roundtrip",)),
@@ -31,7 +31,7 @@ CAPABILITIES = [
     ("Immutable coverage checkpoint", ("e2e-verification",), ("reviews ready evidence coverage",)),
     ("Evidence preview, invalid input, commit and restart", ("e2e-verification",), ("stages synthetic evidence", "invalid result text")),
     ("Reference preflight, artifacts and restart", ("e2e-verification",), ("preflights reference recipes",)),
-    ("Immutable SDK snapshot handoff", ("python-fast", "spec-api"), ("test_http_sdk_snapshot_handoff",)),
+    ("Immutable SDK snapshot handoff", ("python-baseline", "python-fast", "spec-api"), ("test_http_sdk_snapshot_handoff",)),
     ("Real PDF, DOCX and ODT imports", ("e2e-spec",), tuple(f"real {format} document import" for format in ("PDF", "DOCX", "ODT"))),
 ]
 

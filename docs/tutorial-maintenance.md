@@ -4,6 +4,19 @@ The written course teaches important operations through practical exercises.
 The independent video series has a separate production plan. Do not make either
 learning path depend on completing the other.
 
+## Select tutorial work
+
+For changes that affect tutorials, ask the developer to select tutorial work
+separately from software tests. Record skipped work for a later update.
+
+| Choice | Work |
+| --- | --- |
+| Skip | Defer tutorial validation, HTML rebuilds, and capture. |
+| Validate | Check generated HTML and run the tutorial tests in the validation section. |
+| Rebuild HTML | Regenerate pages from the builder after an approved source update. |
+| Capture | Prepare starts and run only the selected screenshot groups. |
+| Publish | Publish reviewed captures after explicit selection and the complete-set checks. |
+
 ## Sources and lesson structure
 
 Edit `scripts/build_tutorials.py`, then regenerate the HTML. Do not hand-edit
@@ -104,15 +117,10 @@ cd tests/ui-scenarios
 PLAYWRIGHT_BROWSERS_PATH=../../circuit-designer/.playwright-browsers \
   node --import tsx runner/check_tutorials.ts ../../temp/TEMP_tutorial_refresh/html-new
 cd ../..
-scripts/test-all.sh fast --dry-run
-scripts/test-all.sh integration --scope spec,circuit,assistant,verification,activities,shared --dry-run
-scripts/test-all.sh fast --output temp/TEMP_tutorial_refresh/fast-new
-scripts/test-all.sh integration --scope spec,circuit,assistant,verification,activities,shared --output temp/TEMP_tutorial_refresh/integration-new
 ```
 
 Use fresh evidence directories for later runs. Follow `docs/testing-strategy.md`
-and AGENTS.md for regression selection. Fast includes exactly three live checks;
-do not replace them with fixtures or silently omit them. Report missing tools,
+and AGENTS.md for separate software profile selection. Report missing tools,
 credentials, or external-service authorization as incomplete coverage.
 
 Walk through each exercise from its own start. Reopen after saves. Compare the

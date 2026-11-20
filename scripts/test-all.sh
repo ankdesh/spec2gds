@@ -5,9 +5,9 @@ set -euo pipefail
 PROJECT_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
-# Keep the legacy tiers unchanged. Profiles use a dependency-aware local runner.
+# Named profiles use a dependency-aware local runner.
 case "${1:-}" in
-  fast|integration|regression)
+  fast|browser-smoke|live-smoke|integration|regression)
     exec python3 "${PROJECT_ROOT}/scripts/test_profiles.py" "$@"
     ;;
 esac
@@ -26,10 +26,12 @@ for option in "$@"; do
     --help|-h)
       cat <<'HELP'
 Usage: scripts/test-all.sh [fundamental|extensive|all] [--no-browser] [--dry-run]
-       scripts/test-all.sh fast|regression [--dry-run] [--output DIRECTORY]
+       scripts/test-all.sh fast|browser-smoke|live-smoke|regression [--dry-run] [--output DIRECTORY]
        scripts/test-all.sh integration --scope spec,circuit [--dry-run] [--output DIRECTORY]
 
-fast: deterministic fundamentals and exactly three short live model browser checks.
+fast: routine deterministic Python, JavaScript, fixture, and schema checks.
+browser-smoke: tagged Spec Editor and Circuit Designer checks with real services.
+live-smoke: exactly three short live model checks with configured credentials.
 integration: affected real-service/API, Harness, browser and Activity checks.
 regression: full deterministic regression and broader repeated live evaluation.
 Scopes: spec, circuit, assistant, verification, activities, shared, all.
@@ -45,7 +47,8 @@ all: both tiers, without repeating the fundamental tests.
 
 Run scripts/setup-all.sh first. Extensive requires Verilator 5.x and GNU Make;
 optional SystemC/CIRCT tests keep their existing configuration-based skips.
-No model API key is required. See docs/development.md for prerequisites and scope.
+Legacy tiers require no model API key. Tutorial validation runs separately.
+See docs/development.md for prerequisites and scope.
 HELP
       exit 0 ;;
     *) echo "Unknown argument: ${option}. Use --help." >&2; exit 2 ;;
@@ -69,7 +72,7 @@ run_check() {
 
 run_fundamental() {
   run_check "Python fundamentals" uv run --no-sync python -m pytest -q --strict-markers \
-    tests testplan-service/tests -m 'not extensive' || true
+    tests testplan-service/tests --ignore=tests/test_tutorials.py -m 'not extensive' || true
   run_check "Circuit Designer units" npm --prefix circuit-designer test || true
   run_check "Assistant units" npm --prefix ai-assistant test || true
 }
@@ -80,7 +83,7 @@ run_extensive() {
   if run_check "Build Assistant" npm --prefix ai-assistant run build; then
     assistant_ready=true
     run_check "Python extensive" uv run --no-sync python -m pytest -q --strict-markers \
-      tests testplan-service/tests -m extensive || true
+      tests testplan-service/tests --ignore=tests/test_tutorials.py -m extensive || true
     run_check "Harness integration" npm --prefix ai-assistant run test:harness || true
   else
     echo "Skipping dependent Python/Assistant checks because the Assistant build failed." >&2

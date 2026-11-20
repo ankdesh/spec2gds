@@ -64,13 +64,16 @@ def test_failed_python_check_still_runs_independent_units_and_fails_the_runner(t
     assert ["npm", "--prefix", "ai-assistant", "test"] in calls
     assert all("build" not in call and "test:ui" not in call for call in calls)
     assert calls[0][-2:] == ["-m", "not extensive"]
+    assert "--ignore=tests/test_tutorials.py" in calls[0]
 
 
 def test_failed_frontend_build_prevents_browser_checks_but_keeps_backend_checks(tmp_path):
     result, calls = _run(tmp_path, "extensive", failure="frontend")
     assert result.returncode == 1
     assert "Build Circuit Designer and editor (exit 18)" in result.stdout
-    assert any(call[-2:] == ["-m", "extensive"] for call in calls)
+    python_call = next(call for call in calls if call[0] == "uv")
+    assert python_call[-2:] == ["-m", "extensive"]
+    assert "--ignore=tests/test_tutorials.py" in python_call
     assert ["npm", "--prefix", "ai-assistant", "run", "test:harness"] in calls
     assert not any(any(argument.startswith("test:e2e") for argument in call) for call in calls)
     assert not any("test:ui" in call for call in calls)

@@ -488,21 +488,23 @@ top-level creation or to one existing entity for focused edits. See
 
 ## Verify changes
 
-After implementation, run the local fast profile and relevant integration
-scopes. Run full regression for broad or high-risk changes and release preparation.
+Use the test groups selected for the implementation plan. Fast is the routine
+choice. Select Full regression for a batch of changes, a release, or an unchanged
+revision that needs a fresh result.
 
 ```bash
 scripts/test-all.sh fast
+scripts/test-all.sh browser-smoke
+scripts/test-all.sh live-smoke
 scripts/test-all.sh integration --scope spec,assistant
 scripts/test-all.sh regression
 scripts/test-all.sh regression --dry-run
 scripts/test-all.sh integration --scope spec --coverage
 ```
 
-Fast includes two deterministic real-service Spec Editor smoke flows and exactly
-three short live model browser checks. Full regression
-includes broader live evaluation. Use Node.js 24.2+ and set `OPENAI_API_KEY` in
-the invoking environment. Missing required prerequisites produce an incomplete
+Fast runs a small set of deterministic Python, JavaScript, fixture, and schema
+checks. Use Node.js 24.2+ for the named profiles. Set `OPENAI_API_KEY` for Live
+model smoke and Full regression. Tutorial maintenance has a separate selection. Missing required prerequisites produce an incomplete
 result and nonzero exit status. Each run writes a report to an ignored repository
 `temp/TEMP_tests-*` directory by default; `--output` selects a new or empty directory
 under an ignored repository `temp/TEMP_*` folder. See
@@ -513,7 +515,7 @@ The legacy fundamental and extensive tiers remain available. The two tiers
 are complementary; `all` retains its legacy meaning and runs each once.
 
 ```bash
-scripts/test-all.sh fundamental       # default: fast Python and JS unit/API checks
+scripts/test-all.sh fundamental       # legacy default: broad Python and JS unit/API checks
 scripts/test-all.sh extensive         # toolchains, CLI, Harness integration, browsers
 scripts/test-all.sh all               # both tiers
 scripts/test-all.sh extensive --no-browser

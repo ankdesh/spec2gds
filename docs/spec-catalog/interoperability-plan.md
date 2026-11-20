@@ -535,7 +535,7 @@ scripts/test-all.sh integration --scope spec,circuit,assistant,verification,acti
 scripts/test-all.sh regression
 ```
 
-Use configured credentials for exactly three live checks in fast. Missing tools
+Use configured credentials for the three live smoke checks in Full regression. Missing tools
 or credentials make the affected profile incomplete. Record optional synthesis,
 formal and physical checks separately. Run new adapter/composition hardware
 matrices explicitly through the maintained verifier after selection support exists.
